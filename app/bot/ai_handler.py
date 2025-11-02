@@ -1,9 +1,9 @@
 """
-AI Handler using Anthropic Claude
+AI Handler using Groq (FREE!)
 """
 import logging
 from typing import List, Dict
-from anthropic import Anthropic
+from groq import Groq
 
 from app.config import get_settings
 
@@ -12,11 +12,11 @@ settings = get_settings()
 
 
 class AIHandler:
-    """Handle AI responses using Claude"""
+    """Handle AI responses using Groq"""
     
     def __init__(self):
-        self.client = Anthropic(api_key=settings.anthropic_api_key)
-        self.model = "claude-3-5-sonnet-20241022"
+        self.client = Groq(api_key=settings.groq_api_key)
+        self.model = "llama-3.1-70b-versatile"  # Fast and smart
         
         # System prompt for the bot
         self.system_prompt = f"""Eres un asistente virtual de {settings.business_name}, una empresa de tours en bote en Villarrica, Chile.
@@ -83,17 +83,19 @@ Responde en español chileno de manera natural y amigable."""
                     "content": msg["content"]
                 })
             
-            # Call Claude API
-            response = self.client.messages.create(
+            # Call Groq API
+            response = self.client.chat.completions.create(
                 model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    *messages
+                ],
                 max_tokens=500,
-                system=self.system_prompt,
-                messages=messages,
                 temperature=0.7
             )
             
             # Extract response text
-            response_text = response.content[0].text
+            response_text = response.choices[0].message.content
             
             logger.info(f"AI response generated: {response_text[:100]}...")
             
@@ -106,4 +108,5 @@ Responde en español chileno de manera natural y amigable."""
             
             # Fallback response
             return f"Hola {contact_name} 👋 Gracias por contactarnos. ¿En qué puedo ayudarte con Hot Boat?"
+
 

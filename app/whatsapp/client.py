@@ -123,3 +123,4 @@ class WhatsAppClient:
 # Global instance
 whatsapp_client = WhatsAppClient()
 
+

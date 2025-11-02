@@ -115,3 +115,4 @@ class ConversationManager:
         message_lower = message.lower()
         return any(keyword in message_lower for keyword in keywords)
 
+

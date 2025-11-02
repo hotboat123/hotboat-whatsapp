@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     whatsapp_business_account_id: str
     whatsapp_verify_token: str
     
-    # AI
-    anthropic_api_key: str
+    # AI (Groq - FREE!)
+    groq_api_key: str
     
     # Bot
     bot_name: str = "HotBoat Chile"
@@ -42,4 +42,5 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance"""
     return Settings()
+
 

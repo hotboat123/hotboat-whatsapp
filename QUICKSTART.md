@@ -8,9 +8,10 @@ Guía rápida para poner el bot en funcionamiento en **15 minutos**.
 
 ### 1. Obtener credenciales necesarias ✅
 
-- [ ] **Anthropic API Key**: https://console.anthropic.com/
-  - Crea cuenta → API Keys → Create Key
-  - Copia el key: `sk-ant-...`
+- [ ] **Groq API Key (GRATIS!)**: https://console.groq.com/
+  - Crea cuenta (gratis, sin tarjeta)
+  - Ve a API Keys → Create API Key
+  - Copia el key: `gsk_...`
 
 - [ ] **WhatsApp Business API**:
   - Ve a tu configuración en Meta (ya lo tienes)
@@ -50,7 +51,7 @@ WHATSAPP_API_TOKEN=EAAxxxxx
 WHATSAPP_PHONE_NUMBER_ID=123456789
 WHATSAPP_BUSINESS_ACCOUNT_ID=987654321
 WHATSAPP_VERIFY_TOKEN=MiTokenSecreto123
-ANTHROPIC_API_KEY=sk-ant-xxxxx
+GROQ_API_KEY=gsk_xxxxx
 PORT=8000
 ```
 
@@ -116,7 +117,7 @@ Envía por WhatsApp:
 "Cuéntame sobre el tour"
 ```
 
-Claude AI generará una respuesta personalizada.
+Groq AI generará una respuesta personalizada (gratis!).
 
 ---
 
@@ -144,13 +145,13 @@ Error: connection refused
 
 **Solución**: Asegúrate que `DATABASE_URL` sea la correcta de Railway PostgreSQL.
 
-### Error de Anthropic
+### Error de Groq
 
 ```
 Error: Invalid API key
 ```
 
-**Solución**: Verifica tu `ANTHROPIC_API_KEY` en https://console.anthropic.com/
+**Solución**: Verifica tu `GROQ_API_KEY` en https://console.groq.com/
 
 ---
 
@@ -168,4 +169,5 @@ Tu bot ya está funcionando. Ahora puedes:
 ## 📞 ¿Problemas?
 
 Revisa el README completo o los logs de Railway para más detalles.
+
 
