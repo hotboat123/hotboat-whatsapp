@@ -31,7 +31,13 @@ class FAQHandler:
             
             "en que consiste": "caracteristicas",  # Alias
             "incluye": "caracteristicas",  # Alias
-            "qué incluye": "caracteristicas",  # Alias
+            "info": "caracteristicas",  # Alias
+            "información": "caracteristicas",  # Alias
+            "dura": "caracteristicas",  # Alias
+            "duración": "caracteristicas",  # Alias
+            "tiempo": "caracteristicas",  # Alias
+
+
             
 
 
@@ -272,5 +278,6 @@ Hostal y cabañas junto al río, con tinaja y entorno natural 🍃
                 return response
         
         return None
+
 
 

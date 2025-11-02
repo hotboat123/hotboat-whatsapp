@@ -8,6 +8,7 @@ import logging
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.bot.conversation import ConversationManager
+from app.db.queries import get_recent_conversations
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -98,13 +99,21 @@ async def webhook_receive(request: Request):
 
 
 @app.get("/conversations")
-async def list_conversations():
+async def list_conversations(limit: int = 50):
     """List recent conversations (for admin dashboard)"""
-    # TODO: Implement conversation listing from database
-    return {
-        "conversations": [],
-        "total": 0
-    }
+    try:
+        conversations = await get_recent_conversations(limit=limit)
+        return {
+            "conversations": conversations,
+            "total": len(conversations)
+        }
+    except Exception as e:
+        logger.error(f"Error listing conversations: {e}")
+        return {
+            "conversations": [],
+            "total": 0,
+            "error": str(e)
+        }
 
 
 if __name__ == "__main__":
@@ -115,5 +124,6 @@ if __name__ == "__main__":
         port=settings.port,
         reload=settings.environment == "development"
     )
+
 
 

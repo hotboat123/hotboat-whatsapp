@@ -110,3 +110,4 @@ Responde en español chileno de manera natural y amigable."""
             return f"Hola {contact_name} 👋 Gracias por contactarnos. ¿En qué puedo ayudarte con Hot Boat?"
 
 
+

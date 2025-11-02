@@ -128,3 +128,52 @@ async def save_conversation(
         # Don't fail if we can't save - this is not critical
 
 
+async def get_recent_conversations(limit: int = 50) -> List[Dict]:
+    """
+    Get recent conversations from database
+    
+    Args:
+        limit: Maximum number of conversations to return
+    
+    Returns:
+        List of conversations
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        id,
+                        phone_number,
+                        customer_name,
+                        message_text,
+                        response_text,
+                        message_type,
+                        created_at
+                    FROM whatsapp_conversations
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (limit,))
+                
+                results = cur.fetchall()
+                
+                conversations = []
+                for row in results:
+                    conversations.append({
+                        "id": row[0],
+                        "phone_number": row[1],
+                        "customer_name": row[2],
+                        "message_text": row[3],
+                        "response_text": row[4],
+                        "message_type": row[5],
+                        "created_at": row[6].isoformat() if row[6] else None
+                    })
+                
+                return conversations
+    
+    except Exception as e:
+        logger.error(f"Error querying conversations: {e}")
+        return []
+
+
+
