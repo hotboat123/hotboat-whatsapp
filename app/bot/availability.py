@@ -23,37 +23,29 @@ class AvailabilityChecker:
             Response with availability information
         """
         try:
-            # TODO: Parse date from message (e.g., "mañana", "próximo sábado", "15 de enero")
-            # For now, return next 7 days availability
-            
-            # Simulate async DB query
+            # Simulate async processing
             await asyncio.sleep(0.1)
             
-            # TODO: Query real database
-            # from app.db.queries import get_available_slots
-            # available_slots = await get_available_slots(start_date, end_date)
+            # Temporary response - manual verification needed
+            response = """🔍 **Consultando disponibilidad...**
+
+¡Perfecto! Estoy verificando la disponibilidad para las fechas que necesitas.
+
+⏰ Dame un momento para confirmar los horarios disponibles y te respondo a la brevedad.
+
+📅 Mientras tanto, cuéntame:
+• ¿Para cuántas personas sería la experiencia HotBoat?
+• ¿Qué día les gustaría vivir la experiencia?
+
+💡 También puedes reservar directamente aquí:
+https://hotboatchile.com/es/book-hotboat/"""
             
-            # Mock response for now
-            response = f"""🚤 **Disponibilidad Hot Boat**
-
-Tenemos disponibilidad para los próximos días:
-
-📅 **Este fin de semana:**
-• Sábado 2 nov: 10:00, 14:00, 16:00 ✅
-• Domingo 3 nov: 11:00, 15:00 ✅
-
-📅 **Próxima semana:**
-• Lunes-Viernes: Horarios flexibles disponibles
-
-👥 ¿Para cuántas personas sería la reserva?
-
-💬 También puedes llamarnos al +56 9 1234 5678 para reservar directamente."""
-            
+            logger.info("Availability query received - manual response needed")
             return response
             
         except Exception as e:
             logger.error(f"Error checking availability: {e}")
-            return "Disculpa, tuve un problema consultando la disponibilidad. ¿Podrías llamarnos al +56 9 1234 5678?"
+            return "Disculpa, tuve un problema consultando la disponibilidad. Te responderé en un momento. Gracias por tu paciencia 🙏"
     
     async def get_available_slots(
         self,
