@@ -189,7 +189,9 @@ async def save_conversation(
     customer_name: str,
     message_text: str,
     response_text: str,
-    message_type: str = "text"
+    message_type: str = "text",
+    message_id: str = None,
+    direction: str = "incoming"
 ) -> None:
     """
     Save conversation to database for analytics
@@ -200,16 +202,27 @@ async def save_conversation(
         message_text: User's message
         response_text: Bot's response
         message_type: Type of message
+        message_id: WhatsApp message ID (to avoid duplicates)
+        direction: 'incoming' or 'outgoing'
     """
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # TODO: Create conversations table if it doesn't exist
+                # Check if message already exists (by message_id if available)
+                if message_id:
+                    cur.execute("""
+                        SELECT id FROM whatsapp_conversations 
+                        WHERE message_id = %s
+                    """, (message_id,))
+                    if cur.fetchone():
+                        logger.info(f"Conversation with message_id {message_id} already exists, skipping")
+                        return
+                
                 cur.execute("""
                     INSERT INTO whatsapp_conversations 
-                    (phone_number, customer_name, message_text, response_text, message_type, created_at)
-                    VALUES (%s, %s, %s, %s, %s, NOW())
-                """, (phone_number, customer_name, message_text, response_text, message_type))
+                    (phone_number, customer_name, message_text, response_text, message_type, message_id, direction, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                """, (phone_number, customer_name, message_text, response_text, message_type, message_id, direction))
             conn.commit()
             logger.info(f"Conversation saved for {phone_number}")
     

@@ -9,7 +9,16 @@ from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.bot.conversation import ConversationManager
 from app.db.queries import get_recent_conversations, get_appointments_between_dates
+from app.db.leads import (
+    get_or_create_lead, 
+    update_lead_status, 
+    get_leads_by_status,
+    get_conversation_history,
+    import_conversation_batch
+)
 from datetime import datetime, timedelta
+from pydantic import BaseModel
+from typing import List, Optional
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -137,6 +146,99 @@ async def list_appointments(days_ahead: int = 30):
             "total": 0,
             "error": str(e)
         }
+
+
+# Leads Management Endpoints
+
+@app.get("/leads")
+async def list_leads(lead_status: Optional[str] = None, limit: int = 50):
+    """List leads, optionally filtered by status"""
+    try:
+        leads = await get_leads_by_status(lead_status=lead_status, limit=limit)
+        return {
+            "leads": leads,
+            "total": len(leads),
+            "filter": lead_status if lead_status else "all"
+        }
+    except Exception as e:
+        logger.error(f"Error listing leads: {e}")
+        return {
+            "leads": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+
+@app.get("/leads/{phone_number}")
+async def get_lead_info(phone_number: str):
+    """Get lead information and conversation history"""
+    try:
+        lead = await get_or_create_lead(phone_number)
+        history = await get_conversation_history(phone_number, limit=100)
+        
+        return {
+            "lead": lead,
+            "conversation_count": len(history),
+            "recent_messages": history[-10:] if history else []  # Last 10 messages
+        }
+    except Exception as e:
+        logger.error(f"Error getting lead info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class LeadStatusUpdate(BaseModel):
+    lead_status: str  # 'potential_client', 'bad_lead', 'customer', 'unknown'
+    notes: Optional[str] = None
+
+
+@app.put("/leads/{phone_number}/status")
+async def update_lead(phone_number: str, update: LeadStatusUpdate):
+    """Update lead classification status"""
+    try:
+        success = await update_lead_status(
+            phone_number=phone_number,
+            lead_status=update.lead_status,
+            notes=update.notes
+        )
+        
+        if success:
+            return {
+                "status": "updated",
+                "phone_number": phone_number,
+                "lead_status": update.lead_status
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to update lead status")
+    except Exception as e:
+        logger.error(f"Error updating lead status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ConversationImport(BaseModel):
+    phone_number: str
+    customer_name: Optional[str] = None
+    conversations: List[dict]  # List of {message, response, timestamp, direction, message_id}
+
+
+@app.post("/import/conversations")
+async def import_conversations(data: ConversationImport):
+    """Import existing conversation history"""
+    try:
+        imported_count = await import_conversation_batch(
+            conversations=data.conversations,
+            phone_number=data.phone_number,
+            customer_name=data.customer_name
+        )
+        
+        return {
+            "status": "success",
+            "phone_number": data.phone_number,
+            "imported": imported_count,
+            "total": len(data.conversations)
+        }
+    except Exception as e:
+        logger.error(f"Error importing conversations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

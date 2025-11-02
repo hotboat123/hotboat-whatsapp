@@ -119,7 +119,9 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         customer_name=contact_name,
                         message_text=text_body,
                         response_text=response,
-                        message_type=message_type
+                        message_type=message_type,
+                        message_id=message_id,
+                        direction="incoming"
                     )
                 except Exception as e:
                     logger.warning(f"Could not save conversation: {e}")

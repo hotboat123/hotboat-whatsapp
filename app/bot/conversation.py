@@ -9,6 +9,7 @@ from datetime import datetime
 from app.bot.ai_handler import AIHandler
 from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS
 from app.bot.faq import FAQHandler
+from app.db.leads import get_or_create_lead, get_conversation_history
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +44,8 @@ class ConversationManager:
             Response text or None
         """
         try:
-            # Get or create conversation context
-            conversation = self.get_conversation(from_number, contact_name)
+            # Get or create conversation context (loads history from DB)
+            conversation = await self.get_conversation(from_number, contact_name)
             
             # Add message to history
             conversation["messages"].append({
@@ -103,17 +104,35 @@ Si prefieres hablar con un humano, puedes esperar a Tomás — te responderá en
             traceback.print_exc()
             return "Disculpa, tuve un problema procesando tu mensaje. ¿Podrías intentar de nuevo?"
     
-    def get_conversation(self, phone_number: str, contact_name: str) -> dict:
-        """Get or create conversation context"""
+    async def get_conversation(self, phone_number: str, contact_name: str) -> dict:
+        """
+        Get or create conversation context, loading history from database if available
+        """
+        # Check if already in memory
         if phone_number not in self.conversations:
+            # Load lead info and conversation history from database
+            lead = await get_or_create_lead(phone_number, contact_name)
+            history = await get_conversation_history(phone_number, limit=50)
+            
             self.conversations[phone_number] = {
                 "phone": phone_number,
                 "name": contact_name,
-                "messages": [],
+                "messages": history if history else [],
                 "created_at": datetime.now().isoformat(),
                 "last_interaction": datetime.now().isoformat(),
-                "metadata": {}
+                "metadata": {
+                    "lead_status": lead.get("lead_status") if lead else "unknown",
+                    "lead_id": lead.get("id") if lead else None
+                }
             }
+            
+            if history:
+                logger.info(f"Loaded {len(history)} messages from history for {phone_number}")
+        
+        # Update name if different
+        if contact_name and self.conversations[phone_number]["name"] != contact_name:
+            self.conversations[phone_number]["name"] = contact_name
+        
         return self.conversations[phone_number]
     
     def _is_greeting_message(self, message: str) -> bool:
@@ -144,9 +163,22 @@ Si prefieres hablar con un humano, puedes esperar a Tomás — te responderá en
         return False
     
     def _is_first_message(self, conversation: dict) -> bool:
-        """Check if this is the first message in the conversation"""
-        # Count user messages only
-        user_messages = [msg for msg in conversation.get("messages", []) if msg.get("role") == "user"]
+        """
+        Check if this is the first message in the conversation.
+        If conversation has history from database, assume welcome was already sent.
+        """
+        messages = conversation.get("messages", [])
+        
+        # If no messages, it's the first
+        if len(messages) == 0:
+            return True
+        
+        # Check if this is the first user message in current session
+        # (not counting loaded history from DB)
+        user_messages = [msg for msg in messages if msg.get("role") == "user"]
+        
+        # If only one user message (the one we just added), it's first
+        # Or if no user messages yet
         return len(user_messages) <= 1
     
     def _contains_date(self, message: str) -> bool:
