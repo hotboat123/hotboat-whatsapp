@@ -56,11 +56,20 @@ class ConversationManager:
             
             logger.info(f"Processing message from {contact_name}: {message_text}")
             
+            # Check if it's the first message or a greeting - send welcome message
+            is_first = self._is_first_message(conversation)
+            is_greeting = self._is_greeting_message(message_text)
+            
+            if is_first and is_greeting:
+                logger.info("First message with greeting - sending welcome message")
+                response = """¡Hola! Soy el asistente virtual de HotBoat Chile 🤖🚤
+Estoy aquí para ayudarte con tus consultas sobre nuestras experiencias flotantes.
+
+Si prefieres hablar con un humano, puedes esperar a Tomás — te responderá en cuanto pueda 🌿"""
             # Check if it's a FAQ question
-            faq_response = self.faq_handler.get_response(message_text)
-            if faq_response:
+            elif self.faq_handler.get_response(message_text):
                 logger.info("Responding with FAQ answer")
-                response = faq_response
+                response = self.faq_handler.get_response(message_text)
             
             # Check if asking about availability
             elif self.is_availability_query(message_text):
@@ -106,6 +115,39 @@ class ConversationManager:
                 "metadata": {}
             }
         return self.conversations[phone_number]
+    
+    def _is_greeting_message(self, message: str) -> bool:
+        """
+        Check if message is a greeting or first contact
+        
+        Args:
+            message: User message
+        
+        Returns:
+            True if message is a greeting
+        """
+        message_lower = message.lower().strip()
+        greetings = [
+            "hola", "hi", "hey", "hello", "buenos días", "buenas tardes", 
+            "buenas noches", "buen día", "saludos", "qué tal", "que tal"
+        ]
+        
+        # Check if message is just a greeting
+        if message_lower in greetings:
+            return True
+        
+        # Check if message starts with a greeting
+        for greeting in greetings:
+            if message_lower.startswith(greeting):
+                return True
+        
+        return False
+    
+    def _is_first_message(self, conversation: dict) -> bool:
+        """Check if this is the first message in the conversation"""
+        # Count user messages only
+        user_messages = [msg for msg in conversation.get("messages", []) if msg.get("role") == "user"]
+        return len(user_messages) <= 1
     
     def _contains_date(self, message: str) -> bool:
         """
