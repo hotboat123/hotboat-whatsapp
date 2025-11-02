@@ -62,12 +62,14 @@ async def get_appointments_between_dates(
         return []
 
 
-async def check_slot_availability(slot_datetime: datetime) -> bool:
+async def check_slot_availability(slot_datetime: datetime, duration_hours: float = 2.0, buffer_hours: float = 0.5) -> bool:
     """
     Check if a specific time slot is available
     
     Args:
         slot_datetime: DateTime to check
+        duration_hours: Duration of the booking in hours
+        buffer_hours: Buffer time before/after booking
     
     Returns:
         True if available, False if booked
@@ -75,16 +77,25 @@ async def check_slot_availability(slot_datetime: datetime) -> bool:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Check if there's an appointment within 2 hours of this time
+                # Check if there's an appointment that overlaps with this slot
+                # An appointment overlaps if it starts before slot ends OR ends after slot starts
+                slot_start = slot_datetime
+                slot_end = slot_datetime + timedelta(hours=duration_hours)
+                
                 cur.execute("""
                     SELECT COUNT(*)
                     FROM booknetic_appointments
-                    WHERE starts_at BETWEEN %s AND %s
-                      AND status NOT IN ('cancelled', 'rejected')
-                """, (
-                    slot_datetime - timedelta(hours=1),
-                    slot_datetime + timedelta(hours=1)
-                ))
+                    WHERE starts_at IS NOT NULL
+                      AND (status IS NULL OR status NOT IN ('cancelled', 'rejected'))
+                      AND (
+                          -- Appointment starts before slot ends (considering buffer)
+                          starts_at < %s
+                          AND (
+                              -- Estimate appointment end (assuming 2 hours default + buffer)
+                              starts_at + INTERVAL '2.5 hours' > %s
+                          )
+                      )
+                """, (slot_end + timedelta(hours=buffer_hours), slot_start - timedelta(hours=buffer_hours)))
                 
                 count = cur.fetchone()[0]
                 return count == 0
@@ -92,6 +103,71 @@ async def check_slot_availability(slot_datetime: datetime) -> bool:
     except Exception as e:
         logger.error(f"Error checking slot availability: {e}")
         return False
+
+
+async def get_booked_slots(
+    start_date: datetime,
+    end_date: datetime,
+    exclude_statuses: Optional[List[str]] = None
+) -> List[Dict]:
+    """
+    Get all booked time slots between dates
+    
+    Args:
+        start_date: Start date for search
+        end_date: End date for search
+        exclude_statuses: List of statuses to exclude (default: ['cancelled', 'rejected'])
+    
+    Returns:
+        List of booked slots with datetime and service info
+    """
+    if exclude_statuses is None:
+        exclude_statuses = ['cancelled', 'rejected']
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Build query based on exclude_statuses
+                if exclude_statuses and len(exclude_statuses) > 0:
+                    placeholders = ','.join(['%s'] * len(exclude_statuses))
+                    status_filter = f"AND (status IS NULL OR status NOT IN ({placeholders}))"
+                    params = (start_date, end_date) + tuple(exclude_statuses)
+                else:
+                    status_filter = ""
+                    params = (start_date, end_date)
+                
+                cur.execute(f"""
+                    SELECT 
+                        id,
+                        starts_at,
+                        service_name,
+                        customer_name,
+                        status
+                    FROM booknetic_appointments
+                    WHERE starts_at >= %s
+                      AND starts_at <= %s
+                      AND starts_at IS NOT NULL
+                      {status_filter}
+                    ORDER BY starts_at
+                """, params)
+                
+                results = cur.fetchall()
+                
+                booked_slots = []
+                for row in results:
+                    booked_slots.append({
+                        "id": row[0],
+                        "starts_at": row[1],
+                        "service_name": row[2],
+                        "customer_name": row[3],
+                        "status": row[4]
+                    })
+                
+                return booked_slots
+    
+    except Exception as e:
+        logger.error(f"Error getting booked slots: {e}")
+        return []
 
 
 async def save_conversation(
