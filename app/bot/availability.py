@@ -2,8 +2,9 @@
 Availability checker - queries PostgreSQL for appointment availability
 """
 import logging
+import re
 from datetime import datetime, timedelta, time
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 import pytz
 
 from app.db.queries import get_booked_slots, check_slot_availability
@@ -17,12 +18,115 @@ logger = logging.getLogger(__name__)
 # Timezone for Chile
 CHILE_TZ = pytz.timezone('America/Santiago')
 
+# Spanish month names
+SPANISH_MONTHS = {
+    'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4,
+    'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8,
+    'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12,
+    # Short forms
+    'ene': 1, 'feb': 2, 'mar': 3, 'abr': 4,
+    'may': 5, 'jun': 6, 'jul': 7, 'ago': 8,
+    'sep': 9, 'oct': 10, 'nov': 11, 'dic': 12
+}
+
 
 class AvailabilityChecker:
     """Check availability by querying appointments database"""
     
     def __init__(self):
         self.config = AVAILABILITY_CONFIG
+    
+    def _parse_spanish_date(self, message: str, current_year: int) -> Optional[datetime]:
+        """
+        Parse Spanish date from message (e.g., "14 de febrero", "18 de noviembre")
+        
+        Args:
+            message: User message
+            current_year: Current year to use if not specified
+        
+        Returns:
+            Parsed datetime or None if not found
+        """
+        message_lower = message.lower()
+        
+        # Pattern 1: "14 de febrero", "18 de noviembre"
+        pattern1 = r'(\d{1,2})\s+de\s+(' + '|'.join(SPANISH_MONTHS.keys()) + r')'
+        match = re.search(pattern1, message_lower)
+        if match:
+            day = int(match.group(1))
+            month_name = match.group(2)
+            month = SPANISH_MONTHS.get(month_name)
+            if month:
+                try:
+                    # Try current year first
+                    parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
+                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    # If date is in the past, try next year
+                    now = datetime.now(CHILE_TZ)
+                    if parsed_date < now:
+                        parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
+                        parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    return parsed_date
+                except ValueError:
+                    return None
+        
+        # Pattern 2: "febrero 14", "noviembre 18" (without "de")
+        pattern2 = r'(' + '|'.join(SPANISH_MONTHS.keys()) + r')\s+(\d{1,2})'
+        match = re.search(pattern2, message_lower)
+        if match:
+            month_name = match.group(1)
+            day = int(match.group(2))
+            month = SPANISH_MONTHS.get(month_name)
+            if month:
+                try:
+                    parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
+                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    now = datetime.now(CHILE_TZ)
+                    if parsed_date < now:
+                        parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
+                        parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    return parsed_date
+                except ValueError:
+                    return None
+        
+        # Pattern 3: "14 febrero" (without "de")
+        pattern3 = r'(\d{1,2})\s+(' + '|'.join(SPANISH_MONTHS.keys()) + r')'
+        match = re.search(pattern3, message_lower)
+        if match:
+            day = int(match.group(1))
+            month_name = match.group(2)
+            month = SPANISH_MONTHS.get(month_name)
+            if month:
+                try:
+                    parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
+                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    now = datetime.now(CHILE_TZ)
+                    if parsed_date < now:
+                        parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
+                        parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    return parsed_date
+                except ValueError:
+                    return None
+        
+        # Pattern 4: "14/02", "18/11" (DD/MM format)
+        pattern4 = r'(\d{1,2})[/-](\d{1,2})'
+        match = re.search(pattern4, message_lower)
+        if match:
+            day = int(match.group(1))
+            month = int(match.group(2))
+            if 1 <= month <= 12 and 1 <= day <= 31:
+                try:
+                    parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
+                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    now = datetime.now(CHILE_TZ)
+                    if parsed_date < now:
+                        parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
+                        parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    return parsed_date
+                except ValueError:
+                    return None
+        
+        return None
     
     def _generate_time_slots_for_date(self, date: datetime) -> List[datetime]:
         """Generate all possible time slots for a given date"""
@@ -129,28 +233,41 @@ class AvailabilityChecker:
         try:
             # Parse date from message if possible
             now = datetime.now(CHILE_TZ)
+            current_year = now.year
             start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
             
             # Try to extract date keywords from message
             message_lower = message.lower()
             
-            # Determine end date based on query
-            if "mañana" in message_lower or "tomorrow" in message_lower:
-                end_date = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
+            # First, try to parse a specific date (e.g., "14 de febrero")
+            specific_date = self._parse_spanish_date(message, current_year)
+            
+            if specific_date:
+                # User asked for a specific date
+                start_date = specific_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_date = specific_date.replace(hour=23, minute=59, second=59, microsecond=999999)
                 days_to_show = 1
-            elif "próxima semana" in message_lower or "next week" in message_lower:
-                end_date = now + timedelta(days=7)
-                days_to_show = 7
-            elif "mes" in message_lower or "month" in message_lower:
-                end_date = now + timedelta(days=30)
-                days_to_show = 30
-            elif "hoy" in message_lower or "today" in message_lower:
-                end_date = now.replace(hour=23, minute=59, second=59)
-                days_to_show = 1
+                specific_date_requested = True
+                logger.info(f"Parsed specific date from message: {specific_date.date()}")
             else:
-                # Default: next 7 days
-                end_date = now + timedelta(days=7)
-                days_to_show = 7
+                # Determine end date based on query
+                specific_date_requested = False
+                if "mañana" in message_lower or "tomorrow" in message_lower:
+                    end_date = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59)
+                    days_to_show = 1
+                elif "próxima semana" in message_lower or "next week" in message_lower:
+                    end_date = now + timedelta(days=7)
+                    days_to_show = 7
+                elif "mes" in message_lower or "month" in message_lower:
+                    end_date = now + timedelta(days=30)
+                    days_to_show = 30
+                elif "hoy" in message_lower or "today" in message_lower:
+                    end_date = now.replace(hour=23, minute=59, second=59)
+                    days_to_show = 1
+                else:
+                    # Default: next 7 days
+                    end_date = now + timedelta(days=7)
+                    days_to_show = 7
             
             # Get available slots
             available_slots = await self.get_available_slots(start_date, end_date)
@@ -158,7 +275,30 @@ class AvailabilityChecker:
             logger.info(f"Found {len(available_slots)} available slots between {start_date.date()} and {end_date.date()}")
             
             if len(available_slots) == 0:
-                return """❌ **Lo siento, no tenemos disponibilidad en este momento**
+                if specific_date_requested:
+                    date_str = specific_date.strftime('%d de %B de %Y')
+                    # Format month name in Spanish
+                    month_names_es = {
+                        'January': 'enero', 'February': 'febrero', 'March': 'marzo',
+                        'April': 'abril', 'May': 'mayo', 'June': 'junio',
+                        'July': 'julio', 'August': 'agosto', 'September': 'septiembre',
+                        'October': 'octubre', 'November': 'noviembre', 'December': 'diciembre'
+                    }
+                    for en, es in month_names_es.items():
+                        date_str = date_str.replace(en, es)
+                    
+                    return f"""❌ **Lo siento, no tenemos disponibilidad el {date_str}**
+
+📅 Todos los horarios para esa fecha están ocupados.
+
+💡 Te sugiero:
+• Consultar disponibilidad para otro día
+• Reservar con anticipación
+• Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
+
+¿Te gustaría que revise disponibilidad para otra fecha?"""
+                else:
+                    return """❌ **Lo siento, no tenemos disponibilidad en este momento**
 
 📅 Para los próximos días todos los horarios están ocupados.
 
@@ -178,11 +318,24 @@ class AvailabilityChecker:
                 slots_by_date[date_key].append(slot)
             
             # Format response
-            response_parts = ["✅ **¡Tenemos disponibilidad!**\n"]
+            if specific_date_requested:
+                date_str = specific_date.strftime('%d de %B de %Y')
+                # Format month name in Spanish
+                month_names_es = {
+                    'January': 'enero', 'February': 'febrero', 'March': 'marzo',
+                    'April': 'abril', 'May': 'mayo', 'June': 'junio',
+                    'July': 'julio', 'August': 'agosto', 'September': 'septiembre',
+                    'October': 'octubre', 'November': 'noviembre', 'December': 'diciembre'
+                }
+                for en, es in month_names_es.items():
+                    date_str = date_str.replace(en, es)
+                response_parts = [f"✅ **¡Tenemos disponibilidad el {date_str}!**\n"]
+            else:
+                response_parts = ["✅ **¡Tenemos disponibilidad!**\n"]
             
             # Show slots grouped by date
             date_count = 0
-            max_dates_to_show = 5 if days_to_show > 5 else days_to_show
+            max_dates_to_show = 1 if specific_date_requested else (5 if days_to_show > 5 else days_to_show)
             
             for date_key in sorted(slots_by_date.keys())[:max_dates_to_show]:
                 slots = sorted(slots_by_date[date_key], key=lambda x: x['datetime'])
