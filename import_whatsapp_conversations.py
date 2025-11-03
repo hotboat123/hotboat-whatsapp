@@ -7,6 +7,9 @@ Usage examples:
 3. Import from manual input
 
 This script helps migrate existing WhatsApp Business conversations to the bot system.
+
+Environment variables required:
+- DATABASE_URL: PostgreSQL connection string (automatically loaded from .env or Railway)
 """
 import os
 import sys
@@ -16,13 +19,15 @@ import asyncio
 from datetime import datetime
 from typing import List, Dict
 
-# Set up environment
-os.environ['DATABASE_URL'] = 'postgresql://postgres:mcxQvhpGaatBzcZNCbVqnGWGBjQpCNYJ@turntable.proxy.rlwy.net:48129/railway'
-os.environ['WHATSAPP_API_TOKEN'] = 'test'
-os.environ['WHATSAPP_PHONE_NUMBER_ID'] = 'test'
-os.environ['WHATSAPP_BUSINESS_ACCOUNT_ID'] = 'test'
-os.environ['WHATSAPP_VERIFY_TOKEN'] = 'test'
-os.environ['GROQ_API_KEY'] = 'test'
+# Load environment variables from .env file if it exists
+from dotenv import load_dotenv
+load_dotenv()
+
+# Verify that DATABASE_URL is set
+if not os.getenv('DATABASE_URL'):
+    print("❌ Error: DATABASE_URL environment variable is not set")
+    print("   Please set it in your .env file or Railway environment variables")
+    sys.exit(1)
 
 async def import_from_json(file_path: str):
     """
