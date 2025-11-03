@@ -1,22 +1,36 @@
 """
-AI Handler using Groq (FREE!)
+AI Handler using Groq (FREE!) with MCP (Model Context Protocol) support
 """
 import logging
-from typing import List, Dict
+import json
+from typing import List, Dict, Optional, Any
 from groq import Groq
 
 from app.config import get_settings
+
+try:
+    from app.bot.mcp_handler import MCPHandler
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    logger.warning("MCP handler not available - running without MCP support")
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
 class AIHandler:
-    """Handle AI responses using Groq"""
+    """Handle AI responses using Groq with MCP support"""
     
     def __init__(self):
         self.client = Groq(api_key=settings.groq_api_key)
         self.model = "llama-3.1-70b-versatile"  # Fast and smart
+        
+        if MCP_AVAILABLE:
+            self.mcp_handler = MCPHandler()
+            self._initialize_mcp_servers()
+        else:
+            self.mcp_handler = None
         
         # System prompt for the bot
         self.system_prompt = f"""Eres un asistente virtual de {settings.business_name}, una empresa de tours en bote en Villarrica, Chile.
@@ -61,6 +75,30 @@ IMPORTANTE:
 
 Responde en español chileno de manera natural y amigable."""
     
+    def _initialize_mcp_servers(self):
+        """
+        Initialize MCP servers from configuration
+        Can be extended to load from environment variables or config file
+        """
+        # Example: Add MCP servers here
+        # self.mcp_handler.add_mcp_server("example", {
+        #     "url": "https://mcp-server.example.com",
+        #     "api_key": None,
+        #     "tools": [
+        #         {
+        #             "name": "get_weather",
+        #             "description": "Get current weather",
+        #             "parameters": {
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "location": {"type": "string", "description": "City name"}
+        #                 }
+        #             }
+        #         }
+        #     ]
+        # })
+        pass
+    
     async def generate_response(
         self,
         message_text: str,
@@ -89,19 +127,89 @@ Responde en español chileno de manera natural y amigable."""
                     "content": msg["content"]
                 })
             
-            # Call Groq API
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            # Get available tools from MCP servers if enabled
+            tools = None
+            if self.mcp_handler and self.mcp_handler.enabled:
+                available_tools = self.mcp_handler.get_available_tools()
+                if available_tools:
+                    tools = available_tools
+                    logger.info(f"Using {len(tools)} MCP tools for this request")
+            
+            # Call Groq API (supports OpenAI-compatible function calling)
+            api_params = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": self.system_prompt},
                     *messages
                 ],
-                max_tokens=500,
-                temperature=0.7
-            )
+                "max_tokens": 500,
+                "temperature": 0.7
+            }
+            
+            # Add tools if MCP is enabled and tools are available
+            if tools:
+                api_params["tools"] = tools
+                api_params["tool_choice"] = "auto"  # Let model decide when to use tools
+            
+            response = self.client.chat.completions.create(**api_params)
             
             # Extract response text
-            response_text = response.choices[0].message.content
+            message = response.choices[0].message
+            
+            # Check if model wants to call a tool (MCP function calling)
+            if message.tool_calls:
+                logger.info(f"Model requested {len(message.tool_calls)} tool calls")
+                
+                # Process tool calls
+                tool_responses = []
+                for tool_call in message.tool_calls:
+                    tool_name = tool_call.function.name
+                    # Safely parse tool arguments (JSON)
+                    try:
+                        tool_args = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
+                    except json.JSONDecodeError:
+                        logger.warning(f"Invalid JSON in tool arguments: {tool_call.function.arguments}")
+                        tool_args = {}
+                    
+                    # Call MCP tool
+                    tool_result = await self.mcp_handler.call_mcp_tool(tool_name, tool_args)
+                    
+                    tool_responses.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": tool_name,
+                        "content": str(tool_result) if tool_result else "Tool execution failed"
+                    })
+                
+                # Make second API call with tool results
+                messages_with_tools = [
+                    {"role": "system", "content": self.system_prompt},
+                    *messages,
+                    {"role": "assistant", "content": message.content, "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments
+                            }
+                        } for tc in message.tool_calls
+                    ]},
+                    *tool_responses
+                ]
+                
+                # Get final response with tool results
+                final_response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages_with_tools,
+                    max_tokens=500,
+                    temperature=0.7
+                )
+                
+                response_text = final_response.choices[0].message.content
+            else:
+                # Normal response without tool calls
+                response_text = message.content
             
             logger.info(f"AI response generated: {response_text[:100]}...")
             
