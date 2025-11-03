@@ -403,7 +403,7 @@ class AvailabilityChecker:
                 remaining = len(slots_by_date) - max_dates_to_show
                 response_parts.append(f"\n... y {remaining} día(s) más con disponibilidad")
             
-            response_parts.append("\n👥 **¿Para cuántas personas sería?**")
+            response_parts.append("\n👥 *¿Para cuántas personas sería?*")
             response_parts.append("Puedo ayudarte a reservar el horario perfecto.")
             response_parts.append("\n💡 También puedes reservar directamente aquí:")
             response_parts.append("https://hotboatchile.com/es/book-hotboat/")

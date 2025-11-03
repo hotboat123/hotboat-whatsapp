@@ -67,11 +67,9 @@ class ConversationManager:
                 logger.info("First message with greeting - sending welcome message")
                 response = """🥬 ¡Ahoy, grumete! ⚓ Soy Popeye el Marino, cabo segundo del HotBoat Chile 🚤
 
-Estoy al mando para ayudarte con todo lo que necesites sobre nuestras experiencias flotantes 🌊
+Estoy al mando para ayudarte con todo lo que necesites sobre la Experiencias HotBoat 🌊
 
-Si algo me queda grande, llamaré al Capitán Tomás, que toma el timón en cuanto pisa cubierta 👨‍✈️🌿
-
-
+Si no puedo resorver tus dudas puedes hablar directamente con el Capitán Tomás, solo escribe *“Llamar a Tomás”* o *“Ayuda”*, y él tomará el timón en cuanto vuelva a cubierta 👨‍✈️🌿  
 
 ¿En qué puedo ayudarte hoy?"""
             # Check if it's a FAQ question
