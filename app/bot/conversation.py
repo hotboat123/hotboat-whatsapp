@@ -47,6 +47,13 @@ class ConversationManager:
             # Get or create conversation context (loads history from DB)
             conversation = await self.get_conversation(from_number, contact_name)
             
+            logger.info(f"Processing message from {contact_name}: {message_text}")
+            
+            # Check if it's the first message or a greeting - send welcome message
+            # Check BEFORE adding the message to history
+            is_first = self._is_first_message(conversation)
+            is_greeting = self._is_greeting_message(message_text)
+            
             # Add message to history
             conversation["messages"].append({
                 "role": "user",
@@ -54,12 +61,6 @@ class ConversationManager:
                 "timestamp": datetime.now().isoformat(),
                 "message_id": message_id
             })
-            
-            logger.info(f"Processing message from {contact_name}: {message_text}")
-            
-            # Check if it's the first message or a greeting - send welcome message
-            is_first = self._is_first_message(conversation)
-            is_greeting = self._is_greeting_message(message_text)
             
             if is_first and is_greeting:
                 logger.info("First message with greeting - sending welcome message")
@@ -170,21 +171,19 @@ Si algo me queda grande, llamaré al Capitán Tomás, que toma el timón en cuan
     def _is_first_message(self, conversation: dict) -> bool:
         """
         Check if this is the first message in the conversation.
-        If conversation has history from database, assume welcome was already sent.
+        We check BEFORE adding the new message, so we look for empty history.
         """
         messages = conversation.get("messages", [])
         
-        # If no messages, it's the first
+        # If no messages in history, it's definitely the first
         if len(messages) == 0:
             return True
         
-        # Check if this is the first user message in current session
-        # (not counting loaded history from DB)
+        # Count only user messages (not bot responses)
         user_messages = [msg for msg in messages if msg.get("role") == "user"]
         
-        # If only one user message (the one we just added), it's first
-        # Or if no user messages yet
-        return len(user_messages) <= 1
+        # If no user messages yet (only bot responses or empty), it's the first user message
+        return len(user_messages) == 0
     
     def _contains_date(self, message: str) -> bool:
         """
