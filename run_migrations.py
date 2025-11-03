@@ -1,10 +1,24 @@
 """
 Script to run database migrations for leads and conversations
+
+Environment variables required:
+- DATABASE_URL: PostgreSQL connection string (automatically loaded from .env or Railway)
 """
+import os
 import sys
 import psycopg
 
-DATABASE_URL = 'postgresql://postgres:mcxQvhpGaatBzcZNCbVqnGWGBjQpCNYJ@turntable.proxy.rlwy.net:48129/railway'
+# Load environment variables from .env file if it exists
+from dotenv import load_dotenv
+load_dotenv()
+
+# Get DATABASE_URL from environment
+DATABASE_URL = os.getenv('DATABASE_URL')
+
+if not DATABASE_URL:
+    print("❌ Error: DATABASE_URL environment variable is not set")
+    print("   Please set it in your .env file or Railway environment variables")
+    sys.exit(1)
 
 def run_migrations():
     """Run SQL migrations"""
