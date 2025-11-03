@@ -65,13 +65,52 @@ class ConversationManager:
             # Always show welcome message on first interaction, regardless of greeting
             if is_first:
                 logger.info("First message with greeting - sending welcome message")
-                response = """🥬 ¡Ahoy, grumete! ⚓ Soy Popeye el Marino, cabo segundo del HotBoat Chile 🚤
+                response = """🥬 ¡Ahoy, grumete! ⚓  
 
-Estoy al mando para ayudarte con todo lo que necesites sobre la Experiencias HotBoat 🌊
 
-Si no puedo resorver tus dudas puedes hablar directamente con el Capitán Tomás, solo escribe *“Llamar a Tomás”* o *“Ayuda”*, y él tomará el timón en cuanto vuelva a cubierta 👨‍✈️🌿  
 
-¿En qué puedo ayudarte hoy?"""
+Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤  
+
+Estoy al mando para ayudarte con todas tus consultas sobre nuestras experiencias flotantes 🌊  
+
+Puedes preguntarme por:  
+
+1️⃣ *Disponibilidad y horarios*  
+
+2️⃣ *Precios por persona*  
+
+3️⃣ *Características del HotBoat*  
+
+4️⃣ *Extras y promociones*  
+
+5️⃣ *Ubicación y reseñas*  
+
+Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*, o simplemente *6️⃣* 👨‍✈️🌿  
+
+¿Listo para zarpar o qué número eliges, grumete?"""
+            # Check if it's a menu number selection (1-6)
+            elif menu_number := self.faq_handler.is_menu_number(message_text):
+                logger.info(f"Menu number selected: {menu_number}")
+                if menu_number == 1:
+                    # Option 1: Disponibilidad y horarios
+                    response = await self.availability_checker.check_availability("disponibilidad")
+                elif menu_number == 2:
+                    # Option 2: Precios por persona
+                    response = self.faq_handler.get_response("precio")
+                elif menu_number == 3:
+                    # Option 3: Características del HotBoat
+                    response = self.faq_handler.get_response("caracteristicas")
+                elif menu_number == 4:
+                    # Option 4: Extras y promociones
+                    response = self.faq_handler.get_response("extras")
+                elif menu_number == 5:
+                    # Option 5: Ubicación y reseñas
+                    response = self.faq_handler.get_response("ubicación")
+                elif menu_number == 6:
+                    # Option 6: Llamar a Tomás
+                    response = self.faq_handler.get_response("llamar a tomas")
+                else:
+                    response = "No entendí esa opción. Por favor elige un número del 1 al 6, grumete ⚓"
             # Check if it's a FAQ question
             elif self.faq_handler.get_response(message_text):
                 logger.info("Responding with FAQ answer")

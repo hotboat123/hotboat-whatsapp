@@ -253,6 +253,28 @@ Hostal y cabañas junto al río, con tinaja y entorno natural 🍃
             "donde hospedarse": "alojamiento",  # Alias
             "hospedaje": "alojamiento",  # Alias
             "hostal": "alojamiento",  # Alias
+            
+            # Respuesta para llamar a Tomás
+            "llamar a tomas": """👨‍✈️🌿 **Capitán Tomás al rescate**
+            
+¡Perfecto, grumete! He avisado al Capitán Tomás que necesita hablar contigo 👨‍✈️
+            
+El Capitán tomará el timón en cuanto vuelva a cubierta y se comunicará contigo pronto 📞
+            
+Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré de ayudarte lo mejor que pueda ⚓
+            
+¡Gracias por tu paciencia!""",
+            
+            "ayuda": "llamar a tomas",  # Alias
+            "hablar con tomas": "llamar a tomas",  # Alias
+            "capitan tomas": "llamar a tomas",  # Alias
+            "capitán tomas": "llamar a tomas",  # Alias
+            
+            # Reseñas (ya está en ubicación, pero agregamos keyword específica)
+            "reseñas": "ubicación",  # Alias - Las reseñas están en la respuesta de ubicación
+            "resenas": "ubicación",  # Alias
+            "reviews": "ubicación",  # Alias
+            "opiniones": "ubicación",  # Alias
         }
     
     def get_response(self, message: str) -> Optional[str]:
@@ -276,6 +298,50 @@ Hostal y cabañas junto al río, con tinaja y entorno natural 🍃
                 
                 logger.info(f"FAQ match found for keyword: {keyword}")
                 return response
+        
+        return None
+    
+    def is_menu_number(self, message: str) -> Optional[int]:
+        """
+        Check if message is a menu number selection (1-6)
+        
+        Args:
+            message: User's message
+        
+        Returns:
+            Number selected (1-6) or None
+        """
+        message_stripped = message.strip()
+        
+        # Check for emoji numbers
+        menu_numbers = {
+            "1️⃣": 1,
+            "2️⃣": 2,
+            "3️⃣": 3,
+            "4️⃣": 4,
+            "5️⃣": 5,
+            "6️⃣": 6,
+        }
+        
+        # Check exact match with emoji
+        if message_stripped in menu_numbers:
+            return menu_numbers[message_stripped]
+        
+        # Check for plain numbers (just the digit, possibly with spaces)
+        message_lower = message.lower().strip()
+        if message_lower in ["1", "2", "3", "4", "5", "6"]:
+            return int(message_lower)
+        
+        # Check if message starts with a number (e.g., "1 disponibilidad")
+        first_char = message_lower[0] if message_lower else ""
+        if first_char in ["1", "2", "3", "4", "5", "6"]:
+            try:
+                # Try to parse just the number
+                num = int(first_char)
+                if 1 <= num <= 6:
+                    return num
+            except ValueError:
+                pass
         
         return None
 
