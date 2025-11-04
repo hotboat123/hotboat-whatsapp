@@ -19,6 +19,27 @@ logger = logging.getLogger(__name__)
 # Número del Capitán Tomás para notificaciones
 CAPITAN_TOMAS_PHONE = "56977577307"  # Tu número personal
 
+# Mapeo de números a extras
+EXTRAS_NUMBER_MAP = {
+    "1": "tabla grande",
+    "2": "tabla pequeña",
+    "3": "jugo natural",
+    "4": "lata bebida",
+    "5": "agua mineral",
+    "6": "helado",  # Needs flavor selection
+    "7": "modo romántico",
+    "8": "velas",
+    "9": "letras",
+    "10": "pack completo",
+    "11": "video 15",
+    "12": "video 60",
+    "13": "transporte",
+    "14": "toalla normal",
+    "15": "toalla poncho",
+    "16": "chalas",
+    "17": "reserva flex",
+}
+
 
 class ConversationManager:
     """Manages conversations with users"""
@@ -160,10 +181,20 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
             elif conversation.get("metadata", {}).get("awaiting_ice_cream_flavor"):
                 logger.info("User responding with ice cream flavor")
                 response = await self._handle_ice_cream_flavor_response(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.6: Check if user is selecting an extra by number (after viewing extras menu)
+            elif conversation.get("metadata", {}).get("awaiting_extra_selection"):
+                extra_response = await self._handle_extra_number_selection(message_text, from_number, contact_name, conversation)
+                if extra_response:
+                    response = extra_response
+                else:
+                    # If not a valid extra number, clear the state and continue processing
+                    conversation["metadata"]["awaiting_extra_selection"] = False
+                    # Let it fall through to other handlers
+                    response = None
             # PRIORITY 2: Check if it's a cart option (1-3) when cart has items
             elif await self._is_cart_option_selection(message_text, from_number):
                 logger.info(f"Cart option selected: {message_text}")
-                response = await self._handle_cart_option_selection(message_text, from_number, contact_name)
+                response = await self._handle_cart_option_selection(message_text, from_number, contact_name, conversation)
             # Check if it's a menu number selection (1-6)
             elif menu_number := self.faq_handler.is_menu_number(message_text):
                 logger.info(f"Menu number selected: {menu_number}")
@@ -178,6 +209,7 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                     response = self.faq_handler.get_response("caracteristicas")
                 elif menu_number == 4:
                     # Option 4: Extras y promociones
+                    conversation["metadata"]["awaiting_extra_selection"] = True
                     response = self.faq_handler.get_response("extras")
                 elif menu_number == 5:
                     # Option 5: Ubicación y reseñas
@@ -694,7 +726,7 @@ Escribe el número que prefieras 🚤"""
             return len(cart) > 0
         return False
     
-    async def _handle_cart_option_selection(self, message: str, phone_number: str, contact_name: str) -> str:
+    async def _handle_cart_option_selection(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """
         Handle cart option selection (1, 2, or 3)
         
@@ -702,6 +734,7 @@ Escribe el número que prefieras 🚤"""
             message: User's message (should be '1', '2', or '3')
             phone_number: User's phone number
             contact_name: User's name
+            conversation: Conversation context
         
         Returns:
             Response message
@@ -710,50 +743,9 @@ Escribe el número que prefieras 🚤"""
         cart = await self.cart_manager.get_cart(phone_number)
         
         if option == '1':
-            # Option 1: Agregar un extra - usar EXACTAMENTE los mismos del menú 4
-            return """✨ *Servicios Extra:*
-
-¿Quieres agregar algo especial a tu HotBoat?
-
-🍇 *Tablas de Picoteo*
-$25.000 → Tabla grande (4 personas): jamón serrano, queso crema con mermelada de pimentón, y más
-$20.000 → Tabla pequeña (2 personas): queso crema con mermelada de pimentón, jamón serrano y más
-
-🥤 *Bebidas y Jugos* (sin alcohol)
-$10.000 → Jugo natural 1L (piña o naranja)
-$2.900 → Lata bebida (Coca-Cola o Fanta)
-$2.500 → Agua mineral 1,5 L
-🍦 $3.500 → Helado individual (Cookies & Cream 🍪 o Frambuesa a la Crema con Chocolate Belga 🍫)
-
-🌹 *Modo Romántico*
-$25.000 → pétalos de rosas y decoración especial 💕
-
-🌙 *Decoración Nocturna Extra*
-$10.000 → Velas LED decorativas 💡
-$15.000 → Letras luminosas "Te Amo" / "Love" ❤️
-$20.000 → Pack completo (velas + letras iluminadas) 💍
-
-✨🎥 *Video personalizado*
-15 s → $30.000 / 60 s → $40.000
-
-🚐 *Transporte* ida y vuelta
-$50.000 desde Pucón
-
-🧻 *Toallas*
-Toalla normal $9.000
-Toalla poncho $10.000
-
-🩴 *Chalas de ducha*
-$10.000
-
-🔒 *Reserva FLEX +10%* → cancela/reprograma cuando quieras
-
-Para agregar, escribe lo que quieres. Por ejemplo:
-• "Quiero la tabla grande"
-• "Agregar modo romántico"
-• "Dame el pack completo"
-
-¿Qué extra te gustaría agregar? 🚤"""
+            # Option 1: Agregar un extra - mostrar menú con números
+            conversation["metadata"]["awaiting_extra_selection"] = True
+            return self.faq_handler.get_response("extras")
         
         elif option == '2':
             # Option 2: Proceder con el pago
@@ -1141,6 +1133,54 @@ Escribe el número que prefieras 🚤"""
             conversation["metadata"]["awaiting_ice_cream_flavor"] = False
             conversation["metadata"]["pending_ice_cream_quantity"] = None
             return "Hubo un error agregando el helado. Por favor, intenta de nuevo."
+    
+    async def _handle_extra_number_selection(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> Optional[str]:
+        """Handle user's selection of an extra by number"""
+        try:
+            message_clean = message.strip()
+            
+            # Check if it's a valid extra number (1-17)
+            if message_clean not in EXTRAS_NUMBER_MAP:
+                logger.info(f"Not a valid extra number: {message_clean}")
+                return None
+            
+            # Clear the awaiting state
+            conversation["metadata"]["awaiting_extra_selection"] = False
+            
+            # Get the extra name from the map
+            extra_name = EXTRAS_NUMBER_MAP[message_clean]
+            
+            logger.info(f"User selected extra #{message_clean}: {extra_name}")
+            
+            # Special case: helado (needs flavor selection)
+            if extra_name == "helado":
+                conversation["metadata"]["awaiting_ice_cream_flavor"] = True
+                conversation["metadata"]["pending_ice_cream_quantity"] = 1
+                return """🍦 *Tenemos 2 sabores de helado:*
+
+1️⃣ Cookies & Cream 🍪
+2️⃣ Frambuesa a la Crema con Chocolate Belga 🍫
+
+Precio: $3,500 c/u
+
+¿Cuál sabor prefieres? (escribe el número) 🚤"""
+            
+            # Try to parse and add the extra to cart
+            extra_item = self.cart_manager.parse_extra_from_message(extra_name)
+            if extra_item:
+                await self.cart_manager.add_item(phone_number, contact_name, extra_item)
+                cart = await self.cart_manager.get_cart(phone_number)
+                return f"✅ *{extra_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+            else:
+                logger.error(f"Could not parse extra: {extra_name}")
+                return "Lo siento, hubo un error agregando ese extra. ¿Podrías intentar de nuevo?"
+            
+        except Exception as e:
+            logger.error(f"Error handling extra number selection: {e}")
+            import traceback
+            traceback.print_exc()
+            conversation["metadata"]["awaiting_extra_selection"] = False
+            return "Hubo un error procesando tu selección. Por favor, intenta de nuevo."
     
     async def _try_parse_multiple_extras(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Try to parse multiple extras from a message like '1 jugo y 2 helados'"""

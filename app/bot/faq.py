@@ -164,39 +164,39 @@ El lago Villarrica es hermoso todo el año, pero el mejor clima es en verano.
 ¿Quieres agregar algo especial a tu HotBoat?
 
 🍇 **Tablas de Picoteo**
-$25.000 → Tabla grande (4 personas): jamón serrano, queso crema con mermelada de pimentón, y más
-$20.000 → Tabla pequeña (2 personas): queso crema con mermelada de pimentón, jamón serrano y más
+1️⃣ Tabla grande (4 personas) - $25.000
+2️⃣ Tabla pequeña (2 personas) - $20.000
 
 🥤 **Bebidas y Jugos** (sin alcohol)
-$10.000 → Jugo natural 1L (piña o naranja)
-$2.900 → Lata bebida (Coca-Cola o Fanta)
-$2.500 → Agua mineral 1,5 L
-🍦 $3.500 → Helado individual (Cookies & Cream 🍪 o Frambuesa a la Crema con Chocolate Belga 🍫)
+3️⃣ Jugo natural 1L (piña o naranja) - $10.000
+4️⃣ Lata bebida (Coca-Cola o Fanta) - $2.900
+5️⃣ Agua mineral 1,5 L - $2.500
+6️⃣ Helado individual (Cookies & Cream 🍪 o Frambuesa 🍫) - $3.500
 
 🌹 **Modo Romántico**
-$25.000 → pétalos de rosas y decoración especial 💕
+7️⃣ Pétalos de rosas y decoración especial - $25.000
 
 🌙 **Decoración Nocturna Extra**
-$10.000 → Velas LED decorativas 💡
-$15.000 → Letras luminosas "Te Amo" / "Love" ❤️
-$20.000 → Pack completo (velas + letras iluminadas) 💍
+8️⃣ Velas LED decorativas - $10.000
+9️⃣ Letras luminosas "Te Amo" / "Love" - $15.000
+🔟 Pack completo (velas + letras) - $20.000
 
 ✨🎥 **Video personalizado**
-15 s → $30.000 / 60 s → $40.000
+1️⃣1️⃣ Video 15s - $30.000
+1️⃣2️⃣ Video 60s - $40.000
 
-🚐 **Transporte** ida y vuelta
-$50.000 desde Pucón
+🚐 **Transporte**
+1️⃣3️⃣ Ida y vuelta desde Pucón - $50.000
 
 🧻 **Toallas**
-Toalla normal $9.000
-Toalla poncho $10.000
+1️⃣4️⃣ Toalla normal - $9.000
+1️⃣5️⃣ Toalla poncho - $10.000
 
-🩴 **Chalas de ducha**
-$10.000
+🩴 **Otros**
+1️⃣6️⃣ Chalas de ducha - $10.000
+1️⃣7️⃣ Reserva FLEX (+10% - cancela/reprograma cuando quieras)
 
-🔒 **Reserva FLEX +10%** → cancela/reprograma cuando quieras
-
-¿Qué extra te gustaría agregar?""",
+📝 *Escribe el número del extra que deseas agregar* 🚤""",
             
             "tablas": "extras",  # Alias
             "picoteo": "extras",  # Alias
