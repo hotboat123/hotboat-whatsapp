@@ -514,6 +514,7 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         Returns:
             Response text or None if not a cart command
         """
+        import re
         message_lower = message.lower().strip()
         
         # View cart
@@ -571,7 +572,6 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         is_direct_extras_request = False
         if has_extra_keywords and not has_action_words:
             # Check if it contains numbers (quantities) and extra keywords
-            import re
             has_numbers = bool(re.search(r'\d+', message_lower))
             # Make sure it's not just a simple menu number (1-6) or just "X helados" without other context
             is_simple_menu_number = message_lower.strip() in ['1', '2', '3', '4', '5', '6']
@@ -596,7 +596,6 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             # Check for special cases that need clarification
             if "helado" in message_lower and not any(flavor in message_lower for flavor in ["cookies", "cream", "frambuesa", "chocolate"]):
                 # Extract quantity if present
-                import re
                 quantity_match = re.search(r'(\d+)\s*helado', message_lower)
                 quantity = int(quantity_match.group(1)) if quantity_match else 1
                 
