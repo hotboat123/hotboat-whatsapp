@@ -135,6 +135,21 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                 logger.info("Checking availability")
                 response = await self.availability_checker.check_availability(message_text)
             
+            # PRIORITY: Check if user is making a reservation FIRST (before checking if asking how to add)
+            # This should happen BEFORE AI handler to catch reservation intents
+            elif reservation_item := await self._try_parse_reservation_from_message(message_text, phone_number, conversation):
+                logger.info("User making a reservation - adding to cart")
+                try:
+                    await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
+                    cart = await self.cart_manager.get_cart(phone_number)
+                    response = f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n¿Quieres agregar algún extra o *confirmar* la reserva?"
+                except Exception as cart_error:
+                    logger.error(f"Error adding to cart: {cart_error}")
+                    import traceback
+                    traceback.print_exc()
+                    # If cart fails, still acknowledge the reservation
+                    response = f"✅ Entendido, quieres reservar para {reservation_item.quantity} personas.\n\nPor favor, confirma los detalles y el Capitán Tomás se comunicará contigo pronto 👨‍✈️"
+            
             # Check if user is asking how to add to cart (after seeing availability)
             elif self._is_asking_how_to_add_to_cart(message_text, conversation):
                 logger.info("User asking how to add to cart")
@@ -155,46 +170,21 @@ Yo lo agrego automáticamente al carrito y luego puedes:
 
 ¿Qué fecha y horario te gustaría? 🚤"""
             
-            # Check if user is making a reservation after viewing availability
-            # Pattern: "el [día] a las [hora] para [X] personas" or similar
-            # This should happen BEFORE AI handler to catch reservation intents
+            # Use AI for general conversation
             else:
-                # Try to parse reservation first, fallback to AI if not a reservation
+                logger.info("Using AI handler for response")
                 try:
-                    reservation_item = await self._try_parse_reservation_from_message(message_text, phone_number, conversation)
-                    if reservation_item:
-                        logger.info("User making a reservation - adding to cart")
-                        try:
-                            await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
-                            cart = await self.cart_manager.get_cart(phone_number)
-                            response = f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n¿Quieres agregar algún extra o *confirmar* la reserva?"
-                        except Exception as cart_error:
-                            logger.error(f"Error adding to cart: {cart_error}")
-                            # If cart fails, still acknowledge the reservation
-                            response = f"✅ Entendido, quieres reservar para {reservation_item.quantity} personas.\n\nPor favor, confirma los detalles y el Capitán Tomás se comunicará contigo pronto 👨‍✈️"
-                    else:
-                        # No reservation detected, use AI handler
-                        logger.info("Using AI handler for response")
-                        response = await self.ai_handler.generate_response(
-                            message_text=message_text,
-                            conversation_history=conversation["messages"],
-                            contact_name=contact_name
-                        )
-                except Exception as e:
-                    logger.error(f"Error in reservation parsing, falling back to AI: {e}")
+                    response = await self.ai_handler.generate_response(
+                        message_text=message_text,
+                        conversation_history=conversation["messages"],
+                        contact_name=contact_name
+                    )
+                except Exception as ai_error:
+                    logger.error(f"Error in AI handler: {ai_error}")
                     import traceback
                     traceback.print_exc()
-                    # Fallback to AI if reservation parsing fails
-                    try:
-                        response = await self.ai_handler.generate_response(
-                            message_text=message_text,
-                            conversation_history=conversation["messages"],
-                            contact_name=contact_name
-                        )
-                    except Exception as ai_error:
-                        logger.error(f"Error in AI handler: {ai_error}")
-                        # Final fallback
-                        response = "🥬 ¡Ahoy, grumete! ⚓ Disculpa, estoy teniendo problemas técnicos. ¿Podrías intentar de nuevo en un momento?"
+                    # Final fallback
+                    response = "🥬 ¡Ahoy, grumete! ⚓ Disculpa, estoy teniendo problemas técnicos. ¿Podrías intentar de nuevo en un momento?"
             
             
             # Add response to history
@@ -518,9 +508,11 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         """Try to parse reservation from message (date, time, capacity)"""
         try:
             message_lower = message.lower().strip()
+            logger.info(f"Trying to parse reservation from: '{message_lower}'")
             
             # Quick exit for simple messages
             if len(message_lower) < 10 or message_lower in ['hola', 'si', 'no', 'gracias', 'ok', 'okay']:
+                logger.debug(f"Message too short or simple, skipping: '{message_lower}'")
                 return None
             
             # Check if this looks like a reservation intent
@@ -532,9 +524,14 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             ])
             
             if not has_reservation_pattern:
+                logger.debug(f"No reservation pattern detected in: '{message_lower}'")
                 return None
+            
+            logger.info(f"Reservation pattern detected in: '{message_lower}'")
         except Exception as e:
             logger.warning(f"Error in reservation pattern check: {e}")
+            import traceback
+            traceback.print_exc()
             return None
         
         try:
@@ -562,10 +559,12 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             }
             
             # Try each pattern
-            for pattern in reservation_patterns:
+            for i, pattern in enumerate(reservation_patterns):
                 match = re.search(pattern, message_lower)
                 if match:
+                    logger.info(f"Pattern {i} matched: {pattern}")
                     groups = match.groups()
+                    logger.info(f"Groups: {groups}")
                     
                     # Extract capacity (always the last number)
                     capacity = None
@@ -658,6 +657,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                         # Format time as HH:00
                         time_str = f"{time_hour:02d}:00"
                         
+                        logger.info(f"Parsed reservation: date={date_str}, time={time_str}, capacity={capacity}")
+                        
                         # Verify the slot is available (optional check)
                         # For now, we'll trust the user and add it
                         
@@ -668,14 +669,19 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                             capacity=capacity
                         )
                         
+                        logger.info(f"Created reservation item: {reservation_item}")
                         return reservation_item
+                    else:
+                        logger.warning(f"Could not parse date or time: target_date={target_date}, time_hour={time_hour}")
             
+            logger.info("No pattern matched or could not extract reservation details")
             return None
         except Exception as e:
             logger.warning(f"Error parsing reservation from message: {e}")
             import traceback
             traceback.print_exc()
             return None
+
 
 
 
