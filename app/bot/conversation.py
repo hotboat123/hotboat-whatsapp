@@ -89,7 +89,12 @@ Puedes preguntarme por:
 Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*, o simplemente *6️⃣* 👨‍✈️🌿  
 
 ¿Listo para zarpar o qué número eliges, grumete?"""
-            # Check if it's a cart option (1-3) when cart has items
+            # PRIORITY 1: Check if user is responding with number of people (after selecting date/time)
+            # This MUST come before menu options to avoid confusion when user types a number
+            elif conversation.get("metadata", {}).get("awaiting_party_size"):
+                logger.info("User responding with party size")
+                response = await self._handle_party_size_response(message_text, from_number, contact_name, conversation)
+            # PRIORITY 2: Check if it's a cart option (1-3) when cart has items
             elif await self._is_cart_option_selection(message_text, from_number):
                 logger.info(f"Cart option selected: {message_text}")
                 response = await self._handle_cart_option_selection(message_text, from_number, contact_name)
@@ -138,11 +143,6 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
             elif self.is_availability_query(message_text):
                 logger.info("Checking availability")
                 response = await self.availability_checker.check_availability(message_text)
-            
-            # Check if user is responding with number of people (after selecting date/time)
-            elif conversation.get("metadata", {}).get("awaiting_party_size"):
-                logger.info("User responding with party size")
-                response = await self._handle_party_size_response(message_text, from_number, contact_name, conversation)
             
             # Check if user is confirming a reservation (after seeing availability from AI)
             elif await self._is_confirming_reservation_from_availability(message_text, conversation):
