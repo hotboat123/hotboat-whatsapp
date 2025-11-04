@@ -530,32 +530,48 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         cart = await self.cart_manager.get_cart(phone_number)
         
         if option == '1':
-            # Option 1: Agregar un extra
-            return """✨ *Extras disponibles:*
+            # Option 1: Agregar un extra - usar EXACTAMENTE los mismos del menú 4
+            return """✨ *Servicios Extra:*
 
-🏄 *Tablas de paddle*
-   • 1 tabla: $15,000
-   • 2 tablas: $25,000
+¿Quieres agregar algo especial a tu HotBoat?
 
-🍻 *Bebidas*
-   • Cervezas (pack 6): $10,000
-   • Vinos: $15,000
-   • Espumante: $20,000
+🍇 *Tablas de Picoteo*
+$25.000 → Tabla grande (4 personas): jamón serrano, queso crema con mermelada de pimentón, y más
+$20.000 → Tabla pequeña (2 personas): queso crema con mermelada de pimentón, jamón serrano y más
 
-🍖 *Comida*
-   • Picoteo: $20,000
-   • Parrillada: $35,000
+🥤 *Bebidas y Jugos* (sin alcohol)
+$10.000 → Jugo natural 1L (piña o naranja)
+$2.900 → Lata bebida (Coca-Cola o Fanta)
+$2.500 → Agua mineral 1,5 L
+🍦 $3.500 → Helado individual (Cookies & Cream 🍪 o Frambuesa a la Crema con Chocolate Belga 🍫)
 
-📸 *Fotografía profesional*
-   • Pack fotos: $25,000
+🌹 *Modo Romántico*
+$25.000 → pétalos de rosas y decoración especial 💕
 
-🎵 *DJ a bordo*
-   • 1 hora: $50,000
+🌙 *Decoración Nocturna Extra*
+$10.000 → Velas LED decorativas 💡
+$15.000 → Letras luminosas "Te Amo" / "Love" ❤️
+$20.000 → Pack completo (velas + letras iluminadas) 💍
 
-Para agregar un extra, solo escríbeme lo que quieres. Por ejemplo:
-• "Quiero 2 tablas de paddle"
-• "Agregar 1 pack de cervezas"
-• "Dame el pack de fotos"
+✨🎥 *Video personalizado*
+15 s → $30.000 / 60 s → $40.000
+
+🚐 *Transporte* ida y vuelta
+$50.000 desde Pucón
+
+🧻 *Toallas*
+Toalla normal $9.000
+Toalla poncho $10.000
+
+🩴 *Chalas de ducha*
+$10.000
+
+🔒 *Reserva FLEX +10%* → cancela/reprograma cuando quieras
+
+Para agregar, escribe lo que quieres. Por ejemplo:
+• "Quiero la tabla grande"
+• "Agregar modo romántico"
+• "Dame el pack completo"
 
 ¿Qué extra te gustaría agregar? 🚤"""
         
