@@ -137,7 +137,7 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
             
             # PRIORITY: Check if user is making a reservation FIRST (before checking if asking how to add)
             # This should happen BEFORE AI handler to catch reservation intents
-            elif reservation_item := await self._try_parse_reservation_from_message(message_text, phone_number, conversation):
+            elif reservation_item := await self._try_parse_reservation_from_message(message_text, from_number, conversation):
                 logger.info("User making a reservation - adding to cart")
                 try:
                     await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
