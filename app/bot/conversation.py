@@ -573,17 +573,25 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             # Check if it contains numbers (quantities) and extra keywords
             import re
             has_numbers = bool(re.search(r'\d+', message_lower))
-            # Make sure it's not just a simple menu number (1-6)
+            # Make sure it's not just a simple menu number (1-6) or just "X helados" without other context
             is_simple_menu_number = message_lower.strip() in ['1', '2', '3', '4', '5', '6']
-            if has_numbers and not is_simple_menu_number:
+            # More strict check: must have number + "y" or comma (indicating multiple items)
+            has_multiple_items_pattern = bool(re.search(r'\d+.*(y|,).*\d*', message_lower))
+            if has_numbers and not is_simple_menu_number and has_multiple_items_pattern:
                 is_direct_extras_request = True
         
         if (has_action_words and has_extra_keywords) or is_direct_extras_request:
             # If it's a direct request with numbers, try to parse multiple extras first
             if is_direct_extras_request:
-                multiple_extras_response = await self._try_parse_multiple_extras(message, phone_number, contact_name)
-                if multiple_extras_response:
-                    return multiple_extras_response
+                try:
+                    multiple_extras_response = await self._try_parse_multiple_extras(message, phone_number, contact_name, conversation)
+                    if multiple_extras_response:
+                        return multiple_extras_response
+                except Exception as e:
+                    logger.error(f"Error in _try_parse_multiple_extras: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Continue to try single item parsing
             
             # Check for special cases that need clarification
             if "helado" in message_lower and not any(flavor in message_lower for flavor in ["cookies", "cream", "frambuesa", "chocolate"]):
@@ -1135,7 +1143,7 @@ Escribe el número que prefieras 🚤"""
             conversation["metadata"]["pending_ice_cream_quantity"] = None
             return "Hubo un error agregando el helado. Por favor, intenta de nuevo."
     
-    async def _try_parse_multiple_extras(self, message: str, phone_number: str, contact_name: str) -> str:
+    async def _try_parse_multiple_extras(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Try to parse multiple extras from a message like '1 jugo y 2 helados'"""
         try:
             # Get available extras from FAQ
@@ -1159,7 +1167,6 @@ Si no puedes identificar ningún extra, responde: []
 IMPORTANTE: Usa EXACTAMENTE los nombres de la lista de extras, no los inventes."""
 
             # Get AI response
-            conversation = await self.get_conversation(phone_number, contact_name)
             ai_response = await self.ai_handler.generate_response(ai_prompt, [], conversation)
             ai_response_clean = ai_response.strip()
             
@@ -1189,7 +1196,9 @@ IMPORTANTE: Usa EXACTAMENTE los nombres de la lista de extras, no los inventes."
                     # Check if it's a generic ice cream (needs flavor selection)
                     if "helado" in item_name.lower() and "cookies" not in item_name.lower() and "frambuesa" not in item_name.lower():
                         needs_ice_cream_flavor = True
-                        conversation = await self.get_conversation(phone_number, contact_name)
+                        # Store ice cream quantity for later (when user selects flavor)
+                        if not conversation.get("metadata"):
+                            conversation["metadata"] = {}
                         conversation["metadata"]["awaiting_ice_cream_flavor"] = True
                         conversation["metadata"]["pending_ice_cream_quantity"] = quantity
                         continue
