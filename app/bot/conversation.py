@@ -144,6 +144,11 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                 logger.info("User responding with party size")
                 response = await self._handle_party_size_response(message_text, from_number, contact_name, conversation)
             
+            # Check if user is confirming a reservation (after seeing availability from AI)
+            elif await self._is_confirming_reservation_from_availability(message_text, conversation):
+                logger.info("User confirming reservation from availability check")
+                response = await self._handle_reservation_confirmation(message_text, from_number, contact_name, conversation)
+            
             # Check if user is selecting a date/time (without specifying party size)
             elif date_time_selection := await self._try_parse_date_time_only(message_text, conversation):
                 logger.info(f"User selecting date/time: {date_time_selection}")
@@ -649,6 +654,121 @@ Para agregar, escribe lo que quieres. Por ejemplo:
             return "🛒 *Carrito vaciado*, grumete ⚓\n\n¿Qué te gustaría hacer ahora?\n\n1️⃣ Ver disponibilidad\n2️⃣ Ver precios\n3️⃣ Hablar con el Capitán Tomás"
         
         return "No entendí esa opción. Por favor elige 1, 2 o 3."
+    
+    async def _is_confirming_reservation_from_availability(self, message: str, conversation: dict) -> bool:
+        """
+        Check if user is confirming a reservation after seeing availability
+        """
+        message_lower = message.lower().strip()
+        
+        # Confirmation keywords
+        confirmation_words = ['si', 'sí', 'claro', 'dale', 'ok', 'okay', 'confirmo', 'confirmar', 'hagamosla', 'hagámosla', 'yes']
+        
+        if message_lower not in confirmation_words:
+            return False
+        
+        # Check if recent messages show availability was checked
+        if not conversation or not conversation.get("messages"):
+            return False
+        
+        recent_messages = conversation["messages"][-5:]  # Check last 5 messages
+        
+        for msg in reversed(recent_messages):
+            if msg.get("role") == "assistant":
+                content = msg.get("content", "").lower()
+                # Check if the message contains availability info and reservation intent
+                if ("disponibilidad" in content or "precio" in content) and ("personas" in content) and ("reserva" in content or "hacer" in content or "decides" in content):
+                    return True
+        
+        return False
+    
+    async def _handle_reservation_confirmation(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """
+        Handle user confirming a reservation after seeing availability
+        Extract reservation details from recent conversation
+        """
+        try:
+            # Look for reservation details in recent messages
+            recent_messages = conversation["messages"][-10:]  # Check last 10 messages
+            
+            date = None
+            time = None
+            party_size = None
+            
+            import re
+            
+            for msg in reversed(recent_messages):
+                content = msg.get("content", "")
+                
+                # Look for "martes a las 16 para 3 personas" pattern in user messages
+                if msg.get("role") == "user":
+                    # Try to extract date/time/party size
+                    match = re.search(r'(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?', content.lower())
+                    if match:
+                        day_name = match.group(1)
+                        hour = int(match.group(2))
+                        party_size = int(match.group(3))
+                        
+                        # Calculate date from day name
+                        from datetime import datetime, timedelta
+                        import pytz
+                        
+                        CHILE_TZ = pytz.timezone('America/Santiago')
+                        now = datetime.now(CHILE_TZ)
+                        
+                        spanish_days = {
+                            'lunes': 0, 'martes': 1, 'miercoles': 2, 'miércoles': 2,
+                            'jueves': 3, 'viernes': 4, 'sabado': 5, 'sábado': 5,
+                            'domingo': 6
+                        }
+                        
+                        target_dow = spanish_days.get(day_name)
+                        if target_dow is not None:
+                            current_dow = now.weekday()
+                            days_ahead = target_dow - current_dow
+                            if days_ahead <= 0:
+                                days_ahead += 7
+                            target_date = (now + timedelta(days=days_ahead)).replace(hour=0, minute=0, second=0, microsecond=0)
+                            
+                            spanish_months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                                             'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+                            date = f"{target_date.day} de {spanish_months[target_date.month - 1]} {target_date.year}"
+                            
+                            # Convert hour to operating hours
+                            if hour == 16:
+                                hour = 15
+                            elif hour == 10:
+                                hour = 9
+                            elif hour in [9, 12, 15, 18, 21]:
+                                pass
+                            else:
+                                available_slots = [9, 12, 15, 18, 21]
+                                hour = min(available_slots, key=lambda x: abs(x - hour))
+                            
+                            time = f"{hour:02d}:00"
+                            break
+            
+            if not date or not time or not party_size:
+                return "No pude encontrar los detalles de la reserva. Por favor, dime la fecha, hora y número de personas nuevamente. Por ejemplo: 'El martes a las 16 para 3 personas' 🚤"
+            
+            # Create reservation item
+            reservation_item = self.cart_manager.create_reservation_item(
+                date=date,
+                time=time,
+                capacity=party_size
+            )
+            
+            # Add to cart
+            await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
+            cart = await self.cart_manager.get_cart(phone_number)
+            
+            return f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar un extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+            
+        except Exception as e:
+            logger.error(f"Error handling reservation confirmation: {e}")
+            import traceback
+            traceback.print_exc()
+            return "Hubo un error procesando tu reserva. Por favor, intenta especificar la fecha, hora y número de personas nuevamente. Por ejemplo: 'El martes a las 16 para 3 personas' 🚤"
     
     async def _try_parse_date_time_only(self, message: str, conversation: dict = None) -> Optional[dict]:
         """
