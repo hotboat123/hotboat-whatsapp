@@ -116,7 +116,10 @@ async def check_slot_availability(slot_datetime: datetime, duration_hours: float
     
     except Exception as e:
         logger.error(f"Error checking slot availability: {e}")
-        return False
+        # If there's an error querying the database, assume the slot IS available
+        # This is safer than blocking all availability
+        logger.warning("Assuming slot is available due to database error")
+        return True
 
 
 async def get_booked_slots(
