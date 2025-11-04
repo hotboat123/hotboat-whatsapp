@@ -262,11 +262,7 @@ class CartManager:
             )
         
         message += f"━━━━━━━━━━━━━━━━\n"
-        message += f"💰 *Total: ${total:,}*\n\n"
-        message += f"📝 *Comandos:*\n"
-        message += f"• *Eliminar [número]* - Eliminar un item\n"
-        message += f"• *Confirmar* - Confirmar y proceder con el pago\n"
-        message += f"• *Vaciar* - Vaciar carrito\n"
+        message += f"💰 *Total: ${total:,}*"
         
         return message
     
