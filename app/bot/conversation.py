@@ -140,20 +140,44 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
             # Check if user is making a reservation after viewing availability
             # Pattern: "el [día] a las [hora] para [X] personas" or similar
             # This should happen BEFORE AI handler to catch reservation intents
-            elif reservation_item := await self._try_parse_reservation_from_message(message_text, phone_number, conversation):
-                logger.info("User making a reservation - adding to cart")
-                await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
-                cart = await self.cart_manager.get_cart(phone_number)
-                response = f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n¿Quieres agregar algún extra o *confirmar* la reserva?"
-            
-            # Use AI for general conversation
             else:
-                logger.info("Using AI handler for response")
-                response = await self.ai_handler.generate_response(
-                    message_text=message_text,
-                    conversation_history=conversation["messages"],
-                    contact_name=contact_name
-                )
+                # Try to parse reservation first, fallback to AI if not a reservation
+                try:
+                    reservation_item = await self._try_parse_reservation_from_message(message_text, phone_number, conversation)
+                    if reservation_item:
+                        logger.info("User making a reservation - adding to cart")
+                        try:
+                            await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
+                            cart = await self.cart_manager.get_cart(phone_number)
+                            response = f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n¿Quieres agregar algún extra o *confirmar* la reserva?"
+                        except Exception as cart_error:
+                            logger.error(f"Error adding to cart: {cart_error}")
+                            # If cart fails, still acknowledge the reservation
+                            response = f"✅ Entendido, quieres reservar para {reservation_item.quantity} personas.\n\nPor favor, confirma los detalles y el Capitán Tomás se comunicará contigo pronto 👨‍✈️"
+                    else:
+                        # No reservation detected, use AI handler
+                        logger.info("Using AI handler for response")
+                        response = await self.ai_handler.generate_response(
+                            message_text=message_text,
+                            conversation_history=conversation["messages"],
+                            contact_name=contact_name
+                        )
+                except Exception as e:
+                    logger.error(f"Error in reservation parsing, falling back to AI: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Fallback to AI if reservation parsing fails
+                    try:
+                        response = await self.ai_handler.generate_response(
+                            message_text=message_text,
+                            conversation_history=conversation["messages"],
+                            contact_name=contact_name
+                        )
+                    except Exception as ai_error:
+                        logger.error(f"Error in AI handler: {ai_error}")
+                        # Final fallback
+                        response = "🥬 ¡Ahoy, grumete! ⚓ Disculpa, estoy teniendo problemas técnicos. ¿Podrías intentar de nuevo en un momento?"
+            
             
             # Add response to history
             conversation["messages"].append({
@@ -180,8 +204,17 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
         # Check if already in memory
         if phone_number not in self.conversations:
             # Load lead info and conversation history from database
-            lead = await get_or_create_lead(phone_number, contact_name)
-            history = await get_conversation_history(phone_number, limit=50)
+            try:
+                lead = await get_or_create_lead(phone_number, contact_name)
+            except Exception as e:
+                logger.warning(f"Error loading lead for {phone_number}: {e}")
+                lead = None
+            
+            try:
+                history = await get_conversation_history(phone_number, limit=50)
+            except Exception as e:
+                logger.warning(f"Error loading history for {phone_number}: {e}")
+                history = []
             
             self.conversations[phone_number] = {
                 "phone": phone_number,
@@ -426,152 +459,166 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
     
     async def _try_parse_reservation_from_message(self, message: str, phone_number: str, conversation: dict = None):
         """Try to parse reservation from message (date, time, capacity)"""
-        message_lower = message.lower().strip()
-        
-        # Check if this looks like a reservation intent
-        # Look for patterns: "a las [hora] para [X] personas", "[día] a las [hora]", etc.
-        has_reservation_pattern = any([
-            'a las' in message_lower and 'personas' in message_lower,
-            'para' in message_lower and 'personas' in message_lower and any(c.isdigit() for c in message_lower),
-            any(day in message_lower for day in ['lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes', 'sábado', 'sabado', 'domingo']) and 'a las' in message_lower
-        ])
-        
-        if not has_reservation_pattern:
+        try:
+            message_lower = message.lower().strip()
+            
+            # Quick exit for simple messages
+            if len(message_lower) < 10 or message_lower in ['hola', 'si', 'no', 'gracias', 'ok', 'okay']:
+                return None
+            
+            # Check if this looks like a reservation intent
+            # Look for patterns: "a las [hora] para [X] personas", "[día] a las [hora]", etc.
+            has_reservation_pattern = any([
+                'a las' in message_lower and 'personas' in message_lower,
+                'para' in message_lower and 'personas' in message_lower and any(c.isdigit() for c in message_lower),
+                any(day in message_lower for day in ['lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes', 'sábado', 'sabado', 'domingo']) and 'a las' in message_lower
+            ])
+            
+            if not has_reservation_pattern:
+                return None
+        except Exception as e:
+            logger.warning(f"Error in reservation pattern check: {e}")
             return None
         
-        # Patterns to detect reservation intent
-        reservation_patterns = [
-            r'\bel\s+(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "el martes a las 16 para 3 personas"
-            r'\b(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "martes a las 16 para 3 personas"
-            r'\b(\w+)\s+(\d{1,2}):?(\d{0,2})\s+(\d+)\s+personas?\b',  # "martes 16:00 3 personas"
-            r'\b(\d{1,2})\s+de\s+(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "4 de noviembre a las 16 para 3 personas"
-            r'\ba\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "a las 16 para 3 personas" (sin día específico)
-        ]
-        
-        import re
-        from datetime import datetime, timedelta
-        import pytz
-        
-        CHILE_TZ = pytz.timezone('America/Santiago')
-        now = datetime.now(CHILE_TZ)
-        
-        # Spanish day names mapping to day of week
-        spanish_days = {
-            'lunes': 0, 'martes': 1, 'miercoles': 2, 'miércoles': 2,
-            'jueves': 3, 'viernes': 4, 'sabado': 5, 'sábado': 5,
-            'domingo': 6
-        }
-        
-        # Try each pattern
-        for pattern in reservation_patterns:
-            match = re.search(pattern, message_lower)
-            if match:
-                groups = match.groups()
-                
-                # Extract capacity (always the last number)
-                capacity = None
-                for group in reversed(groups):
-                    if group.isdigit() and int(group) >= 2 and int(group) <= 7:
-                        capacity = int(group)
-                        break
-                
-                if not capacity:
-                    continue
-                
-                # Extract time (usually a number between 9-21)
-                # Also handle 24-hour format (16 = 4pm = 15:00 in our system)
-                time_hour = None
-                for group in groups:
-                    if group.isdigit():
-                        hour = int(group)
-                        # Handle 24-hour format: 16 = 15:00, 18 = 18:00, etc.
-                        if 9 <= hour <= 21:
-                            # Convert to our operating hours format (9, 12, 15, 18, 21)
-                            if hour == 16:
-                                time_hour = 15  # 16:00 = 15:00 (3pm slot)
-                            elif hour == 10:
-                                time_hour = 9   # 10:00 = 09:00 (9am slot)
-                            elif hour in [9, 12, 15, 18, 21]:
-                                time_hour = hour
-                            else:
-                                # Round to nearest available slot
-                                available_slots = [9, 12, 15, 18, 21]
-                                time_hour = min(available_slots, key=lambda x: abs(x - hour))
+        try:
+            # Patterns to detect reservation intent
+            reservation_patterns = [
+                r'\bel\s+(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "el martes a las 16 para 3 personas"
+                r'\b(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "martes a las 16 para 3 personas"
+                r'\b(\w+)\s+(\d{1,2}):?(\d{0,2})\s+(\d+)\s+personas?\b',  # "martes 16:00 3 personas"
+                r'\b(\d{1,2})\s+de\s+(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "4 de noviembre a las 16 para 3 personas"
+                r'\ba\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "a las 16 para 3 personas" (sin día específico)
+            ]
+            
+            import re
+            from datetime import datetime, timedelta
+            import pytz
+            
+            CHILE_TZ = pytz.timezone('America/Santiago')
+            now = datetime.now(CHILE_TZ)
+            
+            # Spanish day names mapping to day of week
+            spanish_days = {
+                'lunes': 0, 'martes': 1, 'miercoles': 2, 'miércoles': 2,
+                'jueves': 3, 'viernes': 4, 'sabado': 5, 'sábado': 5,
+                'domingo': 6
+            }
+            
+            # Try each pattern
+            for pattern in reservation_patterns:
+                match = re.search(pattern, message_lower)
+                if match:
+                    groups = match.groups()
+                    
+                    # Extract capacity (always the last number)
+                    capacity = None
+                    for group in reversed(groups):
+                        if group.isdigit() and int(group) >= 2 and int(group) <= 7:
+                            capacity = int(group)
                             break
-                
-                if not time_hour:
-                    continue
-                
-                # Extract date
-                date_str = None
-                day_name = None
-                day_number = None
-                month_name = None
-                
-                # Check if it's a day name (lunes, martes, etc.)
-                for group in groups:
-                    if group.lower() in spanish_days:
-                        day_name = group.lower()
-                        break
-                
-                # Check if it's "4 de noviembre" format
-                if len(groups) >= 4:
-                    # Pattern: "4 de noviembre a las 16 para 3 personas"
-                    if groups[0].isdigit() and groups[1] == 'de':
-                        day_number = int(groups[0])
-                        month_name = groups[2].lower()
-                
-                # Try to resolve the date
-                target_date = None
-                
-                if day_name:
-                    # User said "martes" - find next Tuesday
-                    target_dow = spanish_days[day_name]
-                    current_dow = now.weekday()
-                    days_ahead = target_dow - current_dow
-                    if days_ahead <= 0:  # Target day already happened this week
-                        days_ahead += 7
-                    target_date = (now + timedelta(days=days_ahead)).replace(hour=0, minute=0, second=0, microsecond=0)
-                    # Format date in Spanish
-                    spanish_months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-                                     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-                    date_str = f"{target_date.day} de {spanish_months[target_date.month - 1]} {target_date.year}"
-                
-                elif day_number and month_name:
-                    # User said "4 de noviembre"
-                    month_num = SPANISH_MONTHS.get(month_name)
-                    if month_num:
-                        year = now.year
-                        try:
-                            target_date = datetime(year, month_num, day_number, 0, 0, 0)
-                            target_date = CHILE_TZ.localize(target_date)
-                            if target_date < now:
-                                target_date = datetime(year + 1, month_num, day_number, 0, 0, 0)
+                    
+                    if not capacity:
+                        continue
+                    
+                    # Extract time (usually a number between 9-21)
+                    # Also handle 24-hour format (16 = 4pm = 15:00 in our system)
+                    time_hour = None
+                    for group in groups:
+                        if group.isdigit():
+                            hour = int(group)
+                            # Handle 24-hour format: 16 = 15:00, 18 = 18:00, etc.
+                            if 9 <= hour <= 21:
+                                # Convert to our operating hours format (9, 12, 15, 18, 21)
+                                if hour == 16:
+                                    time_hour = 15  # 16:00 = 15:00 (3pm slot)
+                                elif hour == 10:
+                                    time_hour = 9   # 10:00 = 09:00 (9am slot)
+                                elif hour in [9, 12, 15, 18, 21]:
+                                    time_hour = hour
+                                else:
+                                    # Round to nearest available slot
+                                    available_slots = [9, 12, 15, 18, 21]
+                                    time_hour = min(available_slots, key=lambda x: abs(x - hour))
+                                break
+                    
+                    if not time_hour:
+                        continue
+                    
+                    # Extract date
+                    date_str = None
+                    day_name = None
+                    day_number = None
+                    month_name = None
+                    
+                    # Check if it's a day name (lunes, martes, etc.)
+                    for group in groups:
+                        if group.lower() in spanish_days:
+                            day_name = group.lower()
+                            break
+                    
+                    # Check if it's "4 de noviembre" format
+                    if len(groups) >= 4:
+                        # Pattern: "4 de noviembre a las 16 para 3 personas"
+                        if groups[0].isdigit() and groups[1] == 'de':
+                            day_number = int(groups[0])
+                            month_name = groups[2].lower()
+                    
+                    # Try to resolve the date
+                    target_date = None
+                    
+                    if day_name:
+                        # User said "martes" - find next Tuesday
+                        target_dow = spanish_days[day_name]
+                        current_dow = now.weekday()
+                        days_ahead = target_dow - current_dow
+                        if days_ahead <= 0:  # Target day already happened this week
+                            days_ahead += 7
+                        target_date = (now + timedelta(days=days_ahead)).replace(hour=0, minute=0, second=0, microsecond=0)
+                        # Format date in Spanish
+                        spanish_months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                                         'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+                        date_str = f"{target_date.day} de {spanish_months[target_date.month - 1]} {target_date.year}"
+                    
+                    elif day_number and month_name:
+                        # User said "4 de noviembre"
+                        month_num = SPANISH_MONTHS.get(month_name)
+                        if month_num:
+                            year = now.year
+                            try:
+                                target_date = datetime(year, month_num, day_number, 0, 0, 0)
                                 target_date = CHILE_TZ.localize(target_date)
-                            # Format date in Spanish
-                            spanish_months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-                                             'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-                            date_str = f"{target_date.day} de {spanish_months[target_date.month - 1]} {target_date.year}"
-                        except ValueError:
-                            continue
-                
-                if target_date and time_hour:
-                    # Format time as HH:00
-                    time_str = f"{time_hour:02d}:00"
+                                if target_date < now:
+                                    target_date = datetime(year + 1, month_num, day_number, 0, 0, 0)
+                                    target_date = CHILE_TZ.localize(target_date)
+                                # Format date in Spanish
+                                spanish_months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                                                 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+                                date_str = f"{target_date.day} de {spanish_months[target_date.month - 1]} {target_date.year}"
+                            except ValueError:
+                                continue
                     
-                    # Verify the slot is available (optional check)
-                    # For now, we'll trust the user and add it
-                    
-                    # Create reservation item
-                    reservation_item = self.cart_manager.create_reservation_item(
-                        date=date_str,
-                        time=time_str,
-                        capacity=capacity
-                    )
-                    
-                    return reservation_item
-        
-        return None
+                    if target_date and time_hour:
+                        # Format time as HH:00
+                        time_str = f"{time_hour:02d}:00"
+                        
+                        # Verify the slot is available (optional check)
+                        # For now, we'll trust the user and add it
+                        
+                        # Create reservation item
+                        reservation_item = self.cart_manager.create_reservation_item(
+                            date=date_str,
+                            time=time_str,
+                            capacity=capacity
+                        )
+                        
+                        return reservation_item
+            
+            return None
+        except Exception as e:
+            logger.warning(f"Error parsing reservation from message: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
 
 

@@ -101,12 +101,19 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             logger.info(f"💬 Message text: {text_body}")
             
             # Process the message with conversation manager
-            response = await conversation_manager.process_message(
-                from_number=from_number,
-                message_text=text_body,
-                contact_name=contact_name,
-                message_id=message_id
-            )
+            try:
+                response = await conversation_manager.process_message(
+                    from_number=from_number,
+                    message_text=text_body,
+                    contact_name=contact_name,
+                    message_id=message_id
+                )
+            except Exception as e:
+                logger.error(f"Error in conversation_manager.process_message: {e}")
+                import traceback
+                traceback.print_exc()
+                # Send error message to user
+                response = "🥬 ¡Ahoy, grumete! ⚓ Disculpa, estoy teniendo problemas técnicos. ¿Podrías intentar de nuevo en un momento?"
             
             # Send response (handle both text and accommodations with images)
             if response:

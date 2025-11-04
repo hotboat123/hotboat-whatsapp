@@ -10,7 +10,15 @@ import psycopg
 
 # Load environment variables from .env file if it exists
 from dotenv import load_dotenv
-load_dotenv()
+try:
+    load_dotenv()
+except UnicodeDecodeError as e:
+    # If .env has encoding issues, try to handle it gracefully
+    print("⚠️ Warning: Could not load .env file due to encoding issues.")
+    print(f"   Error: {e}")
+    print("   Please ensure .env is saved as UTF-8 encoding.")
+    print("   You can set DATABASE_URL as an environment variable instead.")
+    # Try to continue if DATABASE_URL is set as environment variable
 
 # Get DATABASE_URL from environment
 DATABASE_URL = os.getenv('DATABASE_URL')

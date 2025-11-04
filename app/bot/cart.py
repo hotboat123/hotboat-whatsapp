@@ -109,7 +109,12 @@ class CartManager:
                     
                     return []
         except Exception as e:
-            logger.error(f"Error getting cart for {phone_number}: {e}")
+            # Check if it's a "table does not exist" error
+            error_msg = str(e).lower()
+            if 'does not exist' in error_msg or 'relation' in error_msg:
+                logger.warning(f"Cart table does not exist yet. Run migrations: {e}")
+            else:
+                logger.error(f"Error getting cart for {phone_number}: {e}")
             return []
     
     async def save_cart(self, phone_number: str, customer_name: str, items: List[CartItem]) -> bool:
@@ -134,7 +139,12 @@ class CartManager:
                     logger.info(f"Cart saved for {phone_number}")
                     return True
         except Exception as e:
-            logger.error(f"Error saving cart for {phone_number}: {e}")
+            # Check if it's a "table does not exist" error
+            error_msg = str(e).lower()
+            if 'does not exist' in error_msg or 'relation' in error_msg:
+                logger.warning(f"Cart table does not exist yet. Run migrations to create whatsapp_carts table: {e}")
+            else:
+                logger.error(f"Error saving cart for {phone_number}: {e}")
             return False
     
     async def add_item(self, phone_number: str, customer_name: str, item: CartItem) -> bool:
