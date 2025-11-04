@@ -200,7 +200,7 @@ O escribe:
 
 ¿Qué te gustaría hacer? 🚤"""
             # PRIORITY 2: Check if it's a cart option (1-3) when cart has items
-            elif await self._is_cart_option_selection(message_text, from_number):
+            elif await self._is_cart_option_selection(message_text, from_number, conversation):
                 logger.info(f"Cart option selected: {message_text}")
                 response = await self._handle_cart_option_selection(message_text, from_number, contact_name, conversation)
             # Check if it's a menu number selection (1-6)
@@ -725,11 +725,20 @@ Escribe el número que prefieras 🚤"""
         
         return None
     
-    async def _is_cart_option_selection(self, message: str, phone_number: str) -> bool:
+    async def _is_cart_option_selection(self, message: str, phone_number: str, conversation: dict = None) -> bool:
         """
         Check if user is selecting a cart option (1, 2, or 3)
-        Only returns True if the cart is not empty
+        Only returns True if the cart is not empty AND we're not awaiting other inputs
         """
+        # If we're awaiting other inputs, this is NOT a cart option
+        if conversation and conversation.get("metadata", {}).get("awaiting_extra_selection"):
+            logger.info("Not a cart option: awaiting_extra_selection is True")
+            return False
+        if conversation and conversation.get("metadata", {}).get("awaiting_ice_cream_flavor"):
+            return False
+        if conversation and conversation.get("metadata", {}).get("awaiting_party_size"):
+            return False
+            
         message_stripped = message.strip()
         if message_stripped in ['1', '2', '3']:
             cart = await self.cart_manager.get_cart(phone_number)
