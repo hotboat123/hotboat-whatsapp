@@ -451,7 +451,13 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         # View cart
         if any(cmd in message_lower for cmd in ["carrito", "ver carrito", "mi carrito", "qué tengo"]):
             cart = await self.cart_manager.get_cart(phone_number)
-            return self.cart_manager.format_cart_message(cart)
+            cart_message = self.cart_manager.format_cart_message(cart)
+            
+            # If cart has items, add options
+            if cart:
+                cart_message += "\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar un extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+            
+            return cart_message
         
         # Clear cart
         if any(cmd in message_lower for cmd in ["vaciar", "limpiar", "borrar carrito", "eliminar todo"]):
