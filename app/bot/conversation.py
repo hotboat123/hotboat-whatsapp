@@ -449,11 +449,25 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         
         # Add extra
         if any(cmd in message_lower for cmd in ["agregar", "quiero", "necesito", "dame", "pon", "agrega"]):
-            extra_item = self.cart_manager.parse_extra_from_message(message)
-            if extra_item:
-                await self.cart_manager.add_item(phone_number, contact_name, extra_item)
-                cart = await self.cart_manager.get_cart(phone_number)
-                return f"✅ *{extra_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+            # Check if there's actually an extra keyword in the message
+            has_extra_context = any(word in message_lower for word in ["tabla", "jugo", "bebida", "agua", "helado", "modo", "romantico", "romántico", "velas", "letras", "pack", "video", "transporte", "toalla", "chalas", "flex"])
+            
+            if has_extra_context:
+                extra_item = self.cart_manager.parse_extra_from_message(message)
+                if extra_item:
+                    await self.cart_manager.add_item(phone_number, contact_name, extra_item)
+                    cart = await self.cart_manager.get_cart(phone_number)
+                    return f"✅ *{extra_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+                else:
+                    # User tried to add something but we didn't recognize it
+                    return """❌ *No reconocí ese extra*, grumete ⚓
+
+Escribe *1* para ver todos los extras disponibles, o intenta con algo como:
+• "Quiero la tabla grande"
+• "Agregar modo romántico"  
+• "Dame un jugo natural"
+
+¿Qué te gustaría agregar? 🚤"""
         
         # Confirm cart
         if any(cmd in message_lower for cmd in ["confirmar", "confirmo", "pagar", "comprar", "finalizar"]):

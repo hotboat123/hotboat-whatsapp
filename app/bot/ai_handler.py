@@ -29,7 +29,7 @@ class AIHandler:
             api_key=settings.groq_api_key,
             base_url="https://api.groq.com/openai/v1"  # Groq's OpenAI-compatible endpoint
         )
-        self.model = "llama-3.1-70b-versatile"  # Groq model name
+        self.model = "llama-3.3-70b-versatile"  # Groq model name (updated from deprecated llama-3.1-70b-versatile)
         
         if MCP_AVAILABLE:
             self.mcp_handler = MCPHandler()
