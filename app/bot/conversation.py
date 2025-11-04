@@ -12,8 +12,12 @@ from app.bot.faq import FAQHandler
 from app.bot.accommodations import accommodations_handler
 from app.bot.cart import CartManager
 from app.db.leads import get_or_create_lead, get_conversation_history
+from app.whatsapp.client import WhatsAppClient
 
 logger = logging.getLogger(__name__)
+
+# Número del Capitán Tomás para notificaciones
+CAPITAN_TOMAS_PHONE = "56977577307"  # Tu número personal
 
 
 class ConversationManager:
@@ -24,8 +28,66 @@ class ConversationManager:
         self.availability_checker = AvailabilityChecker()
         self.faq_handler = FAQHandler()
         self.cart_manager = CartManager()
+        self.whatsapp_client = WhatsAppClient()
         # In-memory conversation storage (use Redis or DB in production)
         self.conversations: Dict[str, dict] = {}
+    
+    async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation") -> None:
+        """
+        Send WhatsApp notification to Capitán Tomás
+        
+        Args:
+            customer_name: Name of the customer
+            customer_phone: Customer's phone number
+            cart: Cart items
+            reason: 'reservation' or 'call_request'
+        """
+        try:
+            if reason == "reservation" and cart:
+                # Notification for confirmed reservation
+                reservation = next((item for item in cart if item.item_type == "reservation"), None)
+                total = self.cart_manager.calculate_total(cart)
+                
+                message = f"🚨 *Nueva Reserva Confirmada*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                
+                if reservation:
+                    message += f"📅 *Fecha:* {reservation.metadata.get('date')}\n"
+                    message += f"🕐 *Hora:* {reservation.metadata.get('time')}\n"
+                    message += f"👥 *Personas:* {reservation.quantity}\n\n"
+                
+                extras = [item for item in cart if item.item_type == "extra"]
+                if extras:
+                    message += f"✨ *Extras:*\n"
+                    for item in extras:
+                        message += f"   • {item.name} (${item.price:,})\n"
+                    message += "\n"
+                
+                message += f"💰 *Total:* ${total:,}\n\n"
+                message += f"🔗 *Responder al cliente:*\n"
+                message += f"https://wa.me/{customer_phone}"
+                
+            elif reason == "call_request":
+                # Notification for call request (option 6)
+                message = f"📞 *Solicitud de Contacto*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                message += f"El cliente solicitó hablar con el Capitán Tomás 👨‍✈️\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += f"https://wa.me/{customer_phone}"
+            
+            else:
+                return
+            
+            # Send notification
+            await self.whatsapp_client.send_text_message(CAPITAN_TOMAS_PHONE, message)
+            logger.info(f"Notification sent to Capitán Tomás for {reason}: {customer_name}")
+            
+        except Exception as e:
+            logger.error(f"Error sending notification to Capitán Tomás: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def process_message(
         self,
@@ -118,6 +180,8 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                     response = self.faq_handler.get_response("ubicación")
                 elif menu_number == 6:
                     # Option 6: Llamar a Tomás
+                    # Send notification to Capitán Tomás
+                    await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                     response = self.faq_handler.get_response("llamar a tomas")
                 else:
                     response = "No entendí esa opción. Por favor elige un número del 1 al 6, grumete ⚓"
@@ -664,6 +728,9 @@ Para agregar, escribe lo que quieres. Por ejemplo:
             confirm_message += f"💰 *Total a pagar: ${total:,}*\n\n"
             confirm_message += f"📞 El Capitán Tomás se comunicará contigo pronto para finalizar el pago y confirmar todos los detalles 👨‍✈️\n\n"
             confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
+            
+            # Send notification to Capitán Tomás BEFORE clearing cart
+            await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
             
             # Clear cart after confirmation
             await self.cart_manager.clear_cart(phone_number)
