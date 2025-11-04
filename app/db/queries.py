@@ -9,6 +9,47 @@ from app.db.connection import get_connection
 
 logger = logging.getLogger(__name__)
 
+# Admin notification settings
+ADMIN_PHONE = "56977577307"
+_last_error_notification = {}  # Track last notification time to avoid spam
+
+
+async def _notify_admin_db_error(error: Exception, function_name: str) -> None:
+    """
+    Send WhatsApp notification to admin about database errors
+    Only sends once per hour to avoid spam
+    """
+    try:
+        from app.whatsapp.client import WhatsAppClient
+        
+        # Check if we already notified about this recently (within 1 hour)
+        current_time = datetime.now()
+        error_key = f"{function_name}_{type(error).__name__}"
+        
+        if error_key in _last_error_notification:
+            last_notification = _last_error_notification[error_key]
+            if (current_time - last_notification).total_seconds() < 3600:  # 1 hour
+                logger.info(f"Skipping admin notification for {error_key} - already notified recently")
+                return
+        
+        # Send notification
+        client = WhatsAppClient()
+        message = f"⚠️ *Error de Base de Datos*\n\n"
+        message += f"🔧 *Función:* {function_name}\n"
+        message += f"❌ *Error:* {type(error).__name__}\n"
+        message += f"📝 *Detalles:* {str(error)[:200]}\n\n"
+        message += f"🕐 *Hora:* {current_time.strftime('%H:%M:%S')}\n\n"
+        message += f"⚡ *Acción:* El bot está bloqueando disponibilidad por seguridad. Revisa la base de datos."
+        
+        await client.send_text_message(ADMIN_PHONE, message)
+        
+        # Update last notification time
+        _last_error_notification[error_key] = current_time
+        logger.info(f"Admin notified about database error in {function_name}")
+        
+    except Exception as notify_error:
+        logger.error(f"Failed to notify admin about database error: {notify_error}")
+
 
 async def get_appointments_between_dates(
     start_date: datetime,
@@ -116,10 +157,9 @@ async def check_slot_availability(slot_datetime: datetime, duration_hours: float
     
     except Exception as e:
         logger.error(f"Error checking slot availability: {e}")
-        # If there's an error querying the database, assume the slot IS available
-        # This is safer than blocking all availability
-        logger.warning("Assuming slot is available due to database error")
-        return True
+        # Notify admin about the database error
+        await _notify_admin_db_error(e, "check_slot_availability")
+        return False
 
 
 async def get_booked_slots(
@@ -184,6 +224,8 @@ async def get_booked_slots(
     
     except Exception as e:
         logger.error(f"Error getting booked slots: {e}")
+        # Notify admin about the database error
+        await _notify_admin_db_error(e, "get_booked_slots")
         return []
 
 
