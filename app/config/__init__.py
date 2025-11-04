@@ -11,6 +11,9 @@ from app.config.availability_config import (
     get_service_config
 )
 
+# Import accommodations config
+from app.config.accommodations_config import ACCOMMODATION_IMAGES
+
 # Also export get_settings from the parent config module
 # This allows imports like "from app.config import get_settings" to work
 import sys
@@ -31,20 +34,23 @@ if spec and spec.loader:
             'AVAILABILITY_CONFIG',
             'ServiceConfig',
             'AvailabilityConfig',
-            'get_service_config'
+            'get_service_config',
+            'ACCOMMODATION_IMAGES'
         ]
     else:
         __all__ = [
             'AVAILABILITY_CONFIG',
             'ServiceConfig',
             'AvailabilityConfig',
-            'get_service_config'
+            'get_service_config',
+            'ACCOMMODATION_IMAGES'
         ]
 else:
     __all__ = [
         'AVAILABILITY_CONFIG',
         'ServiceConfig',
         'AvailabilityConfig',
-        'get_service_config'
+        'get_service_config',
+        'ACCOMMODATION_IMAGES'
     ]
 
