@@ -456,7 +456,23 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         # Clear cart
         if any(cmd in message_lower for cmd in ["vaciar", "limpiar", "borrar carrito", "eliminar todo"]):
             await self.cart_manager.clear_cart(phone_number)
-            return "🛒 Carrito vaciado, grumete ⚓\n\n¿Qué te gustaría agregar?"
+            return """🛒 *Carrito vaciado*, grumete ⚓
+
+¿Listo para zarpar de nuevo? Elige una opción:
+
+1️⃣ *Disponibilidad y horarios*
+
+2️⃣ *Precios por persona*
+
+3️⃣ *Características del HotBoat*
+
+4️⃣ *Extras y promociones*
+
+5️⃣ *Ubicación y reseñas*
+
+6️⃣ *Hablar con el Capitán Tomás*
+
+¿Qué número eliges? 🚤"""
         
         # Remove item
         remove_match = re.search(r'eliminar\s+(\d+)', message_lower)
@@ -651,7 +667,23 @@ Para agregar, escribe lo que quieres. Por ejemplo:
         elif option == '3':
             # Option 3: Vaciar el carrito
             await self.cart_manager.clear_cart(phone_number)
-            return "🛒 *Carrito vaciado*, grumete ⚓\n\n¿Qué te gustaría hacer ahora?\n\n1️⃣ Ver disponibilidad\n2️⃣ Ver precios\n3️⃣ Hablar con el Capitán Tomás"
+            return """🛒 *Carrito vaciado*, grumete ⚓
+
+¿Listo para zarpar de nuevo? Elige una opción:
+
+1️⃣ *Disponibilidad y horarios*
+
+2️⃣ *Precios por persona*
+
+3️⃣ *Características del HotBoat*
+
+4️⃣ *Extras y promociones*
+
+5️⃣ *Ubicación y reseñas*
+
+6️⃣ *Hablar con el Capitán Tomás*
+
+¿Qué número eliges? 🚤"""
         
         return "No entendí esa opción. Por favor elige 1, 2 o 3."
     
