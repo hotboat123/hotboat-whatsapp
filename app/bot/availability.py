@@ -302,8 +302,12 @@ class AvailabilityChecker:
                     end_date = now + timedelta(days=30)
                     days_to_show = 30
                 elif "hoy" in message_lower or "today" in message_lower:
+                    # For "today", start from current time, not from midnight
+                    start_date = now  # Start from NOW, not midnight
                     end_date = now.replace(hour=23, minute=59, second=59)
                     days_to_show = 1
+                    specific_date_requested = True  # Treat "today" as specific date for better messaging
+                    logger.info(f"User asked for today: {now.date()} starting from {now.strftime('%H:%M')}")
                 else:
                     # Default: next 7 days
                     end_date = now + timedelta(days=7)
@@ -315,8 +319,23 @@ class AvailabilityChecker:
             logger.info(f"Found {len(available_slots)} available slots between {start_date.date()} and {end_date.date()}")
             
             if len(available_slots) == 0:
-                if specific_date_requested:
-                    date_str = specific_date.strftime('%d de %B de %Y')
+                # Check if user asked for "today" specifically
+                if "hoy" in message_lower or "today" in message_lower:
+                    return f"""❌ *Lo siento, no tenemos disponibilidad para hoy*
+
+📅 Los horarios de hoy ({now.strftime('%d/%m/%Y')}) ya están ocupados o pasaron.
+
+💡 *Te sugiero:*
+• Consultar disponibilidad para *mañana*
+• Ver disponibilidad para *esta semana*
+• Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
+
+¿Te gustaría que revise disponibilidad para mañana o esta semana? 🚤"""
+                elif specific_date_requested:
+                    if specific_date:
+                        date_str = specific_date.strftime('%d de %B de %Y')
+                    else:
+                        date_str = now.strftime('%d de %B de %Y')
                     # Format month name in Spanish
                     month_names_es = {
                         'January': 'enero', 'February': 'febrero', 'March': 'marzo',
@@ -327,27 +346,27 @@ class AvailabilityChecker:
                     for en, es in month_names_es.items():
                         date_str = date_str.replace(en, es)
                     
-                    return f"""❌ **Lo siento, no tenemos disponibilidad el {date_str}**
+                    return f"""❌ *Lo siento, no tenemos disponibilidad el {date_str}*
 
 📅 Todos los horarios para esa fecha están ocupados.
 
-💡 Te sugiero:
-• Consultar disponibilidad para otro día
-• Reservar con anticipación
+💡 *Te sugiero:*
+• Consultar disponibilidad para *otro día*
+• Reservar con *anticipación*
 • Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
 
-¿Te gustaría que revise disponibilidad para otra fecha?"""
+¿Te gustaría que revise disponibilidad para otra fecha? 🚤"""
                 else:
-                    return """❌ **Lo siento, no tenemos disponibilidad en este momento**
+                    return """❌ *Lo siento, no tenemos disponibilidad en este momento*
 
 📅 Para los próximos días todos los horarios están ocupados.
 
-💡 Te sugiero:
-• Consultar disponibilidad para la próxima semana
-• Reservar con anticipación
+💡 *Te sugiero:*
+• Consultar disponibilidad para la *próxima semana*
+• Reservar con *anticipación*
 • Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
 
-¿Te gustaría que revise disponibilidad para otra fecha?"""
+¿Te gustaría que revise disponibilidad para otra fecha? 🚤"""
             
             # Group slots by date
             slots_by_date = {}
@@ -358,8 +377,14 @@ class AvailabilityChecker:
                 slots_by_date[date_key].append(slot)
             
             # Format response
-            if specific_date_requested:
-                date_str = specific_date.strftime('%d de %B de %Y')
+            if "hoy" in message_lower or "today" in message_lower:
+                # Special message for "today"
+                response_parts = [f"✅ *¡Tenemos disponibilidad para HOY* ({now.strftime('%d/%m/%Y')})!\n"]
+            elif specific_date_requested:
+                if specific_date:
+                    date_str = specific_date.strftime('%d de %B de %Y')
+                else:
+                    date_str = now.strftime('%d de %B de %Y')
                 # Format month name in Spanish
                 month_names_es = {
                     'January': 'enero', 'February': 'febrero', 'March': 'marzo',
@@ -369,13 +394,17 @@ class AvailabilityChecker:
                 }
                 for en, es in month_names_es.items():
                     date_str = date_str.replace(en, es)
-                response_parts = [f"✅ **¡Tenemos disponibilidad el {date_str}!**\n"]
+                response_parts = [f"✅ *¡Tenemos disponibilidad el {date_str}!*\n"]
             else:
-                response_parts = ["✅ **¡Tenemos disponibilidad!**\n"]
+                response_parts = ["✅ *¡Tenemos disponibilidad!*\n"]
             
             # Show slots grouped by date
             date_count = 0
-            max_dates_to_show = 1 if specific_date_requested else (5 if days_to_show > 5 else days_to_show)
+            # For "today" or specific dates, show only that date
+            if "hoy" in message_lower or "today" in message_lower or specific_date_requested:
+                max_dates_to_show = 1
+            else:
+                max_dates_to_show = 5 if days_to_show > 5 else days_to_show
             
             for date_key in sorted(slots_by_date.keys())[:max_dates_to_show]:
                 slots = sorted(slots_by_date[date_key], key=lambda x: x['datetime'])
