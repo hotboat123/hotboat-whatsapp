@@ -462,12 +462,13 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                     # User tried to add something but we didn't recognize it
                     return """❌ *No reconocí ese extra*, grumete ⚓
 
-Escribe *1* para ver todos los extras disponibles, o intenta con algo como:
-• "Quiero la tabla grande"
-• "Agregar modo romántico"  
-• "Dame un jugo natural"
+¿Qué te gustaría hacer?
 
-¿Qué te gustaría agregar? 🚤"""
+1️⃣ Ver todos los extras disponibles
+2️⃣ Proceder con el pago (sin agregar más)
+3️⃣ Vaciar el carrito
+
+Escribe el número que prefieras 🚤"""
         
         # Confirm cart
         if any(cmd in message_lower for cmd in ["confirmar", "confirmo", "pagar", "comprar", "finalizar"]):
