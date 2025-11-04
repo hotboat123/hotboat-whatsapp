@@ -139,7 +139,25 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                 logger.info("Checking availability")
                 response = await self.availability_checker.check_availability(message_text)
             
-            # PRIORITY: Check if user is making a reservation FIRST (before checking if asking how to add)
+            # Check if user is responding with number of people (after selecting date/time)
+            elif conversation.get("metadata", {}).get("awaiting_party_size"):
+                logger.info("User responding with party size")
+                response = await self._handle_party_size_response(message_text, from_number, contact_name, conversation)
+            
+            # Check if user is selecting a date/time (without specifying party size)
+            elif date_time_selection := await self._try_parse_date_time_only(message_text, conversation):
+                logger.info(f"User selecting date/time: {date_time_selection}")
+                # Store the selection and ask for party size
+                conversation["metadata"]["pending_reservation"] = date_time_selection
+                conversation["metadata"]["awaiting_party_size"] = True
+                response = f"""✅ Perfecto, grumete ⚓
+
+📅 Fecha: {date_time_selection['date']}
+🕐 Horario: {date_time_selection['time']}
+
+¿Para cuántas personas? (2-7 personas) 🚤"""
+            
+            # PRIORITY: Check if user is making a complete reservation (date, time, AND party size)
             # This should happen BEFORE AI handler to catch reservation intents
             elif reservation_item := await self._try_parse_reservation_from_message(message_text, from_number, conversation):
                 logger.info("User making a reservation - adding to cart")
@@ -631,6 +649,174 @@ Para agregar, escribe lo que quieres. Por ejemplo:
             return "🛒 *Carrito vaciado*, grumete ⚓\n\n¿Qué te gustaría hacer ahora?\n\n1️⃣ Ver disponibilidad\n2️⃣ Ver precios\n3️⃣ Hablar con el Capitán Tomás"
         
         return "No entendí esa opción. Por favor elige 1, 2 o 3."
+    
+    async def _try_parse_date_time_only(self, message: str, conversation: dict = None) -> Optional[dict]:
+        """
+        Try to parse date and time from message (WITHOUT party size)
+        Returns dict with 'date' and 'time' if found
+        """
+        try:
+            message_lower = message.lower().strip()
+            
+            # Skip if message includes party size
+            if 'persona' in message_lower or any(str(i) in message_lower and ('para' in message_lower or 'somos' in message_lower) for i in range(2, 8)):
+                return None
+            
+            # Check if message contains date/time pattern
+            if not ('a las' in message_lower or any(day in message_lower for day in ['lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes', 'sábado', 'sabado', 'domingo']) or any(month in message_lower for month in ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'])):
+                return None
+            
+            import re
+            from datetime import datetime, timedelta
+            import pytz
+            
+            CHILE_TZ = pytz.timezone('America/Santiago')
+            now = datetime.now(CHILE_TZ)
+            
+            spanish_days = {
+                'lunes': 0, 'martes': 1, 'miercoles': 2, 'miércoles': 2,
+                'jueves': 3, 'viernes': 4, 'sabado': 5, 'sábado': 5,
+                'domingo': 6
+            }
+            
+            # Patterns for date/time without party size
+            patterns = [
+                r'\b(el\s+)?(\w+)\s+a\s+las\s+(\d{1,2}):?(\d{0,2})\b',  # "el sábado a las 9:00" or "sábado a las 9"
+                r'\b(\d{1,2})\s+de\s+(\w+)\s+a\s+las\s+(\d{1,2}):?(\d{0,2})\b',  # "8 de noviembre a las 9:00"
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, message_lower)
+                if match:
+                    groups = match.groups()
+                    
+                    # Extract time
+                    time_hour = None
+                    for group in groups:
+                        if group and group.isdigit():
+                            hour = int(group)
+                            if 9 <= hour <= 21:
+                                # Convert to operating hours (9, 12, 15, 18, 21)
+                                if hour == 16:
+                                    time_hour = 15
+                                elif hour == 10:
+                                    time_hour = 9
+                                elif hour in [9, 12, 15, 18, 21]:
+                                    time_hour = hour
+                                else:
+                                    available_slots = [9, 12, 15, 18, 21]
+                                    time_hour = min(available_slots, key=lambda x: abs(x - hour))
+                                break
+                    
+                    if not time_hour:
+                        continue
+                    
+                    # Extract date
+                    date_str = None
+                    day_name = None
+                    day_number = None
+                    month_name = None
+                    
+                    for group in groups:
+                        if group and group.lower() in spanish_days:
+                            day_name = group.lower()
+                        elif group and group.lower() in SPANISH_MONTHS:
+                            month_name = group.lower()
+                        elif group and group.isdigit() and 1 <= int(group) <= 31:
+                            day_number = int(group)
+                    
+                    # Resolve date
+                    target_date = None
+                    
+                    if day_name:
+                        target_dow = spanish_days[day_name]
+                        current_dow = now.weekday()
+                        days_ahead = target_dow - current_dow
+                        if days_ahead <= 0:
+                            days_ahead += 7
+                        target_date = (now + timedelta(days=days_ahead)).replace(hour=0, minute=0, second=0, microsecond=0)
+                        spanish_months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                                         'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+                        date_str = f"{target_date.day} de {spanish_months[target_date.month - 1]} {target_date.year}"
+                    
+                    elif day_number and month_name:
+                        month_num = SPANISH_MONTHS.get(month_name)
+                        if month_num:
+                            year = now.year
+                            try:
+                                target_date = datetime(year, month_num, day_number, 0, 0, 0)
+                                target_date = CHILE_TZ.localize(target_date)
+                                if target_date < now:
+                                    target_date = datetime(year + 1, month_num, day_number, 0, 0, 0)
+                                    target_date = CHILE_TZ.localize(target_date)
+                                spanish_months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                                                 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+                                date_str = f"{target_date.day} de {spanish_months[target_date.month - 1]} {target_date.year}"
+                            except ValueError:
+                                continue
+                    
+                    if target_date and time_hour:
+                        time_str = f"{time_hour:02d}:00"
+                        logger.info(f"Parsed date/time only: date={date_str}, time={time_str}")
+                        return {
+                            "date": date_str,
+                            "time": time_str,
+                            "raw_message": message
+                        }
+            
+            return None
+        except Exception as e:
+            logger.warning(f"Error parsing date/time only: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    async def _handle_party_size_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle user's response with party size after selecting date/time"""
+        try:
+            # Extract number from message
+            import re
+            numbers = re.findall(r'\d+', message)
+            
+            if not numbers:
+                return "Por favor indica el número de personas (entre 2 y 7) 🚤"
+            
+            party_size = int(numbers[0])
+            
+            if party_size < 2 or party_size > 7:
+                return "El HotBoat tiene capacidad para 2 a 7 personas. ¿Cuántas personas son? 🚤"
+            
+            # Get the pending reservation from conversation
+            pending = conversation.get("metadata", {}).get("pending_reservation")
+            
+            if not pending:
+                return "Lo siento, no encontré la reserva pendiente. Por favor, inicia el proceso de nuevo."
+            
+            # Create reservation item
+            reservation_item = self.cart_manager.create_reservation_item(
+                date=pending['date'],
+                time=pending['time'],
+                capacity=party_size
+            )
+            
+            # Add to cart
+            await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
+            cart = await self.cart_manager.get_cart(phone_number)
+            
+            # Clear the pending state
+            conversation["metadata"]["awaiting_party_size"] = False
+            conversation["metadata"]["pending_reservation"] = None
+            
+            return f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar un extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+            
+        except Exception as e:
+            logger.error(f"Error handling party size response: {e}")
+            import traceback
+            traceback.print_exc()
+            # Clear the pending state
+            conversation["metadata"]["awaiting_party_size"] = False
+            conversation["metadata"]["pending_reservation"] = None
+            return "Hubo un error procesando tu reserva. Por favor, intenta de nuevo."
     
     def _is_reservation_confirm(self, message: str) -> bool:
         """Check if message is confirming a reservation"""
