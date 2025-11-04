@@ -560,38 +560,65 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             else:
                 return "❌ Número de item inválido. Usa *carrito* para ver los números."
         
-        # Add extra
-        if any(cmd in message_lower for cmd in ["agregar", "quiero", "necesito", "dame", "pon", "agrega"]):
-            # Check if there's actually an extra keyword in the message
-            has_extra_context = any(word in message_lower for word in ["tabla", "jugo", "bebida", "agua", "helado", "modo", "romantico", "romántico", "velas", "letras", "pack", "video", "transporte", "toalla", "chalas", "flex"])
+        # Add extra - Check if message mentions extras (with or without action words)
+        # First check if there are extra keywords in the message
+        has_extra_keywords = any(word in message_lower for word in ["tabla", "jugo", "bebida", "agua", "helado", "modo", "romantico", "romántico", "velas", "letras", "pack", "video", "transporte", "toalla", "chalas", "flex", "picoteo", "cookies", "frambuesa", "poncho", "sandalias"])
+        
+        # Check if message has action words or just mentions extras directly
+        has_action_words = any(cmd in message_lower for cmd in ["agregar", "quiero", "necesito", "dame", "pon", "agrega"])
+        
+        # Detect if this is a direct extras request (e.g., "1 jugo y 2 helados")
+        is_direct_extras_request = False
+        if has_extra_keywords and not has_action_words:
+            # Check if it contains numbers (quantities) and extra keywords
+            import re
+            has_numbers = bool(re.search(r'\d+', message_lower))
+            # Make sure it's not just a simple menu number (1-6)
+            is_simple_menu_number = message_lower.strip() in ['1', '2', '3', '4', '5', '6']
+            if has_numbers and not is_simple_menu_number:
+                is_direct_extras_request = True
+        
+        if (has_action_words and has_extra_keywords) or is_direct_extras_request:
+            # If it's a direct request with numbers, try to parse multiple extras first
+            if is_direct_extras_request:
+                multiple_extras_response = await self._try_parse_multiple_extras(message, phone_number, contact_name)
+                if multiple_extras_response:
+                    return multiple_extras_response
             
-            if has_extra_context:
-                # Check for special cases that need clarification
-                if "helado" in message_lower and not any(flavor in message_lower for flavor in ["cookies", "cream", "frambuesa", "chocolate"]):
-                    # Ask for ice cream flavor
-                    conversation["metadata"]["awaiting_ice_cream_flavor"] = True
-                    return """🍦 *Tenemos 2 sabores de helado:*
+            # Check for special cases that need clarification
+            if "helado" in message_lower and not any(flavor in message_lower for flavor in ["cookies", "cream", "frambuesa", "chocolate"]):
+                # Extract quantity if present
+                import re
+                quantity_match = re.search(r'(\d+)\s*helado', message_lower)
+                quantity = int(quantity_match.group(1)) if quantity_match else 1
+                
+                # Ask for ice cream flavor
+                conversation["metadata"]["awaiting_ice_cream_flavor"] = True
+                conversation["metadata"]["pending_ice_cream_quantity"] = quantity
+                
+                quantity_text = f"los {quantity} helados" if quantity > 1 else "el helado"
+                return f"""🍦 *Tenemos 2 sabores de helado:*
 
 1️⃣ Cookies & Cream 🍪
 2️⃣ Frambuesa a la Crema con Chocolate Belga 🍫
 
 Precio: $3,500 c/u
 
-¿Cuál prefieres? (escribe el número) 🚤"""
+¿Cuál sabor prefieres para {quantity_text}? (escribe el número) 🚤"""
+            
+            extra_item = self.cart_manager.parse_extra_from_message(message)
+            if extra_item:
+                await self.cart_manager.add_item(phone_number, contact_name, extra_item)
+                cart = await self.cart_manager.get_cart(phone_number)
+                return f"✅ *{extra_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+            else:
+                # Try to use AI to understand what they want
+                ai_response = await self._try_parse_extra_with_ai(message, phone_number, contact_name)
+                if ai_response:
+                    return ai_response
                 
-                extra_item = self.cart_manager.parse_extra_from_message(message)
-                if extra_item:
-                    await self.cart_manager.add_item(phone_number, contact_name, extra_item)
-                    cart = await self.cart_manager.get_cart(phone_number)
-                    return f"✅ *{extra_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
-                else:
-                    # Try to use AI to understand what they want
-                    ai_response = await self._try_parse_extra_with_ai(message, phone_number, contact_name)
-                    if ai_response:
-                        return ai_response
-                    
-                    # User tried to add something but we didn't recognize it
-                    return """❌ *No reconocí ese extra*, grumete ⚓
+                # User tried to add something but we didn't recognize it
+                return """❌ *No reconocí ese extra*, grumete ⚓
 
 ¿Qué te gustaría hacer?
 
@@ -1070,6 +1097,9 @@ Para agregar, escribe lo que quieres. Por ejemplo:
         try:
             message_lower = message.lower().strip()
             
+            # Get the pending quantity (default to 1)
+            quantity = conversation["metadata"].get("pending_ice_cream_quantity", 1)
+            
             # Check if they chose by number or by name
             ice_cream_item = None
             
@@ -1080,13 +1110,19 @@ Para agregar, escribe lo que quieres. Por ejemplo:
             
             # Clear the awaiting state
             conversation["metadata"]["awaiting_ice_cream_flavor"] = False
+            conversation["metadata"]["pending_ice_cream_quantity"] = None
             
             if ice_cream_item:
+                # Set the quantity
+                ice_cream_item.quantity = quantity
                 await self.cart_manager.add_item(phone_number, contact_name, ice_cream_item)
                 cart = await self.cart_manager.get_cart(phone_number)
-                return f"✅ *{ice_cream_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+                
+                quantity_text = f"{quantity}x {ice_cream_item.name}" if quantity > 1 else ice_cream_item.name
+                return f"✅ *{quantity_text} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
             else:
-                return """Por favor elige una opción válida:
+                quantity_text = f"los {quantity} helados" if quantity > 1 else "el helado"
+                return f"""Por favor elige una opción válida para {quantity_text}:
 
 1️⃣ Cookies & Cream 🍪
 2️⃣ Frambuesa a la Crema con Chocolate Belga 🍫
@@ -1096,7 +1132,100 @@ Escribe el número que prefieras 🚤"""
         except Exception as e:
             logger.error(f"Error handling ice cream flavor response: {e}")
             conversation["metadata"]["awaiting_ice_cream_flavor"] = False
+            conversation["metadata"]["pending_ice_cream_quantity"] = None
             return "Hubo un error agregando el helado. Por favor, intenta de nuevo."
+    
+    async def _try_parse_multiple_extras(self, message: str, phone_number: str, contact_name: str) -> str:
+        """Try to parse multiple extras from a message like '1 jugo y 2 helados'"""
+        try:
+            # Get available extras from FAQ
+            extras_text = self.faq_handler.get_response("extras")
+            
+            # Create a prompt for the AI to identify all extras and quantities
+            ai_prompt = f"""El cliente escribió: "{message}"
+
+Aquí está nuestra lista de extras disponibles:
+{extras_text}
+
+Identifica TODOS los extras mencionados y sus cantidades. Responde en formato JSON así:
+[
+  {{"nombre": "Jugo Natural 1L", "cantidad": 1}},
+  {{"nombre": "Helado Individual", "cantidad": 2}}
+]
+
+Si mencionan "helado" sin especificar sabor, usa "Helado Individual".
+Si no puedes identificar ningún extra, responde: []
+
+IMPORTANTE: Usa EXACTAMENTE los nombres de la lista de extras, no los inventes."""
+
+            # Get AI response
+            conversation = await self.get_conversation(phone_number, contact_name)
+            ai_response = await self.ai_handler.generate_response(ai_prompt, [], conversation)
+            ai_response_clean = ai_response.strip()
+            
+            logger.info(f"AI identified extras: {ai_response_clean}")
+            
+            # Try to parse JSON response
+            import json
+            import re
+            
+            # Extract JSON from response (in case AI adds extra text)
+            json_match = re.search(r'\[.*\]', ai_response_clean, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+                extras_list = json.loads(json_str)
+                
+                if not extras_list:
+                    return None
+                
+                # Add all items to cart
+                added_items = []
+                needs_ice_cream_flavor = False
+                
+                for extra_data in extras_list:
+                    item_name = extra_data.get("nombre", "")
+                    quantity = extra_data.get("cantidad", 1)
+                    
+                    # Check if it's a generic ice cream (needs flavor selection)
+                    if "helado" in item_name.lower() and "cookies" not in item_name.lower() and "frambuesa" not in item_name.lower():
+                        needs_ice_cream_flavor = True
+                        conversation = await self.get_conversation(phone_number, contact_name)
+                        conversation["metadata"]["awaiting_ice_cream_flavor"] = True
+                        conversation["metadata"]["pending_ice_cream_quantity"] = quantity
+                        continue
+                    
+                    # Try to parse the extra
+                    extra_item = self.cart_manager.parse_extra_from_message(item_name)
+                    if extra_item:
+                        # Set the quantity
+                        extra_item.quantity = quantity
+                        await self.cart_manager.add_item(phone_number, contact_name, extra_item)
+                        added_items.append(f"{quantity}x {extra_item.name}")
+                
+                # Build response
+                if needs_ice_cream_flavor:
+                    quantity_text = conversation["metadata"].get("pending_ice_cream_quantity", 1)
+                    return f"""🍦 *Tenemos 2 sabores de helado:*
+
+1️⃣ Cookies & Cream 🍪
+2️⃣ Frambuesa a la Crema con Chocolate Belga 🍫
+
+Precio: $3,500 c/u
+
+¿Cuál sabor prefieres para {"los " + str(quantity_text) + " helados" if quantity_text > 1 else "el helado"}? (escribe el número) 🚤"""
+                
+                if added_items:
+                    cart = await self.cart_manager.get_cart(phone_number)
+                    items_text = "\n".join([f"• {item}" for item in added_items])
+                    return f"✅ *Items agregados al carrito:*\n\n{items_text}\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+            
+            return None  # Could not parse
+            
+        except Exception as e:
+            logger.error(f"Error parsing multiple extras: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     async def _try_parse_extra_with_ai(self, message: str, phone_number: str, contact_name: str) -> str:
         """Use AI to try to understand which extra the user wants"""
