@@ -54,38 +54,93 @@ class CartManager:
     EXTRAS_CATALOG = {
         # Tablas de Picoteo
         "tabla grande": {"name": "Tabla de Picoteo Grande (4 personas)", "price": 25000},
+        "tabla de picoteo grande": {"name": "Tabla de Picoteo Grande (4 personas)", "price": 25000},
+        "tabla 4": {"name": "Tabla de Picoteo Grande (4 personas)", "price": 25000},
+        "tabla 4 personas": {"name": "Tabla de Picoteo Grande (4 personas)", "price": 25000},
         "tabla pequena": {"name": "Tabla de Picoteo Pequeña (2 personas)", "price": 20000},
         "tabla pequeña": {"name": "Tabla de Picoteo Pequeña (2 personas)", "price": 20000},
+        "tabla de picoteo pequeña": {"name": "Tabla de Picoteo Pequeña (2 personas)", "price": 20000},
+        "tabla de picoteo pequena": {"name": "Tabla de Picoteo Pequeña (2 personas)", "price": 20000},
+        "tabla 2": {"name": "Tabla de Picoteo Pequeña (2 personas)", "price": 20000},
+        "tabla 2 personas": {"name": "Tabla de Picoteo Pequeña (2 personas)", "price": 20000},
+        "picoteo": {"name": "Tabla de Picoteo Grande (4 personas)", "price": 25000},
+        "picoteo grande": {"name": "Tabla de Picoteo Grande (4 personas)", "price": 25000},
+        "picoteo pequeño": {"name": "Tabla de Picoteo Pequeña (2 personas)", "price": 20000},
+        "picoteo pequeno": {"name": "Tabla de Picoteo Pequeña (2 personas)", "price": 20000},
         "tabla": {"name": "Tabla de Picoteo Grande (4 personas)", "price": 25000},  # Default a grande
         "tablas": {"name": "Tabla de Picoteo Grande (4 personas)", "price": 25000},  # Plural default a grande
         
         # Bebidas y Jugos (sin alcohol)
         "jugo": {"name": "Jugo Natural 1L", "price": 10000},
         "jugo natural": {"name": "Jugo Natural 1L", "price": 10000},
+        "jugo 1l": {"name": "Jugo Natural 1L", "price": 10000},
+        "jugos": {"name": "Jugo Natural 1L", "price": 10000},
+        "jugos naturales": {"name": "Jugo Natural 1L", "price": 10000},
+        "piña": {"name": "Jugo Natural 1L", "price": 10000},
+        "pina": {"name": "Jugo Natural 1L", "price": 10000},
+        "naranja": {"name": "Jugo Natural 1L", "price": 10000},
         "bebida": {"name": "Lata Bebida (Coca-Cola o Fanta)", "price": 2900},
         "lata": {"name": "Lata Bebida (Coca-Cola o Fanta)", "price": 2900},
+        "coca": {"name": "Lata Bebida (Coca-Cola o Fanta)", "price": 2900},
+        "coca cola": {"name": "Lata Bebida (Coca-Cola o Fanta)", "price": 2900},
+        "fanta": {"name": "Lata Bebida (Coca-Cola o Fanta)", "price": 2900},
+        "gaseosa": {"name": "Lata Bebida (Coca-Cola o Fanta)", "price": 2900},
         "agua": {"name": "Agua Mineral 1.5L", "price": 2500},
+        "agua mineral": {"name": "Agua Mineral 1.5L", "price": 2500},
+        
+        # Helados (sin especificar sabor - se preguntará después)
         "helado": {"name": "Helado Individual", "price": 3500},
+        "helados": {"name": "Helado Individual", "price": 3500},
+        
+        # Helados con sabor específico
+        "helado cookies": {"name": "Helado Individual (Cookies & Cream)", "price": 3500},
+        "helado cookies cream": {"name": "Helado Individual (Cookies & Cream)", "price": 3500},
+        "helado cookies & cream": {"name": "Helado Individual (Cookies & Cream)", "price": 3500},
+        "cookies cream": {"name": "Helado Individual (Cookies & Cream)", "price": 3500},
+        "cookies & cream": {"name": "Helado Individual (Cookies & Cream)", "price": 3500},
+        "helado frambuesa": {"name": "Helado Individual (Frambuesa con Chocolate Belga)", "price": 3500},
+        "helado chocolate": {"name": "Helado Individual (Frambuesa con Chocolate Belga)", "price": 3500},
+        "frambuesa": {"name": "Helado Individual (Frambuesa con Chocolate Belga)", "price": 3500},
+        "frambuesa chocolate": {"name": "Helado Individual (Frambuesa con Chocolate Belga)", "price": 3500},
         
         # Modo Romántico
         "modo romantico": {"name": "Modo Romántico", "price": 25000},
         "modo romántico": {"name": "Modo Romántico", "price": 25000},
         "romantico": {"name": "Modo Romántico", "price": 25000},
         "romántico": {"name": "Modo Romántico", "price": 25000},
+        "petalo": {"name": "Modo Romántico", "price": 25000},
+        "petalos": {"name": "Modo Romántico", "price": 25000},
+        "pétalos": {"name": "Modo Romántico", "price": 25000},
+        "rosas": {"name": "Modo Romántico", "price": 25000},
+        "rosa": {"name": "Modo Romántico", "price": 25000},
         
         # Decoración Nocturna Extra
         "velas": {"name": "Velas LED Decorativas", "price": 10000},
+        "velas led": {"name": "Velas LED Decorativas", "price": 10000},
         "letras": {"name": "Letras Luminosas 'Te Amo' / 'Love'", "price": 15000},
+        "letras luminosas": {"name": "Letras Luminosas 'Te Amo' / 'Love'", "price": 15000},
+        "te amo": {"name": "Letras Luminosas 'Te Amo' / 'Love'", "price": 15000},
+        "love": {"name": "Letras Luminosas 'Te Amo' / 'Love'", "price": 15000},
         "pack nocturno": {"name": "Pack Nocturno Completo (velas + letras)", "price": 20000},
         "pack completo": {"name": "Pack Nocturno Completo (velas + letras)", "price": 20000},
+        "pack de noche": {"name": "Pack Nocturno Completo (velas + letras)", "price": 20000},
         
         # Video personalizado
         "video 15": {"name": "Video Personalizado 15s", "price": 30000},
+        "video 15s": {"name": "Video Personalizado 15s", "price": 30000},
+        "video corto": {"name": "Video Personalizado 15s", "price": 30000},
         "video 60": {"name": "Video Personalizado 60s", "price": 40000},
+        "video 60s": {"name": "Video Personalizado 60s", "price": 40000},
+        "video largo": {"name": "Video Personalizado 60s", "price": 40000},
         "video": {"name": "Video Personalizado 15s", "price": 30000},  # Default a 15s
+        "video personalizado": {"name": "Video Personalizado 15s", "price": 30000},
         
         # Transporte
         "transporte": {"name": "Transporte Ida y Vuelta desde Pucón", "price": 50000},
+        "transporte pucon": {"name": "Transporte Ida y Vuelta desde Pucón", "price": 50000},
+        "transporte pucón": {"name": "Transporte Ida y Vuelta desde Pucón", "price": 50000},
+        "ida vuelta": {"name": "Transporte Ida y Vuelta desde Pucón", "price": 50000},
+        "ida y vuelta": {"name": "Transporte Ida y Vuelta desde Pucón", "price": 50000},
         
         # Toallas
         "toalla normal": {"name": "Toalla Normal", "price": 9000},
@@ -94,9 +149,13 @@ class CartManager:
         "toallas normal": {"name": "Toalla Normal", "price": 9000},  # Plural
         "toalla": {"name": "Toalla Normal", "price": 9000},  # Default a normal
         "toallas": {"name": "Toalla Normal", "price": 9000},  # Plural default a normal
+        "poncho": {"name": "Toalla Poncho", "price": 10000},
+        "ponchos": {"name": "Toalla Poncho", "price": 10000},
         
         # Chalas de ducha
         "chalas": {"name": "Chalas de Ducha", "price": 10000},
+        "chalas de ducha": {"name": "Chalas de Ducha", "price": 10000},
+        "sandalias": {"name": "Chalas de Ducha", "price": 10000},
         
         # Reserva FLEX
         "reserva flex": {"name": "Reserva FLEX (+10%)", "price": 0},  # Se calcula como % del total
