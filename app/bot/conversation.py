@@ -89,6 +89,10 @@ Puedes preguntarme por:
 Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*, o simplemente *6️⃣* 👨‍✈️🌿  
 
 ¿Listo para zarpar o qué número eliges, grumete?"""
+            # Check if it's a cart option (1-3) when cart has items
+            elif await self._is_cart_option_selection(message_text, from_number):
+                logger.info(f"Cart option selected: {message_text}")
+                response = await self._handle_cart_option_selection(message_text, from_number, contact_name)
             # Check if it's a menu number selection (1-6)
             elif menu_number := self.faq_handler.is_menu_number(message_text):
                 logger.info(f"Menu number selected: {menu_number}")
@@ -142,7 +146,7 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                 try:
                     await self.cart_manager.add_item(from_number, contact_name, reservation_item)
                     cart = await self.cart_manager.get_cart(from_number)
-                    response = f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n¿Quieres agregar algún extra o *confirmar* la reserva?"
+                    response = f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar un extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
                 except Exception as cart_error:
                     logger.error(f"Error adding to cart: {cart_error}")
                     import traceback
@@ -449,7 +453,7 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             if extra_item:
                 await self.cart_manager.add_item(phone_number, contact_name, extra_item)
                 cart = await self.cart_manager.get_cart(phone_number)
-                return f"✅ {extra_item.name} agregado al carrito\n\n{self.cart_manager.format_cart_message(cart)}"
+                return f"✅ *{extra_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
         
         # Confirm cart
         if any(cmd in message_lower for cmd in ["confirmar", "confirmo", "pagar", "comprar", "finalizar"]):
@@ -498,6 +502,104 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 return f"✅ Reserva agregada al carrito\n\n{self.cart_manager.format_cart_message(cart)}"
         
         return None
+    
+    async def _is_cart_option_selection(self, message: str, phone_number: str) -> bool:
+        """
+        Check if user is selecting a cart option (1, 2, or 3)
+        Only returns True if the cart is not empty
+        """
+        message_stripped = message.strip()
+        if message_stripped in ['1', '2', '3']:
+            cart = await self.cart_manager.get_cart(phone_number)
+            return len(cart) > 0
+        return False
+    
+    async def _handle_cart_option_selection(self, message: str, phone_number: str, contact_name: str) -> str:
+        """
+        Handle cart option selection (1, 2, or 3)
+        
+        Args:
+            message: User's message (should be '1', '2', or '3')
+            phone_number: User's phone number
+            contact_name: User's name
+        
+        Returns:
+            Response message
+        """
+        option = message.strip()
+        cart = await self.cart_manager.get_cart(phone_number)
+        
+        if option == '1':
+            # Option 1: Agregar un extra
+            return """✨ *Extras disponibles:*
+
+🏄 *Tablas de paddle*
+   • 1 tabla: $15,000
+   • 2 tablas: $25,000
+
+🍻 *Bebidas*
+   • Cervezas (pack 6): $10,000
+   • Vinos: $15,000
+   • Espumante: $20,000
+
+🍖 *Comida*
+   • Picoteo: $20,000
+   • Parrillada: $35,000
+
+📸 *Fotografía profesional*
+   • Pack fotos: $25,000
+
+🎵 *DJ a bordo*
+   • 1 hora: $50,000
+
+Para agregar un extra, solo escríbeme lo que quieres. Por ejemplo:
+• "Quiero 2 tablas de paddle"
+• "Agregar 1 pack de cervezas"
+• "Dame el pack de fotos"
+
+¿Qué extra te gustaría agregar? 🚤"""
+        
+        elif option == '2':
+            # Option 2: Proceder con el pago
+            if not cart:
+                return "🛒 Tu carrito está vacío. Agrega items antes de confirmar."
+            
+            # Check if reservation exists
+            has_reservation = any(item.item_type == "reservation" for item in cart)
+            if not has_reservation:
+                return "📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+            
+            total = self.cart_manager.calculate_total(cart)
+            reservation = next((item for item in cart if item.item_type == "reservation"), None)
+            
+            confirm_message = "✅ *Reserva Confirmada*\n\n"
+            confirm_message += f"📅 *Detalles de la Reserva:*\n"
+            confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
+            confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
+            confirm_message += f"   Personas: {reservation.quantity}\n\n"
+            
+            if len(cart) > 1:
+                confirm_message += f"✨ *Extras incluidos:*\n"
+                for item in cart:
+                    if item.item_type == "extra":
+                        confirm_message += f"   • {item.name}\n"
+                confirm_message += "\n"
+            
+            confirm_message += f"💰 *Total a pagar: ${total:,}*\n\n"
+            confirm_message += f"📞 El Capitán Tomás se comunicará contigo pronto para finalizar el pago y confirmar todos los detalles 👨‍✈️\n\n"
+            confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
+            
+            # Clear cart after confirmation
+            await self.cart_manager.clear_cart(phone_number)
+            
+            return confirm_message
+        
+        elif option == '3':
+            # Option 3: Vaciar el carrito
+            await self.cart_manager.clear_cart(phone_number)
+            return "🛒 *Carrito vaciado*, grumete ⚓\n\n¿Qué te gustaría hacer ahora?\n\n1️⃣ Ver disponibilidad\n2️⃣ Ver precios\n3️⃣ Hablar con el Capitán Tomás"
+        
+        return "No entendí esa opción. Por favor elige 1, 2 o 3."
     
     def _is_reservation_confirm(self, message: str) -> bool:
         """Check if message is confirming a reservation"""
