@@ -108,17 +108,48 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 message_id=message_id
             )
             
-            # Send response
+            # Send response (handle both text and accommodations with images)
             if response:
-                await whatsapp_client.send_text_message(from_number, response)
+                if isinstance(response, dict) and response.get("type") == "accommodations":
+                    # Send accommodations with images
+                    logger.info("Sending accommodations response with images")
+                    
+                    # First send the text introduction
+                    await whatsapp_client.send_text_message(from_number, response["text"])
+                    
+                    # Then send images with captions
+                    import asyncio
+                    for item in response["images"]:
+                        if item["type"] == "text":
+                            await whatsapp_client.send_text_message(from_number, item["content"])
+                        elif item["type"] == "image" and item.get("image_url"):
+                            await whatsapp_client.send_image_message(
+                                from_number,
+                                item["image_url"],
+                                item.get("caption", "")
+                            )
+                            # Small delay between images to avoid rate limiting
+                            await asyncio.sleep(0.5)
+                        elif item["type"] == "image" and not item.get("image_url"):
+                            # If no image URL, send caption as text
+                            await whatsapp_client.send_text_message(from_number, item.get("caption", ""))
+                    
+                    # Store text response for database
+                    response_text = response["text"]
+                else:
+                    # Regular text response
+                    await whatsapp_client.send_text_message(from_number, response)
+                    response_text = response
                 
                 # Save conversation to database
                 try:
+                    # Use response_text if it was set (for accommodations), otherwise use response
+                    text_to_save = response_text if 'response_text' in locals() else (response if isinstance(response, str) else str(response))
                     await save_conversation(
                         phone_number=from_number,
                         customer_name=contact_name,
                         message_text=text_body,
-                        response_text=response,
+                        response_text=text_to_save,
                         message_type=message_type,
                         message_id=message_id,
                         direction="incoming"

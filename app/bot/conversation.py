@@ -3,12 +3,14 @@ Conversation manager - handles message flow and context
 """
 import logging
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 from datetime import datetime
 
 from app.bot.ai_handler import AIHandler
 from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS
 from app.bot.faq import FAQHandler
+from app.bot.accommodations import accommodations_handler
+from app.bot.cart import CartManager
 from app.db.leads import get_or_create_lead, get_conversation_history
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,7 @@ class ConversationManager:
         self.ai_handler = AIHandler()
         self.availability_checker = AvailabilityChecker()
         self.faq_handler = FAQHandler()
+        self.cart_manager = CartManager()
         # In-memory conversation storage (use Redis or DB in production)
         self.conversations: Dict[str, dict] = {}
     
@@ -30,7 +33,7 @@ class ConversationManager:
         message_text: str,
         contact_name: str,
         message_id: str
-    ) -> Optional[str]:
+    ) -> Union[Optional[str], Dict]:
         """
         Process incoming message and generate response
         
@@ -111,6 +114,19 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                     response = self.faq_handler.get_response("llamar a tomas")
                 else:
                     response = "No entendí esa opción. Por favor elige un número del 1 al 6, grumete ⚓"
+            # Check if asking about accommodations (special handling with images)
+            elif self._is_accommodation_query(message_text):
+                logger.info("User asking about accommodations - will send with images")
+                # Return special response object that indicates images should be sent
+                return {
+                    "type": "accommodations",
+                    "text": accommodations_handler.get_text_response(),
+                    "images": accommodations_handler.get_accommodations_with_images()
+                }
+            # Check cart commands (before FAQ)
+            elif cart_response := await self._handle_cart_command(message_text, from_number, contact_name):
+                logger.info("Cart command processed")
+                response = cart_response
             # Check if it's a FAQ question
             elif self.faq_handler.get_response(message_text):
                 logger.info("Responding with FAQ answer")
@@ -280,6 +296,136 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
             return True
         
         return False
+    
+    def _is_accommodation_query(self, message: str) -> bool:
+        """
+        Check if message is asking about accommodations
+        
+        Args:
+            message: User message
+        
+        Returns:
+            True if message is about accommodations
+        """
+        message_lower = message.lower()
+        
+        keywords = [
+            "alojamiento", "alojamientos", "hotel", "hoteles", 
+            "cabaña", "cabañas", "cabanas", "donde quedarse",
+            "donde hospedarse", "hospedaje", "hostal", "domo",
+            "open sky", "relikura", "donde dormir"
+        ]
+        
+        return any(keyword in message_lower for keyword in keywords)
+    
+    async def _handle_cart_command(self, message: str, phone_number: str, contact_name: str) -> Optional[str]:
+        """
+        Handle cart-related commands
+        
+        Args:
+            message: User message
+            phone_number: User's phone number
+            contact_name: User's name
+        
+        Returns:
+            Response text or None if not a cart command
+        """
+        message_lower = message.lower().strip()
+        
+        # View cart
+        if any(cmd in message_lower for cmd in ["carrito", "ver carrito", "mi carrito", "qué tengo"]):
+            cart = await self.cart_manager.get_cart(phone_number)
+            return self.cart_manager.format_cart_message(cart)
+        
+        # Clear cart
+        if any(cmd in message_lower for cmd in ["vaciar", "limpiar", "borrar carrito", "eliminar todo"]):
+            await self.cart_manager.clear_cart(phone_number)
+            return "🛒 Carrito vaciado, grumete ⚓\n\n¿Qué te gustaría agregar?"
+        
+        # Remove item
+        remove_match = re.search(r'eliminar\s+(\d+)', message_lower)
+        if remove_match:
+            item_index = int(remove_match.group(1)) - 1  # Convert to 0-based
+            cart = await self.cart_manager.get_cart(phone_number)
+            if 0 <= item_index < len(cart):
+                await self.cart_manager.remove_item(phone_number, contact_name, item_index)
+                cart = await self.cart_manager.get_cart(phone_number)
+                return f"✅ Item eliminado del carrito\n\n{self.cart_manager.format_cart_message(cart)}"
+            else:
+                return "❌ Número de item inválido. Usa *carrito* para ver los números."
+        
+        # Add extra
+        if any(cmd in message_lower for cmd in ["agregar", "quiero", "necesito", "dame", "pon", "agrega"]):
+            extra_item = self.cart_manager.parse_extra_from_message(message)
+            if extra_item:
+                await self.cart_manager.add_item(phone_number, contact_name, extra_item)
+                cart = await self.cart_manager.get_cart(phone_number)
+                return f"✅ {extra_item.name} agregado al carrito\n\n{self.cart_manager.format_cart_message(cart)}"
+        
+        # Confirm cart
+        if any(cmd in message_lower for cmd in ["confirmar", "confirmo", "pagar", "comprar", "finalizar"]):
+            cart = await self.cart_manager.get_cart(phone_number)
+            if not cart:
+                return "🛒 Tu carrito está vacío. Agrega items antes de confirmar."
+            
+            # Check if reservation exists
+            has_reservation = any(item.item_type == "reservation" for item in cart)
+            if not has_reservation:
+                return "📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+            
+            total = self.cart_manager.calculate_total(cart)
+            reservation = next((item for item in cart if item.item_type == "reservation"), None)
+            
+            confirm_message = "✅ *Reserva Confirmada*\n\n"
+            confirm_message += f"📅 *Detalles de la Reserva:*\n"
+            confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
+            confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
+            confirm_message += f"   Personas: {reservation.quantity}\n\n"
+            
+            if len(cart) > 1:
+                confirm_message += f"✨ *Extras incluidos:*\n"
+                for item in cart:
+                    if item.item_type == "extra":
+                        confirm_message += f"   • {item.name}\n"
+                confirm_message += "\n"
+            
+            confirm_message += f"💰 *Total a pagar: ${total:,}*\n\n"
+            confirm_message += f"📞 El Capitán Tomás se comunicará contigo pronto para finalizar el pago y confirmar todos los detalles 👨‍✈️\n\n"
+            confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
+            
+            # Clear cart after confirmation
+            await self.cart_manager.clear_cart(phone_number)
+            
+            return confirm_message
+        
+        # Add reservation (if user specifies date and time after checking availability)
+        # This will be handled when user confirms a specific slot
+        if self._is_reservation_confirm(message_lower):
+            # Try to parse reservation from message
+            reservation_item = await self._parse_reservation_from_message(message, phone_number)
+            if reservation_item:
+                await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
+                cart = await self.cart_manager.get_cart(phone_number)
+                return f"✅ Reserva agregada al carrito\n\n{self.cart_manager.format_cart_message(cart)}"
+        
+        return None
+    
+    def _is_reservation_confirm(self, message: str) -> bool:
+        """Check if message is confirming a reservation"""
+        keywords = ["reservar", "reserva", "quiero ese", "confirmo", "ese horario", "ese día"]
+        return any(keyword in message for keyword in keywords)
+    
+    async def _parse_reservation_from_message(self, message: str, phone_number: str) -> Optional:
+        """Parse reservation details from message"""
+        # This is a simplified version - in production you'd want more sophisticated parsing
+        # For now, we'll rely on the availability checker to provide context
+        # and the user to explicitly say "reservar" with a date/time
+        
+        # Try to extract date and time
+        # This is a placeholder - you'd want to integrate with availability checker
+        # to get the actual selected slot
+        
+        return None  # Placeholder - would need more context from conversation
 
 
 

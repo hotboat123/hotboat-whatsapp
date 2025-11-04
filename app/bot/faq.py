@@ -215,44 +215,9 @@ $10.000
             "extras disponible": "extras",  # Alias
             "servicios extra": "extras",  # Alias
             
-            # Alojamientos
-            "alojamiento": """🌊🔥 **HotBoat + Alojamiento en Pucón**
-
-Arma tu experiencia a tu medida con HotBoat y nuestros alojamientos recomendados.
-
-⭐ **Open Sky** – Para parejas románticas
-Domos transparentes con vista a las estrellas 🌌
-
-💰 $100.000 / noche – Domo con tina de baño interior (2 pers.)
-💰 $120.000 / noche – Domo con hidromasaje interior (2 pers.)
-
-🌿 **Raíces de Relikura** – Familiar con actividades
-Hostal y cabañas junto al río, con tinaja y entorno natural 🍃
-
-**Cabañas:**
-💰 $60.000 / noche (2 pers.)
-💰 $80.000 / noche (4 pers.)
-💰 $100.000 / noche (6 pers.)
-
-**Hostal:**
-💰 $20.000 / noche por persona
-
-📌 **Cómo funciona:**
-1. Me dices la fecha y la opción de alojamiento
-2. Te confirmo disponibilidad
-3. Pagas todo en un solo link y quedas reservado
-
-📲 Responde este mensaje con la fecha y alojamiento que prefieras""",
-            
-            "alojamientos": "alojamiento",  # Alias
-            "hotel": "alojamiento",  # Alias
-            "hoteles": "alojamiento",  # Alias
-            "cabañas": "alojamiento",  # Alias
-            "cabanas": "alojamiento",  # Alias
-            "donde quedarse": "alojamiento",  # Alias
-            "donde hospedarse": "alojamiento",  # Alias
-            "hospedaje": "alojamiento",  # Alias
-            "hostal": "alojamiento",  # Alias
+            # Alojamientos - Nota: Las consultas de alojamiento son manejadas por ConversationManager
+            # con soporte para imágenes, así que no necesitamos respuesta aquí
+            # Los aliases están en _is_accommodation_query() de ConversationManager
             
             # Respuesta para llamar a Tomás
             "llamar a tomas": """👨‍✈️🌿 **Capitán Tomás al rescate**

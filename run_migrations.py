@@ -58,6 +58,27 @@ def run_migrations():
                 # Create conversations table if it doesn't exist
                 print("\n📋 Creating/updating conversations table...")
                 
+                # Create carts table
+                print("\n🛒 Creating carts table...")
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS whatsapp_carts (
+                        id SERIAL PRIMARY KEY,
+                        phone_number VARCHAR(20) NOT NULL UNIQUE,
+                        customer_name VARCHAR(100),
+                        cart_data JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_carts_phone_number ON whatsapp_carts(phone_number);
+                """)
+                
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_carts_updated_at ON whatsapp_carts(updated_at DESC);
+                """)
+                
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS whatsapp_conversations (
                         id SERIAL PRIMARY KEY,
