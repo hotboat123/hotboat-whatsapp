@@ -70,8 +70,6 @@ class ConversationManager:
                 logger.info("First message with greeting - sending welcome message")
                 response = """🥬 ¡Ahoy, grumete! ⚓  
 
-
-
 Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤  
 
 Estoy al mando para ayudarte con todas tus consultas sobre nuestras experiencias flotantes 🌊  
@@ -136,6 +134,26 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
             elif self.is_availability_query(message_text):
                 logger.info("Checking availability")
                 response = await self.availability_checker.check_availability(message_text)
+            
+            # Check if user is asking how to add to cart (after seeing availability)
+            elif self._is_asking_how_to_add_to_cart(message_text, conversation):
+                logger.info("User asking how to add to cart")
+                response = """🛒 *Cómo agregar al carrito:*
+
+Es muy sencillo, grumete ⚓
+
+Solo dime la *fecha*, *hora* y *número de personas* que quieres reservar.
+
+Por ejemplo:
+• *"El martes a las 16 para 3 personas"*
+• *"4 de noviembre a las 15 para 2 personas"*
+• *"Miércoles a las 12 para 4 personas"*
+
+Yo lo agrego automáticamente al carrito y luego puedes:
+• Agregar extras (tablas, bebidas, etc.)
+• Confirmar la reserva
+
+¿Qué fecha y horario te gustaría? 🚤"""
             
             # Check if user is making a reservation after viewing availability
             # Pattern: "el [día] a las [hora] para [X] personas" or similar
@@ -236,6 +254,45 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
             self.conversations[phone_number]["name"] = contact_name
         
         return self.conversations[phone_number]
+    
+    def _is_asking_how_to_add_to_cart(self, message: str, conversation: dict) -> bool:
+        """
+        Check if user is asking how to add items to cart
+        
+        Args:
+            message: User message
+            conversation: Conversation context
+        
+        Returns:
+            True if user is asking about cart process
+        """
+        message_lower = message.lower().strip()
+        
+        # Keywords that indicate user is asking how to add to cart
+        cart_help_keywords = [
+            "cómo agregar", "como agregar", "agregar al carro", "agregar al carrito",
+            "cómo reservar", "como reservar", "cómo hacer", "como hacer",
+            "qué tengo que hacer", "que tengo que hacer", "qué hago", "que hago",
+            "no entiendo", "no entiendo que", "cómo funciona", "como funciona",
+            "cómo es", "como es", "explicame", "explícame", "explica"
+        ]
+        
+        # Check if message contains cart-related help keywords
+        if any(keyword in message_lower for keyword in cart_help_keywords):
+            # Check if last bot message was about availability (context)
+            if conversation and conversation.get("messages"):
+                last_messages = conversation["messages"][-3:]  # Check last 3 messages
+                for msg in reversed(last_messages):
+                    if msg.get("role") == "assistant":
+                        content = msg.get("content", "").lower()
+                        # If bot recently showed availability, user is likely asking how to proceed
+                        if "disponibilidad" in content or "disponible" in content or "horario" in content:
+                            return True
+            # Also return True if message clearly asks about cart/reservation process
+            if any(word in message_lower for word in ["carro", "carrito", "reservar", "reserva"]):
+                return True
+        
+        return False
     
     def _is_greeting_message(self, message: str) -> bool:
         """

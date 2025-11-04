@@ -403,8 +403,12 @@ class AvailabilityChecker:
                 remaining = len(slots_by_date) - max_dates_to_show
                 response_parts.append(f"\n... y {remaining} día(s) más con disponibilidad")
             
-            response_parts.append("\n👥 *¿Para cuántas personas sería?*")
-            response_parts.append("Puedo ayudarte a reservar el horario perfecto.")
+            response_parts.append("\n🛒 *¿Cómo reservo?*")
+            response_parts.append("Solo dime la *fecha*, *hora* y *número de personas*.")
+            response_parts.append("\nPor ejemplo:")
+            response_parts.append("• *\"El martes a las 16 para 3 personas\"*")
+            response_parts.append("• *\"4 de noviembre a las 15 para 2 personas\"*")
+            response_parts.append("\nYo lo agrego al carrito automáticamente 🚤")
             response_parts.append("\n💡 También puedes reservar directamente aquí:")
             response_parts.append("https://hotboatchile.com/es/book-hotboat/")
             
