@@ -134,6 +134,7 @@ class ConversationManager:
             conversation = await self.get_conversation(from_number, contact_name)
             
             logger.info(f"Processing message from {contact_name}: {message_text}")
+            logger.info(f"Current metadata state: {conversation.get('metadata', {})}")
             
             # Check if it's the first message - send welcome message
             # Check BEFORE adding the message to history
@@ -183,14 +184,21 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                 response = await self._handle_ice_cream_flavor_response(message_text, from_number, contact_name, conversation)
             # PRIORITY 1.6: Check if user is selecting an extra by number (after viewing extras menu)
             elif conversation.get("metadata", {}).get("awaiting_extra_selection"):
+                logger.info(f"User awaiting extra selection, processing: {message_text}")
                 extra_response = await self._handle_extra_number_selection(message_text, from_number, contact_name, conversation)
                 if extra_response:
                     response = extra_response
                 else:
-                    # If not a valid extra number, clear the state and continue processing
+                    # If not a valid extra number, tell them what's expected
                     conversation["metadata"]["awaiting_extra_selection"] = False
-                    # Let it fall through to other handlers
-                    response = None
+                    response = f"""❌ Por favor escribe un número válido del 1 al 17 para seleccionar un extra.
+
+O escribe:
+• *Ver extras* para ver el menú de nuevo
+• *Menu* para volver al menú principal
+• *Carrito* para ver tu carrito
+
+¿Qué te gustaría hacer? 🚤"""
             # PRIORITY 2: Check if it's a cart option (1-3) when cart has items
             elif await self._is_cart_option_selection(message_text, from_number):
                 logger.info(f"Cart option selected: {message_text}")
@@ -210,6 +218,8 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                 elif menu_number == 4:
                     # Option 4: Extras y promociones
                     conversation["metadata"]["awaiting_extra_selection"] = True
+                    logger.info(f"Set awaiting_extra_selection=True for {from_number}")
+                    logger.info(f"Metadata: {conversation.get('metadata', {})}")
                     response = self.faq_handler.get_response("extras")
                 elif menu_number == 5:
                     # Option 5: Ubicación y reseñas
