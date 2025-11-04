@@ -140,8 +140,8 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
             elif reservation_item := await self._try_parse_reservation_from_message(message_text, from_number, conversation):
                 logger.info("User making a reservation - adding to cart")
                 try:
-                    await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
-                    cart = await self.cart_manager.get_cart(phone_number)
+                    await self.cart_manager.add_item(from_number, contact_name, reservation_item)
+                    cart = await self.cart_manager.get_cart(from_number)
                     response = f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n¿Quieres agregar algún extra o *confirmar* la reserva?"
                 except Exception as cart_error:
                     logger.error(f"Error adding to cart: {cart_error}")
