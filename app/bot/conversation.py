@@ -833,10 +833,10 @@ Escribe el número que prefieras 🚤"""
             
             elif option == '3':
                 # Option 3: Quitar Reserva FLEX
-                # Buscar y eliminar Reserva FLEX del carrito
-                flex_item = next((item for item in cart if item.name == "Reserva FLEX (+10%)"), None)
-                if flex_item:
-                    await self.cart_manager.remove_item(phone_number, "Reserva FLEX (+10%)")
+                # Buscar el índice de Reserva FLEX en el carrito
+                flex_index = next((i for i, item in enumerate(cart) if item.name == "Reserva FLEX (+10%)"), None)
+                if flex_index is not None:
+                    await self.cart_manager.remove_item(phone_number, contact_name, flex_index)
                     cart = await self.cart_manager.get_cart(phone_number)
                     cart_message = self.cart_manager.format_cart_message(cart)
                     return f"""✅ *Reserva FLEX removida del carrito*
