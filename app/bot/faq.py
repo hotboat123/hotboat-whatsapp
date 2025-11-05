@@ -42,18 +42,33 @@ class FAQHandler:
 
 
             # Pricing
-            "precio": """💰 **Precios HotBoat:**
+            "precio": """💰 *Precios HotBoat:*
 
-Personas | Precio x Persona | Total
-———————————————————
-2        | $69.990          | $139.980
-3        | $54.990          | $164.970
-4        | $44.990          | $179.960
-5        | $38.990          | $194.950
-6        | $32.990          | $197.940
-7        | $29.990          | $209.930
+👥 *2 personas*
+• $69.990 x persona
+• Total: *$139.980*
 
-*niños pagan desde los 6 años
+👥 *3 personas*
+• $54.990 x persona
+• Total: *$164.970*
+
+👥 *4 personas*
+• $44.990 x persona
+• Total: *$179.960*
+
+👥 *5 personas*
+• $38.990 x persona
+• Total: *$194.950*
+
+👥 *6 personas*
+• $32.990 x persona
+• Total: *$197.940*
+
+👥 *7 personas*
+• $29.990 x persona
+• Total: *$209.930*
+
+_*niños pagan desde los 6 años_
 
 Aquí puedes reservar tu horario directo 👇
 https://hotboatchile.com/es/book-hotboat/""",

@@ -1,0 +1,55 @@
+# Configuración de Automatizaciones HotBoat
+
+# Monitores
+monitors:
+  appointments:
+    enabled: true
+    name: "Monitor de Reservas"
+    check_interval: 60  # segundos
+    notifications:
+      new_appointment: true
+      cancelled_appointment: true
+      modified_appointment: true
+      upcoming_reminder: false  # Desactivado por defecto
+      reminder_hours_before: 24
+  
+  stock:
+    enabled: true
+    name: "Monitor de Stock"
+    check_interval: 300  # segundos (5 minutos)
+    thresholds:
+      low_stock: 5
+      critical_stock: 2
+      out_of_stock: 0
+    notifications:
+      low_stock: true
+      critical_stock: true
+      out_of_stock: true
+      stock_restored: true
+
+# Notificaciones
+notifications:
+  whatsapp:
+    enabled: true
+    # Los números se configuran en .env: AUTOMATION_PHONE_NUMBERS
+    priority_levels:
+      critical: true
+      high: true
+      medium: true
+      low: false
+  
+  telegram:
+    enabled: false  # Opcional, si quieres también Telegram
+    priority_levels:
+      critical: true
+      high: true
+      medium: false
+      low: false
+
+# General
+general:
+  timezone: "America/Santiago"
+  startup_notification: true
+  error_notification: true
+  health_check_interval: 3600  # 1 hora
+

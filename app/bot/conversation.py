@@ -204,7 +204,8 @@ O escribe:
                 logger.info(f"Cart option selected: {message_text}")
                 response = await self._handle_cart_option_selection(message_text, from_number, contact_name, conversation)
             # Check if it's a menu number selection (1-6)
-            elif menu_number := self.faq_handler.is_menu_number(message_text):
+            # BUT ONLY if we're in a menu context (early in conversation or user just asked for menu)
+            elif (menu_number := self.faq_handler.is_menu_number(message_text)) and self._should_interpret_as_menu(message_text, conversation):
                 logger.info(f"Menu number selected: {menu_number}")
                 if menu_number == 1:
                     # Option 1: Disponibilidad y horarios
@@ -1513,6 +1514,82 @@ NO inventes extras que no estén en la lista."""
             import traceback
             traceback.print_exc()
             return None
+    
+    def _should_interpret_as_menu(self, message_text: str, conversation: dict) -> bool:
+        """
+        Determine if a number (1-6) should be interpreted as a menu option.
+        Returns True only if we're in a menu context, not in the middle of another conversation flow.
+        
+        Args:
+            message_text: The user's message
+            conversation: The conversation context
+            
+        Returns:
+            bool: True if the number should be treated as a menu option
+        """
+        # If the message contains more than just a number, it's not a menu selection
+        # e.g., "2 personas", "somos 3", etc.
+        message_lower = message_text.lower().strip()
+        
+        # If message has words in addition to the number, it's NOT a menu selection
+        words = message_lower.split()
+        if len(words) > 1:
+            # Check if it's just emoji numbers like "2️⃣"
+            if message_text.strip() not in ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"]:
+                logger.info(f"Message has multiple words, not treating as menu: {message_text}")
+                return False
+        
+        # If message contains words like "personas", "persona", "somos", "seremos", etc.
+        # it's definitely NOT a menu selection
+        person_keywords = ["persona", "personas", "somos", "seremos", "serían", "seríamos", "gente", "adultos", "niños"]
+        if any(keyword in message_lower for keyword in person_keywords):
+            logger.info(f"Message contains person-related keywords, not treating as menu: {message_text}")
+            return False
+        
+        # Check conversation history length
+        history = conversation.get("messages", [])
+        
+        # If it's the first few messages (within first 3 user messages), likely a menu selection
+        user_messages = [m for m in history if m.get("sender") == "user"]
+        if len(user_messages) <= 3:
+            logger.info(f"Early in conversation ({len(user_messages)} user messages), treating as menu")
+            return True
+        
+        # Check if the last bot message contained the menu
+        # (user might be responding to the menu after seeing it again)
+        if history:
+            last_bot_message = None
+            for msg in reversed(history):
+                if msg.get("sender") == "bot":
+                    last_bot_message = msg.get("message", "")
+                    break
+            
+            if last_bot_message:
+                # Check if menu options were shown in last bot message
+                menu_indicators = [
+                    "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣",
+                    "qué número eliges",
+                    "elige un número",
+                    "número del 1 al 6",
+                    "puedes preguntarme por"
+                ]
+                
+                if any(indicator in last_bot_message.lower() for indicator in menu_indicators):
+                    logger.info("Last bot message contained menu, treating number as menu option")
+                    return True
+        
+        # Check if user recently asked for "menu"
+        recent_messages = history[-5:] if len(history) >= 5 else history
+        for msg in recent_messages:
+            if msg.get("sender") == "user":
+                msg_text = msg.get("message", "").lower()
+                if "menu" in msg_text or "menú" in msg_text or "opciones" in msg_text:
+                    logger.info("User recently asked for menu, treating as menu option")
+                    return True
+        
+        # Default: if we're deep in conversation and no menu context, DON'T treat as menu
+        logger.info(f"No menu context found, NOT treating as menu option (conversation has {len(user_messages)} user messages)")
+        return False
 
 
 

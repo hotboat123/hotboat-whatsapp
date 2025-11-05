@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     business_email: str = "info@hotboatchile.com"
     business_website: str = "https://hotboatchile.com/es/"
     
+    # Automations
+    automation_phone_numbers: str = ""  # Comma-separated phone numbers for automation notifications
+    
     # Server
     port: int = 8000
     host: str = "0.0.0.0"

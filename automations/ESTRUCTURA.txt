@@ -1,0 +1,150 @@
+================================================================================
+  SISTEMA DE AUTOMATIZACIONES HOTBOAT - ESTRUCTURA DEL PROYECTO
+================================================================================
+
+📁 hotboat-whatsapp/
+│
+├── 📁 automations/                      ← NUEVA CARPETA DE AUTOMATIZACIONES
+│   │
+│   ├── __init__.py                      Inicialización del módulo
+│   ├── config.yaml                      ⚙️ Configuración de monitores
+│   ├── database.py                      🗄️ Utilidades de base de datos
+│   ├── notifications.py                 📱 Sistema de notificaciones WhatsApp
+│   ├── setup_inventory.sql              📦 Script SQL para crear tabla inventory
+│   ├── README.md                        📚 Documentación completa
+│   │
+│   └── 📁 monitors/                     Monitores del sistema
+│       ├── __init__.py
+│       ├── base_monitor.py              Clase base para monitores
+│       ├── appointments_monitor.py      📅 Monitor de reservas
+│       └── stock_monitor.py             📦 Monitor de inventario
+│
+├── run_automations.py                   ▶️ Script principal para ejecutar
+├── test_automations.py                  🧪 Script de prueba
+├── AUTOMATIONS_QUICKSTART.md            🚀 Guía rápida de inicio
+│
+├── 📁 app/                              Aplicación principal (sin cambios)
+│   ├── config.py                        ✏️ MODIFICADO: +automation_phone_numbers
+│   ├── whatsapp/
+│   │   └── client.py                    ♻️ Reutilizado por automations
+│   └── ...
+│
+├── .env                                 ✏️ AGREGAR: AUTOMATION_PHONE_NUMBERS
+├── env.example                          ✏️ MODIFICADO: +ejemplo de config
+└── requirements.txt                     ✏️ MODIFICADO: +pyyaml
+
+================================================================================
+  ¿QUÉ HACE CADA ARCHIVO?
+================================================================================
+
+📄 run_automations.py
+   → Script principal que ejecuta el sistema de automatizaciones
+   → Usa: python run_automations.py
+
+📄 test_automations.py
+   → Verifica que todo esté configurado correctamente
+   → Usa: python test_automations.py
+
+📄 automations/config.yaml
+   → Configuración de:
+     • Intervalos de revisión (cada cuántos segundos revisar)
+     • Umbrales de stock (cuándo alertar)
+     • Prioridades de notificaciones
+
+📄 automations/notifications.py
+   → Envía mensajes por WhatsApp
+   → Reutiliza el WhatsAppClient existente del proyecto
+   → Soporta múltiples números de destinatarios
+
+📄 automations/database.py
+   → Funciones para consultar la base de datos
+   → Reutiliza la conexión existente del proyecto
+
+📄 automations/monitors/appointments_monitor.py
+   → Monitorea la tabla appointments
+   → Detecta: nuevas reservas, cancelaciones, modificaciones
+
+📄 automations/monitors/stock_monitor.py
+   → Monitorea la tabla inventory
+   → Detecta: stock bajo, crítico, sin stock, reposición
+
+================================================================================
+  FLUJO DE FUNCIONAMIENTO
+================================================================================
+
+1. Ejecutas: python run_automations.py
+
+2. El sistema:
+   ✓ Se conecta a la base de datos
+   ✓ Inicializa los monitores configurados
+   ✓ Te envía un mensaje de confirmación por WhatsApp
+
+3. Cada monitor:
+   ✓ Revisa la base de datos cada X segundos (configurable)
+   ✓ Compara con el estado anterior
+   ✓ Si detecta cambios, te envía notificación por WhatsApp
+
+4. Tú recibes en tu WhatsApp:
+   📱 "🎉 Nueva Reserva Creada"
+   📱 "🔄 Reserva Modificada"
+   📱 "🟡 Stock Bajo"
+   📱 etc.
+
+================================================================================
+  ARCHIVOS QUE MODIFICASTE
+================================================================================
+
+✏️ app/config.py
+   + Agregaste: automation_phone_numbers: str = ""
+
+✏️ env.example
+   + Agregaste: AUTOMATION_PHONE_NUMBERS=
+
+✏️ requirements.txt
+   + Agregaste: pyyaml==6.0.1
+
+✏️ .env (tu archivo personal)
+   + Debes agregar: AUTOMATION_PHONE_NUMBERS=56912345678
+
+================================================================================
+  ARCHIVOS NUEVOS
+================================================================================
+
+✅ automations/                          (toda la carpeta)
+✅ run_automations.py
+✅ test_automations.py
+✅ AUTOMATIONS_QUICKSTART.md
+
+================================================================================
+  VENTAJAS DE ESTA ESTRUCTURA
+================================================================================
+
+✨ Todo en un solo repositorio
+✨ Usa la misma configuración de WhatsApp que ya tienes
+✨ Usa la misma conexión a base de datos
+✨ No necesitas configurar tokens adicionales
+✨ Se ejecuta independientemente del bot principal
+✨ Puedes correr ambos al mismo tiempo
+✨ Fácil de extender con nuevos monitores
+
+================================================================================
+  PRÓXIMOS PASOS
+================================================================================
+
+1. Edita .env y agrega:
+   AUTOMATION_PHONE_NUMBERS=56912345678
+
+2. Instala dependencia:
+   pip install pyyaml
+
+3. Prueba la configuración:
+   python test_automations.py
+
+4. Ejecuta el sistema:
+   python run_automations.py
+
+5. Prueba creando una reserva en la base de datos
+   (Ver ejemplos en AUTOMATIONS_QUICKSTART.md)
+
+================================================================================
+
