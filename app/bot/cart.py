@@ -270,9 +270,10 @@ class CartManager:
                 total += item.price * item.quantity
             elif item.item_type == "extra":
                 if item.name == "Reserva FLEX (+10%)":
-                    # FLEX is calculated as % of subtotal
-                    subtotal = sum(i.price * i.quantity for i in items if i.item_type != "extra" or i.name != "Reserva FLEX (+10%)")
-                    total += int(subtotal * 0.1)
+                    # FLEX is calculated as 10% of ONLY the reservation cost (passengers)
+                    # NOT including other extras
+                    reservation_total = sum(i.price * i.quantity for i in items if i.item_type == "reservation")
+                    total += int(reservation_total * 0.1)
                 else:
                     total += item.price * item.quantity
             else:
@@ -311,13 +312,14 @@ class CartManager:
                     message += f"   ${price:,} ({item.quantity}x ${item.price:,})\n\n"
                     total += price
         
-        # Calculate FLEX if present
+        # Calculate FLEX if present (10% of ONLY reservation cost, not extras)
         if any(item.name == "Reserva FLEX (+10%)" for item in items):
-            flex_amount = int(total * 0.1)
+            reservation_cost = sum(i.price * i.quantity for i in items if i.item_type == "reservation")
+            flex_amount = int(reservation_cost * 0.1)
             total += flex_amount
             message = message.replace(
                 "🔒 Reserva FLEX (+10%)\n   (Se aplica al subtotal)\n\n",
-                f"🔒 Reserva FLEX (+10%)\n   ${flex_amount:,}\n\n"
+                f"🔒 Reserva FLEX (+10%)\n   ${flex_amount:,}\n   (10% del costo de pasajeros)\n\n"
             )
         
         message += f"━━━━━━━━━━━━━━━━\n"
