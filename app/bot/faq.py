@@ -81,7 +81,7 @@ https://hotboatchile.com/es/book-hotboat/""",
 
             
             # Location
-            "ubicación": """📍 **Ubicación HotBoat:**
+            "ubicación": """📍 *Ubicación HotBoat:*
 
 📍 Estamos entre Pucón y Curarrehue, en pleno corazón de La Araucanía 🌿
 
@@ -101,7 +101,7 @@ https://maps.app.goo.gl/jVYVHRzekkmFRjEH7
             "donde están": "ubicación",  # Alias
             
             # Duration
-            "duración": """⏱️ **Duración del tour:**
+            "duración": """⏱️ *Duración del tour:*
 
 El tour Hot Boat tiene una duración aproximada de:
 • 1.5 a 2 horas en el lago
@@ -117,7 +117,7 @@ Incluye:
             "cuanto tiempo": "duración",  # Alias
             
             # What to bring
-            "traer": """🎒 **¿Qué traer?**
+            "traer": """🎒 *¿Qué traer?*
 
 📋 Recomendamos:
 • Protector solar ☀️
@@ -135,7 +135,7 @@ Incluye:
 ¿Lista para la aventura?""",
             
             # Weather/Season
-            "clima": """🌤️ **Mejor época:**
+            "clima": """🌤️ *Mejor época:*
 
 Operamos principalmente en temporada alta:
 • Diciembre - Marzo (verano)
@@ -150,7 +150,7 @@ El lago Villarrica es hermoso todo el año, pero el mejor clima es en verano.
             "temporada": "clima",  # Alias
             
             # Contact
-            "contacto": """📞 **Contáctanos:**
+            "contacto": """📞 *Contáctanos:*
 
 📱 WhatsApp: +56 9 1234 5678
 📧 Email: info@hotboatchile.com
@@ -161,7 +161,7 @@ El lago Villarrica es hermoso todo el año, pero el mejor clima es en verano.
 ¡Escríbenos para reservar! 🚤""",
             
             # Cancelation policy
-            "cancelar": """🔄 **Política de cancelación:**
+            "cancelar": """🔄 *Política de cancelación:*
 
 • Cancelación gratuita hasta 48h antes
 • Entre 24-48h: 50% de reembolso
@@ -174,40 +174,40 @@ El lago Villarrica es hermoso todo el año, pero el mejor clima es en verano.
 ¿Necesitas más información?""",
             
             # Extras
-            "extras": """✨ **Servicios Extra:**
+            "extras": """✨ *Servicios Extra:*
 
 ¿Quieres agregar algo especial a tu HotBoat?
 
-🍇 **Tablas de Picoteo**
+🍇 *Tablas de Picoteo*
 1️⃣ Tabla grande (4 personas) - $25.000
 2️⃣ Tabla pequeña (2 personas) - $20.000
 
-🥤 **Bebidas y Jugos** (sin alcohol)
+🥤 *Bebidas y Jugos* (sin alcohol)
 3️⃣ Jugo natural 1L (piña o naranja) - $10.000
 4️⃣ Lata bebida (Coca-Cola o Fanta) - $2.900
 5️⃣ Agua mineral 1,5 L - $2.500
 6️⃣ Helado individual (Cookies & Cream 🍪 o Frambuesa 🍫) - $3.500
 
-🌹 **Modo Romántico**
+🌹 *Modo Romántico*
 7️⃣ Pétalos de rosas y decoración especial - $25.000
 
-🌙 **Decoración Nocturna Extra**
+🌙 *Decoración Nocturna Extra*
 8️⃣ Velas LED decorativas - $10.000
 9️⃣ Letras luminosas "Te Amo" / "Love" - $15.000
 🔟 Pack completo (velas + letras) - $20.000
 
-✨🎥 **Video personalizado**
+✨🎥 *Video personalizado*
 1️⃣1️⃣ Video 15s - $30.000
 1️⃣2️⃣ Video 60s - $40.000
 
-🚐 **Transporte**
+🚐 *Transporte*
 1️⃣3️⃣ Ida y vuelta desde Pucón - $50.000
 
-🧻 **Toallas**
+🧻 *Toallas*
 1️⃣4️⃣ Toalla normal - $9.000
 1️⃣5️⃣ Toalla poncho - $10.000
 
-🩴 **Otros**
+🩴 *Otros*
 1️⃣6️⃣ Chalas de ducha - $10.000
 1️⃣7️⃣ Reserva FLEX (+10% - cancela/reprograma cuando quieras)
 
@@ -235,7 +235,7 @@ El lago Villarrica es hermoso todo el año, pero el mejor clima es en verano.
             # Los aliases están en _is_accommodation_query() de ConversationManager
             
             # Respuesta para llamar a Tomás
-            "llamar a tomas": """👨‍✈️🌿 **Capitán Tomás al rescate**
+            "llamar a tomas": """👨‍✈️🌿 *Capitán Tomás al rescate*
             
 ¡Perfecto, grumete! He avisado al Capitán Tomás que necesita hablar contigo 👨‍✈️
             

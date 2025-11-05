@@ -424,7 +424,7 @@ class AvailabilityChecker:
                 
                 time_str = ", ".join([s['time'] for s in slots])
                 response_parts.append(
-                    f"📅 **{weekday_es} {first_slot['date_str']}**: {time_str}"
+                    f"📅 *{weekday_es} {first_slot['date_str']}*: {time_str}"
                 )
                 date_count += 1
             

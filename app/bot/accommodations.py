@@ -102,28 +102,28 @@ class AccommodationsHandler:
     
     def get_text_response(self) -> str:
         """Get text response about accommodations"""
-        return """🌊🔥 **HotBoat + Alojamiento en Pucón**
+        return """🌊🔥 *HotBoat + Alojamiento en Pucón*
 
 Arma tu experiencia a tu medida con HotBoat y nuestros alojamientos recomendados.
 
-⭐ **Open Sky** – Para parejas románticas
+⭐ *Open Sky* – Para parejas románticas
 Domos transparentes con vista a las estrellas 🌌
 
 💰 $100.000 / noche – Domo con tina de baño interior (2 pers.)
 💰 $120.000 / noche – Domo con hidromasaje interior (2 pers.)
 
-🌿 **Raíces de Relikura** – Familiar con actividades
+🌿 *Raíces de Relikura* – Familiar con actividades
 Hostal y cabañas junto al río, con tinaja y entorno natural 🍃
 
-**Cabañas:**
+*Cabañas:*
 💰 $60.000 / noche (2 pers.)
 💰 $80.000 / noche (4 pers.)
 💰 $100.000 / noche (6 pers.)
 
-**Hostal:**
+*Hostal:*
 💰 $20.000 / noche por persona
 
-📌 **Cómo funciona:**
+📌 *Cómo funciona:*
 1. Me dices la fecha y la opción de alojamiento
 2. Te confirmo disponibilidad
 3. Pagas todo en un solo link y quedas reservado
