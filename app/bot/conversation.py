@@ -733,11 +733,18 @@ Escribe el número que prefieras 🚤"""
         # Agregar la reserva
         await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
         
-        # Agregar Reserva FLEX automáticamente
-        flex_item = self.cart_manager.parse_extra_from_message("reserva flex")
-        if flex_item:
-            await self.cart_manager.add_item(phone_number, contact_name, flex_item)
-            logger.info(f"Reserva FLEX agregada automáticamente para {phone_number}")
+        # Verificar si ya existe un FLEX en el carrito
+        cart = await self.cart_manager.get_cart(phone_number)
+        has_flex = any(item.name == "Reserva FLEX (+10%)" for item in cart)
+        
+        # Agregar Reserva FLEX automáticamente solo si no existe ya
+        if not has_flex:
+            flex_item = self.cart_manager.parse_extra_from_message("reserva flex")
+            if flex_item:
+                await self.cart_manager.add_item(phone_number, contact_name, flex_item)
+                logger.info(f"Reserva FLEX agregada automáticamente para {phone_number}")
+        else:
+            logger.info(f"Reserva FLEX ya existe en el carrito de {phone_number}, no se agrega duplicado")
     
     def _format_cart_with_flex_options(self, cart: list) -> str:
         """

@@ -244,6 +244,13 @@ class CartManager:
             # Remove any existing reservation AND any existing FLEX (since FLEX is tied to reservation)
             cart = [i for i in cart if i.item_type != "reservation" and i.name != "Reserva FLEX (+10%)"]
         
+        # Check if trying to add FLEX when one already exists (max 1 FLEX per reservation)
+        if item.name == "Reserva FLEX (+10%)":
+            has_flex = any(i.name == "Reserva FLEX (+10%)" for i in cart)
+            if has_flex:
+                logger.info(f"Intento de agregar FLEX duplicado prevenido para {phone_number}")
+                return False  # No agregar FLEX duplicado
+        
         cart.append(item)
         return await self.save_cart(phone_number, customer_name, cart)
     
