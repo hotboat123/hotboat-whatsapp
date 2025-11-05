@@ -193,12 +193,12 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                     conversation["metadata"]["awaiting_extra_selection"] = False
                     response = f"""❌ Por favor escribe un número válido del 1 al 17 para seleccionar un extra.
 
-O escribe:
-• *Ver extras* para ver el menú de nuevo
-• *Menu* para volver al menú principal
-• *Carrito* para ver tu carrito
+O elige:
+1️⃣8️⃣ Ver extras (menú completo de nuevo)
+1️⃣9️⃣ Menu principal
+2️⃣0️⃣ Ver carrito
 
-¿Qué te gustaría hacer? 🚤"""
+¿Qué número eliges? 🚤"""
             # PRIORITY 2: Check if it's a cart option (1-3) when cart has items
             elif await self._is_cart_option_selection(message_text, from_number, conversation):
                 logger.info(f"Cart option selected: {message_text}")
@@ -1343,6 +1343,29 @@ Escribe el número que prefieras 🚤"""
             
             # Extract all numbers from the message (support formats like "5 y 7", "5, 7", "5 7", etc.)
             numbers = re.findall(r'\b(\d+)\b', message_clean)
+            
+            # Check for special commands first (18, 19, 20)
+            if "18" in numbers:
+                # Ver extras - mostrar menú de nuevo
+                logger.info("User selected option 18: Ver extras")
+                # Don't clear awaiting_extra_selection, keep them in extras mode
+                return self.faq_handler.get_response("extras")
+            
+            if "19" in numbers:
+                # Menu principal
+                logger.info("User selected option 19: Menu principal")
+                conversation["metadata"]["awaiting_extra_selection"] = False
+                return self.faq_handler.get_response("bienvenida")
+            
+            if "20" in numbers:
+                # Ver carrito
+                logger.info("User selected option 20: Ver carrito")
+                conversation["metadata"]["awaiting_extra_selection"] = False
+                cart = await self.cart_manager.get_cart(phone_number)
+                if cart:
+                    return self.cart_manager.format_cart_message(cart)
+                else:
+                    return "🛒 Tu carrito está vacío, grumete ⚓\n\n¿Qué te gustaría agregar? 🚤"
             
             # Filter to only valid extra numbers (1-17)
             valid_numbers = [n for n in numbers if n in EXTRAS_NUMBER_MAP]
