@@ -1312,11 +1312,15 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                     response += "\n"
                 
                 response += f"{self.cart_manager.format_cart_message(cart)}\n\n"
-                response += "📋 *Elige una opción (escribe el número):*\n\n"
-                response += "1️⃣ Agregar otro extra\n"
-                response += "2️⃣ Proceder con el pago\n"
-                response += "3️⃣ Vaciar el carrito\n\n"
+                response += "📋 *¿Qué deseas hacer?*\n\n"
+                response += "• Escribe 1-17 para agregar más extras\n"
+                response += "• 1️⃣8️⃣ Ver menú de extras completo\n"
+                response += "• 1️⃣9️⃣ Menu principal\n"
+                response += "• 2️⃣0️⃣ Proceder con el pago\n\n"
                 response += "¿Qué opción eliges, grumete?"
+                
+                # Keep user in extras mode
+                conversation["metadata"]["awaiting_extra_selection"] = True
                 
                 return response
             else:
@@ -1358,14 +1362,45 @@ Escribe el número que prefieras 🚤"""
                 return self.faq_handler.get_response("bienvenida")
             
             if "20" in numbers:
-                # Ver carrito
-                logger.info("User selected option 20: Ver carrito")
+                # Proceder con el pago
+                logger.info("User selected option 20: Proceder con el pago")
                 conversation["metadata"]["awaiting_extra_selection"] = False
                 cart = await self.cart_manager.get_cart(phone_number)
-                if cart:
-                    return self.cart_manager.format_cart_message(cart)
-                else:
-                    return "🛒 Tu carrito está vacío, grumete ⚓\n\n¿Qué te gustaría agregar? 🚤"
+                if not cart:
+                    return "🛒 Tu carrito está vacío. Agrega items antes de confirmar."
+                
+                # Check if reservation exists
+                has_reservation = any(item.item_type == "reservation" for item in cart)
+                if not has_reservation:
+                    return "📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+                
+                total = self.cart_manager.calculate_total(cart)
+                reservation = next((item for item in cart if item.item_type == "reservation"), None)
+                
+                confirm_message = "✅ *Reserva Confirmada*\n\n"
+                confirm_message += f"📅 *Detalles de la Reserva:*\n"
+                confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
+                confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
+                confirm_message += f"   Personas: {reservation.quantity}\n\n"
+                
+                if len(cart) > 1:
+                    confirm_message += f"✨ *Extras incluidos:*\n"
+                    for item in cart:
+                        if item.item_type == "extra":
+                            confirm_message += f"   • {item.name}\n"
+                    confirm_message += "\n"
+                
+                confirm_message += f"💰 *Total a pagar: ${total:,}*\n\n"
+                confirm_message += f"📞 El Capitán Tomás se comunicará contigo pronto para finalizar el pago y confirmar todos los detalles 👨‍✈️\n\n"
+                confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
+                
+                # Send notification to Capitán Tomás BEFORE clearing cart
+                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
+                
+                # Clear cart after confirmation
+                await self.cart_manager.clear_cart(phone_number)
+                
+                return confirm_message
             
             # Filter to only valid extra numbers (1-17)
             valid_numbers = [n for n in numbers if n in EXTRAS_NUMBER_MAP]
@@ -1376,8 +1411,9 @@ Escribe el número que prefieras 🚤"""
             
             logger.info(f"User selected extras: {valid_numbers}")
             
-            # Clear the awaiting state
-            conversation["metadata"]["awaiting_extra_selection"] = False
+            # DON'T clear awaiting_extra_selection here - keep user in extras mode
+            # It will be cleared when they explicitly choose to exit (option 19 or 20)
+            # or when they choose a cart option
             
             # Check if any of the selections is helado (6) - needs special handling
             if "6" in valid_numbers:
@@ -1441,10 +1477,11 @@ Precio: $3,500 c/u
                     response += "\n"
                 
                 response += f"{self.cart_manager.format_cart_message(cart)}\n\n"
-                response += "📋 *Elige una opción (escribe el número):*\n\n"
-                response += "1️⃣ Agregar otro extra\n"
-                response += "2️⃣ Proceder con el pago\n"
-                response += "3️⃣ Vaciar el carrito\n\n"
+                response += "📋 *¿Qué deseas hacer?*\n\n"
+                response += "• Escribe 1-17 para agregar más extras\n"
+                response += "• 1️⃣8️⃣ Ver menú de extras completo\n"
+                response += "• 1️⃣9️⃣ Menu principal\n"
+                response += "• 2️⃣0️⃣ Proceder con el pago\n\n"
                 response += "¿Qué opción eliges, grumete?"
                 
                 if failed_extras:
