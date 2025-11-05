@@ -1035,6 +1035,28 @@ Escribe el número que prefieras 🚤"""
             if not date or not time or not party_size:
                 return "No pude encontrar los detalles de la reserva. Por favor, dime la fecha, hora y número de personas nuevamente. Por ejemplo: 'El martes a las 16 para 3 personas' 🚤"
             
+            # Validate minimum 4 hours advance booking
+            from datetime import datetime
+            import pytz
+            
+            CHILE_TZ = pytz.timezone('America/Santiago')
+            now = datetime.now(CHILE_TZ)
+            
+            # Parse the reservation datetime
+            hour = int(time.split(':')[0])
+            reservation_datetime = target_date.replace(hour=hour, minute=0, second=0, microsecond=0)
+            
+            hours_ahead = (reservation_datetime - now).total_seconds() / 3600
+            if hours_ahead < 4:
+                logger.info(f"Reservation too soon: {hours_ahead:.1f} hours ahead (minimum 4 hours required)")
+                return f"""⏰ *Lo siento, grumete*
+
+Las reservas deben hacerse con un mínimo de *4 horas de anticipación*.
+
+Tu horario solicitado es en {hours_ahead:.1f} horas, necesitas reservar para más adelante.
+
+Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
+            
             # Create reservation item
             reservation_item = self.cart_manager.create_reservation_item(
                 date=date,
@@ -1161,7 +1183,17 @@ Escribe el número que prefieras 🚤"""
                     
                     if target_date and time_hour:
                         time_str = f"{time_hour:02d}:00"
-                        logger.info(f"Parsed date/time only: date={date_str}, time={time_str}")
+                        
+                        # Validate minimum 4 hours advance booking
+                        reservation_datetime = target_date.replace(hour=time_hour, minute=0, second=0, microsecond=0)
+                        hours_ahead = (reservation_datetime - now).total_seconds() / 3600
+                        
+                        if hours_ahead < 4:
+                            logger.info(f"Date/time too soon: {hours_ahead:.1f} hours ahead (minimum 4 hours required)")
+                            # Skip this time slot, it's too soon
+                            continue
+                        
+                        logger.info(f"Parsed date/time only: date={date_str}, time={time_str}, hours_ahead={hours_ahead:.1f}")
                         return {
                             "date": date_str,
                             "time": time_str,
@@ -1195,6 +1227,10 @@ Escribe el número que prefieras 🚤"""
             
             if not pending:
                 return "Lo siento, no encontré la reserva pendiente. Por favor, inicia el proceso de nuevo."
+            
+            # Validate minimum 4 hours advance (this should already be validated, but double-check)
+            # The pending reservation should already have been validated in _try_parse_date_time_only
+            # But we add this as a safeguard
             
             # Create reservation item
             reservation_item = self.cart_manager.create_reservation_item(
@@ -1690,7 +1726,17 @@ NO inventes extras que no estén en la lista."""
                         # Format time as HH:00
                         time_str = f"{time_hour:02d}:00"
                         
-                        logger.info(f"Parsed reservation: date={date_str}, time={time_str}, capacity={capacity}")
+                        # Create full datetime for validation
+                        reservation_datetime = target_date.replace(hour=time_hour, minute=0, second=0, microsecond=0)
+                        
+                        # Validate minimum 4 hours advance booking
+                        hours_ahead = (reservation_datetime - now).total_seconds() / 3600
+                        if hours_ahead < 4:
+                            logger.info(f"Reservation too soon: {hours_ahead:.1f} hours ahead (minimum 4 hours required)")
+                            # Return None to reject this reservation - will be caught and user notified
+                            continue
+                        
+                        logger.info(f"Parsed reservation: date={date_str}, time={time_str}, capacity={capacity}, hours_ahead={hours_ahead:.1f}")
                         
                         # Verify the slot is available (optional check)
                         # For now, we'll trust the user and add it
