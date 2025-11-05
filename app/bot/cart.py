@@ -251,6 +251,15 @@ class CartManager:
                 logger.info(f"Intento de agregar FLEX duplicado prevenido para {phone_number}")
                 return False  # No agregar FLEX duplicado
         
+        # Check if item already exists in cart (for extras, group them by incrementing quantity)
+        if item.item_type == "extra":
+            existing_item = next((i for i in cart if i.name == item.name and i.item_type == "extra"), None)
+            if existing_item:
+                # Item already exists, increment quantity
+                existing_item.quantity += item.quantity
+                logger.info(f"Item {item.name} ya existe, incrementando cantidad a {existing_item.quantity}")
+                return await self.save_cart(phone_number, customer_name, cart)
+        
         cart.append(item)
         return await self.save_cart(phone_number, customer_name, cart)
     
