@@ -735,7 +735,7 @@ Precio: $3,500 c/u
 
 Escribe el número que prefieras 🚤"""
         
-        # Confirm cart
+        # Show cart with options (don't auto-confirm, let user choose)
         if any(cmd in message_lower for cmd in ["confirmar", "confirmo", "pagar", "comprar", "finalizar"]):
             cart = await self.cart_manager.get_cart(phone_number)
             if not cart:
@@ -746,30 +746,8 @@ Escribe el número que prefieras 🚤"""
             if not has_reservation:
                 return "📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
             
-            total = self.cart_manager.calculate_total(cart)
-            reservation = next((item for item in cart if item.item_type == "reservation"), None)
-            
-            confirm_message = "✅ *Reserva Confirmada*\n\n"
-            confirm_message += f"📅 *Detalles de la Reserva:*\n"
-            confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
-            confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
-            confirm_message += f"   Personas: {reservation.quantity}\n\n"
-            
-            if len(cart) > 1:
-                confirm_message += f"✨ *Extras incluidos:*\n"
-                for item in cart:
-                    if item.item_type == "extra":
-                        confirm_message += f"   • {item.name}\n"
-                confirm_message += "\n"
-            
-            confirm_message += f"💰 *Total a pagar: ${total:,}*\n\n"
-            confirm_message += f"📞 El Capitán Tomás se comunicará contigo pronto para finalizar el pago y confirmar todos los detalles 👨‍✈️\n\n"
-            confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
-            
-            # Clear cart after confirmation
-            await self.cart_manager.clear_cart(phone_number)
-            
-            return confirm_message
+            # Show cart with options (don't auto-confirm)
+            return self._format_cart_with_flex_options(cart)
         
         # Add reservation (if user specifies date and time after checking availability)
         # This will be handled when user confirms a specific slot
@@ -1766,6 +1744,7 @@ NO inventes extras que no estén en la lista."""
         try:
             # Patterns to detect reservation intent
             reservation_patterns = [
+                r'\b(\w+)\s+(\d{1,2})\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "miércoles 5 a las 21 para 2 personas"
                 r'\bel\s+(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "el martes a las 16 para 3 personas"
                 r'\b(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "martes a las 16 para 3 personas"
                 r'\b(\w+)\s+(\d{1,2}):?(\d{0,2})\s+(\d+)\s+personas?\b',  # "martes 16:00 3 personas"
