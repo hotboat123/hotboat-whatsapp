@@ -278,9 +278,9 @@ O escribe:
             elif reservation_item := await self._try_parse_reservation_from_message(message_text, from_number, conversation):
                 logger.info("User making a reservation - adding to cart")
                 try:
-                    await self.cart_manager.add_item(from_number, contact_name, reservation_item)
+                    await self._add_reservation_with_flex(from_number, contact_name, reservation_item)
                     cart = await self.cart_manager.get_cart(from_number)
-                    response = f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar un extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+                    response = self._format_cart_with_flex_options(cart)
                 except Exception as cart_error:
                     logger.error(f"Error adding to cart: {cart_error}")
                     import traceback
@@ -720,15 +720,66 @@ Escribe el número que prefieras 🚤"""
             # Try to parse reservation from message
             reservation_item = await self._parse_reservation_from_message(message, phone_number)
             if reservation_item:
-                await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
+                await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
                 cart = await self.cart_manager.get_cart(phone_number)
-                return f"✅ Reserva agregada al carrito\n\n{self.cart_manager.format_cart_message(cart)}"
+                return self._format_cart_with_flex_options(cart)
         
         return None
     
+    async def _add_reservation_with_flex(self, phone_number: str, contact_name: str, reservation_item):
+        """
+        Agrega una reserva al carrito e incluye automáticamente la opción FLEX
+        """
+        # Agregar la reserva
+        await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
+        
+        # Agregar FLEX automáticamente
+        flex_item = self.cart_manager.parse_extra_from_message("reserva flex")
+        if flex_item:
+            await self.cart_manager.add_item(phone_number, contact_name, flex_item)
+            logger.info(f"FLEX agregado automáticamente para {phone_number}")
+    
+    def _format_cart_with_flex_options(self, cart: list) -> str:
+        """
+        Formatea el carrito con opciones específicas cuando incluye FLEX por defecto
+        """
+        cart_message = self.cart_manager.format_cart_message(cart)
+        
+        # Verificar si hay FLEX en el carrito
+        has_flex = any(item.name == "Reserva FLEX (+10%)" for item in cart)
+        
+        if has_flex:
+            return f"""✅ *Reserva agregada al carrito*
+
+{cart_message}
+
+💡 *Hemos incluido la opción FLEX* que te permite cancelar o reprogramar cuando quieras (+10% del costo de pasajeros)
+
+📋 *Elige una opción (escribe el número):*
+
+1️⃣ Mantener FLEX y continuar
+2️⃣ Quitar FLEX y continuar
+3️⃣ Agregar más extras
+4️⃣ Proceder con el pago
+5️⃣ Vaciar el carrito
+
+¿Qué opción eliges, grumete?"""
+        else:
+            return f"""✅ *Reserva agregada al carrito*
+
+{cart_message}
+
+📋 *Elige una opción (escribe el número):*
+
+1️⃣ Agregar un extra
+2️⃣ Proceder con el pago
+3️⃣ Vaciar el carrito
+
+¿Qué opción eliges, grumete?"""
+    
     async def _is_cart_option_selection(self, message: str, phone_number: str, conversation: dict = None) -> bool:
         """
-        Check if user is selecting a cart option (1, 2, or 3)
+        Check if user is selecting a cart option (1-5 when FLEX present, 1-3 otherwise)
         Only returns True if the cart is not empty AND we're not awaiting other inputs
         """
         # If we're awaiting other inputs, this is NOT a cart option
@@ -741,17 +792,24 @@ Escribe el número que prefieras 🚤"""
             return False
             
         message_stripped = message.strip()
-        if message_stripped in ['1', '2', '3']:
-            cart = await self.cart_manager.get_cart(phone_number)
-            return len(cart) > 0
-        return False
+        cart = await self.cart_manager.get_cart(phone_number)
+        if len(cart) == 0:
+            return False
+        
+        # Check if FLEX is in cart to determine valid options
+        has_flex = any(item.name == "Reserva FLEX (+10%)" for item in cart)
+        
+        if has_flex:
+            return message_stripped in ['1', '2', '3', '4', '5']
+        else:
+            return message_stripped in ['1', '2', '3']
     
     async def _handle_cart_option_selection(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """
-        Handle cart option selection (1, 2, or 3)
+        Handle cart option selection (1-5 when FLEX present, 1-3 otherwise)
         
         Args:
-            message: User's message (should be '1', '2', or '3')
+            message: User's message
             phone_number: User's phone number
             contact_name: User's name
             conversation: Conversation context
@@ -761,14 +819,97 @@ Escribe el número que prefieras 🚤"""
         """
         option = message.strip()
         cart = await self.cart_manager.get_cart(phone_number)
+        has_flex = any(item.name == "Reserva FLEX (+10%)" for item in cart)
         
-        if option == '1':
-            # Option 1: Agregar un extra - mostrar menú con números
-            conversation["metadata"]["awaiting_extra_selection"] = True
-            return self.faq_handler.get_response("extras")
+        # Si hay FLEX, las opciones son diferentes
+        if has_flex:
+            if option == '1':
+                # Option 1: Mantener FLEX y continuar - mostrar opciones normales
+                cart_message = self.cart_manager.format_cart_message(cart)
+                return f"""✅ *FLEX mantenido*
+
+{cart_message}
+
+📋 *¿Qué deseas hacer ahora?*
+
+1️⃣ Agregar más extras
+2️⃣ Proceder con el pago
+3️⃣ Vaciar el carrito
+
+¿Qué opción eliges, grumete?"""
+            
+            elif option == '2':
+                # Option 2: Quitar FLEX y continuar
+                # Buscar y eliminar FLEX del carrito
+                flex_item = next((item for item in cart if item.name == "Reserva FLEX (+10%)"), None)
+                if flex_item:
+                    await self.cart_manager.remove_item(phone_number, "Reserva FLEX (+10%)")
+                    cart = await self.cart_manager.get_cart(phone_number)
+                    cart_message = self.cart_manager.format_cart_message(cart)
+                    return f"""✅ *FLEX removido del carrito*
+
+{cart_message}
+
+📋 *¿Qué deseas hacer ahora?*
+
+1️⃣ Agregar un extra
+2️⃣ Proceder con el pago
+3️⃣ Vaciar el carrito
+
+¿Qué opción eliges, grumete?"""
+            
+            elif option == '3':
+                # Option 3: Agregar más extras
+                conversation["metadata"]["awaiting_extra_selection"] = True
+                return self.faq_handler.get_response("extras")
+            
+            elif option == '4':
+                # Option 4: Proceder con el pago
+                pass  # Continúa al código de pago abajo
+            
+            elif option == '5':
+                # Option 5: Vaciar el carrito
+                await self.cart_manager.clear_cart(phone_number)
+                return """🛒 *Carrito vaciado*, grumete ⚓
+
+¿Listo para zarpar de nuevo? Elige una opción:
+
+1️⃣ *Disponibilidad y horarios*
+2️⃣ *Precios por persona*
+3️⃣ *Características del HotBoat*
+4️⃣ *Extras y promociones*
+5️⃣ *Ubicación y reseñas*
+6️⃣ *Hablar con el Capitán Tomás*
+
+¿Qué número eliges? 🚤"""
         
-        elif option == '2':
-            # Option 2: Proceder con el pago
+        else:
+            # Sin FLEX, opciones normales (1-3)
+            if option == '1':
+                # Option 1: Agregar un extra - mostrar menú con números
+                conversation["metadata"]["awaiting_extra_selection"] = True
+                return self.faq_handler.get_response("extras")
+            
+            elif option == '3':
+                # Option 3: Vaciar el carrito
+                await self.cart_manager.clear_cart(phone_number)
+                return """🛒 *Carrito vaciado*, grumete ⚓
+
+¿Listo para zarpar de nuevo? Elige una opción:
+
+1️⃣ *Disponibilidad y horarios*
+2️⃣ *Precios por persona*
+3️⃣ *Características del HotBoat*
+4️⃣ *Extras y promociones*
+5️⃣ *Ubicación y reseñas*
+6️⃣ *Hablar con el Capitán Tomás*
+
+¿Qué número eliges? 🚤"""
+            
+            # Option 2: Proceder con el pago (aplica para ambos casos)
+        
+        if option == '2' or (has_flex and option == '4'):
+            # Proceder con el pago
             if not cart:
                 return "🛒 Tu carrito está vacío. Agrega items antes de confirmar."
             
@@ -805,28 +946,7 @@ Escribe el número que prefieras 🚤"""
             
             return confirm_message
         
-        elif option == '3':
-            # Option 3: Vaciar el carrito
-            await self.cart_manager.clear_cart(phone_number)
-            return """🛒 *Carrito vaciado*, grumete ⚓
-
-¿Listo para zarpar de nuevo? Elige una opción:
-
-1️⃣ *Disponibilidad y horarios*
-
-2️⃣ *Precios por persona*
-
-3️⃣ *Características del HotBoat*
-
-4️⃣ *Extras y promociones*
-
-5️⃣ *Ubicación y reseñas*
-
-6️⃣ *Hablar con el Capitán Tomás*
-
-¿Qué número eliges? 🚤"""
-        
-        return "No entendí esa opción. Por favor elige 1, 2 o 3."
+        return "No entendí esa opción. Por favor elige las opciones indicadas."
     
     async def _is_confirming_reservation_from_availability(self, message: str, conversation: dict) -> bool:
         """
@@ -931,11 +1051,11 @@ Escribe el número que prefieras 🚤"""
                 capacity=party_size
             )
             
-            # Add to cart
-            await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
+            # Add to cart with FLEX
+            await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
             cart = await self.cart_manager.get_cart(phone_number)
             
-            return f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar un extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+            return self._format_cart_with_flex_options(cart)
             
         except Exception as e:
             logger.error(f"Error handling reservation confirmation: {e}")
@@ -1092,15 +1212,15 @@ Escribe el número que prefieras 🚤"""
                 capacity=party_size
             )
             
-            # Add to cart
-            await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
+            # Add to cart with FLEX
+            await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
             cart = await self.cart_manager.get_cart(phone_number)
             
             # Clear the pending state
             conversation["metadata"]["awaiting_party_size"] = False
             conversation["metadata"]["pending_reservation"] = None
             
-            return f"✅ *Reserva agregada al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar un extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+            return self._format_cart_with_flex_options(cart)
             
         except Exception as e:
             logger.error(f"Error handling party size response: {e}")
