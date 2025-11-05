@@ -189,14 +189,20 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
                 if extra_response:
                     response = extra_response
                 else:
-                    # If not a valid extra number, tell them what's expected
-                    conversation["metadata"]["awaiting_extra_selection"] = False
-                    response = f"""❌ Por favor escribe un número válido del 1 al 17 para seleccionar un extra.
+                    # If not a valid extra number, try to parse with text/AI (e.g., "2 jugos")
+                    logger.info("Not a pure ID selection, trying text-based parsing")
+                    text_response = await self._try_parse_extra_with_ai(message_text, from_number, contact_name, conversation)
+                    if text_response:
+                        response = text_response
+                    else:
+                        # If still can't parse, tell them what's expected
+                        conversation["metadata"]["awaiting_extra_selection"] = False
+                        response = f"""❌ Por favor escribe un número válido del 1 al 17 para seleccionar un extra.
 
 O elige:
 1️⃣8️⃣ Ver extras (menú completo de nuevo)
 1️⃣9️⃣ Menu principal
-2️⃣0️⃣ Ver carrito
+2️⃣0️⃣ Proceder con el pago
 
 ¿Qué número eliges? 🚤"""
             # PRIORITY 2: Check if it's a cart option (1-3) when cart has items
@@ -663,7 +669,8 @@ Precio: $3,500 c/u
                 return f"✅ *{extra_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
             else:
                 # Try to use AI to understand what they want
-                ai_response = await self._try_parse_extra_with_ai(message, phone_number, contact_name)
+                conversation = await self.get_conversation(phone_number, contact_name)
+                ai_response = await self._try_parse_extra_with_ai(message, phone_number, contact_name, conversation)
                 if ai_response:
                     return ai_response
                 
@@ -1344,6 +1351,24 @@ Escribe el número que prefieras 🚤"""
         try:
             import re
             message_clean = message.strip()
+            message_lower = message_clean.lower()
+            
+            # Check if message contains item descriptions (like "jugo", "helado", "tabla", etc.)
+            # If it does, this is NOT a pure ID selection, it's a quantity + description
+            item_keywords = [
+                'jugo', 'bebida', 'agua', 'lata', 'helado', 'cookies', 'frambuesa',
+                'tabla', 'picoteo', 'modo', 'romantico', 'pétalos', 'petalos', 'rosa',
+                'vela', 'letra', 'pack', 'video', 'transporte', 'toalla', 'chalas', 'flex'
+            ]
+            
+            # Remove common connectors and numbers to check for item keywords
+            words_only = re.sub(r'\b\d+\b', '', message_lower)  # Remove numbers
+            words_only = re.sub(r'[,y]', ' ', words_only).strip()  # Remove connectors
+            
+            # If there are meaningful words left (item descriptions), don't treat as pure IDs
+            if any(keyword in words_only for keyword in item_keywords):
+                logger.info(f"Message contains item descriptions, not treating as pure IDs: {message_clean}")
+                return None  # Let other handlers (like AI or text parser) handle it
             
             # Extract all numbers from the message (support formats like "5 y 7", "5, 7", "5 7", etc.)
             numbers = re.findall(r'\b(\d+)\b', message_clean)
@@ -1591,36 +1616,61 @@ Precio: $3,500 c/u
             traceback.print_exc()
             return None
     
-    async def _try_parse_extra_with_ai(self, message: str, phone_number: str, contact_name: str) -> str:
-        """Use AI to try to understand which extra the user wants"""
+    async def _try_parse_extra_with_ai(self, message: str, phone_number: str, contact_name: str, conversation: dict = None) -> str:
+        """Use AI to try to understand which extra the user wants (handles quantity + description like '2 jugos')"""
         try:
             # Get available extras from FAQ
             extras_text = self.faq_handler.get_response("extras")
             
-            # Create a prompt for the AI to identify the extra
+            # Create a prompt for the AI to identify the extra and quantity
             ai_prompt = f"""El cliente escribió: "{message}"
 
 Aquí está nuestra lista de extras disponibles:
 {extras_text}
 
-¿Qué extra está pidiendo el cliente? Responde SOLO con el nombre exacto del extra de nuestra lista (por ejemplo: "Tabla de Picoteo Grande", "Jugo natural", "Modo Romántico", etc.), o responde "NO_ENCONTRADO" si no corresponde a ningún extra de la lista.
+¿Qué extra está pidiendo el cliente y cuántas unidades? Responde en formato: "CANTIDAD|NOMBRE_EXTRA"
+Por ejemplo: "2|Jugo natural" o "1|Tabla de Picoteo Grande"
 
+Si no especifica cantidad, usa 1.
+Responde "NO_ENCONTRADO" si no corresponde a ningún extra de la lista.
 NO inventes extras que no estén en la lista."""
 
             # Get AI response
-            conversation = await self.get_conversation(phone_number, contact_name)
+            if not conversation:
+                conversation = await self.get_conversation(phone_number, "")
             ai_response = await self.ai_handler.generate_response(ai_prompt, [], conversation)
             ai_response_clean = ai_response.strip()
             
             logger.info(f"AI identified extra: {ai_response_clean}")
             
-            if "NO_ENCONTRADO" not in ai_response_clean and len(ai_response_clean) > 0:
+            if "NO_ENCONTRADO" not in ai_response_clean and "|" in ai_response_clean:
+                # Parse quantity and name
+                parts = ai_response_clean.split("|", 1)
+                quantity = int(parts[0].strip()) if parts[0].strip().isdigit() else 1
+                extra_name = parts[1].strip()
+                
                 # Try to parse the AI's suggestion
-                extra_item = self.cart_manager.parse_extra_from_message(ai_response_clean)
+                extra_item = self.cart_manager.parse_extra_from_message(extra_name)
                 if extra_item:
+                    extra_item.quantity = quantity
                     await self.cart_manager.add_item(phone_number, contact_name, extra_item)
                     cart = await self.cart_manager.get_cart(phone_number)
-                    return f"✅ *{extra_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+                    
+                    # Keep user in extras mode
+                    if conversation:
+                        conversation["metadata"]["awaiting_extra_selection"] = True
+                    
+                    response = f"✅ *{extra_item.name}"
+                    if quantity > 1:
+                        response += f" x{quantity}"
+                    response += f" agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n"
+                    response += "📋 *¿Qué deseas hacer?*\n\n"
+                    response += "• Escribe 1-17 para agregar más extras\n"
+                    response += "• 1️⃣8️⃣ Ver menú de extras completo\n"
+                    response += "• 1️⃣9️⃣ Menu principal\n"
+                    response += "• 2️⃣0️⃣ Proceder con el pago\n\n"
+                    response += "¿Qué opción eliges, grumete?"
+                    return response
             
             return None  # Could not identify
             
