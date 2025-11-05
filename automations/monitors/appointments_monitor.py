@@ -15,33 +15,36 @@ class AppointmentsMonitor(BaseMonitor):
     
     async def check(self) -> Dict[str, Any]:
         """
-        Obtiene el estado actual de las reservas
+        Obtiene el estado actual de las reservas de Booknetic
         """
         # Obtener todas las reservas activas (próximas y recientes)
+        # Usando la tabla de Booknetic
         query = """
             SELECT 
                 id,
                 customer_name,
-                phone_number,
-                appointment_date,
-                start_time,
-                duration_hours,
-                boat_type,
-                num_people,
-                total_price,
+                customer_email,
+                customer_phone,
+                service_name,
+                starts_at,
+                duration,
                 status,
+                price,
+                paid_amount,
                 created_at,
-                updated_at,
-                notes
-            FROM appointments
-            WHERE appointment_date >= CURRENT_DATE - INTERVAL '1 day'
-            ORDER BY appointment_date, start_time
+                note,
+                custom_fields
+            FROM booknetic_appointments
+            WHERE starts_at >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+                AND (status IS NULL OR status NOT IN ('cancelled', 'rejected'))
+            ORDER BY starts_at
         """
         
         try:
             appointments = await execute_query(query)
         except Exception as e:
-            logger.warning(f"⚠️ Error al consultar appointments: {e}")
+            logger.warning(f"⚠️ Error al consultar booknetic_appointments: {e}")
+            logger.info("💡 Verifica que la tabla booknetic_appointments tenga los campos correctos")
             return {}
         
         # Crear un diccionario indexado por ID para fácil comparación
@@ -85,9 +88,9 @@ class AppointmentsMonitor(BaseMonitor):
     def _has_changed(self, old_appt: Dict, new_appt: Dict) -> bool:
         """Verifica si una reserva ha cambiado"""
         fields = [
-            'customer_name', 'phone_number', 'appointment_date',
-            'start_time', 'duration_hours', 'boat_type',
-            'num_people', 'total_price', 'status'
+            'customer_name', 'customer_phone', 'customer_email',
+            'starts_at', 'duration', 'service_name',
+            'price', 'paid_amount', 'status', 'note'
         ]
         
         for field in fields:
@@ -97,25 +100,76 @@ class AppointmentsMonitor(BaseMonitor):
         return False
     
     async def _notify_new_appointment(self, appointment: Dict):
-        """Notifica sobre una nueva reserva"""
+        """Notifica sobre una nueva reserva de Booknetic"""
         if not self.config.get("notifications", {}).get("new_appointment", True):
             return
         
-        date_str = appointment['appointment_date'].strftime('%d/%m/%Y')
-        time_str = str(appointment.get('start_time', 'N/A'))
+        # Formatear fecha y hora
+        starts_at = appointment.get('starts_at')
+        if starts_at:
+            if isinstance(starts_at, str):
+                from datetime import datetime
+                starts_at = datetime.fromisoformat(starts_at.replace('Z', '+00:00'))
+            date_str = starts_at.strftime('%d/%m/%Y')
+            time_str = starts_at.strftime('%H:%M')
+        else:
+            date_str = 'N/A'
+            time_str = 'N/A'
         
-        message = f"""🎉 *Nueva Reserva Creada*
+        # Parsear custom_fields si existe (puede contener info de personas y extras)
+        custom_fields = appointment.get('custom_fields')
+        num_people = 'N/A'
+        extras_info = ''
+        
+        if custom_fields:
+            try:
+                import json
+                if isinstance(custom_fields, str):
+                    fields = json.loads(custom_fields)
+                else:
+                    fields = custom_fields
+                
+                # Buscar número de personas (puede estar en diferentes campos)
+                for key, value in fields.items():
+                    if 'persona' in key.lower() or 'people' in key.lower() or 'capacity' in key.lower():
+                        num_people = value
+                        break
+                
+                # Buscar extras
+                extras_list = []
+                for key, value in fields.items():
+                    if 'extra' in key.lower() or 'addon' in key.lower() or 'servicio' in key.lower():
+                        if value and value != 'none' and value != '':
+                            extras_list.append(f"• {key}: {value}")
+                
+                if extras_list:
+                    extras_info = "\n\n✨ *Extras:*\n" + "\n".join(extras_list)
+            except:
+                pass
+        
+        # Construir mensaje
+        price = appointment.get('price', 0)
+        paid_amount = appointment.get('paid_amount', 0)
+        
+        message = f"""🎉 *NUEVA RESERVA HOTBOAT*
 
-👤 Cliente: {appointment.get('customer_name', 'N/A')}
-📱 Teléfono: {appointment.get('phone_number', 'N/A')}
-📅 Fecha: {date_str}
-⏰ Hora: {time_str}
-⛵ Embarcación: {appointment.get('boat_type', 'N/A')}
-👥 Personas: {appointment.get('num_people', 'N/A')}
-💰 Total: ${appointment.get('total_price', 0):,.0f}
-📝 Estado: {appointment.get('status', 'N/A')}
+👤 *Cliente:* {appointment.get('customer_name', 'N/A')}
+📱 *Teléfono:* {appointment.get('customer_phone', 'N/A')}
+📧 *Email:* {appointment.get('customer_email', 'N/A')}
 
-{f"Notas: {appointment.get('notes')}" if appointment.get('notes') else ""}
+📅 *Fecha:* {date_str}
+⏰ *Hora:* {time_str}
+⏱️ *Duración:* {appointment.get('duration', 'N/A')} min
+⛵ *Servicio:* {appointment.get('service_name', 'N/A')}
+👥 *Personas:* {num_people}
+
+💰 *Precio total:* ${price:,.0f} CLP
+💳 *Monto pagado:* ${paid_amount:,.0f} CLP
+{f"⚠️ *Pendiente:* ${price - paid_amount:,.0f} CLP" if price > paid_amount else "✅ *Pagado completamente*"}
+{extras_info}
+{f"\n📝 *Notas:* {appointment.get('note')}" if appointment.get('note') else ""}
+
+🔗 *ID Reserva:* #{appointment.get('id')}
         """.strip()
         
         await self.send_notification(
@@ -123,21 +177,34 @@ class AppointmentsMonitor(BaseMonitor):
             priority="high"
         )
         
-        logger.info(f"🎉 Nueva reserva: {appointment.get('customer_name')} - {date_str}")
+        logger.info(f"🎉 Nueva reserva: {appointment.get('customer_name')} - {date_str} {time_str}")
     
     async def _notify_cancelled_appointment(self, appointment: Dict):
         """Notifica sobre una reserva cancelada"""
         if not self.config.get("notifications", {}).get("cancelled_appointment", True):
             return
         
-        date_str = appointment['appointment_date'].strftime('%d/%m/%Y')
+        # Formatear fecha y hora
+        starts_at = appointment.get('starts_at')
+        if starts_at:
+            if isinstance(starts_at, str):
+                from datetime import datetime
+                starts_at = datetime.fromisoformat(starts_at.replace('Z', '+00:00'))
+            date_str = starts_at.strftime('%d/%m/%Y')
+            time_str = starts_at.strftime('%H:%M')
+        else:
+            date_str = 'N/A'
+            time_str = 'N/A'
         
         message = f"""❌ *Reserva Cancelada*
 
 👤 Cliente: {appointment.get('customer_name', 'N/A')}
+📱 Teléfono: {appointment.get('customer_phone', 'N/A')}
 📅 Fecha: {date_str}
-⏰ Hora: {appointment.get('start_time', 'N/A')}
-💰 Monto: ${appointment.get('total_price', 0):,.0f}
+⏰ Hora: {time_str}
+💰 Monto: ${appointment.get('price', 0):,.0f} CLP
+
+🔗 *ID Reserva:* #{appointment.get('id')}
         """.strip()
         
         await self.send_notification(
@@ -155,19 +222,32 @@ class AppointmentsMonitor(BaseMonitor):
         # Detectar qué cambió
         changes = []
         
-        if old_appt.get('appointment_date') != new_appt.get('appointment_date'):
-            old_date = old_appt['appointment_date'].strftime('%d/%m/%Y')
-            new_date = new_appt['appointment_date'].strftime('%d/%m/%Y')
-            changes.append(f"📅 Fecha: {old_date} → {new_date}")
+        # Comparar fechas/hora
+        old_starts = old_appt.get('starts_at')
+        new_starts = new_appt.get('starts_at')
+        if old_starts != new_starts:
+            from datetime import datetime
+            if isinstance(old_starts, str):
+                old_starts = datetime.fromisoformat(old_starts.replace('Z', '+00:00'))
+            if isinstance(new_starts, str):
+                new_starts = datetime.fromisoformat(new_starts.replace('Z', '+00:00'))
+            
+            if old_starts and new_starts:
+                old_str = old_starts.strftime('%d/%m/%Y %H:%M')
+                new_str = new_starts.strftime('%d/%m/%Y %H:%M')
+                changes.append(f"📅 Fecha/Hora: {old_str} → {new_str}")
         
-        if old_appt.get('start_time') != new_appt.get('start_time'):
-            changes.append(f"⏰ Hora: {old_appt.get('start_time')} → {new_appt.get('start_time')}")
+        if old_appt.get('price') != new_appt.get('price'):
+            changes.append(f"💰 Precio: ${old_appt.get('price', 0):,.0f} → ${new_appt.get('price', 0):,.0f}")
+        
+        if old_appt.get('paid_amount') != new_appt.get('paid_amount'):
+            changes.append(f"💳 Pagado: ${old_appt.get('paid_amount', 0):,.0f} → ${new_appt.get('paid_amount', 0):,.0f}")
         
         if old_appt.get('status') != new_appt.get('status'):
             changes.append(f"📝 Estado: {old_appt.get('status')} → {new_appt.get('status')}")
         
-        if old_appt.get('num_people') != new_appt.get('num_people'):
-            changes.append(f"👥 Personas: {old_appt.get('num_people')} → {new_appt.get('num_people')}")
+        if old_appt.get('duration') != new_appt.get('duration'):
+            changes.append(f"⏱️ Duración: {old_appt.get('duration')} → {new_appt.get('duration')} min")
         
         if not changes:
             return
@@ -175,10 +255,12 @@ class AppointmentsMonitor(BaseMonitor):
         message = f"""🔄 *Reserva Modificada*
 
 👤 Cliente: {new_appt.get('customer_name', 'N/A')}
-📱 Teléfono: {new_appt.get('phone_number', 'N/A')}
+📱 Teléfono: {new_appt.get('customer_phone', 'N/A')}
 
 *Cambios:*
 {chr(10).join(changes)}
+
+🔗 *ID Reserva:* #{new_appt.get('id')}
         """.strip()
         
         await self.send_notification(
