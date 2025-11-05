@@ -757,11 +757,10 @@ Escribe el número que prefieras 🚤"""
 
 📋 *Elige una opción (escribe el número):*
 
-1️⃣ Mantener Reserva FLEX y continuar
-2️⃣ Quitar Reserva FLEX y continuar
-3️⃣ Agregar más extras
-4️⃣ Proceder con el pago
-5️⃣ Vaciar el carrito
+1️⃣ Agregar más extras
+2️⃣ Proceder con el pago
+3️⃣ Quitar Reserva FLEX
+4️⃣ Vaciar el carrito
 
 ¿Qué opción eliges, grumete?"""
         else:
@@ -779,7 +778,7 @@ Escribe el número que prefieras 🚤"""
     
     async def _is_cart_option_selection(self, message: str, phone_number: str, conversation: dict = None) -> bool:
         """
-        Check if user is selecting a cart option (1-5 when Reserva FLEX present, 1-3 otherwise)
+        Check if user is selecting a cart option (1-4 when Reserva FLEX present, 1-3 otherwise)
         Only returns True if the cart is not empty AND we're not awaiting other inputs
         """
         # If we're awaiting other inputs, this is NOT a cart option
@@ -800,13 +799,13 @@ Escribe el número que prefieras 🚤"""
         has_flex = any(item.name == "Reserva FLEX (+10%)" for item in cart)
         
         if has_flex:
-            return message_stripped in ['1', '2', '3', '4', '5']
+            return message_stripped in ['1', '2', '3', '4']
         else:
             return message_stripped in ['1', '2', '3']
     
     async def _handle_cart_option_selection(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """
-        Handle cart option selection (1-5 when Reserva FLEX present, 1-3 otherwise)
+        Handle cart option selection (1-4 when Reserva FLEX present, 1-3 otherwise)
         
         Args:
             message: User's message
@@ -824,22 +823,16 @@ Escribe el número que prefieras 🚤"""
         # Si hay Reserva FLEX, las opciones son diferentes
         if has_flex:
             if option == '1':
-                # Option 1: Mantener Reserva FLEX y continuar - mostrar opciones normales
-                cart_message = self.cart_manager.format_cart_message(cart)
-                return f"""✅ *Reserva FLEX mantenida*
-
-{cart_message}
-
-📋 *¿Qué deseas hacer ahora?*
-
-1️⃣ Agregar más extras
-2️⃣ Proceder con el pago
-3️⃣ Vaciar el carrito
-
-¿Qué opción eliges, grumete?"""
+                # Option 1: Agregar más extras
+                conversation["metadata"]["awaiting_extra_selection"] = True
+                return self.faq_handler.get_response("extras")
             
             elif option == '2':
-                # Option 2: Quitar Reserva FLEX y continuar
+                # Option 2: Proceder con el pago
+                pass  # Continúa al código de pago abajo
+            
+            elif option == '3':
+                # Option 3: Quitar Reserva FLEX
                 # Buscar y eliminar Reserva FLEX del carrito
                 flex_item = next((item for item in cart if item.name == "Reserva FLEX (+10%)"), None)
                 if flex_item:
@@ -858,17 +851,8 @@ Escribe el número que prefieras 🚤"""
 
 ¿Qué opción eliges, grumete?"""
             
-            elif option == '3':
-                # Option 3: Agregar más extras
-                conversation["metadata"]["awaiting_extra_selection"] = True
-                return self.faq_handler.get_response("extras")
-            
             elif option == '4':
-                # Option 4: Proceder con el pago
-                pass  # Continúa al código de pago abajo
-            
-            elif option == '5':
-                # Option 5: Vaciar el carrito
+                # Option 4: Vaciar el carrito
                 await self.cart_manager.clear_cart(phone_number)
                 return """🛒 *Carrito vaciado*, grumete ⚓
 
@@ -908,7 +892,7 @@ Escribe el número que prefieras 🚤"""
             
             # Option 2: Proceder con el pago (aplica para ambos casos)
         
-        if option == '2' or (has_flex and option == '4'):
+        if option == '2':
             # Proceder con el pago
             if not cart:
                 return "🛒 Tu carrito está vacío. Agrega items antes de confirmar."
