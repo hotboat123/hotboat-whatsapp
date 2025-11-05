@@ -205,7 +205,57 @@ O elige:
 2️⃣0️⃣ Proceder con el pago
 
 ¿Qué número eliges? 🚤"""
-            # PRIORITY 2: Check if it's a cart option (1-3) when cart has items
+            # PRIORITY 2: Check for global shortcuts (18, 19, 20) - work anywhere
+            elif message_text.strip() == "18":
+                logger.info("Global shortcut 18: Ver extras")
+                conversation["metadata"]["awaiting_extra_selection"] = True
+                response = self.faq_handler.get_response("extras")
+            elif message_text.strip() == "19":
+                logger.info("Global shortcut 19: Menu principal")
+                conversation["metadata"]["awaiting_extra_selection"] = False
+                response = self.faq_handler.get_response("bienvenida")
+            elif message_text.strip() == "20":
+                logger.info("Global shortcut 20: Ver/proceder con carrito")
+                conversation["metadata"]["awaiting_extra_selection"] = False
+                cart = await self.cart_manager.get_cart(from_number)
+                if not cart:
+                    response = "🛒 Tu carrito está vacío, grumete ⚓\n\n¿Qué te gustaría agregar? 🚤"
+                else:
+                    # Check if has reservation to proceed with payment
+                    has_reservation = any(item.item_type == "reservation" for item in cart)
+                    if has_reservation:
+                        # Proceed with payment
+                        total = self.cart_manager.calculate_total(cart)
+                        reservation = next((item for item in cart if item.item_type == "reservation"), None)
+                        
+                        confirm_message = "✅ *Reserva Confirmada*\n\n"
+                        confirm_message += f"📅 *Detalles de la Reserva:*\n"
+                        confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
+                        confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
+                        confirm_message += f"   Personas: {reservation.quantity}\n\n"
+                        
+                        if len(cart) > 1:
+                            confirm_message += f"✨ *Extras incluidos:*\n"
+                            for item in cart:
+                                if item.item_type == "extra":
+                                    confirm_message += f"   • {item.name}\n"
+                            confirm_message += "\n"
+                        
+                        confirm_message += f"💰 *Total a pagar: ${total:,}*\n\n"
+                        confirm_message += f"📞 El Capitán Tomás se comunicará contigo pronto para finalizar el pago y confirmar todos los detalles 👨‍✈️\n\n"
+                        confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
+                        
+                        # Send notification to Capitán Tomás BEFORE clearing cart
+                        await self._notify_capitan_tomas(contact_name, from_number, cart, reason="reservation")
+                        
+                        # Clear cart after confirmation
+                        await self.cart_manager.clear_cart(from_number)
+                        
+                        response = confirm_message
+                    else:
+                        # Just show cart
+                        response = f"{self.cart_manager.format_cart_message(cart)}\n\n📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+            # PRIORITY 3: Check if it's a cart option (1-3) when cart has items
             elif await self._is_cart_option_selection(message_text, from_number, conversation):
                 logger.info(f"Cart option selected: {message_text}")
                 response = await self._handle_cart_option_selection(message_text, from_number, contact_name, conversation)
