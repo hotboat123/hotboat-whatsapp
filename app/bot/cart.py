@@ -241,7 +241,8 @@ class CartManager:
         
         # Check if reservation already exists (only one reservation per cart)
         if item.item_type == "reservation":
-            cart = [i for i in cart if i.item_type != "reservation"]
+            # Remove any existing reservation AND any existing FLEX (since FLEX is tied to reservation)
+            cart = [i for i in cart if i.item_type != "reservation" and i.name != "Reserva FLEX (+10%)"]
         
         cart.append(item)
         return await self.save_cart(phone_number, customer_name, cart)
