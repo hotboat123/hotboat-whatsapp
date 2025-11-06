@@ -364,6 +364,11 @@ Yo lo agrego automáticamente al carrito y luego puedes:
 
 ¿Qué fecha y horario te gustaría? 🚤"""
             
+            # Check if user wants to make a reservation (but didn't specify date/time yet)
+            elif self._is_reservation_intent(message_text):
+                logger.info("User wants to make a reservation - showing availability")
+                response = await self.availability_checker.check_availability("disponibilidad")
+            
             # Use AI for general conversation
             else:
                 logger.info("Using AI handler for response")
@@ -475,6 +480,39 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             # Also return True if message clearly asks about cart/reservation process
             if any(word in message_lower for word in ["carro", "carrito", "reservar", "reserva"]):
                 return True
+        
+        return False
+    
+    def _is_reservation_intent(self, message: str) -> bool:
+        """
+        Check if user wants to make a reservation (without specific date/time)
+        
+        Args:
+            message: User message
+        
+        Returns:
+            True if user expresses intent to reserve
+        """
+        message_lower = message.lower().strip()
+        
+        # Keywords that indicate user wants to reserve (but hasn't given details)
+        reservation_intent_keywords = [
+            "quiero reservar", "quisiera reservar", "me gustaría reservar",
+            "puedo reservar", "se puede reservar", "podría reservar",
+            "quiero hacer una reserva", "quisiera hacer una reserva", 
+            "me gustaría hacer una reserva", "hacer una reserva",
+            "puedo hacer una reserva", "podría hacer una reserva",
+            "reservar por acá", "reservar por aca", "reservar aquí", "reservar aqui",
+            "me gustaría una reserva", "quisiera una reserva", "quiero una reserva"
+        ]
+        
+        # Check if message contains reservation intent keywords
+        # BUT make sure it's NOT asking HOW to reserve (that's handled by _is_asking_how_to_add_to_cart)
+        if any(keyword in message_lower for keyword in reservation_intent_keywords):
+            # Exclude if asking "how" or asking for explanation
+            if any(word in message_lower for word in ["cómo", "como", "explicar", "qué tengo", "que tengo"]):
+                return False
+            return True
         
         return False
     
