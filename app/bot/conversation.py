@@ -1828,12 +1828,25 @@ NO inventes extras que no estén en la lista."""
         try:
             # Patterns to detect reservation intent
             reservation_patterns = [
+                # ORDEN: día + para + personas + a las + hora
+                r'\bel\s+(\w+)\s+para\s+(\d+)\s+personas?\s+a\s+las\s+(\d{1,2}):?(\d{0,2})\b',  # "el martes para 3 personas a las 18:00"
+                r'\b(\w+)\s+para\s+(\d+)\s+personas?\s+a\s+las\s+(\d{1,2}):?(\d{0,2})\b',  # "martes para 3 personas a las 18:00"
+                r'\b(\w+)\s+para\s+(\d+)\s+personas?\s+a\s+las\s+(\d{1,2})\b',  # "martes para 3 personas a las 18"
+                # ORDEN: día + número + a las + hora + para + personas
                 r'\b(\w+)\s+(\d{1,2})\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "miércoles 5 a las 21 para 2 personas"
+                # ORDEN: día + a las + hora + para + personas
+                r'\bel\s+(\w+)\s+a\s+las\s+(\d{1,2}):?(\d{0,2})\s+para\s+(\d+)\s+personas?\b',  # "el martes a las 16:00 para 3 personas"
                 r'\bel\s+(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "el martes a las 16 para 3 personas"
+                r'\b(\w+)\s+a\s+las\s+(\d{1,2}):?(\d{0,2})\s+para\s+(\d+)\s+personas?\b',  # "martes a las 16:00 para 3 personas"
                 r'\b(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "martes a las 16 para 3 personas"
-                r'\b(\w+)\s+(\d{1,2}):?(\d{0,2})\s+(\d+)\s+personas?\b',  # "martes 16:00 3 personas"
+                # ORDEN: día + hora:minutos + personas
+                r'\b(\w+)\s+(\d{1,2}):(\d{2})\s+(\d+)\s+personas?\b',  # "martes 16:00 3 personas"
+                # ORDEN: día del mes + de + mes + a las + hora + para + personas
+                r'\b(\d{1,2})\s+de\s+(\w+)\s+a\s+las\s+(\d{1,2}):?(\d{0,2})\s+para\s+(\d+)\s+personas?\b',  # "4 de noviembre a las 16:00 para 3 personas"
                 r'\b(\d{1,2})\s+de\s+(\w+)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "4 de noviembre a las 16 para 3 personas"
-                r'\ba\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "a las 16 para 3 personas" (sin día específico)
+                # ORDEN: a las + hora + para + personas (sin día específico)
+                r'\ba\s+las\s+(\d{1,2}):?(\d{0,2})\s+para\s+(\d+)\s+personas?\b',  # "a las 16:00 para 3 personas"
+                r'\ba\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?\b',  # "a las 16 para 3 personas"
             ]
             
             import re
