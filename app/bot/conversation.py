@@ -1749,9 +1749,54 @@ NO inventes extras que no estén en la lista."""
         keywords = ["reservar", "reserva", "quiero ese", "confirmo", "ese horario", "ese día"]
         return any(keyword in message for keyword in keywords)
     
+    def _convert_written_numbers_to_digits(self, message: str) -> str:
+        """
+        Convert written numbers to digits in Spanish
+        Example: "dos personas" -> "2 personas"
+        """
+        number_words = {
+            'dos': '2',
+            'tres': '3',
+            'cuatro': '4',
+            'cinco': '5',
+            'seis': '6',
+            'siete': '7',
+            'ocho': '8',
+            'nueve': '9',
+            'diez': '10',
+            'once': '11',
+            'doce': '12',
+            'trece': '13',
+            'catorce': '14',
+            'quince': '15',
+            'dieciseis': '16',
+            'dieciséis': '16',
+            'diecisiete': '17',
+            'dieciocho': '18',
+            'diecinueve': '19',
+            'veinte': '20',
+            'veintiuno': '21',
+            'veintiuna': '21'
+        }
+        
+        message_lower = message.lower()
+        result = message
+        
+        # Replace written numbers with digits
+        for word, digit in number_words.items():
+            # Use word boundaries to avoid replacing parts of other words
+            import re
+            pattern = r'\b' + word + r'\b'
+            result = re.sub(pattern, digit, result, flags=re.IGNORECASE)
+        
+        return result
+    
     async def _try_parse_reservation_from_message(self, message: str, phone_number: str, conversation: dict = None):
         """Try to parse reservation from message (date, time, capacity)"""
         try:
+            # First, convert written numbers to digits
+            message = self._convert_written_numbers_to_digits(message)
+            
             message_lower = message.lower().strip()
             logger.info(f"Trying to parse reservation from: '{message_lower}'")
             
@@ -1762,9 +1807,10 @@ NO inventes extras que no estén en la lista."""
             
             # Check if this looks like a reservation intent
             # Look for patterns: "a las [hora] para [X] personas", "[día] a las [hora]", etc.
+            has_person_word = 'persona' in message_lower or 'personas' in message_lower
             has_reservation_pattern = any([
-                'a las' in message_lower and 'personas' in message_lower,
-                'para' in message_lower and 'personas' in message_lower and any(c.isdigit() for c in message_lower),
+                'a las' in message_lower and has_person_word,
+                'para' in message_lower and has_person_word and any(c.isdigit() for c in message_lower),
                 any(day in message_lower for day in ['lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes', 'sábado', 'sabado', 'domingo']) and 'a las' in message_lower
             ])
             
