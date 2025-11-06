@@ -152,27 +152,7 @@ class ConversationManager:
             # Always show welcome message on first interaction, regardless of greeting
             if is_first:
                 logger.info("First message with greeting - sending welcome message")
-                response = """🥬 ¡Ahoy, grumete! ⚓  
-
-Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤  
-
-Estoy al mando para ayudarte con todas tus consultas sobre nuestras experiencias flotantes 🌊  
-
-Puedes preguntarme por:  
-
-1️⃣ *Disponibilidad y horarios*  
-
-2️⃣ *Precios por persona*  
-
-3️⃣ *Características del HotBoat*  
-
-4️⃣ *Extras y promociones*  
-
-5️⃣ *Ubicación y reseñas*  
-
-Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*, o simplemente *6️⃣* 👨‍✈️🌿  
-
-¿Listo para zarpar o qué número eliges, grumete?"""
+                response = self._get_main_menu_message()
             # PRIORITY 1: Check if user is responding with number of people (after selecting date/time)
             # This MUST come before menu options to avoid confusion when user types a number
             elif conversation.get("metadata", {}).get("awaiting_party_size"):
@@ -213,7 +193,7 @@ O elige:
             elif message_text.strip() == "19":
                 logger.info("Global shortcut 19: Menu principal")
                 conversation["metadata"]["awaiting_extra_selection"] = False
-                response = self.faq_handler.get_response("bienvenida")
+                response = self._get_main_menu_message()
             elif message_text.strip() == "20":
                 logger.info("Global shortcut 20: Ver/proceder con carrito")
                 conversation["metadata"]["awaiting_extra_selection"] = False
@@ -521,6 +501,30 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             return True
         
         return False
+    
+    def _get_main_menu_message(self) -> str:
+        """Return the standard main menu message."""
+        return """🥬 ¡Ahoy, grumete! ⚓  
+
+Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤  
+
+Estoy al mando para ayudarte con todas tus consultas sobre nuestras experiencias flotantes 🌊  
+
+Puedes preguntarme por:  
+
+1️⃣ *Disponibilidad y horarios*  
+
+2️⃣ *Precios por persona*  
+
+3️⃣ *Características del HotBoat*  
+
+4️⃣ *Extras y promociones*  
+
+5️⃣ *Ubicación y reseñas*  
+
+Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*, o simplemente *6️⃣* 👨‍✈️🌿  
+
+¿Listo para zarpar o qué número eliges, grumete?"""
     
     def _is_greeting_message(self, message: str) -> bool:
         """
@@ -1480,7 +1484,7 @@ Escribe el número que prefieras 🚤"""
                 # Menu principal
                 logger.info("User selected option 19: Menu principal")
                 conversation["metadata"]["awaiting_extra_selection"] = False
-                return self.faq_handler.get_response("bienvenida")
+                return self._get_main_menu_message()
             
             if "20" in numbers:
                 # Proceder con el pago
