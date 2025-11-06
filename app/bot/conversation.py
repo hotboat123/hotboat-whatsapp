@@ -297,6 +297,12 @@ O elige:
                     "text": accommodations_handler.get_text_response(),
                     "images": accommodations_handler.get_accommodations_with_images()
                 }
+            # Check if user wants to make a reservation (but didn't specify date/time yet)
+            # THIS MUST BE EARLY to catch "quiero reservar", "reservar" before other parsers
+            elif self._is_reservation_intent(message_text):
+                logger.info("User wants to make a reservation - showing availability")
+                response = await self.availability_checker.check_availability("disponibilidad")
+            
             # Check cart commands (before FAQ)
             elif cart_response := await self._handle_cart_command(message_text, from_number, contact_name):
                 logger.info("Cart command processed")
@@ -363,11 +369,6 @@ Yo lo agrego automáticamente al carrito y luego puedes:
 • Confirmar la reserva
 
 ¿Qué fecha y horario te gustaría? 🚤"""
-            
-            # Check if user wants to make a reservation (but didn't specify date/time yet)
-            elif self._is_reservation_intent(message_text):
-                logger.info("User wants to make a reservation - showing availability")
-                response = await self.availability_checker.check_availability("disponibilidad")
             
             # Use AI for general conversation
             else:
