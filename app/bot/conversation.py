@@ -477,8 +477,9 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                         # If bot recently showed availability, user is likely asking how to proceed
                         if "disponibilidad" in content or "disponible" in content or "horario" in content:
                             return True
-            # Also return True if message clearly asks about cart/reservation process
-            if any(word in message_lower for word in ["carro", "carrito", "reservar", "reserva"]):
+            # Only return True if message has BOTH a help keyword AND cart/reservation word
+            # This prevents "quiero reservar" from being caught here
+            if any(word in message_lower for word in ["carro", "carrito"]):
                 return True
         
         return False
@@ -495,6 +496,10 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         """
         message_lower = message.lower().strip()
         
+        # Exclude if asking HOW to reserve (that's handled by _is_asking_how_to_add_to_cart)
+        if any(word in message_lower for word in ["cómo", "como", "explicar", "qué tengo", "que tengo"]):
+            return False
+        
         # Keywords that indicate user wants to reserve (but hasn't given details)
         reservation_intent_keywords = [
             "quiero reservar", "quisiera reservar", "me gustaría reservar",
@@ -507,11 +512,11 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         ]
         
         # Check if message contains reservation intent keywords
-        # BUT make sure it's NOT asking HOW to reserve (that's handled by _is_asking_how_to_add_to_cart)
         if any(keyword in message_lower for keyword in reservation_intent_keywords):
-            # Exclude if asking "how" or asking for explanation
-            if any(word in message_lower for word in ["cómo", "como", "explicar", "qué tengo", "que tengo"]):
-                return False
+            return True
+        
+        # Also catch simple "reservar" or "reserva" (without asking how)
+        if message_lower in ["reservar", "reserva", "una reserva"]:
             return True
         
         return False
