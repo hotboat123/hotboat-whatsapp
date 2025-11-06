@@ -228,21 +228,21 @@ O elige:
                         total = self.cart_manager.calculate_total(cart)
                         reservation = next((item for item in cart if item.item_type == "reservation"), None)
                         
-                        confirm_message = "✅ *Reserva Confirmada*\n\n"
-                        confirm_message += f"📅 *Detalles de la Reserva:*\n"
+                        confirm_message = "✅ *Solicitud de Reserva Recibida*\n\n"
+                        confirm_message += f"📅 *Detalles de tu Solicitud:*\n"
                         confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
                         confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
                         confirm_message += f"   Personas: {reservation.quantity}\n\n"
                         
                         if len(cart) > 1:
-                            confirm_message += f"✨ *Extras incluidos:*\n"
+                            confirm_message += f"✨ *Extras solicitados:*\n"
                             for item in cart:
                                 if item.item_type == "extra":
                                     confirm_message += f"   • {item.name}\n"
                             confirm_message += "\n"
                         
-                        confirm_message += f"💰 *Total a pagar: ${total:,}*\n\n"
-                        confirm_message += f"📞 El Capitán Tomás se comunicará contigo pronto para finalizar el pago y confirmar todos los detalles 👨‍✈️\n\n"
+                        confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
+                        confirm_message += f"📞 *El Capitán Tomás se comunicará contigo pronto por WhatsApp o teléfono para confirmar tu reserva y coordinar el pago* 👨‍✈️\n\n"
                         confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
                         
                         # Send notification to Capitán Tomás BEFORE clearing cart
@@ -985,21 +985,21 @@ Escribe el número que prefieras 🚤"""
             total = self.cart_manager.calculate_total(cart)
             reservation = next((item for item in cart if item.item_type == "reservation"), None)
             
-            confirm_message = "✅ *Reserva Confirmada*\n\n"
-            confirm_message += f"📅 *Detalles de la Reserva:*\n"
+            confirm_message = "✅ *Solicitud de Reserva Recibida*\n\n"
+            confirm_message += f"📅 *Detalles de tu Solicitud:*\n"
             confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
             confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
             confirm_message += f"   Personas: {reservation.quantity}\n\n"
             
             if len(cart) > 1:
-                confirm_message += f"✨ *Extras incluidos:*\n"
+                confirm_message += f"✨ *Extras solicitados:*\n"
                 for item in cart:
                     if item.item_type == "extra":
                         confirm_message += f"   • {item.name}\n"
                 confirm_message += "\n"
             
-            confirm_message += f"💰 *Total a pagar: ${total:,}*\n\n"
-            confirm_message += f"📞 El Capitán Tomás se comunicará contigo pronto para finalizar el pago y confirmar todos los detalles 👨‍✈️\n\n"
+            confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
+            confirm_message += f"📞 *El Capitán Tomás se comunicará contigo pronto por WhatsApp o teléfono para confirmar tu reserva y coordinar el pago* 👨‍✈️\n\n"
             confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
             
             # Send notification to Capitán Tomás BEFORE clearing cart
