@@ -292,29 +292,6 @@ O elige:
                 logger.info("Responding with FAQ answer")
                 response = self.faq_handler.get_response(message_text)
             
-            # Check if asking about availability
-            elif self.is_availability_query(message_text):
-                logger.info("Checking availability")
-                response = await self.availability_checker.check_availability(message_text)
-            
-            # Check if user is confirming a reservation (after seeing availability from AI)
-            elif await self._is_confirming_reservation_from_availability(message_text, conversation):
-                logger.info("User confirming reservation from availability check")
-                response = await self._handle_reservation_confirmation(message_text, from_number, contact_name, conversation)
-            
-            # Check if user is selecting a date/time (without specifying party size)
-            elif date_time_selection := await self._try_parse_date_time_only(message_text, conversation):
-                logger.info(f"User selecting date/time: {date_time_selection}")
-                # Store the selection and ask for party size
-                conversation["metadata"]["pending_reservation"] = date_time_selection
-                conversation["metadata"]["awaiting_party_size"] = True
-                response = f"""✅ Perfecto, grumete ⚓
-
-📅 Fecha: {date_time_selection['date']}
-🕐 Horario: {date_time_selection['time']}
-
-¿Para cuántas personas? (2-7 personas) 🚤"""
-            
             # PRIORITY: Check if user is making a complete reservation (date, time, AND party size)
             # This should happen BEFORE AI handler to catch reservation intents
             elif reservation_item := await self._try_parse_reservation_from_message(message_text, from_number, conversation):
@@ -329,6 +306,31 @@ O elige:
                     traceback.print_exc()
                     # If cart fails, still acknowledge the reservation
                     response = f"✅ Entendido, quieres reservar para {reservation_item.quantity} personas.\n\nPor favor, confirma los detalles y el Capitán Tomás se comunicará contigo pronto 👨‍✈️"
+            
+            # Check if user is selecting a date/time (without specifying party size)
+            elif date_time_selection := await self._try_parse_date_time_only(message_text, conversation):
+                logger.info(f"User selecting date/time: {date_time_selection}")
+                # Store the selection and ask for party size
+                conversation["metadata"]["pending_reservation"] = date_time_selection
+                conversation["metadata"]["awaiting_party_size"] = True
+                conversation["metadata"]["awaiting_date_time_selection"] = False
+                response = f"""✅ Perfecto, grumete ⚓
+
+📅 Fecha: {date_time_selection['date']}
+🕐 Horario: {date_time_selection['time']}
+
+¿Para cuántas personas? (2-7 personas) 🚤"""
+            
+            # Check if user is confirming a reservation (after seeing availability from AI)
+            elif await self._is_confirming_reservation_from_availability(message_text, conversation):
+                logger.info("User confirming reservation from availability check")
+                response = await self._handle_reservation_confirmation(message_text, from_number, contact_name, conversation)
+            
+            # Check if asking about availability
+            elif self.is_availability_query(message_text):
+                logger.info("Checking availability")
+                response = await self.availability_checker.check_availability(message_text)
+                conversation["metadata"]["awaiting_date_time_selection"] = True
             
             # Check if user is asking how to add to cart (after seeing availability)
             elif self._is_asking_how_to_add_to_cart(message_text, conversation):
@@ -1329,6 +1331,7 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             # Clear the pending state
             conversation["metadata"]["awaiting_party_size"] = False
             conversation["metadata"]["pending_reservation"] = None
+            conversation["metadata"]["awaiting_date_time_selection"] = False
             
             return self._format_cart_with_flex_options(cart)
             
@@ -1339,6 +1342,7 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             # Clear the pending state
             conversation["metadata"]["awaiting_party_size"] = False
             conversation["metadata"]["pending_reservation"] = None
+            conversation["metadata"]["awaiting_date_time_selection"] = False
             return "Hubo un error procesando tu reserva. Por favor, intenta de nuevo."
     
     async def _handle_ice_cream_flavor_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
@@ -2106,6 +2110,9 @@ NO inventes extras que no estén en la lista."""
         # Default: if we're deep in conversation and no menu context, DON'T treat as menu
         logger.info(f"No menu context found, NOT treating as menu option (conversation has {len(user_messages)} user messages)")
         return False
+
+
+
 
 
 
