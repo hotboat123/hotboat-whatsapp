@@ -682,7 +682,13 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
             
             # If cart has items, add options
             if cart:
-                cart_message += "\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar un extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+                cart_message += "\n\n📋 *¿Qué deseas hacer?*\n\n"
+                cart_message += "• Escribe 1-17 para agregar más extras\n"
+                cart_message += "• 1️⃣8️⃣ Ver menú de extras completo\n"
+                cart_message += "• 1️⃣9️⃣ Menú principal\n"
+                cart_message += "• 2️⃣0️⃣ Proceder con el pago\n"
+                cart_message += "• Escribe *vaciar* para vaciar el carrito\n\n"
+                cart_message += "¿Qué opción eliges, grumete?"
             
             return cart_message
         
@@ -706,6 +712,30 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*
 6️⃣ *Hablar con el Capitán Tomás*
 
 ¿Qué número eliges? 🚤"""
+
+        # Remove Reserva FLEX via text command
+        if "quitar flex" in message_lower or "sacar flex" in message_lower or "remover flex" in message_lower:
+            cart = await self.cart_manager.get_cart(phone_number)
+            flex_index = next((i for i, item in enumerate(cart) if item.name == "Reserva FLEX (+10%)"), None)
+            if flex_index is None:
+                return "⚓ No tienes Reserva FLEX en tu carrito actualmente."
+            
+            await self.cart_manager.remove_item(phone_number, contact_name, flex_index)
+            cart = await self.cart_manager.get_cart(phone_number)
+            cart_message = self.cart_manager.format_cart_message(cart)
+            return f"""✅ *Reserva FLEX removida del carrito*
+
+{cart_message}
+
+📋 *¿Qué deseas hacer ahora?*
+
+• Escribe 1-17 para agregar más extras
+• 1️⃣8️⃣ Ver menú de extras completo
+• 1️⃣9️⃣ Menú principal
+• 2️⃣0️⃣ Proceder con el pago
+• Escribe *vaciar* para vaciar el carrito
+
+¿Qué opción eliges, grumete?"""
         
         # Remove item
         remove_match = re.search(r'eliminar\s+(\d+)', message_lower)
@@ -775,7 +805,17 @@ Precio: $3,500 c/u
             if extra_item:
                 await self.cart_manager.add_item(phone_number, contact_name, extra_item)
                 cart = await self.cart_manager.get_cart(phone_number)
-                return f"✅ *{extra_item.name} agregado al carrito*\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+                return (
+                    f"✅ *{extra_item.name} agregado al carrito*\n\n"
+                    f"{self.cart_manager.format_cart_message(cart)}\n\n"
+                    "📋 *¿Qué deseas hacer?*\n\n"
+                    "• Escribe 1-17 para agregar más extras\n"
+                    "• 1️⃣8️⃣ Ver menú de extras completo\n"
+                    "• 1️⃣9️⃣ Menú principal\n"
+                    "• 2️⃣0️⃣ Proceder con el pago\n"
+                    "• Escribe *vaciar* para vaciar el carrito\n\n"
+                    "¿Qué opción eliges, grumete?"
+                )
             else:
                 # Try to use AI to understand what they want
                 conversation = await self.get_conversation(phone_number, contact_name)
@@ -856,12 +896,14 @@ Escribe el número que prefieras 🚤"""
 
 💡 *Hemos incluido la Reserva FLEX* que te permite cancelar o reprogramar cuando quieras (+10% del costo de pasajeros)
 
-📋 *Elige una opción (escribe el número):*
+📋 *¿Qué deseas hacer ahora?*
 
-1️⃣ Agregar más extras
-2️⃣ Proceder con el pago
-3️⃣ Quitar Reserva FLEX
-4️⃣ Vaciar el carrito
+• Escribe 1-17 para agregar más extras
+• 1️⃣8️⃣ Ver menú de extras completo
+• 1️⃣9️⃣ Menú principal
+• 2️⃣0️⃣ Proceder con el pago
+• Escribe *quitar flex* para remover la Reserva FLEX
+• Escribe *vaciar* para vaciar el carrito
 
 ¿Qué opción eliges, grumete?"""
         else:
@@ -869,11 +911,13 @@ Escribe el número que prefieras 🚤"""
 
 {cart_message}
 
-📋 *Elige una opción (escribe el número):*
+📋 *¿Qué deseas hacer ahora?*
 
-1️⃣ Agregar un extra
-2️⃣ Proceder con el pago
-3️⃣ Vaciar el carrito
+• Escribe 1-17 para agregar más extras
+• 1️⃣8️⃣ Ver menú de extras completo
+• 1️⃣9️⃣ Menú principal
+• 2️⃣0️⃣ Proceder con el pago
+• Escribe *vaciar* para vaciar el carrito
 
 ¿Qué opción eliges, grumete?"""
     
@@ -946,9 +990,11 @@ Escribe el número que prefieras 🚤"""
 
 📋 *¿Qué deseas hacer ahora?*
 
-1️⃣ Agregar un extra
-2️⃣ Proceder con el pago
-3️⃣ Vaciar el carrito
+• Escribe 1-17 para agregar más extras
+• 1️⃣8️⃣ Ver menú de extras completo
+• 1️⃣9️⃣ Menú principal
+• 2️⃣0️⃣ Proceder con el pago
+• Escribe *vaciar* para vaciar el carrito
 
 ¿Qué opción eliges, grumete?"""
             
@@ -2082,7 +2128,17 @@ Precio: $3,500 c/u
             if added_items:
                 cart = await self.cart_manager.get_cart(phone_number)
                 items_text = "\n".join([f"• {item}" for item in added_items])
-                return f"✅ *Items agregados al carrito:*\n\n{items_text}\n\n{self.cart_manager.format_cart_message(cart)}\n\n📋 *Elige una opción (escribe el número):*\n\n1️⃣ Agregar otro extra\n2️⃣ Proceder con el pago\n3️⃣ Vaciar el carrito\n\n¿Qué opción eliges, grumete?"
+                return (
+                    "✅ *Items agregados al carrito:*\n\n"
+                    f"{items_text}\n\n{self.cart_manager.format_cart_message(cart)}\n\n"
+                    "📋 *¿Qué deseas hacer?*\n\n"
+                    "• Escribe 1-17 para agregar más extras\n"
+                    "• 1️⃣8️⃣ Ver menú de extras completo\n"
+                    "• 1️⃣9️⃣ Menú principal\n"
+                    "• 2️⃣0️⃣ Proceder con el pago\n"
+                    "• Escribe *vaciar* para vaciar el carrito\n\n"
+                    "¿Qué opción eliges, grumete?"
+                )
             
             return None
         except Exception as e:
