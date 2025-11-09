@@ -1165,6 +1165,9 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
         Returns dict with 'date' and 'time' if found
         """
         try:
+            from datetime import datetime, timedelta
+            import pytz
+            
             message_lower = message.lower().strip()
             
             # Skip if message includes party size
@@ -1176,7 +1179,7 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 'a las' in message_lower
                 or any(day in message_lower for day in ['lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes', 'sábado', 'sabado', 'domingo'])
                 or any(month in message_lower for month in ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'])
-                or re.search(r'\d{1,2}:/?(\d{2})?', message_lower)
+                or re.search(r'\d{1,2}[:h]\d{0,2}', message_lower)
             ):
                 return None
             
@@ -1189,17 +1192,79 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 'domingo': 6
             }
             
-            # Patterns for date/time without party size
             day_names_pattern = '(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)'
             month_names_pattern = '(' + '|'.join(SPANISH_MONTHS.keys()) + ')'
             available_slots = [9, 12, 15, 18, 21]
             
+            def normalize_hour(hour_value: int) -> int:
+                if hour_value < available_slots[0]:
+                    return available_slots[0]
+                if hour_value > available_slots[-1]:
+                    return available_slots[-1]
+                if hour_value not in available_slots:
+                    return min(available_slots, key=lambda x: abs(x - hour_value))
+                return hour_value
+            
+            def resolve_date(day: Optional[int] = None, month: Optional[Union[int, str]] = None, day_name: Optional[str] = None):
+                month_int = None
+                if isinstance(month, str):
+                    month_int = SPANISH_MONTHS.get(month.lower())
+                elif month is not None:
+                    month_int = int(month)
+                
+                day_index = None
+                if day_name:
+                    day_index = spanish_days.get(day_name.lower())
+                
+                # Case 1: specific month and day
+                if month_int and day:
+                    for year_offset in range(0, 2):
+                        year_candidate = now.year + year_offset
+                        try:
+                            candidate = CHILE_TZ.localize(datetime(year_candidate, month_int, day, 0, 0, 0))
+                        except ValueError:
+                            continue
+                        if candidate < now:
+                            continue
+                        if day_index is not None and candidate.weekday() != day_index:
+                            continue
+                        return candidate
+                    return None
+                
+                # Case 2: only day number (and optionally day name)
+                if day is not None:
+                    for month_offset in range(0, 13):
+                        month_candidate = ((now.month - 1 + month_offset) % 12) + 1
+                        year_candidate = now.year + ((now.month - 1 + month_offset) // 12)
+                        try:
+                            candidate = CHILE_TZ.localize(datetime(year_candidate, month_candidate, day, 0, 0, 0))
+                        except ValueError:
+                            continue
+                        if candidate < now:
+                            continue
+                        if day_index is not None and candidate.weekday() != day_index:
+                            continue
+                        return candidate
+                    return None
+                
+                # Case 3: only day name
+                if day_index is not None:
+                    days_ahead = (day_index - now.weekday()) % 7
+                    if days_ahead == 0:
+                        days_ahead = 7
+                    candidate = (now + timedelta(days=days_ahead)).replace(hour=0, minute=0, second=0, microsecond=0)
+                    return candidate
+                
+                return None
+            
             patterns = [
-                ("day_name", re.compile(rf'\b(?:el\s+)?(?P<day_name>{day_names_pattern})\s+a\s+las\s+(?P<hour>\d{{1,2}})(?::(?P<minutes>\d{{2}}))?\b')),
-                ("day_month", re.compile(rf'\b(?P<day>\d{{1,2}})\s+de\s+(?P<month>{month_names_pattern})\s+a\s+las\s+(?P<hour>\d{{1,2}})(?::(?P<minutes>\d{{2}}))?\b')),
-                ("day_month", re.compile(rf'\b(?P<day>\d{{1,2}})\s+de\s+(?P<month>{month_names_pattern})\s+(?P<hour>\d{{1,2}})(?::(?P<minutes>\d{{2}}))?\b')),
-                ("numeric", re.compile(r'\b(?P<day>\d{1,2})/(?P<month>\d{1,2})\s+a\s+las\s+(?P<hour>\d{1,2})(?::(?P<minutes>\d{2}))?\b')),
-                ("numeric", re.compile(r'\b(?P<day>\d{1,2})/(?P<month>\d{1,2})\s+(?P<hour>\d{1,2})(?::(?P<minutes>\d{2}))?\b')),
+                ("full", re.compile(rf'\b(?:el\s+)?(?:(?P<day_name>{day_names_pattern})\s+)?(?P<day>\d{{1,2}})\s+de\s+(?P<month>{month_names_pattern})\s+a\s+las\s+(?P<hour>\d{{1,2}})(?:[:h\.](?P<minutes>\d{{2}}))?\b')),
+                ("full_compact", re.compile(rf'\b(?:el\s+)?(?:(?P<day_name>{day_names_pattern})\s+)?(?P<day>\d{{1,2}})\s+de\s+(?P<month>{month_names_pattern})\s+(?P<hour>\d{{1,2}})(?:[:h\.](?P<minutes>\d{{2}}))?\b')),
+                ("day_name_day", re.compile(rf'\b(?:el\s+)?(?P<day_name>{day_names_pattern})\s+(?P<day>\d{{1,2}})\s+a\s+las\s+(?P<hour>\d{{1,2}})(?:[:h\.](?P<minutes>\d{{2}}))?\b')),
+                ("day_name_only", re.compile(rf'\b(?:el\s+)?(?P<day_name>{day_names_pattern})\s+a\s+las\s+(?P<hour>\d{{1,2}})(?:[:h\.](?P<minutes>\d{{2}}))?\b')),
+                ("numeric", re.compile(r'\b(?P<day>\d{1,2})/(?P<month>\d{1,2})\s+a\s+las\s+(?P<hour>\d{1,2})(?:[:h\.](?P<minutes>\d{2}))?\b')),
+                ("numeric_compact", re.compile(r'\b(?P<day>\d{1,2})/(?P<month>\d{1,2})\s+(?P<hour>\d{1,2})(?:[:h\.](?P<minutes>\d{2}))?\b')),
+                ("day_only", re.compile(r'\b(?:el\s+)?(?P<day>\d{1,2})\s+a\s+las\s+(?P<hour>\d{1,2})(?:[:h\.](?P<minutes>\d{2}))?\b')),
             ]
             
             for pattern_type, regex in patterns:
@@ -1208,73 +1273,56 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                     continue
                 
                 groups = match.groupdict()
-                hour = int(groups.get("hour", 0))
-                minute = int(groups.get("minutes") or 0)
                 
-                # Normalize hour to closest available slot
-                if hour < available_slots[0]:
-                    hour = available_slots[0]
-                elif hour > available_slots[-1]:
-                    hour = available_slots[-1]
-                elif hour not in available_slots:
-                    hour = min(available_slots, key=lambda x: abs(x - hour))
+                hour_raw = groups.get("hour")
+                if not hour_raw or not hour_raw.isdigit():
+                    continue
+                hour = normalize_hour(int(hour_raw))
                 
-                minute = 0  # Horarios oficiales son en punto
+                minutes_raw = groups.get("minutes")
+                minutes = int(minutes_raw) if minutes_raw and minutes_raw.isdigit() else 0
+                minutes = 0  # Horarios oficiales son en punto
                 
-                time_str = f"{hour:02d}:00"
+                day_name = groups.get("day_name")
+                if day_name:
+                    day_name = day_name.lower()
+                
+                day_str = groups.get("day")
+                day = int(day_str) if day_str and day_str.isdigit() else None
+                
+                month_value = groups.get("month")
+                if month_value:
+                    month_value = month_value.lower()
                 
                 target_date = None
-                date_str = None
-                
-                if pattern_type == "day_name":
-                    day_name = groups.get("day_name")
-                    if day_name:
-                        target_dow = spanish_days[day_name]
-                        current_dow = now.weekday()
-                        days_ahead = target_dow - current_dow
-                        if days_ahead <= 0:
-                            days_ahead += 7
-                        target_date = (now + timedelta(days=days_ahead)).replace(hour=0, minute=0, second=0, microsecond=0)
-                        spanish_months_names = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-                                                'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-                        date_str = f"{target_date.day} de {spanish_months_names[target_date.month - 1]} {target_date.year}"
+                if month_value:
+                    target_date = resolve_date(day=day, month=month_value, day_name=day_name)
                 else:
-                    day = groups.get("day")
-                    month_value = groups.get("month")
-                    if day and month_value:
-                        try:
-                            day_int = int(day)
-                            if pattern_type == "day_month":
-                                month_int = SPANISH_MONTHS.get(month_value.lower())
-                            else:
-                                month_int = int(month_value)
-                            if month_int:
-                                year = now.year
-                                target_date = datetime(year, month_int, day_int, 0, 0, 0)
-                                target_date = CHILE_TZ.localize(target_date)
-                                if target_date < now:
-                                    target_date = datetime(year + 1, month_int, day_int, 0, 0, 0)
-                                    target_date = CHILE_TZ.localize(target_date)
-                                spanish_months_names = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-                                                        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-                                date_str = f"{target_date.day} de {spanish_months_names[target_date.month - 1]} {target_date.year}"
-                        except ValueError:
-                            continue
+                    target_date = resolve_date(day=day, day_name=day_name)
+                    if not target_date and day_name:
+                        target_date = resolve_date(day=None, day_name=day_name)
                 
-                if target_date:
-                    reservation_datetime = target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                    hours_ahead = (reservation_datetime - now).total_seconds() / 3600
-                    
-                    if hours_ahead < 4:
-                        logger.info(f"Date/time too soon: {hours_ahead:.1f} hours ahead (minimum 4 hours required)")
-                        continue
-                    
-                    logger.info(f"Parsed date/time only: date={date_str}, time={time_str}, hours_ahead={hours_ahead:.1f}")
-                    return {
-                        "date": date_str,
-                        "time": time_str,
-                        "raw_message": message
-                    }
+                if not target_date:
+                    continue
+                
+                reservation_datetime = target_date.replace(hour=hour, minute=minutes, second=0, microsecond=0)
+                hours_ahead = (reservation_datetime - now).total_seconds() / 3600
+                
+                if hours_ahead < 4:
+                    logger.info(f"Date/time too soon: {hours_ahead:.1f} hours ahead (minimum 4 hours required)")
+                    continue
+                
+                spanish_months_names = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                                        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+                date_str = f"{reservation_datetime.day} de {spanish_months_names[reservation_datetime.month - 1]} {reservation_datetime.year}"
+                time_str = f"{hour:02d}:00"
+                
+                logger.info(f"Parsed date/time only: date={date_str}, time={time_str}, hours_ahead={hours_ahead:.1f}")
+                return {
+                    "date": date_str,
+                    "time": time_str,
+                    "raw_message": message
+                }
             
             return None
         except Exception as e:
