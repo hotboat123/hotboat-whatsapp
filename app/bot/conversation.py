@@ -3,10 +3,10 @@ Conversation manager - handles message flow and context
 """
 import logging
 import re
-from typing import Dict, Optional, Union
-from datetime import datetime
+from typing import Dict, Optional, Union, List
+from datetime import datetime, timedelta
 
-from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS
+from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS, CHILE_TZ
 from app.bot.faq import FAQHandler
 from app.bot.accommodations import accommodations_handler
 from app.bot.cart import CartManager
@@ -158,6 +158,14 @@ class ConversationManager:
             elif conversation.get("metadata", {}).get("awaiting_party_size"):
                 logger.info("User responding with party size")
                 response = await self._handle_party_size_response(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.2: Sequential reservation flow - awaiting date selection
+            elif conversation.get("metadata", {}).get("awaiting_reservation_date"):
+                logger.info("User responding with reservation date")
+                response = await self._handle_reservation_date_response(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.3: Sequential reservation flow - awaiting time selection
+            elif conversation.get("metadata", {}).get("awaiting_reservation_time"):
+                logger.info("User responding with reservation time")
+                response = await self._handle_reservation_time_response(message_text, from_number, contact_name, conversation)
             # PRIORITY 1.5: Check if user is responding with ice cream flavor choice
             elif conversation.get("metadata", {}).get("awaiting_ice_cream_flavor"):
                 logger.info("User responding with ice cream flavor")
@@ -245,7 +253,7 @@ O elige:
                 logger.info(f"Menu number selected: {menu_number}")
                 if menu_number == 1:
                     # Option 1: Disponibilidad y horarios
-                    response = await self.availability_checker.check_availability("disponibilidad")
+                    response = self._ask_for_reservation_date(conversation)
                 elif menu_number == 2:
                     # Option 2: Precios por persona
                     response = self.faq_handler.get_response("precio")
@@ -281,7 +289,7 @@ O elige:
             # THIS MUST BE EARLY to catch "quiero reservar", "reservar" before other parsers
             elif self._is_reservation_intent(message_text):
                 logger.info("User wants to make a reservation - showing availability")
-                response = await self.availability_checker.check_availability("disponibilidad")
+                response = self._ask_for_reservation_date(conversation)
             
             # Check cart commands (before FAQ)
             elif cart_response := await self._handle_cart_command(message_text, from_number, contact_name):
@@ -328,9 +336,9 @@ O elige:
             
             # Check if asking about availability
             elif self.is_availability_query(message_text):
-                logger.info("Checking availability")
-                response = await self.availability_checker.check_availability(message_text)
-                conversation["metadata"]["awaiting_date_time_selection"] = True
+                logger.info("Checking availability (guided reservation flow)")
+                self._prepare_reservation_flow(conversation, reset=True)
+                response = await self._handle_reservation_date_response(message_text, from_number, contact_name, conversation)
             
             # Check if user is asking how to add to cart (after seeing availability)
             elif self._is_asking_how_to_add_to_cart(message_text, conversation):
@@ -358,9 +366,12 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 # Reset transient states to avoid being stuck in partial flows
                 if conversation.get("metadata"):
                     conversation["metadata"].pop("awaiting_party_size", None)
+                    conversation["metadata"].pop("awaiting_reservation_date", None)
+                    conversation["metadata"].pop("awaiting_reservation_time", None)
                     conversation["metadata"].pop("awaiting_extra_selection", None)
                     conversation["metadata"].pop("awaiting_ice_cream_flavor", None)
                     conversation["metadata"].pop("pending_reservation", None)
+                    conversation["metadata"].pop("available_times_for_date", None)
                     conversation["metadata"].pop("pending_extras", None)
                     conversation["metadata"].pop("pending_ice_cream_quantity", None)
                     conversation["metadata"].pop("awaiting_date_time_selection", None)
@@ -1331,6 +1342,310 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             traceback.print_exc()
             return None
     
+    def _prepare_reservation_flow(self, conversation: dict, reset: bool = False) -> None:
+        """Initialize or reset reservation-related metadata."""
+        metadata = conversation.setdefault("metadata", {})
+        if reset or not metadata.get("pending_reservation"):
+            metadata["pending_reservation"] = {
+                "date": None,
+                "time": None,
+                "date_obj_iso": None
+            }
+        metadata["available_times_for_date"] = []
+        metadata["awaiting_reservation_date"] = True
+        metadata["awaiting_reservation_time"] = False
+        metadata["awaiting_party_size"] = False
+        metadata["awaiting_date_time_selection"] = False
+    
+    def _ask_for_reservation_date(self, conversation: dict) -> str:
+        """Prompt user to choose a date as first step of reservation flow."""
+        self._prepare_reservation_flow(conversation, reset=True)
+        return """📅 *Vamos paso a paso para agendar tu HotBoat*.
+
+¿Para qué fecha te gustaría navegar?  
+Puedes decirme:
+• Un día específico (ej: 14 de noviembre)  
+• Un día de la semana (ej: viernes)  
+• *Hoy* o *mañana* 🚤"""
+
+    async def _handle_reservation_date_response(
+        self,
+        message: str,
+        phone_number: str,
+        contact_name: str,
+        conversation: dict
+    ) -> str:
+        """Handle user's response when we are waiting for the reservation date."""
+        metadata = conversation.setdefault("metadata", {})
+        message_clean = message.strip()
+        message_lower = message_clean.lower()
+        
+        # Allow global shortcuts while in this state
+        if message_clean in ["19"] or message_lower in ["menu", "menú", "principal"]:
+            self._reset_reservation_flow(conversation)
+            return self._get_main_menu_message()
+        if message_clean == "18":
+            return self.faq_handler.get_response("extras")
+        if message_clean == "20":
+            cart = await self.cart_manager.get_cart(phone_number)
+            if not cart:
+                return "🛒 Tu carrito está vacío, grumete ⚓\n\n¿Qué te gustaría agregar? 🚤"
+            has_reservation = any(item.item_type == "reservation" for item in cart)
+            if has_reservation:
+                total = self.cart_manager.calculate_total(cart)
+                reservation = next((item for item in cart if item.item_type == "reservation"), None)
+                confirm_message = "✅ *Solicitud de Reserva Recibida*\n\n"
+                confirm_message += f"📅 *Detalles de tu Solicitud:*\n"
+                confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
+                confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
+                confirm_message += f"   Personas: {reservation.quantity}\n\n"
+                extras = [item for item in cart if item.item_type == "extra"]
+                if extras:
+                    confirm_message += "✨ *Extras solicitados:*\n"
+                    for item in extras:
+                        confirm_message += f"   • {item.name}\n"
+                    confirm_message += "\n"
+                confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
+                confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para confirmar y coordinar el pago* 👨‍✈️\n\n"
+                confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
+                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
+                await self.cart_manager.clear_cart(phone_number)
+                self._reset_reservation_flow(conversation)
+                return confirm_message
+            return f"{self.cart_manager.format_cart_message(cart)}\n\n📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+        
+        parsed_date = self._parse_reservation_date(message_lower)
+        if not parsed_date:
+            return """Necesito la fecha exacta para continuar ⚓
+
+Por ejemplo:
+• *14 de noviembre*
+• *viernes*
+• *mañana*
+
+¿Qué día prefieres?"""
+        
+        available_slots = await self.availability_checker.get_slots_for_date(parsed_date["date_obj"])
+        available_times = sorted({slot['time'] for slot in available_slots})
+        
+        if not available_times:
+            metadata["awaiting_reservation_date"] = True
+            metadata["available_times_for_date"] = []
+            return f"""❌ *No tenemos horarios disponibles el {parsed_date['display']}*.
+
+¿Te gustaría intentar con otra fecha?"""
+        
+        metadata["pending_reservation"] = {
+            "date": parsed_date["display"],
+            "time": None,
+            "date_obj_iso": parsed_date["date_obj"].isoformat()
+        }
+        metadata["available_times_for_date"] = available_times
+        metadata["awaiting_reservation_date"] = False
+        metadata["awaiting_reservation_time"] = True
+        metadata["awaiting_date_time_selection"] = True
+        
+        times_message = self._format_available_times(available_times)
+        return f"""✅ *El {parsed_date['display']} tenemos cupos disponibles.*
+
+⏰ Horarios: {times_message}
+
+¿Qué horario prefieres? (ej: 15:00)"""
+
+    async def _handle_reservation_time_response(
+        self,
+        message: str,
+        phone_number: str,
+        contact_name: str,
+        conversation: dict
+    ) -> str:
+        """Handle user's response when we are waiting for the reservation time."""
+        metadata = conversation.setdefault("metadata", {})
+        message_clean = message.strip()
+        message_lower = message_clean.lower()
+        
+        if message_clean in ["19"] or message_lower in ["menu", "menú", "principal"]:
+            self._reset_reservation_flow(conversation)
+            return self._get_main_menu_message()
+        if message_clean == "18":
+            return self.faq_handler.get_response("extras")
+        if message_clean == "20":
+            cart = await self.cart_manager.get_cart(phone_number)
+            if not cart:
+                return "🛒 Tu carrito está vacío, grumete ⚓\n\n¿Qué te gustaría agregar? 🚤"
+            has_reservation = any(item.item_type == "reservation" for item in cart)
+            if has_reservation:
+                total = self.cart_manager.calculate_total(cart)
+                reservation = next((item for item in cart if item.item_type == "reservation"), None)
+                confirm_message = "✅ *Solicitud de Reserva Recibida*\n\n"
+                confirm_message += f"📅 *Detalles de tu Solicitud:*\n"
+                confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
+                confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
+                confirm_message += f"   Personas: {reservation.quantity}\n\n"
+                extras = [item for item in cart if item.item_type == "extra"]
+                if extras:
+                    confirm_message += "✨ *Extras solicitados:*\n"
+                    for item in extras:
+                        confirm_message += f"   • {item.name}\n"
+                    confirm_message += "\n"
+                confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
+                confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para confirmar y coordinar el pago* 👨‍✈️\n\n"
+                confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
+                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
+                await self.cart_manager.clear_cart(phone_number)
+                self._reset_reservation_flow(conversation)
+                conversation["metadata"]["awaiting_party_size"] = False
+                return confirm_message
+            return f"{self.cart_manager.format_cart_message(cart)}\n\n📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+        
+        pending = metadata.get("pending_reservation")
+        if not pending or not pending.get("date_obj_iso"):
+            self._reset_reservation_flow(conversation)
+            return "Perdí la fecha seleccionada. Empecemos de nuevo, ¿para qué día te gustaría reservar?"
+        
+        available_times = metadata.get("available_times_for_date", [])
+        normalized_time = self._normalize_time_input(message_lower)
+        if not normalized_time:
+            return f"""No reconocí el horario ⚓
+
+Recuerda elegir uno de estos:
+{self._format_available_times(available_times, bullet_list=True)}
+
+Escribe por ejemplo: 15:00"""
+        
+        if available_times and normalized_time not in available_times:
+            return f"""Ese horario no está disponible para {pending.get('date')} ⚓
+
+Horarios disponibles:
+{self._format_available_times(available_times, bullet_list=True)}
+
+¿Cuál prefieres?"""
+        
+        try:
+            date_obj = datetime.fromisoformat(pending["date_obj_iso"])
+            hour, minute = map(int, normalized_time.split(":"))
+            reservation_datetime = date_obj.replace(hour=hour, minute=minute)
+            now = datetime.now(CHILE_TZ)
+            hours_ahead = (reservation_datetime - now).total_seconds() / 3600
+            if hours_ahead < 4:
+                return "Necesitamos al menos 4 horas de anticipación. ¿Puedes elegir un horario más adelante?"
+        except Exception as exc:
+            logger.warning(f"Error validating reservation datetime: {exc}")
+            return "No logré validar ese horario. ¿Podrías escribirlo en formato HH:MM? (ej: 15:00)"
+        
+        pending["time"] = normalized_time
+        metadata["pending_reservation"] = pending
+        metadata["awaiting_reservation_time"] = False
+        metadata["awaiting_party_size"] = True
+        metadata["awaiting_date_time_selection"] = False
+        
+        return f"""⏰ ¡Listo! El {pending.get('date')} a las {normalized_time}.
+
+¿Para cuántas personas será la navegación? (2 a 7 personas)"""
+
+    def _parse_reservation_date(self, message_lower: str) -> Optional[Dict[str, object]]:
+        """Parse reservation date from user input."""
+        now = datetime.now(CHILE_TZ)
+        
+        if not message_lower:
+            return None
+        
+        if "mañana" in message_lower:
+            target = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        elif "hoy" in message_lower:
+            target = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            exact_date = self.availability_checker.parse_exact_date(message_lower)
+            if exact_date:
+                target = exact_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                contains_digits = any(char.isdigit() for char in message_lower)
+                day_names = {
+                    'lunes': 0, 'martes': 1, 'miercoles': 2, 'miércoles': 2,
+                    'jueves': 3, 'viernes': 4, 'sabado': 5, 'sábado': 5,
+                    'domingo': 6
+                }
+                matched_day = None
+                if not contains_digits:
+                    for name, dow in day_names.items():
+                        if name in message_lower:
+                            matched_day = dow
+                            break
+                if matched_day is None:
+                    return None
+                current_dow = now.weekday()
+                days_ahead = matched_day - current_dow
+                if days_ahead <= 0:
+                    days_ahead += 7
+                target = (now + timedelta(days=days_ahead)).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        if target.tzinfo is None:
+            target = CHILE_TZ.localize(target)
+        
+        display = self._format_spanish_date(target)
+        return {"date_obj": target, "display": display}
+
+    def _format_spanish_date(self, date_obj: datetime) -> str:
+        """Format datetime into Spanish human-readable date."""
+        spanish_months = [
+            'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+            'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+        ]
+        return f"{date_obj.day} de {spanish_months[date_obj.month - 1]} {date_obj.year}"
+
+    def _format_available_times(self, times: List[str], bullet_list: bool = False) -> str:
+        """Format list of available time strings."""
+        if not times:
+            return ""
+        if bullet_list:
+            return "\n".join(f"• {time_str}" for time_str in times)
+        return ", ".join(times)
+
+    def _normalize_time_input(self, message_lower: str) -> Optional[str]:
+        """Normalize user time input to HH:MM format."""
+        cleaned = message_lower
+        replacements = [" horas", " hora", "hrs", "hr", "h", " pm", " a. m.", " a.m.", " p. m.", " p.m."]
+        for token in replacements:
+            cleaned = cleaned.replace(token, "")
+        cleaned = cleaned.strip()
+        
+        period = None
+        if "pm" in message_lower or "p.m" in message_lower:
+            period = "pm"
+        elif "am" in message_lower or "a.m" in message_lower:
+            period = "am"
+        
+        match = re.search(r'(\d{1,2})(?:[:.,](\d{1,2}))?', cleaned)
+        if not match:
+            return None
+        
+        hour = int(match.group(1))
+        minute_str = match.group(2)
+        minute = int(minute_str) if minute_str is not None else 0
+        
+        if minute >= 60:
+            return None
+        
+        if period == "pm" and hour < 12:
+            hour += 12
+        elif period == "am" and hour == 12:
+            hour = 0
+        
+        if hour > 23:
+            return None
+        
+        return f"{hour:02d}:{minute:02d}"
+
+    def _reset_reservation_flow(self, conversation: dict) -> None:
+        """Clear reservation-related metadata flags."""
+        metadata = conversation.setdefault("metadata", {})
+        metadata["awaiting_reservation_date"] = False
+        metadata["awaiting_reservation_time"] = False
+        metadata["awaiting_party_size"] = False
+        metadata["available_times_for_date"] = []
+        metadata["awaiting_date_time_selection"] = False
+        metadata["pending_reservation"] = None
+    
     async def _handle_party_size_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Handle user's response with party size after selecting date/time"""
         try:
@@ -1368,9 +1683,8 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             cart = await self.cart_manager.get_cart(phone_number)
             
             # Clear the pending state
+            self._reset_reservation_flow(conversation)
             conversation["metadata"]["awaiting_party_size"] = False
-            conversation["metadata"]["pending_reservation"] = None
-            conversation["metadata"]["awaiting_date_time_selection"] = False
             
             return self._format_cart_with_flex_options(cart)
             
@@ -1379,9 +1693,8 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             import traceback
             traceback.print_exc()
             # Clear the pending state
+            self._reset_reservation_flow(conversation)
             conversation["metadata"]["awaiting_party_size"] = False
-            conversation["metadata"]["pending_reservation"] = None
-            conversation["metadata"]["awaiting_date_time_selection"] = False
             return "Hubo un error procesando tu reserva. Por favor, intenta de nuevo."
     
     async def _handle_ice_cream_flavor_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:

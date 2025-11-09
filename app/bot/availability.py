@@ -136,6 +136,29 @@ class AvailabilityChecker:
         
         return None
     
+    def parse_exact_date(self, message: str) -> Optional[datetime]:
+        """
+        Public wrapper to parse a specific calendar date from user message.
+        Does not handle relative expressions like 'hoy' or 'mañana'.
+        """
+        now = datetime.now(CHILE_TZ)
+        return self._parse_spanish_date(message, now.year)
+    
+    async def get_slots_for_date(self, date: datetime) -> List[Dict]:
+        """
+        Convenience helper to fetch available slots for a single date.
+        
+        Args:
+            date: Target date (timezone-aware), time portion ignored
+        
+        Returns:
+            List of available slot dictionaries for that date
+        """
+        normalized = date.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = normalized
+        end_date = normalized.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return await self.get_available_slots(start_date, end_date)
+    
     def _generate_time_slots_for_date(self, date: datetime) -> List[datetime]:
         """Generate all possible time slots for a given date"""
         slots = []
@@ -448,6 +471,9 @@ class AvailabilityChecker:
             import traceback
             traceback.print_exc()
             return "Disculpa, tuve un problema consultando la disponibilidad. Te responderé en un momento. Gracias por tu paciencia 🙏"
+
+
+
 
 
 
