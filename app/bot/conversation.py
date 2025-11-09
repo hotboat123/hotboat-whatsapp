@@ -1,8 +1,12 @@
 """
 Conversation manager - handles message flow and context
 """
+import asyncio
 import logging
 import re
+import smtplib
+import unicodedata
+from email.mime.text import MIMEText
 from typing import Dict, Optional, Union, List
 from datetime import datetime, timedelta
 
@@ -10,6 +14,7 @@ from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS, CHILE_TZ
 from app.bot.faq import FAQHandler
 from app.bot.accommodations import accommodations_handler
 from app.bot.cart import CartManager
+from app.config import get_settings
 from app.db.leads import get_or_create_lead, get_conversation_history
 from app.whatsapp.client import WhatsAppClient
 
@@ -48,6 +53,14 @@ class ConversationManager:
         self.faq_handler = FAQHandler()
         self.cart_manager = CartManager()
         self.whatsapp_client = WhatsAppClient()
+        self.settings = get_settings()
+        notification_emails = getattr(self.settings, "notification_emails", "")
+        self.notification_email_recipients = [
+            email.strip()
+            for email in notification_emails.split(",")
+            if email and email.strip()
+        ]
+        self.email_sender = self.settings.email_from or self.settings.business_email
         # Precompute extra keywords sorted by length to prioritize specific matches
         self.extra_keywords = sorted(self.cart_manager.EXTRAS_CATALOG.keys(), key=len, reverse=True)
         # In-memory conversation storage (use Redis or DB in production)
@@ -64,6 +77,10 @@ class ConversationManager:
             reason: 'reservation' or 'call_request'
         """
         try:
+            email_subject: Optional[str] = None
+            email_body: Optional[str] = None
+            email_priority = "high"
+            
             if reason == "reservation" and cart:
                 # Notification for confirmed reservation
                 reservation = next((item for item in cart if item.item_type == "reservation"), None)
@@ -89,6 +106,10 @@ class ConversationManager:
                 message += f"🔗 *Responder al cliente:*\n"
                 message += f"https://wa.me/{customer_phone}"
                 
+                email_subject = f"Nueva reserva confirmada - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
+                
             elif reason == "call_request":
                 # Notification for call request (option 6)
                 message = f"📞 *Solicitud de Contacto*\n\n"
@@ -97,6 +118,10 @@ class ConversationManager:
                 message += f"El cliente solicitó hablar con el Capitán Tomás 👨‍✈️\n\n"
                 message += f"🔗 *Contactar al cliente:*\n"
                 message += f"https://wa.me/{customer_phone}"
+                
+                email_subject = f"Solicitud de contacto - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "critical"
             
             else:
                 return
@@ -104,6 +129,9 @@ class ConversationManager:
             # Send notification
             await self.whatsapp_client.send_text_message(CAPITAN_TOMAS_PHONE, message)
             logger.info(f"Notification sent to Capitán Tomás for {reason}: {customer_name}")
+            
+            if email_subject and email_body:
+                await self._send_notification_email(email_subject, email_body, priority=email_priority)
             
         except Exception as e:
             logger.error(f"Error sending notification to Capitán Tomás: {e}")
@@ -295,6 +323,14 @@ O elige:
             elif cart_response := await self._handle_cart_command(message_text, from_number, contact_name):
                 logger.info("Cart command processed")
                 response = cart_response
+            # Check if user is requesting help or Capitán Tomás directly
+            elif self._is_help_request(message_text):
+                logger.info("Help request detected - notifying Capitán Tomás")
+                await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
+                faq_response = self.faq_handler.get_response(message_text)
+                if not faq_response:
+                    faq_response = self.faq_handler.get_response("llamar a tomas")
+                response = faq_response or "👨‍✈️ ¡Entendido! El Capitán Tomás te contactará a la brevedad."
             # Check if it's a FAQ question
             elif self.faq_handler.get_response(message_text):
                 logger.info("Responding with FAQ answer")
@@ -1691,6 +1727,82 @@ Horarios disponibles:
         metadata["available_times_for_date"] = []
         metadata["awaiting_date_time_selection"] = False
         metadata["pending_reservation"] = None
+    
+    def _normalize_text(self, text: str) -> str:
+        """Normalize text removing accents for keyword matching."""
+        normalized = unicodedata.normalize("NFD", text.lower())
+        return "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    
+    def _is_help_request(self, message: str) -> bool:
+        """Detect if user is asking for help or to contact Capitán Tomás."""
+        normalized = self._normalize_text(message)
+        tokens = re.findall(r'\b\w+\b', normalized)
+        
+        if "ayuda" in tokens:
+            return True
+        if "tomas" in tokens and ("capitan" in tokens or "hablar" in tokens or "llamar" in tokens or len(tokens) == 1):
+            return True
+        if "tomas" in tokens:
+            # Standalone mentions of Tomás should also trigger
+            return True
+        
+        phrases = [
+            "hablar con tomas",
+            "llamar a tomas",
+            "contactar a tomas",
+            "necesito a tomas",
+            "capitan tomas",
+            "capitan tomas"
+        ]
+        return any(phrase in normalized for phrase in phrases)
+    
+    def _format_plain_text(self, text: str) -> str:
+        """Convert markdown-styled text into plain text for email."""
+        plain = text.replace("*", "")
+        plain = plain.replace("•", "-")
+        return plain
+    
+    async def _send_notification_email(self, subject: str, body: str, priority: str = "high") -> None:
+        """Send email notification if email settings are enabled."""
+        if not getattr(self.settings, "email_enabled", False):
+            logger.debug("Email notifications disabled; skipping send.")
+            return
+        if not self.notification_email_recipients:
+            logger.debug("No email recipients configured; skipping send.")
+            return
+        if not self.settings.email_host:
+            logger.warning("Email host not configured; cannot send email notification.")
+            return
+        
+        try:
+            await asyncio.to_thread(self._send_email_sync, subject, body)
+            logger.info(f"Email notification sent: {subject}")
+        except Exception as e:
+            logger.error(f"Error sending email notification: {e}")
+    
+    def _send_email_sync(self, subject: str, body: str) -> None:
+        """Blocking email send executed in thread to avoid blocking event loop."""
+        sender = self.email_sender
+        if not sender:
+            sender = self.settings.business_email
+        
+        message = MIMEText(body, "plain", "utf-8")
+        message["Subject"] = subject
+        message["From"] = sender
+        message["To"] = ", ".join(self.notification_email_recipients)
+        
+        if self.settings.email_use_ssl:
+            with smtplib.SMTP_SSL(self.settings.email_host, self.settings.email_port) as server:
+                if self.settings.email_username:
+                    server.login(self.settings.email_username, self.settings.email_password)
+                server.sendmail(sender, self.notification_email_recipients, message.as_string())
+        else:
+            with smtplib.SMTP(self.settings.email_host, self.settings.email_port) as server:
+                if self.settings.email_use_tls:
+                    server.starttls()
+                if self.settings.email_username:
+                    server.login(self.settings.email_username, self.settings.email_password)
+                server.sendmail(sender, self.notification_email_recipients, message.as_string())
     
     async def _handle_party_size_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Handle user's response with party size after selecting date/time"""

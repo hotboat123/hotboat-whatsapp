@@ -30,6 +30,17 @@ class Settings(BaseSettings):
     # Automations
     automation_phone_numbers: str = ""  # Comma-separated phone numbers for automation notifications
     
+    # Email notifications
+    email_enabled: bool = False
+    email_host: str = ""
+    email_port: int = 587
+    email_username: str = ""
+    email_password: str = ""
+    email_from: str = ""
+    email_use_tls: bool = True
+    email_use_ssl: bool = False
+    notification_emails: str = ""  # Comma-separated list of emails to notify
+    
     # Server
     port: int = 8000
     host: str = "0.0.0.0"
@@ -45,6 +56,9 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance"""
     return Settings()
+
+
+
 
 
 
