@@ -91,14 +91,32 @@ class ConversationManager:
                 reservation = next((item for item in cart if item.item_type == "reservation"), None)
                 total = self.cart_manager.calculate_total(cart)
                 
+                # Prepare WhatsApp link with pre-filled message
+                date_str = reservation.metadata.get('date', '') if reservation else ''
+                time_str = reservation.metadata.get('time', '') if reservation else ''
+                people_str = str(reservation.quantity) if reservation else ''
+                
+                # Create pre-filled message for WhatsApp link
+                prefilled_msg = f"Hola {customer_name}! 👋\n\n"
+                prefilled_msg += f"Tu reserva para el {date_str} a las {time_str} está confirmada ✅\n\n"
+                prefilled_msg += f"Detalles:\n"
+                prefilled_msg += f"• {people_str} personas\n"
+                prefilled_msg += f"• Total: ${total:,}\n\n"
+                prefilled_msg += f"Nos vemos pronto! 🚤"
+                
+                # URL encode the message
+                import urllib.parse
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
                 message = f"🚨 *Nueva Reserva Confirmada*\n\n"
                 message += f"👤 *Cliente:* {customer_name}\n"
                 message += f"📱 *Teléfono:* +{customer_phone}\n\n"
                 
                 if reservation:
-                    message += f"📅 *Fecha:* {reservation.metadata.get('date')}\n"
-                    message += f"🕐 *Hora:* {reservation.metadata.get('time')}\n"
-                    message += f"👥 *Personas:* {reservation.quantity}\n\n"
+                    message += f"📅 *Fecha:* {date_str}\n"
+                    message += f"🕐 *Hora:* {time_str}\n"
+                    message += f"👥 *Personas:* {people_str}\n\n"
                 
                 extras = [item for item in cart if item.item_type == "extra"]
                 if extras:
@@ -109,7 +127,7 @@ class ConversationManager:
                 
                 message += f"💰 *Total:* ${total:,}\n\n"
                 message += f"🔗 *Responder al cliente:*\n"
-                message += f"https://wa.me/{customer_phone}"
+                message += whatsapp_link
                 
                 email_subject = f"Nueva reserva confirmada - {customer_name}"
                 email_body = self._format_plain_text(message)
@@ -117,12 +135,19 @@ class ConversationManager:
                 
             elif reason == "call_request":
                 # Notification for call request (option 6)
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\n¿En qué puedo ayudarte? 😊"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
                 message = f"📞 *Solicitud de Contacto*\n\n"
                 message += f"👤 *Cliente:* {customer_name}\n"
                 message += f"📱 *Teléfono:* +{customer_phone}\n\n"
                 message += f"El cliente solicitó hablar con el Capitán Tomás 👨‍✈️\n\n"
                 message += f"🔗 *Contactar al cliente:*\n"
-                message += f"https://wa.me/{customer_phone}"
+                message += whatsapp_link
                 
                 email_subject = f"Solicitud de contacto - {customer_name}"
                 email_body = self._format_plain_text(message)
