@@ -267,8 +267,11 @@ O elige:
                         confirm_message += f"📞 *El Capitán Tomás se comunicará contigo pronto por WhatsApp o teléfono para confirmar tu reserva y coordinar el pago* 👨‍✈️\n\n"
                         confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
                         
-                        # Send notification to Capitán Tomás BEFORE clearing cart
-                        await self._notify_capitan_tomas(contact_name, from_number, cart, reason="reservation")
+                        # Send confirmation immediately to user and trigger notifications in background
+                        notification_cart = list(cart)
+                        asyncio.create_task(
+                            self._notify_capitan_tomas(contact_name, from_number, notification_cart, reason="reservation")
+                        )
                         
                         # Clear cart after confirmation
                         await self.cart_manager.clear_cart(from_number)
@@ -1112,8 +1115,10 @@ Escribe el número que prefieras 🚤"""
             confirm_message += f"📞 *El Capitán Tomás se comunicará contigo pronto por WhatsApp o teléfono para confirmar tu reserva y coordinar el pago* 👨‍✈️\n\n"
             confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
             
-            # Send notification to Capitán Tomás BEFORE clearing cart
-            await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
+            notification_cart = list(cart)
+            asyncio.create_task(
+                self._notify_capitan_tomas(contact_name, phone_number, notification_cart, reason="reservation")
+            )
             
             # Clear cart after confirmation
             await self.cart_manager.clear_cart(phone_number)
