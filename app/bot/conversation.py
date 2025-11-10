@@ -160,6 +160,12 @@ class ConversationManager:
         try:
             # Get or create conversation context (loads history from DB)
             conversation = await self.get_conversation(from_number, contact_name)
+            processed_ids: set = conversation.setdefault("processed_message_ids", set())
+            if message_id and message_id in processed_ids:
+                logger.info(f"Duplicate message detected (ID: {message_id}), skipping processing.")
+                return None
+            if message_id:
+                processed_ids.add(message_id)
             
             logger.info(f"Processing message from {contact_name}: {message_text}")
             logger.info(f"Current metadata state: {conversation.get('metadata', {})}")
@@ -460,7 +466,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 "metadata": {
                     "lead_status": lead.get("lead_status") if lead else "unknown",
                     "lead_id": lead.get("id") if lead else None
-                }
+                },
+                "processed_message_ids": set()
             }
             
             if history:
