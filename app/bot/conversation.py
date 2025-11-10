@@ -1765,13 +1765,13 @@ Horarios disponibles:
     async def _send_notification_email(self, subject: str, body: str, priority: str = "high") -> None:
         """Send email notification if email settings are enabled."""
         if not getattr(self.settings, "email_enabled", False):
-            logger.debug("Email notifications disabled; skipping send.")
+            logger.info("Email notifications disabled (EMAIL_ENABLED=false); skipping send.")
             return
         if not self.notification_email_recipients:
-            logger.debug("No email recipients configured; skipping send.")
+            logger.warning("No notification emails configured (NOTIFICATION_EMAILS env variable). Skipping email send.")
             return
         if not self.settings.email_host:
-            logger.warning("Email host not configured; cannot send email notification.")
+            logger.warning("EMAIL_HOST is not configured; cannot send email notification.")
             return
         
         try:
