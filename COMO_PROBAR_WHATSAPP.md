@@ -226,3 +226,5 @@ Una vez que confirmes que funciona:
 
 **¡Listo para probar!** 🎉 Envía un mensaje de WhatsApp y deberías recibir la disponibilidad en tiempo real.
 
+
+

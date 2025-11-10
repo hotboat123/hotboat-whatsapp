@@ -4,9 +4,7 @@ Conversation manager - handles message flow and context
 import asyncio
 import logging
 import re
-import smtplib
 import unicodedata
-from email.mime.text import MIMEText
 from typing import Dict, Optional, Union, List
 from datetime import datetime, timedelta
 
@@ -17,6 +15,13 @@ from app.bot.cart import CartManager
 from app.config import get_settings
 from app.db.leads import get_or_create_lead, get_conversation_history
 from app.whatsapp.client import WhatsAppClient
+
+try:
+    import resend
+    RESEND_AVAILABLE = True
+except ImportError:
+    RESEND_AVAILABLE = False
+    logging.warning("Resend not installed - email notifications will be disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -1775,46 +1780,44 @@ Horarios disponibles:
         return plain
     
     async def _send_notification_email(self, subject: str, body: str, priority: str = "high") -> None:
-        """Send email notification if email settings are enabled."""
+        """Send email notification using Resend API (works on Railway/PaaS)."""
         if not getattr(self.settings, "email_enabled", False):
             logger.info("Email notifications disabled (EMAIL_ENABLED=false); skipping send.")
             return
+        
+        if not RESEND_AVAILABLE:
+            logger.warning("Resend library not installed; cannot send email notification.")
+            return
+        
         if not self.notification_email_recipients:
             logger.warning("No notification emails configured (NOTIFICATION_EMAILS env variable). Skipping email send.")
             return
-        if not self.settings.email_host:
-            logger.warning("EMAIL_HOST is not configured; cannot send email notification.")
+        
+        resend_key = getattr(self.settings, "resend_api_key", "")
+        if not resend_key:
+            logger.warning("RESEND_API_KEY not configured; cannot send email notification.")
             return
         
         try:
-            await asyncio.to_thread(self._send_email_sync, subject, body)
-            logger.info(f"Email notification sent: {subject}")
+            # Configure Resend API key
+            resend.api_key = resend_key
+            
+            # Convert body to HTML (preserve line breaks)
+            html_body = f"<pre style='font-family: monospace; white-space: pre-wrap;'>{body}</pre>"
+            
+            # Send email via Resend API
+            result = resend.Emails.send({
+                "from": self.email_sender,
+                "to": self.notification_email_recipients,
+                "subject": subject,
+                "html": html_body,
+            })
+            
+            logger.info(f"Email notification sent via Resend: {subject} (ID: {result.get('id', 'N/A')})")
         except Exception as e:
-            logger.error(f"Error sending email notification: {e}")
-    
-    def _send_email_sync(self, subject: str, body: str) -> None:
-        """Blocking email send executed in thread to avoid blocking event loop."""
-        sender = self.email_sender
-        if not sender:
-            sender = self.settings.business_email
-        
-        message = MIMEText(body, "plain", "utf-8")
-        message["Subject"] = subject
-        message["From"] = sender
-        message["To"] = ", ".join(self.notification_email_recipients)
-        
-        if self.settings.email_use_ssl:
-            with smtplib.SMTP_SSL(self.settings.email_host, self.settings.email_port) as server:
-                if self.settings.email_username:
-                    server.login(self.settings.email_username, self.settings.email_password)
-                server.sendmail(sender, self.notification_email_recipients, message.as_string())
-        else:
-            with smtplib.SMTP(self.settings.email_host, self.settings.email_port) as server:
-                if self.settings.email_use_tls:
-                    server.starttls()
-                if self.settings.email_username:
-                    server.login(self.settings.email_username, self.settings.email_password)
-                server.sendmail(sender, self.notification_email_recipients, message.as_string())
+            logger.error(f"Error sending email notification via Resend: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def _handle_party_size_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Handle user's response with party size after selecting date/time"""

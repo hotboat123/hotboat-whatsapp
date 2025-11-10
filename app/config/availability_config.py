@@ -90,3 +90,5 @@ def get_service_config(service_name: str) -> ServiceConfig:
         price_per_person=0
     )
 
+
+

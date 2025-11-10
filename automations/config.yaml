@@ -5,7 +5,7 @@ monitors:
   appointments:
     enabled: true
     name: "Monitor de Reservas"
-    check_interval: 60  # segundos
+    check_interval: 900  # segundos ( 15 minutos)
     notifications:
       new_appointment: true
       cancelled_appointment: true

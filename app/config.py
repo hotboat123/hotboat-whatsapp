@@ -30,15 +30,10 @@ class Settings(BaseSettings):
     # Automations
     automation_phone_numbers: str = ""  # Comma-separated phone numbers for automation notifications
     
-    # Email notifications
+    # Email notifications (using Resend API - works on Railway)
     email_enabled: bool = False
-    email_host: str = ""
-    email_port: int = 587
-    email_username: str = ""
-    email_password: str = ""
-    email_from: str = ""
-    email_use_tls: bool = True
-    email_use_ssl: bool = False
+    resend_api_key: str = ""
+    email_from: str = "onboarding@resend.dev"  # Change to your verified domain
     notification_emails: str = ""  # Comma-separated list of emails to notify
     
     # Server

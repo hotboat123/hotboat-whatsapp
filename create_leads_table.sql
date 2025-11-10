@@ -24,3 +24,5 @@ ADD COLUMN IF NOT EXISTS imported BOOLEAN DEFAULT FALSE; -- True if imported fro
 -- Create index for message_id
 CREATE INDEX IF NOT EXISTS idx_message_id ON whatsapp_conversations(message_id);
 
+
+

@@ -247,3 +247,5 @@ Si tienes problemas durante la migración:
 2. Verifica que todas las variables de entorno estén correctas
 3. Prueba importar solo un contacto primero para verificar el formato
 
+
+

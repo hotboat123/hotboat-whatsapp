@@ -227,3 +227,5 @@ if __name__ == "__main__":
         print("Formatos soportados: txt, csv")
         sys.exit(1)
 
+
+

@@ -441,3 +441,5 @@ buffer_hours = 1.0                      # Buffer time
 
 Este es el flujo completo de cómo funciona la consulta de disponibilidad en WhatsApp! 🚤⚓
 
+
+
