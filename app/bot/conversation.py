@@ -71,15 +71,17 @@ class ConversationManager:
         # In-memory conversation storage (use Redis or DB in production)
         self.conversations: Dict[str, dict] = {}
     
-    async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation") -> None:
+    async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation", customer_email: str = None, full_name: str = None) -> None:
         """
         Send WhatsApp notification to Capitán Tomás
         
         Args:
-            customer_name: Name of the customer
+            customer_name: Name of the customer (from WhatsApp profile)
             customer_phone: Customer's phone number
             cart: Cart items
             reason: 'reservation' or 'call_request'
+            customer_email: Optional - customer's email address
+            full_name: Optional - customer's full name (if different from WhatsApp name)
         """
         try:
             email_subject: Optional[str] = None
@@ -109,9 +111,15 @@ class ConversationManager:
                 encoded_msg = urllib.parse.quote(prefilled_msg)
                 whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
                 
+                # Use full name if provided, otherwise use WhatsApp name
+                display_name = full_name if full_name else customer_name
+                
                 message = f"🚨 *Nueva Reserva Confirmada*\n\n"
-                message += f"👤 *Cliente:* {customer_name}\n"
-                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                message += f"👤 *Cliente:* {display_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n"
+                if customer_email:
+                    message += f"📧 *Email:* {customer_email}\n"
+                message += "\n"
                 
                 if reservation:
                     message += f"📅 *Fecha:* {date_str}\n"
@@ -222,6 +230,10 @@ class ConversationManager:
             elif conversation.get("metadata", {}).get("awaiting_party_size"):
                 logger.info("User responding with party size")
                 response = await self._handle_party_size_response(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.1: Check if user is providing customer info (name and email)
+            elif conversation.get("metadata", {}).get("awaiting_customer_info"):
+                logger.info("User providing customer info (name and email)")
+                response = await self._handle_customer_info_response(message_text, from_number, contact_name, conversation)
             # PRIORITY 1.2: Sequential reservation flow - awaiting date selection
             elif conversation.get("metadata", {}).get("awaiting_reservation_date"):
                 logger.info("User responding with reservation date")
@@ -299,8 +311,10 @@ O elige:
                         
                         # Send confirmation immediately to user and trigger notifications in background
                         notification_cart = list(cart)
+                        customer_email = conversation.get("customer_email")
+                        full_name = conversation.get("customer_name")
                         asyncio.create_task(
-                            self._notify_capitan_tomas(contact_name, from_number, notification_cart, reason="reservation")
+                            self._notify_capitan_tomas(contact_name, from_number, notification_cart, reason="reservation", customer_email=customer_email, full_name=full_name)
                         )
                         
                         # Clear cart after confirmation
@@ -1146,8 +1160,10 @@ Escribe el número que prefieras 🚤"""
             confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
             
             notification_cart = list(cart)
+            customer_email = conversation.get("customer_email")
+            full_name = conversation.get("customer_name")
             asyncio.create_task(
-                self._notify_capitan_tomas(contact_name, phone_number, notification_cart, reason="reservation")
+                self._notify_capitan_tomas(contact_name, phone_number, notification_cart, reason="reservation", customer_email=customer_email, full_name=full_name)
             )
             
             # Clear cart after confirmation
@@ -1532,7 +1548,9 @@ Puedes decirme:
                 confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
                 confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para confirmar y coordinar el pago* 👨‍✈️\n\n"
                 confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
-                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
+                customer_email = conversation.get("customer_email")
+                full_name = conversation.get("customer_name")
+                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation", customer_email=customer_email, full_name=full_name)
                 await self.cart_manager.clear_cart(phone_number)
                 self._reset_reservation_flow(conversation)
                 return confirm_message
@@ -1615,7 +1633,9 @@ Por ejemplo:
                 confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
                 confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para confirmar y coordinar el pago* 👨‍✈️\n\n"
                 confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
-                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
+                customer_email = conversation.get("customer_email")
+                full_name = conversation.get("customer_name")
+                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation", customer_email=customer_email, full_name=full_name)
                 await self.cart_manager.clear_cart(phone_number)
                 self._reset_reservation_flow(conversation)
                 conversation["metadata"]["awaiting_party_size"] = False
@@ -1865,26 +1885,22 @@ Horarios disponibles:
             if not pending:
                 return "Lo siento, no encontré la reserva pendiente. Por favor, inicia el proceso de nuevo."
             
-            # Validate minimum 4 hours advance (this should already be validated, but double-check)
-            # The pending reservation should already have been validated in _try_parse_date_time_only
-            # But we add this as a safeguard
+            # Store party size in pending reservation
+            pending['party_size'] = party_size
+            conversation["metadata"]["pending_reservation"] = pending
             
-            # Create reservation item
-            reservation_item = self.cart_manager.create_reservation_item(
-                date=pending['date'],
-                time=pending['time'],
-                capacity=party_size
-            )
-            
-            # Add to cart with Reserva FLEX
-            await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
-            cart = await self.cart_manager.get_cart(phone_number)
-            
-            # Clear the pending state
-            self._reset_reservation_flow(conversation)
+            # Now ask for customer name and email
             conversation["metadata"]["awaiting_party_size"] = False
+            conversation["metadata"]["awaiting_customer_info"] = True
             
-            return self._format_cart_with_flex_options(cart)
+            return """👤 *Perfecto! Casi listo...*
+
+Para finalizar tu reserva, por favor compárteme:
+
+📝 *Tu nombre completo*
+📧 *Tu email*
+
+Ejemplo: Juan Pérez, juan@email.com"""
             
         except Exception as e:
             logger.error(f"Error handling party size response: {e}")
@@ -1894,6 +1910,81 @@ Horarios disponibles:
             self._reset_reservation_flow(conversation)
             conversation["metadata"]["awaiting_party_size"] = False
             return "Hubo un error procesando tu reserva. Por favor, intenta de nuevo."
+    
+    async def _handle_customer_info_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle user's response with name and email"""
+        try:
+            import re
+            
+            # Try to extract email from message
+            email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+            email_match = re.search(email_pattern, message)
+            
+            if not email_match:
+                return """❌ No encontré un email válido.
+
+Por favor envíame tu información en este formato:
+
+📝 *Nombre completo*
+📧 *Email*
+
+Ejemplo: Juan Pérez, juan@email.com"""
+            
+            email = email_match.group(0).lower()
+            
+            # Extract name (everything before the email or comma)
+            # Remove the email from the message to get the name
+            name_part = message.replace(email, '').strip()
+            # Remove common separators
+            name_part = re.sub(r'^[,\-:\s]+|[,\-:\s]+$', '', name_part)
+            
+            if not name_part or len(name_part) < 3:
+                return f"""✅ Email recibido: {email}
+
+Pero necesito también tu nombre completo.
+
+Por favor envíame: *Tu nombre completo*"""
+            
+            # Get the pending reservation
+            pending = conversation.get("metadata", {}).get("pending_reservation")
+            
+            if not pending or 'party_size' not in pending:
+                return "Lo siento, no encontré la reserva pendiente. Por favor, inicia el proceso de nuevo."
+            
+            # Store customer info
+            pending['customer_name'] = name_part
+            pending['customer_email'] = email
+            conversation["metadata"]["pending_reservation"] = pending
+            
+            # Create reservation item
+            reservation_item = self.cart_manager.create_reservation_item(
+                date=pending['date'],
+                time=pending['time'],
+                capacity=pending['party_size']
+            )
+            
+            # Add to cart with Reserva FLEX
+            await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
+            cart = await self.cart_manager.get_cart(phone_number)
+            
+            # Clear the pending state
+            self._reset_reservation_flow(conversation)
+            conversation["metadata"]["awaiting_customer_info"] = False
+            
+            # Store customer info in conversation for future use
+            conversation["customer_name"] = name_part
+            conversation["customer_email"] = email
+            
+            return self._format_cart_with_flex_options(cart)
+            
+        except Exception as e:
+            logger.error(f"Error handling customer info response: {e}")
+            import traceback
+            traceback.print_exc()
+            # Clear the pending state
+            self._reset_reservation_flow(conversation)
+            conversation["metadata"]["awaiting_customer_info"] = False
+            return "Hubo un error procesando tu información. Por favor, intenta de nuevo."
     
     async def _handle_ice_cream_flavor_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Handle user's response with ice cream flavor choice"""
@@ -2074,7 +2165,9 @@ Escribe el número que prefieras 🚤"""
                 confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
                 
                 # Send notification to Capitán Tomás BEFORE clearing cart
-                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
+                customer_email = conversation.get("customer_email")
+                full_name = conversation.get("customer_name")
+                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation", customer_email=customer_email, full_name=full_name)
                 
                 # Clear cart after confirmation
                 await self.cart_manager.clear_cart(phone_number)
