@@ -295,6 +295,7 @@ O elige:
                         
                         confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
                         confirm_message += f"📞 *El Capitán Tomás se comunicará contigo pronto por WhatsApp o teléfono para confirmar tu reserva y coordinar el pago* 👨‍✈️\n\n"
+                        confirm_message += f"Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
                         confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
                         
                         # Send confirmation immediately to user and trigger notifications in background
@@ -1143,6 +1144,7 @@ Escribe el número que prefieras 🚤"""
             
             confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
             confirm_message += f"📞 *El Capitán Tomás se comunicará contigo pronto por WhatsApp o teléfono para confirmar tu reserva y coordinar el pago* 👨‍✈️\n\n"
+            confirm_message += f"Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
             confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
             
             notification_cart = list(cart)
@@ -1531,6 +1533,7 @@ Puedes decirme:
                     confirm_message += "\n"
                 confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
                 confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para confirmar y coordinar el pago* 👨‍✈️\n\n"
+                confirm_message += "Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
                 confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
                 await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
                 await self.cart_manager.clear_cart(phone_number)
@@ -1614,6 +1617,7 @@ Por ejemplo:
                     confirm_message += "\n"
                 confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
                 confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para confirmar y coordinar el pago* 👨‍✈️\n\n"
+                confirm_message += "Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
                 confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
                 await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
                 await self.cart_manager.clear_cart(phone_number)
@@ -2071,6 +2075,7 @@ Escribe el número que prefieras 🚤"""
                 
                 confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
                 confirm_message += f"📞 *El Capitán Tomás se comunicará contigo pronto por WhatsApp o teléfono para confirmar tu reserva y coordinar el pago* 👨‍✈️\n\n"
+                confirm_message += f"Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
                 confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
                 
                 # Send notification to Capitán Tomás BEFORE clearing cart
