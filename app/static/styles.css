@@ -218,6 +218,16 @@ body {
     color: var(--text-secondary);
 }
 
+.chat-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.mobile-back-button {
+    display: none;
+}
+
 .messages-container {
     flex: 1;
     overflow-y: auto;
@@ -243,6 +253,48 @@ body {
 .load-more-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+.main-content.mobile {
+    flex-direction: column;
+}
+
+.main-content.mobile .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+}
+
+.main-content.mobile .chat-area {
+    width: 100%;
+}
+
+.main-content.mobile.show-conversations .chat-area {
+    display: none;
+}
+
+.main-content.mobile.show-chat .sidebar {
+    display: none;
+}
+
+.main-content.mobile.show-chat .chat-area {
+    display: flex;
+}
+
+.main-content.mobile .mobile-back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.main-content.mobile .messages-container {
+    padding: 1.2rem;
+}
+
+.main-content.mobile .message {
+    max-width: 80%;
 }
 
 .welcome-message {
@@ -613,19 +665,6 @@ body {
 @media (max-width: 1024px) {
     .right-panel {
         display: none;
-    }
-}
-
-@media (max-width: 768px) {
-    .sidebar {
-        width: 100%;
-        position: absolute;
-        z-index: 100;
-        height: 100%;
-    }
-    
-    .chat-area {
-        width: 100%;
     }
 }
 

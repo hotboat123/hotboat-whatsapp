@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kia-Ai - WhatsApp Management Interface</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20251111d">
+    <link rel="stylesheet" href="/static/styles.css?v=20251111e">
 </head>
 <body>
     <div class="container">
@@ -48,6 +48,9 @@
                         <p id="currentChatPhone"></p>
                     </div>
                     <div class="chat-actions">
+                    <button class="btn-secondary mobile-back-button" onclick="showConversationList()">
+                        ← Conversaciones
+                    </button>
                         <button class="btn-secondary" onclick="showNewMessageModal()">
                             ➕ New Message
                         </button>
@@ -139,7 +142,7 @@
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="/static/app.js?v=20251111d"></script>
+    <script src="/static/app.js?v=20251111e"></script>
 </body>
 </html>
 

@@ -2,12 +2,13 @@
 let currentConversation = null;
 let conversations = [];
 let messagesCache = {};
+let isLoadingOlderMessages = false;
+const MESSAGES_PAGE_SIZE = 20;
+const MAX_REFRESH_LIMIT = 500;
+const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
 
 // API Base URL
 const API_BASE = window.location.origin;
-const MESSAGES_PAGE_SIZE = 20;
-const MAX_REFRESH_LIMIT = 500;
-let isLoadingOlderMessages = false;
 
 function normalizeMessages(messages = []) {
     if (!Array.isArray(messages)) {
@@ -99,12 +100,64 @@ function mergeMessageLists(existing = [], incoming = []) {
     return sortMessagesChronologically(Array.from(map.values()));
 }
 
+function setupResponsiveLayout() {
+    updateMobileLayout();
+    if (mobileMediaQuery.addEventListener) {
+        mobileMediaQuery.addEventListener('change', updateMobileLayout);
+    } else if (mobileMediaQuery.addListener) {
+        mobileMediaQuery.addListener(updateMobileLayout);
+    }
+    window.addEventListener('resize', updateMobileLayout);
+}
+
+function isMobileLayout() {
+    return mobileMediaQuery.matches;
+}
+
+function updateMobileLayout() {
+    const mainContent = document.querySelector('.main-content');
+    if (!mainContent) return;
+    const mobile = isMobileLayout();
+    mainContent.classList.toggle('mobile', mobile);
+
+    if (!mobile) {
+        mainContent.classList.remove('show-chat', 'show-conversations');
+        return;
+    }
+
+    // Ensure one of the views is visible
+    if (!mainContent.classList.contains('show-chat') && !mainContent.classList.contains('show-conversations')) {
+        if (currentConversation) {
+            mainContent.classList.add('show-chat');
+        } else {
+            mainContent.classList.add('show-conversations');
+        }
+    }
+}
+
+function showConversationList() {
+    if (!isMobileLayout()) return;
+    const mainContent = document.querySelector('.main-content');
+    if (!mainContent) return;
+    mainContent.classList.add('show-conversations');
+    mainContent.classList.remove('show-chat');
+}
+
+function showChatView() {
+    if (!isMobileLayout()) return;
+    const mainContent = document.querySelector('.main-content');
+    if (!mainContent) return;
+    mainContent.classList.add('show-chat');
+    mainContent.classList.remove('show-conversations');
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadConversations();
     setupEventListeners();
     setInterval(loadConversations, 10000); // Refresh every 10 seconds
     setInterval(refreshCurrentConversation, 5000); // Refresh current chat every 5 seconds
+    setupResponsiveLayout();
 });
 
 // Event Listeners
@@ -229,6 +282,8 @@ async function selectConversation(phoneNumber) {
         
         renderCurrentChat({ scrollToBottom: true });
         renderConversations();
+        showChatView();
+        updateMobileLayout();
         
     } catch (error) {
         console.error('Error selecting conversation:', error);
@@ -350,6 +405,8 @@ function renderCurrentChat(options = {}) {
             </div>
         `;
         messageInputArea.style.display = 'none';
+        showConversationList();
+        updateMobileLayout();
         return;
     }
     
@@ -404,6 +461,9 @@ function renderCurrentChat(options = {}) {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     }
+
+    showChatView();
+    updateMobileLayout();
 }
 
 // Load Lead Info
@@ -662,4 +722,7 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+window.loadOlderMessages = loadOlderMessages;
+window.showConversationList = showConversationList;
 
