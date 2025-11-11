@@ -7,15 +7,39 @@ let messagesCache = {};
 const API_BASE = window.location.origin;
 
 function normalizeMessages(messages = []) {
-    return (messages || []).map((msg, index) => {
-        const messageText = msg.message_text ?? msg.content ?? '';
-        const direction = msg.direction ?? (msg.role === 'assistant' ? 'outgoing' : 'incoming');
-        const timestamp = msg.timestamp ?? msg.created_at ?? new Date().toISOString();
+    if (!Array.isArray(messages)) {
+        return [];
+    }
+
+    return messages.map((msg = {}, index) => {
+        const messageText =
+            (typeof msg.message_text === 'string' && msg.message_text.trim().length > 0 && msg.message_text) ??
+            (typeof msg.content === 'string' && msg.content.trim().length > 0 && msg.content) ??
+            (typeof msg.response_text === 'string' && msg.response_text.trim().length > 0 && msg.response_text) ??
+            (typeof msg.message === 'string' && msg.message.trim().length > 0 && msg.message) ??
+            (typeof msg.text === 'string' && msg.text.trim().length > 0 && msg.text) ??
+            '';
+
+        const inferredDirection =
+            msg.direction ??
+            (msg.role === 'assistant' ? 'outgoing' :
+                msg.role === 'system' ? 'outgoing' :
+                msg.role === 'user' ? 'incoming' :
+                msg.response_text ? 'outgoing' :
+                'incoming');
+
+        const timestamp =
+            msg.timestamp ??
+            msg.created_at ??
+            msg.message_timestamp ??
+            msg.updated_at ??
+            new Date().toISOString();
+
         return {
             id: msg.id ?? `msg_${Date.now()}_${index}`,
             message_text: messageText,
-            direction,
-            message_type: msg.message_type ?? 'text',
+            direction: inferredDirection === 'outgoing' ? 'outgoing' : 'incoming',
+            message_type: msg.message_type ?? msg.type ?? 'text',
             timestamp
         };
     });
