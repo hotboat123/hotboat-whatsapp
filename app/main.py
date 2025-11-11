@@ -2,11 +2,13 @@
 FastAPI main application
 """
 from fastapi import FastAPI, Request, Response, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import logging
 
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
+from app.whatsapp.client import whatsapp_client
 from app.bot.conversation import ConversationManager
 from app.db.queries import get_recent_conversations, get_appointments_between_dates
 from app.db.leads import (
@@ -19,6 +21,7 @@ from app.db.leads import (
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from typing import List, Optional
+import os
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -34,18 +37,45 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Mount static files for Kia-Ai interface
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+logger.info(f"📁 Static directory expected at: {static_dir}")
+if os.path.exists(static_dir):
+    logger.info(f"✅ Static directory found with files: {os.listdir(static_dir)}")
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+else:
+    logger.warning("⚠️ Static directory not found – Kia-Ai UI will not be served.")
+
 # Initialize conversation manager
 conversation_manager = ConversationManager()
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    """Health check endpoint"""
-    return {
-        "status": "ok",
-        "service": "HotBoat WhatsApp Bot",
-        "version": "1.0.0"
-    }
+    """Serve Kia-Ai chat interface"""
+    try:
+        static_dir = os.path.join(os.path.dirname(__file__), "static")
+        index_path = os.path.join(static_dir, "index.html")
+        
+        if os.path.exists(index_path):
+            logger.info(f"🖥️ Serving Kia-Ai interface from {index_path}")
+            with open(index_path, 'r', encoding='utf-8') as f:
+                return HTMLResponse(content=f.read())
+        else:
+            logger.warning("⚠️ Kia-Ai interface not found, returning default health response.")
+            return {
+                "status": "ok",
+                "service": "HotBoat WhatsApp Bot",
+                "version": "1.0.0",
+                "note": "Kia-Ai interface not found. API is working."
+            }
+    except Exception as e:
+        logger.error(f"Error serving index: {e}")
+        return {
+            "status": "ok",
+            "service": "HotBoat WhatsApp Bot",
+            "version": "1.0.0"
+        }
 
 
 @app.get("/health")
@@ -241,6 +271,99 @@ async def import_conversations(data: ConversationImport):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Kia-Ai API Endpoints
+
+@app.get("/api/conversations")
+async def get_conversations_list(limit: int = 50):
+    """Get list of all conversations with latest messages"""
+    try:
+        conversations = await get_recent_conversations(limit=limit)
+        return {
+            "conversations": conversations,
+            "total": len(conversations)
+        }
+    except Exception as e:
+        logger.error(f"Error getting conversations: {e}")
+        return {
+            "conversations": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+
+@app.get("/api/conversations/{phone_number}")
+async def get_conversation_detail(phone_number: str):
+    """Get full conversation history for a specific phone number"""
+    try:
+        lead = await get_or_create_lead(phone_number)
+        messages = await get_conversation_history(phone_number, limit=200)
+        
+        return {
+            "lead": lead,
+            "messages": messages,
+            "total_messages": len(messages)
+        }
+    except Exception as e:
+        logger.error(f"Error getting conversation detail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SendMessageRequest(BaseModel):
+    to: str  # Phone number with country code (no +)
+    message: str
+
+
+@app.post("/api/send-message")
+async def send_custom_message(request: SendMessageRequest):
+    """Send a custom WhatsApp message through Kia-Ai"""
+    try:
+        # Validate inputs
+        if not request.to or not request.message:
+            raise HTTPException(status_code=400, detail="Phone number and message are required")
+        
+        if len(request.message) > 4096:
+            raise HTTPException(status_code=400, detail="Message too long (max 4096 characters)")
+        
+        # Send message via WhatsApp API
+        result = await whatsapp_client.send_text_message(request.to, request.message)
+        
+        # Log in database
+        try:
+            # Create/update lead
+            lead = await get_or_create_lead(request.to)
+            
+            # Store message in conversation history
+            from app.db.connection import get_connection
+            async with get_connection() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO conversations 
+                    (phone_number, customer_name, message_text, response_text, direction, timestamp, message_id)
+                    VALUES ($1, $2, '', $3, 'outgoing', NOW(), $4)
+                    """,
+                    request.to,
+                    lead.get('customer_name', request.to),
+                    request.message,
+                    result.get('messages', [{}])[0].get('id', '')
+                )
+        except Exception as db_error:
+            logger.error(f"Error storing message in DB: {db_error}")
+            # Don't fail the request if DB logging fails
+        
+        return {
+            "status": "sent",
+            "to": request.to,
+            "message_id": result.get('messages', [{}])[0].get('id', ''),
+            "details": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending custom message: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
@@ -249,6 +372,7 @@ if __name__ == "__main__":
         port=settings.port,
         reload=settings.environment == "development"
     )
+
 
 
 
