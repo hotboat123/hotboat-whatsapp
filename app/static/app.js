@@ -257,14 +257,39 @@ async function sendMessage(event) {
         
         if (!response.ok) throw new Error('Failed to send message');
         
+        const result = await response.json();
+        
+        // Optimistically append outgoing message to the UI
+        const timestamp = new Date().toISOString();
+        const newMessage = {
+            id: result?.message_id || `temp_${Date.now()}`,
+            message_text: message,
+            direction: 'outgoing',
+            message_type: 'text',
+            timestamp
+        };
+
+        currentConversation.messages.push(newMessage);
+        renderCurrentChat();
+
+        // Update conversations list preview
+        const conversationIndex = conversations.findIndex(conv => conv.phone_number === currentConversation.phone_number);
+        if (conversationIndex >= 0) {
+            conversations[conversationIndex].last_message = message;
+            conversations[conversationIndex].last_message_at = timestamp;
+        } else {
+            loadConversations();
+        }
+        renderConversations();
+        
         // Clear input
         input.value = '';
         updateCharCount('messageInput', 'charCount');
         
         showToast('Message sent successfully! ✅', 'success');
         
-        // Refresh conversation
-        setTimeout(() => selectConversation(currentConversation.phone_number), 1000);
+        // Refresh conversation (ensure DB sync)
+        setTimeout(() => selectConversation(currentConversation.phone_number), 1500);
         
     } catch (error) {
         console.error('Error sending message:', error);
