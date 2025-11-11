@@ -48,7 +48,32 @@ async function loadConversations() {
         if (!response.ok) throw new Error('Failed to load conversations');
         
         const data = await response.json();
-        conversations = data.conversations || [];
+        const rawConversations = data.conversations || [];
+
+        // Group by phone number and keep latest entry
+        const grouped = new Map();
+        rawConversations.forEach(item => {
+            const phone = item.phone_number;
+            const lastMessage = item.last_message ?? item.message_text ?? item.response_text ?? '';
+            const timestamp = item.last_message_at ?? item.created_at ?? new Date().toISOString();
+            const customerName = item.customer_name || phone;
+
+            const existing = grouped.get(phone);
+            if (!existing || new Date(timestamp) > new Date(existing.last_message_at)) {
+                grouped.set(phone, {
+                    phone_number: phone,
+                    customer_name: customerName,
+                    last_message: lastMessage,
+                    last_message_at: timestamp,
+                    created_at: timestamp
+                });
+            }
+        });
+
+        conversations = Array.from(grouped.values()).sort(
+            (a, b) => new Date(b.last_message_at) - new Date(a.last_message_at)
+        );
+
         renderConversations();
         
         updateStatus('connected', 'Connected');
