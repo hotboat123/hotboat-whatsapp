@@ -53,7 +53,7 @@ function normalizeMessages(messages = []) {
             new Date().toISOString();
 
         const parsedTimestamp = Date.parse(timestamp);
-        const sortKey = Number.isNaN(parsedTimestamp) ? index : parsedTimestamp;
+        const sortKey = Number.isNaN(parsedTimestamp) ? null : parsedTimestamp;
 
         return {
             id: msg.id ?? `msg_${Date.now()}_${index}`,
@@ -61,13 +61,21 @@ function normalizeMessages(messages = []) {
             direction: inferredDirection === 'outgoing' ? 'outgoing' : 'incoming',
             message_type: msg.message_type ?? msg.type ?? 'text',
             timestamp,
-            _sortKey: sortKey
+            _sortKey: sortKey,
+            _originalIndex: index
         };
     });
 
     return normalized
-        .sort((a, b) => a._sortKey - b._sortKey)
-        .map(({ _sortKey, ...msg }) => msg);
+        .sort((a, b) => {
+            const aKey = a._sortKey ?? Number.MAX_SAFE_INTEGER;
+            const bKey = b._sortKey ?? Number.MAX_SAFE_INTEGER;
+            if (aKey !== bKey) {
+                return aKey - bKey;
+            }
+            return a._originalIndex - b._originalIndex;
+        })
+        .map(({ _sortKey, _originalIndex, ...msg }) => msg);
 }
 
 // Initialize
