@@ -12,13 +12,21 @@ function normalizeMessages(messages = []) {
     }
 
     const normalized = messages.map((msg = {}, index) => {
-        const messageText =
-            (typeof msg.message_text === 'string' && msg.message_text.trim().length > 0 && msg.message_text) ??
-            (typeof msg.content === 'string' && msg.content.trim().length > 0 && msg.content) ??
-            (typeof msg.response_text === 'string' && msg.response_text.trim().length > 0 && msg.response_text) ??
-            (typeof msg.message === 'string' && msg.message.trim().length > 0 && msg.message) ??
-            (typeof msg.text === 'string' && msg.text.trim().length > 0 && msg.text) ??
-            '';
+        const candidateFields = [
+            msg.message_text,
+            msg.content,
+            msg.response_text,
+            msg.message,
+            msg.text
+        ];
+
+        let messageText = '';
+        for (const field of candidateFields) {
+            if (typeof field === 'string' && field.trim().length > 0) {
+                messageText = field;
+                break;
+            }
+        }
 
         const inferredDirection =
             msg.direction ??
