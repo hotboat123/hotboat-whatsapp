@@ -212,11 +212,12 @@ function renderCurrentChat() {
         `;
     } else {
         messagesContainer.innerHTML = currentConversation.messages.map(msg => {
-            const text = msg.message_text ?? msg.content ?? '';
+            const text = (msg.message_text ?? msg.content ?? '').trim();
             const direction = msg.direction ?? (msg.role === 'assistant' ? 'outgoing' : 'incoming');
+            const sanitized = escapeHtml(text || '').replace(/\n/g, '<br>');
             return `
                 <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
-                    <div class="message-text">${escapeHtml(text)}</div>
+                    <div class="message-text">${sanitized || '&nbsp;'}</div>
                     <div class="message-time">${formatTime(msg.timestamp)}</div>
                 </div>
             `;
