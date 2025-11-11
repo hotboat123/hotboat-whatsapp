@@ -168,12 +168,16 @@ function renderCurrentChat() {
             </div>
         `;
     } else {
-        messagesContainer.innerHTML = currentConversation.messages.map(msg => `
-            <div class="message ${msg.direction === 'outgoing' ? 'outgoing' : 'incoming'}">
-                <div class="message-text">${escapeHtml(msg.message_text)}</div>
-                <div class="message-time">${formatTime(msg.timestamp)}</div>
-            </div>
-        `).join('');
+        messagesContainer.innerHTML = currentConversation.messages.map(msg => {
+            const text = msg.message_text ?? msg.content ?? '';
+            const direction = msg.direction ?? (msg.role === 'assistant' ? 'outgoing' : 'incoming');
+            return `
+                <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
+                    <div class="message-text">${escapeHtml(text)}</div>
+                    <div class="message-time">${formatTime(msg.timestamp)}</div>
+                </div>
+            `;
+        }).join('');
         
         // Scroll to bottom
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
