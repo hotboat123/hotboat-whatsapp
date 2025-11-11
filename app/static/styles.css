@@ -269,6 +269,9 @@ body {
 
 .main-content.mobile .chat-area {
     width: 100%;
+    position: relative;
+    height: calc(100vh - 140px);
+    max-height: calc(100vh - 140px);
 }
 
 .main-content.mobile.show-conversations .chat-area {
@@ -290,11 +293,22 @@ body {
 }
 
 .main-content.mobile .messages-container {
-    padding: 1.2rem;
+    padding: 1rem 1rem 6rem 1rem;
+    overflow-y: auto;
 }
 
 .main-content.mobile .message {
     max-width: 80%;
+}
+
+.main-content.mobile .message-input-area {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-medium);
 }
 
 .welcome-message {
@@ -347,6 +361,7 @@ body {
     padding: 1rem 2rem;
     background-color: var(--bg-medium);
     border-top: 1px solid var(--border-color);
+    z-index: 150;
 }
 
 #messageForm {
