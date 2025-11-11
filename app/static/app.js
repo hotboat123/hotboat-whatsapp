@@ -22,9 +22,18 @@ function normalizeMessages(messages = []) {
 
         let messageText = '';
         for (const field of candidateFields) {
-            if (typeof field === 'string' && field.trim().length > 0) {
-                messageText = field;
-                break;
+            if (typeof field === 'string') {
+                const trimmed = field.trim();
+                if (trimmed.length > 0) {
+                    messageText = trimmed;
+                    break;
+                }
+            } else if (field !== null && field !== undefined) {
+                const asString = String(field).trim();
+                if (asString.length > 0) {
+                    messageText = asString;
+                    break;
+                }
             }
         }
 
