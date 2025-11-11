@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
 from app.bot.conversation import ConversationManager
-from app.db.queries import get_recent_conversations, get_appointments_between_dates
+from app.db.queries import get_recent_conversations, get_appointments_between_dates, save_conversation
 from app.db.leads import (
     get_or_create_lead, 
     update_lead_status, 
@@ -355,23 +355,18 @@ async def send_custom_message(request: SendMessageRequest):
         
         # Log in database
         try:
-            # Create/update lead
             lead = await get_or_create_lead(request.to)
+            message_id = result.get('messages', [{}])[0].get('id', '')
             
-            # Store message in conversation history
-            from app.db.connection import get_connection
-            async with get_connection() as conn:
-                await conn.execute(
-                    """
-                    INSERT INTO conversations 
-                    (phone_number, customer_name, message_text, response_text, direction, timestamp, message_id)
-                    VALUES ($1, $2, '', $3, 'outgoing', NOW(), $4)
-                    """,
-                    request.to,
-                    lead.get('customer_name', request.to),
-                    request.message,
-                    result.get('messages', [{}])[0].get('id', '')
-                )
+            await save_conversation(
+                phone_number=request.to,
+                customer_name=lead.get('customer_name', request.to) if lead else request.to,
+                message_text='',
+                response_text=request.message,
+                message_type='text',
+                message_id=message_id or None,
+                direction='outgoing'
+            )
         except Exception as db_error:
             logger.error(f"Error storing message in DB: {db_error}")
             # Don't fail the request if DB logging fails
