@@ -7,6 +7,11 @@ const MESSAGES_PAGE_SIZE = 20;
 const MAX_REFRESH_LIMIT = 500;
 const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
 
+function setViewportHeightVar() {
+    const vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+
 // API Base URL
 const API_BASE = window.location.origin;
 
@@ -107,7 +112,17 @@ function setupResponsiveLayout() {
     } else if (mobileMediaQuery.addListener) {
         mobileMediaQuery.addListener(updateMobileLayout);
     }
-    window.addEventListener('resize', updateMobileLayout);
+    window.addEventListener('resize', () => {
+        updateMobileLayout();
+        setViewportHeightVar();
+    });
+    window.addEventListener('orientationchange', () => {
+        setViewportHeightVar();
+        setTimeout(() => {
+            setViewportHeightVar();
+            updateMobileLayout();
+        }, 200);
+    });
 }
 
 function isMobileLayout() {
@@ -154,6 +169,7 @@ function showChatView() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    setViewportHeightVar();
     loadConversations();
     setupEventListeners();
     setInterval(loadConversations, 10000); // Refresh every 10 seconds
