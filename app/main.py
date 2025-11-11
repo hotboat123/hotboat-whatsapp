@@ -1,7 +1,7 @@
 """
 FastAPI main application
 """
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, Request, Response, HTTPException, Query
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import logging
@@ -292,16 +292,42 @@ async def get_conversations_list(limit: int = 50):
 
 
 @app.get("/api/conversations/{phone_number}")
-async def get_conversation_detail(phone_number: str):
-    """Get full conversation history for a specific phone number"""
+async def get_conversation_detail(
+    phone_number: str,
+    limit: int = Query(50, ge=1, le=500),
+    before: Optional[str] = None
+):
+    """Get full conversation history for a specific phone number with optional pagination"""
     try:
         lead = await get_or_create_lead(phone_number)
-        messages = await get_conversation_history(phone_number, limit=200)
+        
+        before_dt = None
+        if before:
+            try:
+                before_dt = datetime.fromisoformat(before)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid 'before' timestamp format.")
+        
+        messages_result = await get_conversation_history(
+            phone_number,
+            limit=limit,
+            before=before_dt,
+            return_has_more=True
+        )
+        
+        if isinstance(messages_result, tuple):
+            messages, has_more, next_cursor = messages_result
+        else:
+            messages = messages_result
+            has_more = False
+            next_cursor = None
         
         return {
             "lead": lead,
             "messages": messages,
-            "total_messages": len(messages)
+            "total_messages": len(messages),
+            "has_more": has_more,
+            "next_cursor": next_cursor
         }
     except Exception as e:
         logger.error(f"Error getting conversation detail: {e}")

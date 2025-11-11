@@ -194,7 +194,12 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
         return []
 
 
-async def get_conversation_history(phone_number: str, limit: int = 50) -> List[Dict]:
+async def get_conversation_history(
+    phone_number: str,
+    limit: int = 50,
+    before: Optional[datetime] = None,
+    return_has_more: bool = False
+) -> List[Dict]:
     """
     Get conversation history for a specific phone number
     
@@ -208,7 +213,15 @@ async def get_conversation_history(phone_number: str, limit: int = 50) -> List[D
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                fetch_limit = limit + 1 if return_has_more else limit
+                params = [phone_number]
+                before_clause = ""
+                if before:
+                    before_clause = " AND created_at < %s"
+                    params.append(before)
+                
+                params.append(fetch_limit)
+                cur.execute(f"""
                     SELECT 
                         id,
                         message_text,
@@ -218,34 +231,57 @@ async def get_conversation_history(phone_number: str, limit: int = 50) -> List[D
                         created_at
                     FROM whatsapp_conversations
                     WHERE phone_number = %s
-                    ORDER BY created_at ASC
+                    {before_clause}
+                    ORDER BY created_at DESC
                     LIMIT %s
-                """, (phone_number, limit))
+                """, tuple(params))
                 
-                results = cur.fetchall()
+                rows = cur.fetchall()
+                has_more = False
+                if return_has_more and len(rows) > limit:
+                    has_more = True
+                    rows = rows[:limit]
+                
+                # We fetched newest first; reverse to chronological order
+                results = list(reversed(rows))
                 
                 history = []
                 for row in results:
-                    # Build conversation history format for AI
-                    # User messages
-                    history.append({
-                        "role": "user",
-                        "content": row[1],
-                        "timestamp": row[5].isoformat() if row[5] else None
-                    })
+                    message_text = row[1]  # User's message
+                    response_text = row[2]  # Bot's response
+                    message_type = row[3] if row[3] else 'text'
+                    direction = row[4] if row[4] else 'incoming'
+                    timestamp = row[5].isoformat() if row[5] else None
                     
-                    # Bot responses
-                    if row[2]:  # If there's a response
+                    # Add incoming message (from customer)
+                    if message_text:
                         history.append({
-                            "role": "assistant",
-                            "content": row[2],
-                            "timestamp": row[5].isoformat() if row[5] else None
+                            "id": f"{row[0]}_in",
+                            "message_text": message_text,
+                            "direction": "incoming",
+                            "message_type": message_type,
+                            "timestamp": timestamp
+                        })
+                    
+                    # Add outgoing message (bot's response)
+                    if response_text:
+                        history.append({
+                            "id": f"{row[0]}_out",
+                            "message_text": response_text,
+                            "direction": "outgoing",
+                            "message_type": message_type,
+                            "timestamp": timestamp
                         })
                 
+                if return_has_more:
+                    next_cursor = history[0]["timestamp"] if history else None
+                    return history, has_more, next_cursor
                 return history
     
     except Exception as e:
         logger.error(f"Error getting conversation history: {e}")
+        if return_has_more:
+            return [], False, None
         return []
 
 
@@ -333,6 +369,7 @@ async def import_conversation_batch(
         import traceback
         traceback.print_exc()
         return 0
+
 
 
 

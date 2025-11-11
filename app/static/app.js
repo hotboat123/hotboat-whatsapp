@@ -5,6 +5,9 @@ let messagesCache = {};
 
 // API Base URL
 const API_BASE = window.location.origin;
+const MESSAGES_PAGE_SIZE = 20;
+const MAX_REFRESH_LIMIT = 500;
+let isLoadingOlderMessages = false;
 
 function normalizeMessages(messages = []) {
     if (!Array.isArray(messages)) {
@@ -76,6 +79,24 @@ function normalizeMessages(messages = []) {
             return a._originalIndex - b._originalIndex;
         })
         .map(({ _sortKey, _originalIndex, ...msg }) => msg);
+}
+
+function sortMessagesChronologically(messages = []) {
+    return [...messages].sort((a, b) => {
+        const aTime = new Date(a.timestamp).getTime();
+        const bTime = new Date(b.timestamp).getTime();
+        return aTime - bTime;
+    });
+}
+
+function mergeMessageLists(existing = [], incoming = []) {
+    const map = new Map();
+    [...existing, ...incoming].forEach(msg => {
+        if (msg && msg.id) {
+            map.set(msg.id, msg);
+        }
+    });
+    return sortMessagesChronologically(Array.from(map.values()));
 }
 
 // Initialize
@@ -156,6 +177,18 @@ async function loadConversations() {
     }
 }
 
+async function fetchConversationData(phoneNumber, { limit = MESSAGES_PAGE_SIZE, before = null } = {}) {
+    const params = new URLSearchParams();
+    params.append('limit', Math.min(Math.max(limit, 1), MAX_REFRESH_LIMIT).toString());
+    if (before) {
+        params.append('before', before);
+    }
+
+    const response = await fetch(`${API_BASE}/api/conversations/${phoneNumber}?${params.toString()}`);
+    if (!response.ok) throw new Error('Failed to load conversation');
+    return response.json();
+}
+
 // Render Conversations List
 function renderConversations() {
     const container = document.getElementById('conversationsList');
@@ -183,23 +216,19 @@ function renderConversations() {
 // Select Conversation
 async function selectConversation(phoneNumber) {
     try {
-        // Load conversation history
-        const response = await fetch(`${API_BASE}/api/conversations/${phoneNumber}`);
-        if (!response.ok) throw new Error('Failed to load conversation');
-        
-        const data = await response.json();
+        const data = await fetchConversationData(phoneNumber, { limit: MESSAGES_PAGE_SIZE });
         currentConversation = {
             phone_number: phoneNumber,
             customer_name: data.lead?.customer_name || phoneNumber,
-            messages: normalizeMessages(data.messages)
+            messages: normalizeMessages(data.messages),
+            hasMore: Boolean(data.has_more),
+            nextCursor: data.next_cursor || null
         };
         
-        // Load lead info
         loadLeadInfo(phoneNumber);
         
-        // Update UI
-        renderCurrentChat();
-        renderConversations(); // Update active state
+        renderCurrentChat({ scrollToBottom: true });
+        renderConversations();
         
     } catch (error) {
         console.error('Error selecting conversation:', error);
@@ -209,37 +238,106 @@ async function selectConversation(phoneNumber) {
 
 // Refresh Current Conversation (auto-refresh)
 async function refreshCurrentConversation() {
-    // Only refresh if there's an active conversation
     if (!currentConversation) return;
     
     try {
-        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}`);
-        if (!response.ok) return; // Silently fail
+        const existingCount = currentConversation.messages?.length || 0;
+        const limit = Math.min(
+            Math.max(existingCount, MESSAGES_PAGE_SIZE),
+            MAX_REFRESH_LIMIT
+        );
         
-        const data = await response.json();
+        const data = await fetchConversationData(currentConversation.phone_number, { limit });
         const normalized = normalizeMessages(data.messages);
-        const oldMessages = currentConversation.messages || [];
-        const latestOldId = oldMessages.length ? oldMessages[oldMessages.length - 1].id : null;
-        const latestNewId = normalized.length ? normalized[normalized.length - 1].id : null;
+        const mergedMessages = mergeMessageLists(currentConversation.messages || [], normalized);
         
-        currentConversation.messages = normalized;
+        const hadChanges = mergedMessages.length !== (currentConversation.messages || []).length ||
+            (mergedMessages.length && currentConversation.messages?.length &&
+                mergedMessages[mergedMessages.length - 1]?.id !== currentConversation.messages[currentConversation.messages.length - 1]?.id);
         
-        // Only re-render if there are new messages or content changed
-        if (normalized.length !== oldMessages.length || latestNewId !== latestOldId) {
+        currentConversation.messages = mergedMessages;
+        currentConversation.hasMore = Boolean(data.has_more) || Boolean(currentConversation.hasMore);
+        
+        if (data.next_cursor) {
+            if (!currentConversation.nextCursor) {
+                currentConversation.nextCursor = data.next_cursor;
+            } else {
+                currentConversation.nextCursor = data.next_cursor < currentConversation.nextCursor
+                    ? data.next_cursor
+                    : currentConversation.nextCursor;
+            }
+        }
+        
+        if (hadChanges) {
             renderCurrentChat();
         }
     } catch (error) {
-        // Silently fail - don't show errors for auto-refresh
         console.log('Auto-refresh failed:', error);
     }
 }
 
+async function loadOlderMessages() {
+    if (!currentConversation || !currentConversation.hasMore || isLoadingOlderMessages) {
+        return;
+    }
+
+    isLoadingOlderMessages = true;
+    const loadButton = document.getElementById('loadOlderButton');
+    if (loadButton) {
+        loadButton.disabled = true;
+        loadButton.textContent = 'Cargando...';
+    }
+
+    try {
+        const beforeCursor = currentConversation.nextCursor;
+        const data = await fetchConversationData(currentConversation.phone_number, {
+            limit: MESSAGES_PAGE_SIZE,
+            before: beforeCursor
+        });
+
+        const olderMessages = normalizeMessages(data.messages);
+        currentConversation.messages = mergeMessageLists(currentConversation.messages || [], olderMessages);
+        currentConversation.hasMore = Boolean(data.has_more);
+
+        if (data.next_cursor) {
+            if (!currentConversation.nextCursor) {
+                currentConversation.nextCursor = data.next_cursor;
+            } else {
+                currentConversation.nextCursor = data.next_cursor < currentConversation.nextCursor
+                    ? data.next_cursor
+                    : currentConversation.nextCursor;
+            }
+        } else if (!currentConversation.hasMore) {
+            currentConversation.nextCursor = null;
+        }
+
+        renderCurrentChat({ scrollToBottom: false, preserveScroll: true });
+    } catch (error) {
+        console.error('Error loading older messages:', error);
+        showToast('No se pudieron cargar mensajes anteriores', 'error');
+    } finally {
+        isLoadingOlderMessages = false;
+        const button = document.getElementById('loadOlderButton');
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Ver mensajes anteriores';
+        }
+    }
+}
+
 // Render Current Chat
-function renderCurrentChat() {
+function renderCurrentChat(options = {}) {
+    const {
+        scrollToBottom = true,
+        preserveScroll = false
+    } = options;
+
     const chatName = document.getElementById('currentChatName');
     const chatPhone = document.getElementById('currentChatPhone');
     const messagesContainer = document.getElementById('messagesContainer');
     const messageInputArea = document.getElementById('messageInputArea');
+    const previousScrollHeight = preserveScroll ? messagesContainer.scrollHeight : null;
+    const previousScrollTop = preserveScroll ? messagesContainer.scrollTop : null;
     
     if (!currentConversation) {
         chatName.textContent = 'Select a conversation';
@@ -261,14 +359,23 @@ function renderCurrentChat() {
     
     // Render messages
     if (currentConversation.messages.length === 0) {
+        const loadMoreHtml = currentConversation.hasMore ? `
+            <div class="load-more-container">
+                <button class="btn-secondary load-more-btn" onclick="loadOlderMessages()" id="loadOlderButton">
+                    Ver mensajes anteriores
+                </button>
+            </div>
+        ` : '';
+
         messagesContainer.innerHTML = `
+            ${loadMoreHtml}
             <div class="welcome-message">
                 <p>No messages in this conversation</p>
                 <p>Start by sending a message below</p>
             </div>
         `;
     } else {
-        messagesContainer.innerHTML = currentConversation.messages.map(msg => {
+        const messagesHtml = currentConversation.messages.map(msg => {
             const text = (msg.message_text ?? msg.content ?? '').trim();
             const direction = msg.direction ?? (msg.role === 'assistant' ? 'outgoing' : 'incoming');
             const sanitized = escapeHtml(text || '').replace(/\n/g, '<br>');
@@ -279,9 +386,23 @@ function renderCurrentChat() {
                 </div>
             `;
         }).join('');
+
+        const loadMoreHtml = currentConversation.hasMore ? `
+            <div class="load-more-container">
+                <button class="btn-secondary load-more-btn" onclick="loadOlderMessages()" id="loadOlderButton">
+                    Ver mensajes anteriores
+                </button>
+            </div>
+        ` : '';
+
+        messagesContainer.innerHTML = `${loadMoreHtml}${messagesHtml}`;
         
-        // Scroll to bottom
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        if (preserveScroll && previousScrollHeight !== null && previousScrollTop !== null) {
+            const newScrollHeight = messagesContainer.scrollHeight;
+            messagesContainer.scrollTop = newScrollHeight - previousScrollHeight + previousScrollTop;
+        } else if (scrollToBottom) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
     }
 }
 

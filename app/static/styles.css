@@ -227,6 +227,24 @@ body {
     gap: 1rem;
 }
 
+.load-more-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+
+.load-more-btn {
+    padding: 0.45rem 1.2rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.load-more-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .welcome-message {
     text-align: center;
     margin: auto;
