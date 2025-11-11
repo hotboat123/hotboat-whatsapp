@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kia-Ai - WhatsApp Management Interface</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <h1>🤖 Kia-Ai</h1>
+                <p class="subtitle">WhatsApp Management Interface</p>
+            </div>
+            <div class="status">
+                <span class="status-indicator connected" id="statusIndicator"></span>
+                <span id="statusText">Connected</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar: Conversations List -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h2>💬 Conversations</h2>
+                    <button class="btn-refresh" onclick="loadConversations()" title="Refresh">
+                        🔄
+                    </button>
+                </div>
+                
+                <div class="search-box">
+                    <input type="text" id="searchConversations" placeholder="Search conversations..." onkeyup="filterConversations()">
+                </div>
+
+                <div class="conversations-list" id="conversationsList">
+                    <!-- Conversations will be loaded here -->
+                </div>
+            </aside>
+
+            <!-- Chat Area -->
+            <main class="chat-area">
+                <div class="chat-header" id="chatHeader">
+                    <div class="chat-info">
+                        <h3 id="currentChatName">Select a conversation</h3>
+                        <p id="currentChatPhone"></p>
+                    </div>
+                    <div class="chat-actions">
+                        <button class="btn-secondary" onclick="showNewMessageModal()">
+                            ➕ New Message
+                        </button>
+                    </div>
+                </div>
+
+                <div class="messages-container" id="messagesContainer">
+                    <div class="welcome-message">
+                        <h2>👋 Welcome to Kia-Ai</h2>
+                        <p>Select a conversation from the left to view messages</p>
+                        <p>or click "New Message" to send a custom message</p>
+                    </div>
+                </div>
+
+                <div class="message-input-area" id="messageInputArea" style="display: none;">
+                    <form onsubmit="sendMessage(event)" id="messageForm">
+                        <textarea 
+                            id="messageInput" 
+                            placeholder="Type your message..." 
+                            rows="3"
+                            maxlength="4096"
+                        ></textarea>
+                        <div class="input-actions">
+                            <div class="char-counter">
+                                <span id="charCount">0</span>/4096
+                            </div>
+                            <button type="submit" class="btn-primary" id="sendButton">
+                                Send 📤
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </main>
+
+            <!-- Right Panel: Lead Info -->
+            <aside class="right-panel" id="rightPanel">
+                <div class="panel-header">
+                    <h3>👤 Lead Information</h3>
+                </div>
+                <div class="lead-info" id="leadInfo">
+                    <p class="no-selection">Select a conversation to view lead details</p>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Modal: New Message -->
+    <div class="modal" id="newMessageModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📱 Send New Message</h2>
+                <button class="modal-close" onclick="closeNewMessageModal()">&times;</button>
+            </div>
+            <form onsubmit="sendNewMessage(event)" id="newMessageForm">
+                <div class="form-group">
+                    <label for="recipientPhone">Phone Number</label>
+                    <input 
+                        type="text" 
+                        id="recipientPhone" 
+                        placeholder="56912345678 (with country code, no +)" 
+                        required
+                        pattern="[0-9]{10,15}"
+                    >
+                    <small>Format: Country code + number (e.g., 56912345678 for Chile)</small>
+                </div>
+                <div class="form-group">
+                    <label for="newMessageText">Message</label>
+                    <textarea 
+                        id="newMessageText" 
+                        placeholder="Type your message here..." 
+                        rows="5"
+                        maxlength="4096"
+                        required
+                    ></textarea>
+                    <small><span id="newMsgCharCount">0</span>/4096 characters</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeNewMessageModal()">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn-primary">
+                        Send Message 📤
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+
