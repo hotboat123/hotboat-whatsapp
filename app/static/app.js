@@ -139,6 +139,7 @@ function showConversationList() {
     if (!isMobileLayout()) return;
     const mainContent = document.querySelector('.main-content');
     if (!mainContent) return;
+    mainContent.scrollTop = 0;
     mainContent.classList.add('show-conversations');
     mainContent.classList.remove('show-chat');
 }
