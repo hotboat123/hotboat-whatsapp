@@ -6,6 +6,21 @@ let messagesCache = {};
 // API Base URL
 const API_BASE = window.location.origin;
 
+function normalizeMessages(messages = []) {
+    return (messages || []).map((msg, index) => {
+        const messageText = msg.message_text ?? msg.content ?? '';
+        const direction = msg.direction ?? (msg.role === 'assistant' ? 'outgoing' : 'incoming');
+        const timestamp = msg.timestamp ?? msg.created_at ?? new Date().toISOString();
+        return {
+            id: msg.id ?? `msg_${Date.now()}_${index}`,
+            message_text: messageText,
+            direction,
+            message_type: msg.message_type ?? 'text',
+            timestamp
+        };
+    });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadConversations();
@@ -119,7 +134,7 @@ async function selectConversation(phoneNumber) {
         currentConversation = {
             phone_number: phoneNumber,
             customer_name: data.lead?.customer_name || phoneNumber,
-            messages: data.messages || []
+            messages: normalizeMessages(data.messages)
         };
         
         // Load lead info
@@ -145,12 +160,15 @@ async function refreshCurrentConversation() {
         if (!response.ok) return; // Silently fail
         
         const data = await response.json();
-        const oldMessageCount = currentConversation.messages.length;
+        const normalized = normalizeMessages(data.messages);
+        const oldMessages = currentConversation.messages || [];
+        const latestOldId = oldMessages.length ? oldMessages[oldMessages.length - 1].id : null;
+        const latestNewId = normalized.length ? normalized[normalized.length - 1].id : null;
         
-        currentConversation.messages = data.messages || [];
+        currentConversation.messages = normalized;
         
-        // Only re-render if there are new messages
-        if (currentConversation.messages.length !== oldMessageCount) {
+        // Only re-render if there are new messages or content changed
+        if (normalized.length !== oldMessages.length || latestNewId !== latestOldId) {
             renderCurrentChat();
         }
     } catch (error) {
