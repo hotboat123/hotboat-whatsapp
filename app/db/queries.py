@@ -278,27 +278,36 @@ async def save_conversation(
 
 async def get_recent_conversations(limit: int = 50) -> List[Dict]:
     """
-    Get recent conversations from database
+    Get recent conversations from database grouped by phone number
     
     Args:
         limit: Maximum number of conversations to return
     
     Returns:
-        List of conversations
+        List of conversations with latest message per phone number
     """
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT 
-                        id,
                         phone_number,
                         customer_name,
+                        created_at,
                         message_text,
                         response_text,
-                        message_type,
-                        created_at
-                    FROM whatsapp_conversations
+                        direction
+                    FROM (
+                        SELECT DISTINCT ON (phone_number)
+                            phone_number,
+                            customer_name,
+                            created_at,
+                            message_text,
+                            response_text,
+                            direction
+                        FROM whatsapp_conversations
+                        ORDER BY phone_number, created_at DESC
+                    ) latest
                     ORDER BY created_at DESC
                     LIMIT %s
                 """, (limit,))
@@ -307,21 +316,33 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                 
                 conversations = []
                 for row in results:
+                    phone_number = row[0]
+                    customer_name = row[1] if row[1] else phone_number
+                    created_at = row[2]
+                    message_text = row[3] or ""
+                    response_text = row[4] or ""
+                    direction = row[5] if row[5] else 'incoming'
+                    
+                    if direction == 'outgoing':
+                        last_message = response_text or message_text
+                    else:
+                        last_message = message_text or response_text
+                    
                     conversations.append({
-                        "id": row[0],
-                        "phone_number": row[1],
-                        "customer_name": row[2],
-                        "message_text": row[3],
-                        "response_text": row[4],
-                        "message_type": row[5],
-                        "created_at": row[6].isoformat() if row[6] else None
+                        "phone_number": phone_number,
+                        "customer_name": customer_name,
+                        "last_message_at": created_at.isoformat() if created_at else None,
+                        "last_message": last_message,
+                        "direction": direction
                     })
                 
+                conversations.sort(key=lambda x: x["last_message_at"] or "", reverse=True)
                 return conversations
     
     except Exception as e:
         logger.error(f"Error querying conversations: {e}")
         return []
+
 
 
 
