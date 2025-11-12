@@ -10,7 +10,7 @@ from app.db.connection import get_connection
 logger = logging.getLogger(__name__)
 
 # Admin notification settings
-ADMIN_PHONE = "56977577307"
+ADMIN_PHONE = "56974950762"
 _last_error_notification = {}  # Track last notification time to avoid spam
 
 
