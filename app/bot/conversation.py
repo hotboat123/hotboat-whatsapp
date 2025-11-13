@@ -26,7 +26,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Número del Capitán Tomás para notificaciones
-CAPITAN_TOMAS_PHONE = "56977577307"  # Tu número personal
+CAPITAN_TOMAS_PHONE = "56974950762"  # Tu número personal
 
 # Mapeo de números a extras
 EXTRAS_NUMBER_MAP = {
