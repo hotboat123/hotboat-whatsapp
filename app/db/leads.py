@@ -4,8 +4,12 @@ Leads and contacts management
 import logging
 from typing import Optional, List, Dict
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app.db.connection import get_connection
+
+# Chilean timezone
+CHILE_TZ = ZoneInfo("America/Santiago")
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +88,9 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "lead_status": "unknown",
                         "notes": None,
                         "tags": [],
-                        "created_at": datetime.now().isoformat(),
-                        "updated_at": datetime.now().isoformat(),
-                        "last_interaction_at": datetime.now().isoformat()
+                        "created_at": datetime.now(CHILE_TZ).isoformat(),
+                        "updated_at": datetime.now(CHILE_TZ).isoformat(),
+                        "last_interaction_at": datetime.now(CHILE_TZ).isoformat()
                     }
     
     except Exception as e:
@@ -251,7 +255,18 @@ async def get_conversation_history(
                     response_text = row[2]  # Bot's response
                     message_type = row[3] if row[3] else 'text'
                     direction = row[4] if row[4] else 'incoming'
-                    timestamp = row[5].isoformat() if row[5] else None
+                    timestamp = row[5]
+                    
+                    # Convert UTC to Chilean timezone
+                    if timestamp:
+                        if timestamp.tzinfo is None:
+                            # If naive datetime, assume it's UTC
+                            timestamp = timestamp.replace(tzinfo=ZoneInfo("UTC"))
+                        # Convert to Chilean time
+                        timestamp = timestamp.astimezone(CHILE_TZ)
+                        timestamp = timestamp.isoformat()
+                    else:
+                        timestamp = None
                     
                     # Add incoming message (from customer)
                     if message_text:

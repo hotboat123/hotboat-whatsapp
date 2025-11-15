@@ -4,10 +4,14 @@ Shopping Cart Manager - handles cart operations for reservations and extras
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from dataclasses import dataclass, asdict
 import json
 
 from app.db.connection import get_connection
+
+# Chilean timezone
+CHILE_TZ = ZoneInfo("America/Santiago")
 
 logger = logging.getLogger(__name__)
 
@@ -221,7 +225,7 @@ class CartManager:
                             cart_data = EXCLUDED.cart_data,
                             customer_name = EXCLUDED.customer_name,
                             updated_at = EXCLUDED.updated_at
-                    """, (phone_number, customer_name, cart_data, datetime.now()))
+                    """, (phone_number, customer_name, cart_data, datetime.now(CHILE_TZ)))
                     
                     conn.commit()
                     logger.info(f"Cart saved for {phone_number}")

@@ -209,7 +209,7 @@ class ConversationManager:
             conversation["messages"].append({
                 "role": "user",
                 "content": message_text,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(CHILE_TZ).isoformat(),
                 "message_id": message_id
             })
             
@@ -458,11 +458,11 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             conversation["messages"].append({
                 "role": "assistant",
                 "content": response,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now(CHILE_TZ).isoformat()
             })
             
             # Update last interaction
-            conversation["last_interaction"] = datetime.now().isoformat()
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
             
             return response
             
@@ -495,8 +495,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 "phone": phone_number,
                 "name": contact_name,
                 "messages": history if history else [],
-                "created_at": datetime.now().isoformat(),
-                "last_interaction": datetime.now().isoformat(),
+                "created_at": datetime.now(CHILE_TZ).isoformat(),
+                "last_interaction": datetime.now(CHILE_TZ).isoformat(),
                 "metadata": {
                     "lead_status": lead.get("lead_status") if lead else "unknown",
                     "lead_id": lead.get("id") if lead else None

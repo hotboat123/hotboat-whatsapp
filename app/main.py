@@ -19,8 +19,12 @@ from app.db.leads import (
     import_conversation_batch
 )
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel
 from typing import List, Optional
+
+# Chilean timezone
+CHILE_TZ = ZoneInfo("America/Santiago")
 import os
 
 # Setup logging
@@ -160,7 +164,7 @@ async def list_conversations(limit: int = 50):
 async def list_appointments(days_ahead: int = 30):
     """List appointments for the next N days"""
     try:
-        start_date = datetime.now()
+        start_date = datetime.now(CHILE_TZ)
         end_date = start_date + timedelta(days=days_ahead)
         appointments = await get_appointments_between_dates(start_date, end_date)
         return {
