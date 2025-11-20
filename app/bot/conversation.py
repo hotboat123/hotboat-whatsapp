@@ -282,7 +282,8 @@ O elige:
             elif message_text.strip() == "18":
                 logger.info("Global shortcut 18: Ver extras")
                 conversation["metadata"]["awaiting_extra_selection"] = True
-                response = self.faq_handler.get_response("extras")
+                language = conversation.get("metadata", {}).get("language", "es")
+                response = self.faq_handler.get_response("extras", language)
             elif message_text.strip() == "19":
                 logger.info("Global shortcut 19: Menu principal")
                 conversation["metadata"]["awaiting_extra_selection"] = False
@@ -348,29 +349,30 @@ O elige:
             # BUT ONLY if we're in a menu context (early in conversation or user just asked for menu)
             elif (menu_number := self.faq_handler.is_menu_number(message_text)) and self._should_interpret_as_menu(message_text, conversation):
                 logger.info(f"Menu number selected: {menu_number}")
+                language = conversation.get("metadata", {}).get("language", "es")
                 if menu_number == 1:
                     # Option 1: Disponibilidad y horarios
-                    response = self._ask_for_reservation_date(conversation)
+                    response = self._ask_for_reservation_date(conversation, language)
                 elif menu_number == 2:
                     # Option 2: Precios por persona
-                    response = self.faq_handler.get_response("precio")
+                    response = self.faq_handler.get_response("precio", language)
                 elif menu_number == 3:
                     # Option 3: Características del HotBoat
-                    response = self.faq_handler.get_response("caracteristicas")
+                    response = self.faq_handler.get_response("caracteristicas", language)
                 elif menu_number == 4:
                     # Option 4: Extras y promociones
                     conversation["metadata"]["awaiting_extra_selection"] = True
                     logger.info(f"Set awaiting_extra_selection=True for {from_number}")
                     logger.info(f"Metadata: {conversation.get('metadata', {})}")
-                    response = self.faq_handler.get_response("extras")
+                    response = self.faq_handler.get_response("extras", language)
                 elif menu_number == 5:
                     # Option 5: Ubicación y reseñas
-                    response = self.faq_handler.get_response("ubicación")
+                    response = self.faq_handler.get_response("ubicación", language)
                 elif menu_number == 6:
                     # Option 6: Llamar a Tomás
                     # Send notification to Capitán Tomás
                     await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
-                    response = self.faq_handler.get_response("llamar a tomas")
+                    response = self.faq_handler.get_response("llamar a tomas", language)
                 else:
                     response = "No entendí esa opción. Por favor elige un número del 1 al 6, grumete ⚓"
             # Check if asking about accommodations (special handling with images)
@@ -1509,16 +1511,10 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
         metadata["awaiting_party_size"] = False
         metadata["awaiting_date_time_selection"] = False
     
-    def _ask_for_reservation_date(self, conversation: dict) -> str:
+    def _ask_for_reservation_date(self, conversation: dict, language: str = "es") -> str:
         """Prompt user to choose a date as first step of reservation flow."""
         self._prepare_reservation_flow(conversation, reset=True)
-        return """📅 *Vamos paso a paso para agendar tu HotBoat*.
-
-¿Para qué fecha te gustaría navegar?  
-Puedes decirme:
-• Un día específico (ej: 14 de noviembre)  
-• Un día de la semana (ej: viernes)  
-• *Hoy* o *mañana* 🚤"""
+        return get_text("ask_for_date", language)
 
     async def _handle_reservation_date_response(
         self,

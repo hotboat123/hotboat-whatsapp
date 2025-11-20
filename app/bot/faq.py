@@ -4,6 +4,8 @@ FAQ Handler - predefined responses for common questions
 import logging
 from typing import Optional
 
+from app.bot.translations import get_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -11,6 +13,7 @@ class FAQHandler:
     """Handle frequently asked questions with predefined answers"""
     
     def __init__(self):
+        self.language = "es"  # Default language
         self.faqs = {
 
 
@@ -257,27 +260,57 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
             "opiniones": "ubicación",  # Alias
         }
     
-    def get_response(self, message: str) -> Optional[str]:
+    def set_language(self, language: str):
+        """Set the language for responses"""
+        self.language = language
+    
+    def get_response(self, message: str, language: str = None) -> Optional[str]:
         """
         Get FAQ response if message matches a question
         
         Args:
             message: User's message
+            language: Language code (es, en, pt). If None, uses default
         
         Returns:
             FAQ response or None
         """
+        lang = language or self.language
         message_lower = message.lower().strip()
+        
+        # Map FAQ keys to translation keys
+        faq_to_translation = {
+            "caracteristicas": "features",
+            "precio": "pricing",
+            "ubicación": "location",
+            "extras": "extras_menu",
+            "llamar a tomas": "call_captain",
+            "duración": "duration",
+            "traer": "what_to_bring",
+            "clima": "weather",
+            "contacto": "contact_info",
+            "cancelar": "cancellation",
+        }
         
         # Check for exact matches or keywords
         for keyword, response in self.faqs.items():
             if keyword in message_lower:
-                # If response is an alias, get the actual response
+                # If response is an alias, resolve it
+                actual_keyword = keyword
                 if isinstance(response, str) and response in self.faqs:
-                    response = self.faqs[response]
+                    actual_keyword = response
                 
-                logger.info(f"FAQ match found for keyword: {keyword}")
-                return response
+                # Check if we have a translation for this keyword
+                if actual_keyword in faq_to_translation:
+                    translation_key = faq_to_translation[actual_keyword]
+                    logger.info(f"FAQ match found for keyword: {keyword} -> {translation_key}")
+                    return get_text(translation_key, lang)
+                else:
+                    # Fallback to original response if no translation available
+                    if isinstance(response, str) and response in self.faqs:
+                        response = self.faqs[response]
+                    logger.info(f"FAQ match found for keyword: {keyword} (no translation)")
+                    return response
         
         return None
     
@@ -324,6 +357,7 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
                 pass
         
         return None
+
 
 
 

@@ -5,6 +5,7 @@ import logging
 from typing import Dict, List, Optional, Any
 
 from app.config.accommodations_config import ACCOMMODATION_IMAGES
+from app.bot.translations import get_text
 
 logger = logging.getLogger(__name__)
 
@@ -100,35 +101,17 @@ class AccommodationsHandler:
             self.relikura_hostel,
         ]
     
-    def get_text_response(self) -> str:
-        """Get text response about accommodations"""
-        return """🌊🔥 *HotBoat + Alojamiento en Pucón*
-
-Arma tu experiencia a tu medida con HotBoat y nuestros alojamientos recomendados.
-
-⭐ *Open Sky* – Para parejas románticas
-Domos transparentes con vista a las estrellas 🌌
-
-💰 $100.000 / noche – Domo con tina de baño interior (2 pers.)
-💰 $120.000 / noche – Domo con hidromasaje interior (2 pers.)
-
-🌿 *Raíces de Relikura* – Familiar con actividades
-Hostal y cabañas junto al río, con tinaja y entorno natural 🍃
-
-*Cabañas:*
-💰 $60.000 / noche (2 pers.)
-💰 $80.000 / noche (4 pers.)
-💰 $100.000 / noche (6 pers.)
-
-*Hostal:*
-💰 $20.000 / noche por persona
-
-📌 *Cómo funciona:*
-1. Me dices la fecha y la opción de alojamiento
-2. Te confirmo disponibilidad
-3. Pagas todo en un solo link y quedas reservado
-
-📲 Responde este mensaje con la fecha y alojamiento que prefieras"""
+    def get_text_response(self, language: str = "es") -> str:
+        """
+        Get text response about accommodations
+        
+        Args:
+            language: Language code (es, en, pt)
+        
+        Returns:
+            Accommodations text in specified language
+        """
+        return get_text("accommodations", language)
     
     def get_accommodations_with_images(self) -> List[Dict[str, Any]]:
         """

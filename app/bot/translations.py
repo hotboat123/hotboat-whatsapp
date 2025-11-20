@@ -273,6 +273,749 @@ Pronto para zarpar ou que número você escolhe, marujo?"""
 - 6 pessoas: $32.990 por pessoa (Total: $197.940 CLP)
 - 7 pessoas: $29.990 por pessoa (Total: $209.930 CLP)
 *Crianças pagam a partir dos 6 anos"""
+    },
+    
+    # ===== FAQ RESPONSES =====
+    
+    # Features / Características
+    "features": {
+        "es": """Estas son las características de la experiencia HotBoat 🚤🔥:
+
+⚡ Motor eléctrico (silencioso y sustentable)
+⏱️ Duración: 2 horas
+🔥 Tú eliges la temperatura del agua (antes y durante el paseo)
+🛥️ Fácil de navegar → ¡puedes manejarlo tú mismo!
+🎶 Escucha tu propia música con parlante bluetooth + bolsas impermeables
+🎥 Video cinematográfico de tu aventura disponible
+🍹 ¡Disfruta bebestibles a bordo del HotBoat! Se mantendrán fríos en el cooler.
+🧺 Opción de tablas de picoteo a bordo
+🧼 Se limpia antes de cada uso, siempre impecable
+
+¿Te gustaría reservar tu experiencia?""",
+        
+        "en": """Here are the features of the HotBoat experience 🚤🔥:
+
+⚡ Electric motor (silent and sustainable)
+⏱️ Duration: 2 hours
+🔥 You choose the water temperature (before and during the ride)
+🛥️ Easy to navigate → you can drive it yourself!
+🎶 Listen to your own music with bluetooth speaker + waterproof bags
+🎥 Cinematic video of your adventure available
+🍹 Enjoy drinks on board the HotBoat! They'll stay cold in the cooler.
+🧺 Charcuterie board option on board
+🧼 Cleaned before each use, always immaculate
+
+Would you like to book your experience?""",
+        
+        "pt": """Estas são as características da experiência HotBoat 🚤🔥:
+
+⚡ Motor elétrico (silencioso e sustentável)
+⏱️ Duração: 2 horas
+🔥 Você escolhe a temperatura da água (antes e durante o passeio)
+🛥️ Fácil de navegar → você pode dirigir você mesmo!
+🎶 Ouça sua própria música com alto-falante bluetooth + bolsas impermeáveis
+🎥 Vídeo cinematográfico da sua aventura disponível
+🍹 Desfrute de bebidas a bordo do HotBoat! Ficarão geladas no cooler.
+🧺 Opção de tábua de frios a bordo
+🧼 Limpo antes de cada uso, sempre impecável
+
+Gostaria de reservar sua experiência?"""
+    },
+    
+    # Pricing detailed
+    "pricing": {
+        "es": """💰 *Precios HotBoat:*
+
+👥 *2 personas*
+• $69.990 x persona
+• Total: *$139.980*
+
+👥 *3 personas*
+• $54.990 x persona
+• Total: *$164.970*
+
+👥 *4 personas*
+• $44.990 x persona
+• Total: *$179.960*
+
+👥 *5 personas*
+• $38.990 x persona
+• Total: *$194.950*
+
+👥 *6 personas*
+• $32.990 x persona
+• Total: *$197.940*
+
+👥 *7 personas*
+• $29.990 x persona
+• Total: *$209.930*
+
+_*niños pagan desde los 6 años_
+
+Aquí puedes reservar tu horario directo 👇
+https://hotboatchile.com/es/book-hotboat/""",
+        
+        "en": """💰 *HotBoat Prices:*
+
+👥 *2 people*
+• $69,990 per person
+• Total: *$139,980 CLP*
+
+👥 *3 people*
+• $54,990 per person
+• Total: *$164,970 CLP*
+
+👥 *4 people*
+• $44,990 per person
+• Total: *$179,960 CLP*
+
+👥 *5 people*
+• $38,990 per person
+• Total: *$194,950 CLP*
+
+👥 *6 people*
+• $32,990 per person
+• Total: *$197,940 CLP*
+
+👥 *7 people*
+• $29,990 per person
+• Total: *$209,930 CLP*
+
+_*children pay from 6 years old_
+
+Book your time slot here 👇
+https://hotboatchile.com/en/book-hotboat/""",
+        
+        "pt": """💰 *Preços HotBoat:*
+
+👥 *2 pessoas*
+• $69.990 por pessoa
+• Total: *$139.980 CLP*
+
+👥 *3 pessoas*
+• $54.990 por pessoa
+• Total: *$164.970 CLP*
+
+👥 *4 pessoas*
+• $44.990 por pessoa
+• Total: *$179.960 CLP*
+
+👥 *5 pessoas*
+• $38.990 por pessoa
+• Total: *$194.950 CLP*
+
+👥 *6 pessoas*
+• $32.990 por pessoa
+• Total: *$197.940 CLP*
+
+👥 *7 pessoas*
+• $29.990 por pessoa
+• Total: *$209.930 CLP*
+
+_*crianças pagam a partir dos 6 anos_
+
+Reserve seu horário aqui 👇
+https://hotboatchile.com/pt/book-hotboat/"""
+    },
+    
+    # Location
+    "location": {
+        "es": """📍 *Ubicación HotBoat:*
+
+📍 Estamos entre Pucón y Curarrehue, en pleno corazón de La Araucanía 🌿
+
+🗺️ Mira fotos, ubicación y más de 100 reseñas ⭐⭐⭐⭐⭐ de nuestros navegantes que vivieron la experiencia HotBoat!
+https://maps.app.goo.gl/jVYVHRzekkmFRjEH7
+
+🚗 Fácil acceso 100% pavimentado desde:
+• Pucón: 25 min
+• Villarrica centro: 50 min
+• Temuco: 2 horas
+
+¿Te gustaría reservar tu experiencia?""",
+        
+        "en": """📍 *HotBoat Location:*
+
+📍 We're between Pucón and Curarrehue, in the heart of La Araucanía 🌿
+
+🗺️ Check out photos, location and over 100 ⭐⭐⭐⭐⭐ reviews from our sailors who lived the HotBoat experience!
+https://maps.app.goo.gl/jVYVHRzekkmFRjEH7
+
+🚗 Easy access, 100% paved from:
+• Pucón: 25 min
+• Villarrica downtown: 50 min
+• Temuco: 2 hours
+
+Would you like to book your experience?""",
+        
+        "pt": """📍 *Localização HotBoat:*
+
+📍 Estamos entre Pucón e Curarrehue, no coração de La Araucanía 🌿
+
+🗺️ Veja fotos, localização e mais de 100 avaliações ⭐⭐⭐⭐⭐ dos nossos marinheiros que viveram a experiência HotBoat!
+https://maps.app.goo.gl/jVYVHRzekkmFRjEH7
+
+🚗 Acesso fácil, 100% pavimentado desde:
+• Pucón: 25 min
+• Villarrica centro: 50 min
+• Temuco: 2 horas
+
+Gostaria de reservar sua experiência?"""
+    },
+    
+    # Extras menu
+    "extras_menu": {
+        "es": """✨ *Servicios Extra:*
+
+¿Quieres agregar algo especial a tu HotBoat?
+
+🍇 *Tablas de Picoteo*
+1️⃣ Tabla grande (4 personas) - $25.000
+2️⃣ Tabla pequeña (2 personas) - $20.000
+
+🥤 *Bebidas y Jugos* (sin alcohol)
+3️⃣ Jugo natural 1L (piña o naranja) - $10.000
+4️⃣ Lata bebida (Coca-Cola o Fanta) - $2.900
+5️⃣ Agua mineral 1,5 L - $2.500
+6️⃣ Helado individual (Cookies & Cream 🍪 o Frambuesa 🍫) - $3.500
+
+🌹 *Modo Romántico*
+7️⃣ Pétalos de rosas y decoración especial - $25.000
+
+🌙 *Decoración Nocturna Extra*
+8️⃣ Velas LED decorativas - $10.000
+9️⃣ Letras luminosas "Te Amo" / "Love" - $15.000
+🔟 Pack completo (velas + letras) - $20.000
+
+✨🎥 *Video personalizado*
+1️⃣1️⃣ Video 15s - $30.000
+1️⃣2️⃣ Video 60s - $40.000
+
+🚐 *Transporte*
+1️⃣3️⃣ Ida y vuelta desde Pucón - $50.000
+
+🧻 *Toallas*
+1️⃣4️⃣ Toalla normal - $9.000
+1️⃣5️⃣ Toalla poncho - $10.000
+
+🩴 *Otros*
+1️⃣6️⃣ Chalas de ducha - $10.000
+1️⃣7️⃣ Reserva FLEX (+10% - cancela/reprograma cuando quieras)
+
+📝 *Escribe el número del extra que deseas agregar* 🚤""",
+        
+        "en": """✨ *Extra Services:*
+
+Want to add something special to your HotBoat?
+
+🍇 *Charcuterie Boards*
+1️⃣ Large board (4 people) - $25,000 CLP
+2️⃣ Small board (2 people) - $20,000 CLP
+
+🥤 *Drinks and Juices* (non-alcoholic)
+3️⃣ Natural juice 1L (pineapple or orange) - $10,000 CLP
+4️⃣ Canned drink (Coca-Cola or Fanta) - $2,900 CLP
+5️⃣ Mineral water 1.5 L - $2,500 CLP
+6️⃣ Individual ice cream (Cookies & Cream 🍪 or Raspberry 🍫) - $3,500 CLP
+
+🌹 *Romantic Mode*
+7️⃣ Rose petals and special decoration - $25,000 CLP
+
+🌙 *Extra Night Decoration*
+8️⃣ Decorative LED candles - $10,000 CLP
+9️⃣ Illuminated letters "Te Amo" / "Love" - $15,000 CLP
+🔟 Complete pack (candles + letters) - $20,000 CLP
+
+✨🎥 *Personalized video*
+1️⃣1️⃣ 15s video - $30,000 CLP
+1️⃣2️⃣ 60s video - $40,000 CLP
+
+🚐 *Transportation*
+1️⃣3️⃣ Round trip from Pucón - $50,000 CLP
+
+🧻 *Towels*
+1️⃣4️⃣ Regular towel - $9,000 CLP
+1️⃣5️⃣ Poncho towel - $10,000 CLP
+
+🩴 *Other*
+1️⃣6️⃣ Shower flip-flops - $10,000 CLP
+1️⃣7️⃣ FLEX Reservation (+10% - cancel/reschedule anytime)
+
+📝 *Type the number of the extra you want to add* 🚤""",
+        
+        "pt": """✨ *Serviços Extras:*
+
+Quer adicionar algo especial ao seu HotBoat?
+
+🍇 *Tábuas de Frios*
+1️⃣ Tábua grande (4 pessoas) - $25.000 CLP
+2️⃣ Tábua pequena (2 pessoas) - $20.000 CLP
+
+🥤 *Bebidas e Sucos* (sem álcool)
+3️⃣ Suco natural 1L (abacaxi ou laranja) - $10.000 CLP
+4️⃣ Lata de bebida (Coca-Cola ou Fanta) - $2.900 CLP
+5️⃣ Água mineral 1,5 L - $2.500 CLP
+6️⃣ Sorvete individual (Cookies & Cream 🍪 ou Framboesa 🍫) - $3.500 CLP
+
+🌹 *Modo Romântico*
+7️⃣ Pétalas de rosas e decoração especial - $25.000 CLP
+
+🌙 *Decoração Noturna Extra*
+8️⃣ Velas LED decorativas - $10.000 CLP
+9️⃣ Letras iluminadas "Te Amo" / "Love" - $15.000 CLP
+🔟 Pacote completo (velas + letras) - $20.000 CLP
+
+✨🎥 *Vídeo personalizado*
+1️⃣1️⃣ Vídeo 15s - $30.000 CLP
+1️⃣2️⃣ Vídeo 60s - $40.000 CLP
+
+🚐 *Transporte*
+1️⃣3️⃣ Ida e volta desde Pucón - $50.000 CLP
+
+🧻 *Toalhas*
+1️⃣4️⃣ Toalha normal - $9.000 CLP
+1️⃣5️⃣ Toalha poncho - $10.000 CLP
+
+🩴 *Outros*
+1️⃣6️⃣ Chinelos de banho - $10.000 CLP
+1️⃣7️⃣ Reserva FLEX (+10% - cancele/reagende quando quiser)
+
+📝 *Digite o número do extra que deseja adicionar* 🚤"""
+    },
+    
+    # Contact Captain
+    "call_captain": {
+        "es": """👨‍✈️🌿 *Capitán Tomás al rescate*
+            
+¡Perfecto, grumete! He avisado al Capitán Tomás que necesita hablar contigo 👨‍✈️
+            
+El Capitán tomará el timón en cuanto vuelva a cubierta y se comunicará contigo pronto 📞
+            
+Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré de ayudarte lo mejor que pueda ⚓
+            
+¡Gracias por tu paciencia!""",
+        
+        "en": """👨‍✈️🌿 *Captain Tomás to the rescue*
+            
+Perfect, sailor! I've notified Captain Tomás that you need to talk to him 👨‍✈️
+            
+The Captain will take the helm as soon as he's back on deck and will contact you soon 📞
+            
+In the meantime, if you have any urgent questions, you can write to me and I'll try to help you as best I can ⚓
+            
+Thanks for your patience!""",
+        
+        "pt": """👨‍✈️🌿 *Capitão Tomás ao resgate*
+            
+Perfeito, marujo! Avisei o Capitão Tomás que você precisa falar com ele 👨‍✈️
+            
+O Capitão assumirá o leme assim que retornar ao convés e entrará em contato em breve 📞
+            
+Enquanto isso, se você tiver alguma dúvida urgente, pode me escrever e tentarei ajudá-lo da melhor forma possível ⚓
+            
+Obrigado pela sua paciência!"""
+    },
+    
+    # Duration
+    "duration": {
+        "es": """⏱️ *Duración del tour:*
+
+El tour Hot Boat tiene una duración aproximada de:
+• 1.5 a 2 horas en el lago
+
+Incluye:
+• Briefing de seguridad
+• Recorrido por puntos destacados
+• Tiempo para fotos
+• Experiencia completa
+
+¿Alguna otra duda?""",
+        
+        "en": """⏱️ *Tour duration:*
+
+The Hot Boat tour lasts approximately:
+• 1.5 to 2 hours on the lake
+
+Includes:
+• Safety briefing
+• Tour of highlights
+• Time for photos
+• Complete experience
+
+Any other questions?""",
+        
+        "pt": """⏱️ *Duração do passeio:*
+
+O passeio Hot Boat tem duração aproximada de:
+• 1,5 a 2 horas no lago
+
+Inclui:
+• Briefing de segurança
+• Passeio pelos pontos destacados
+• Tempo para fotos
+• Experiência completa
+
+Alguma outra dúvida?"""
+    },
+    
+    # What to bring
+    "what_to_bring": {
+        "es": """🎒 *¿Qué traer?*
+
+📋 Recomendamos:
+• Protector solar ☀️
+• Lentes de sol 🕶️
+• Ropa cómoda
+• Chaqueta (puede hacer viento)
+• Cámara para fotos 📸
+• Ganas de pasarlo bien 🎉
+
+✅ Nosotros proporcionamos:
+• Chalecos salvavidas
+• Equipo de seguridad
+• Guía experto
+
+¿Lista para la aventura?""",
+        
+        "en": """🎒 *What to bring?*
+
+📋 We recommend:
+• Sunscreen ☀️
+• Sunglasses 🕶️
+• Comfortable clothes
+• Jacket (it can be windy)
+• Camera for photos 📸
+• Ready to have fun 🎉
+
+✅ We provide:
+• Life jackets
+• Safety equipment
+• Expert guide
+
+Ready for the adventure?""",
+        
+        "pt": """🎒 *O que trazer?*
+
+📋 Recomendamos:
+• Protetor solar ☀️
+• Óculos de sol 🕶️
+• Roupa confortável
+• Jaqueta (pode ventar)
+• Câmera para fotos 📸
+• Vontade de se divertir 🎉
+
+✅ Nós fornecemos:
+• Coletes salva-vidas
+• Equipamento de segurança
+• Guia especializado
+
+Pronto para a aventura?"""
+    },
+    
+    # Weather/Season
+    "weather": {
+        "es": """🌤️ *Mejor época:*
+
+Operamos principalmente en temporada alta:
+• Diciembre - Marzo (verano)
+• Octubre - Noviembre (primavera)
+
+El lago Villarrica es hermoso todo el año, pero el mejor clima es en verano.
+
+❄️ En invierno: consultar disponibilidad
+
+¿Para qué fecha te interesa?""",
+        
+        "en": """🌤️ *Best season:*
+
+We operate mainly in high season:
+• December - March (summer)
+• October - November (spring)
+
+Lake Villarrica is beautiful year-round, but the best weather is in summer.
+
+❄️ In winter: check availability
+
+What date are you interested in?""",
+        
+        "pt": """🌤️ *Melhor época:*
+
+Operamos principalmente na alta temporada:
+• Dezembro - Março (verão)
+• Outubro - Novembro (primavera)
+
+O lago Villarrica é lindo o ano todo, mas o melhor clima é no verão.
+
+❄️ No inverno: consultar disponibilidade
+
+Para qual data você está interessado?"""
+    },
+    
+    # Contact info
+    "contact_info": {
+        "es": """📞 *Contáctanos:*
+
+📱 WhatsApp: +56 9 1234 5678
+📧 Email: info@hotboatchile.com
+🌐 Web: https://hotboatchile.com
+
+📍 Villarrica, Región de La Araucanía, Chile
+
+¡Escríbenos para reservar! 🚤""",
+        
+        "en": """📞 *Contact us:*
+
+📱 WhatsApp: +56 9 1234 5678
+📧 Email: info@hotboatchile.com
+🌐 Web: https://hotboatchile.com
+
+📍 Villarrica, La Araucanía Region, Chile
+
+Write to us to book! 🚤""",
+        
+        "pt": """📞 *Contate-nos:*
+
+📱 WhatsApp: +56 9 1234 5678
+📧 Email: info@hotboatchile.com
+🌐 Web: https://hotboatchile.com
+
+📍 Villarrica, Região de La Araucanía, Chile
+
+Escreva-nos para reservar! 🚤"""
+    },
+    
+    # Cancellation policy
+    "cancellation": {
+        "es": """🔄 *Política de cancelación:*
+
+• Cancelación gratuita hasta 48h antes
+• Entre 24-48h: 50% de reembolso
+• Menos de 24h: No reembolsable
+
+⛈️ Mal clima: Reprogramamos sin costo
+
+💳 Política de pago: Se requiere anticipo del 30% para reservar
+
+¿Necesitas más información?""",
+        
+        "en": """🔄 *Cancellation policy:*
+
+• Free cancellation up to 48h before
+• Between 24-48h: 50% refund
+• Less than 24h: Non-refundable
+
+⛈️ Bad weather: We reschedule at no cost
+
+💳 Payment policy: 30% deposit required to book
+
+Need more information?""",
+        
+        "pt": """🔄 *Política de cancelamento:*
+
+• Cancelamento gratuito até 48h antes
+• Entre 24-48h: 50% de reembolso
+• Menos de 24h: Não reembolsável
+
+⛈️ Mau tempo: Reagendamos sem custo
+
+💳 Política de pagamento: Depósito de 30% necessário para reservar
+
+Precisa de mais informações?"""
+    },
+    
+    # ===== ACCOMMODATION MESSAGES =====
+    
+    "accommodations": {
+        "es": """🌊🔥 *HotBoat + Alojamiento en Pucón*
+
+Arma tu experiencia a tu medida con HotBoat y nuestros alojamientos recomendados.
+
+⭐ *Open Sky* – Para parejas románticas
+Domos transparentes con vista a las estrellas 🌌
+
+💰 $100.000 / noche – Domo con tina de baño interior (2 pers.)
+💰 $120.000 / noche – Domo con hidromasaje interior (2 pers.)
+
+🌿 *Raíces de Relikura* – Familiar con actividades
+Hostal y cabañas junto al río, con tinaja y entorno natural 🍃
+
+*Cabañas:*
+💰 $60.000 / noche (2 pers.)
+💰 $80.000 / noche (4 pers.)
+💰 $100.000 / noche (6 pers.)
+
+*Hostal:*
+💰 $20.000 / noche por persona
+
+📌 *Cómo funciona:*
+1. Me dices la fecha y la opción de alojamiento
+2. Te confirmo disponibilidad
+3. Pagas todo en un solo link y quedas reservado
+
+📲 Responde este mensaje con la fecha y alojamiento que prefieras""",
+        
+        "en": """🌊🔥 *HotBoat + Accommodation in Pucón*
+
+Build your experience your way with HotBoat and our recommended accommodations.
+
+⭐ *Open Sky* – For romantic couples
+Transparent domes with starry views 🌌
+
+💰 $100,000 CLP / night – Dome with indoor bathtub (2 people)
+💰 $120,000 CLP / night – Dome with indoor hydromassage (2 people)
+
+🌿 *Raíces de Relikura* – Family with activities
+Hostel and cabins by the river, with hot tub and natural surroundings 🍃
+
+*Cabins:*
+💰 $60,000 CLP / night (2 people)
+💰 $80,000 CLP / night (4 people)
+💰 $100,000 CLP / night (6 people)
+
+*Hostel:*
+💰 $20,000 CLP / night per person
+
+📌 *How it works:*
+1. Tell me the date and accommodation option
+2. I confirm availability
+3. Pay everything in one link and you're booked
+
+📲 Reply to this message with your preferred date and accommodation""",
+        
+        "pt": """🌊🔥 *HotBoat + Hospedagem em Pucón*
+
+Monte sua experiência do seu jeito com HotBoat e nossas hospedagens recomendadas.
+
+⭐ *Open Sky* – Para casais românticos
+Domos transparentes com vista para as estrelas 🌌
+
+💰 $100.000 CLP / noite – Domo com banheira interna (2 pessoas)
+💰 $120.000 CLP / noite – Domo com hidromassagem interna (2 pessoas)
+
+🌿 *Raíces de Relikura* – Familiar com atividades
+Albergue e cabanas à beira do rio, com ofurô e ambiente natural 🍃
+
+*Cabanas:*
+💰 $60.000 CLP / noite (2 pessoas)
+💰 $80.000 CLP / noite (4 pessoas)
+💰 $100.000 CLP / noite (6 pessoas)
+
+*Albergue:*
+💰 $20.000 CLP / noite por pessoa
+
+📌 *Como funciona:*
+1. Me diz a data e a opção de hospedagem
+2. Confirmo a disponibilidade
+3. Pague tudo em um link e você está reservado
+
+📲 Responda esta mensagem com sua data e hospedagem preferidas"""
+    },
+    
+    # ===== RESERVATION FLOW MESSAGES =====
+    
+    "ask_for_date": {
+        "es": """📅 *¿Para qué fecha te gustaría reservar?*
+
+Escríbeme la fecha, por ejemplo:
+• "15 de enero"
+• "martes 23"
+• "próximo sábado"
+
+¿Qué fecha prefieres, grumete? ⚓""",
+        
+        "en": """📅 *What date would you like to book?*
+
+Write me the date, for example:
+• "January 15"
+• "Tuesday 23rd"
+• "next Saturday"
+
+What date do you prefer, sailor? ⚓""",
+        
+        "pt": """📅 *Para qual data você gostaria de reservar?*
+
+Escreva-me a data, por exemplo:
+• "15 de janeiro"
+• "terça-feira 23"
+• "próximo sábado"
+
+Que data você prefere, marujo? ⚓"""
+    },
+    
+    "ask_for_party_size": {
+        "es": """👥 *¿Para cuántas personas?*
+
+Por favor, escríbeme el número de personas (de 2 a 7):
+• Ejemplo: "4 personas"
+• O simplemente: "4"
+
+¿Cuántos navegantes zarparán? ⚓""",
+        
+        "en": """👥 *For how many people?*
+
+Please write me the number of people (2 to 7):
+• Example: "4 people"
+• Or simply: "4"
+
+How many sailors will set sail? ⚓""",
+        
+        "pt": """👥 *Para quantas pessoas?*
+
+Por favor, escreva-me o número de pessoas (de 2 a 7):
+• Exemplo: "4 pessoas"
+• Ou simplesmente: "4"
+
+Quantos marinheiros vão zarpar? ⚓"""
+    },
+    
+    "reservation_confirmed": {
+        "es": """✅ *Solicitud de Reserva Recibida*
+
+📞 *El Capitán Tomás se comunicará contigo pronto por WhatsApp o teléfono para confirmar tu reserva y coordinar el pago* 👨‍✈️
+
+Por mientras, envíanos tu *email* y *nombre completo* por favor 📝
+
+¡Gracias por elegir HotBoat! 🚤🌊""",
+        
+        "en": """✅ *Reservation Request Received*
+
+📞 *Captain Tomás will contact you soon via WhatsApp or phone to confirm your booking and coordinate payment* 👨‍✈️
+
+In the meantime, please send us your *email* and *full name* 📝
+
+Thanks for choosing HotBoat! 🚤🌊""",
+        
+        "pt": """✅ *Solicitação de Reserva Recebida*
+
+📞 *O Capitão Tomás entrará em contato em breve via WhatsApp ou telefone para confirmar sua reserva e coordenar o pagamento* 👨‍✈️
+
+Enquanto isso, envie-nos seu *email* e *nome completo* por favor 📝
+
+Obrigado por escolher HotBoat! 🚤🌊"""
+    },
+    
+    "invalid_party_size": {
+        "es": "⚠️ El número debe ser entre 2 y 7 personas. ¿Cuántos serán?",
+        "en": "⚠️ The number must be between 2 and 7 people. How many will you be?",
+        "pt": "⚠️ O número deve ser entre 2 e 7 pessoas. Quantos serão?"
+    },
+    
+    "extra_added": {
+        "es": "✅ Extra agregado al carrito",
+        "en": "✅ Extra added to cart",
+        "pt": "✅ Extra adicionado ao carrinho"
+    },
+    
+    "cart_cleared": {
+        "es": "🗑️ Carrito vaciado",
+        "en": "🗑️ Cart cleared",
+        "pt": "🗑️ Carrinho esvaziado"
+    },
+    
+    "processing": {
+        "es": "⏳ Procesando...",
+        "en": "⏳ Processing...",
+        "pt": "⏳ Processando..."
     }
 }
 
