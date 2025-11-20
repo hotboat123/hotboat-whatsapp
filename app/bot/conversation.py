@@ -12,6 +12,10 @@ from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS, CHILE_TZ
 from app.bot.faq import FAQHandler
 from app.bot.accommodations import accommodations_handler
 from app.bot.cart import CartManager
+from app.bot.translations import (
+    get_text, is_language_selection, get_language_from_selection,
+    detect_language_command, LANGUAGES
+)
 from app.config import get_settings
 from app.db.leads import get_or_create_lead, get_conversation_history
 from app.whatsapp.client import WhatsAppClient
@@ -215,8 +219,25 @@ class ConversationManager:
             
             # Always show welcome message on first interaction, regardless of greeting
             if is_first:
-                logger.info("First message with greeting - sending welcome message")
-                response = self._get_main_menu_message()
+                logger.info("First message - showing language selection")
+                conversation["metadata"]["awaiting_language_selection"] = True
+                response = get_text("welcome_with_language", "es")
+            # PRIORITY 0: Handle language selection (must come before other checks)
+            elif conversation.get("metadata", {}).get("awaiting_language_selection"):
+                if is_language_selection(message_text):
+                    selected_language = get_language_from_selection(message_text.strip())
+                    conversation["metadata"]["language"] = selected_language
+                    conversation["metadata"]["language_selected"] = True
+                    conversation["metadata"]["awaiting_language_selection"] = False
+                    logger.info(f"Language selected: {selected_language}")
+                    
+                    # Send confirmation and main menu in selected language
+                    confirmation = get_text("language_changed", selected_language)
+                    menu = self._get_main_menu_message(selected_language)
+                    response = f"{confirmation}\n\n{menu}"
+                else:
+                    # Invalid selection, ask again
+                    response = get_text("welcome_with_language", "es")
             # PRIORITY 1: Check if user is responding with number of people (after selecting date/time)
             # This MUST come before menu options to avoid confusion when user types a number
             elif conversation.get("metadata", {}).get("awaiting_party_size"):
@@ -265,13 +286,15 @@ O elige:
             elif message_text.strip() == "19":
                 logger.info("Global shortcut 19: Menu principal")
                 conversation["metadata"]["awaiting_extra_selection"] = False
-                response = self._get_main_menu_message()
+                language = conversation.get("metadata", {}).get("language", "es")
+                response = self._get_main_menu_message(language)
             elif message_text.strip() == "20":
                 logger.info("Global shortcut 20: Ver/proceder con carrito")
                 conversation["metadata"]["awaiting_extra_selection"] = False
                 cart = await self.cart_manager.get_cart(from_number)
+                language = conversation.get("metadata", {}).get("language", "es")
                 if not cart:
-                    response = "🛒 Tu carrito está vacío, grumete ⚓\n\n¿Qué te gustaría agregar? 🚤"
+                    response = get_text("cart_empty", language)
                 else:
                     # Check if has reservation to proceed with payment
                     has_reservation = any(item.item_type == "reservation" for item in cart)
@@ -311,6 +334,12 @@ O elige:
                     else:
                         # Just show cart
                         response = f"{self.cart_manager.format_cart_message(cart)}\n\n📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+            # PRIORITY 2.5: Check if user wants to change language
+            elif detect_language_command(message_text):
+                logger.info("User requesting language change")
+                current_language = conversation.get("metadata", {}).get("language", "es")
+                conversation["metadata"]["awaiting_language_selection"] = True
+                response = get_text("change_language", current_language)
             # PRIORITY 3: Check if it's a cart option (1-3) when cart has items
             elif await self._is_cart_option_selection(message_text, from_number, conversation):
                 logger.info(f"Cart option selected: {message_text}")
@@ -451,7 +480,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                     conversation["metadata"].pop("pending_extras", None)
                     conversation["metadata"].pop("pending_ice_cream_quantity", None)
                     conversation["metadata"].pop("awaiting_date_time_selection", None)
-                response = self._get_main_menu_message()
+                language = conversation.get("metadata", {}).get("language", "es")
+                response = self._get_main_menu_message(language)
             
             
             # Add response to history
@@ -491,6 +521,12 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 logger.warning(f"Error loading history for {phone_number}: {e}")
                 history = []
             
+            # Detect language from history if available, otherwise default to Spanish
+            detected_language = "es"  # Default
+            if history:
+                # If there's history, user already selected language
+                detected_language = "es"  # Could be enhanced to detect from history
+            
             self.conversations[phone_number] = {
                 "phone": phone_number,
                 "name": contact_name,
@@ -499,7 +535,9 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 "last_interaction": datetime.now(CHILE_TZ).isoformat(),
                 "metadata": {
                     "lead_status": lead.get("lead_status") if lead else "unknown",
-                    "lead_id": lead.get("id") if lead else None
+                    "lead_id": lead.get("id") if lead else None,
+                    "language": detected_language,
+                    "language_selected": len(history) > 0  # True if has history
                 },
                 "processed_message_ids": set()
             }
@@ -590,29 +628,17 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         
         return False
     
-    def _get_main_menu_message(self) -> str:
-        """Return the standard main menu message."""
-        return """🥬 ¡Ahoy, grumete! ⚓  
-
-Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤  
-
-Estoy al mando para ayudarte con todas tus consultas sobre nuestras experiencias flotantes 🌊  
-
-Puedes preguntarme por:  
-
-1️⃣ *Disponibilidad y horarios*  
-
-2️⃣ *Precios por persona*  
-
-3️⃣ *Características del HotBoat*  
-
-4️⃣ *Extras y promociones*  
-
-5️⃣ *Ubicación y reseñas*  
-
-Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*, o simplemente *6️⃣* 👨‍✈️🌿  
-
-¿Listo para zarpar o qué número eliges, grumete?"""
+    def _get_main_menu_message(self, language: str = "es") -> str:
+        """
+        Return the standard main menu message in the specified language.
+        
+        Args:
+            language: Language code (es, en, pt)
+        
+        Returns:
+            Main menu message
+        """
+        return get_text("main_menu", language)
     
     def _is_greeting_message(self, message: str) -> bool:
         """
@@ -1509,7 +1535,8 @@ Puedes decirme:
         # Allow global shortcuts while in this state
         if message_clean in ["19"] or message_lower in ["menu", "menú", "principal"]:
             self._reset_reservation_flow(conversation)
-            return self._get_main_menu_message()
+            language = conversation.get("metadata", {}).get("language", "es")
+            return self._get_main_menu_message(language)
         if message_clean == "18":
             return self.faq_handler.get_response("extras")
         if message_clean == "20":
@@ -1593,7 +1620,8 @@ Por ejemplo:
         
         if message_clean in ["19"] or message_lower in ["menu", "menú", "principal"]:
             self._reset_reservation_flow(conversation)
-            return self._get_main_menu_message()
+            language = conversation.get("metadata", {}).get("language", "es")
+            return self._get_main_menu_message(language)
         if message_clean == "18":
             return self.faq_handler.get_response("extras")
         if message_clean == "20":
@@ -2042,7 +2070,8 @@ Escribe el número que prefieras 🚤"""
                 # Menu principal
                 logger.info("User selected option 19: Menu principal")
                 conversation["metadata"]["awaiting_extra_selection"] = False
-                return self._get_main_menu_message()
+                language = conversation.get("metadata", {}).get("language", "es")
+                return self._get_main_menu_message(language)
             
             if "20" in numbers:
                 # Proceder con el pago
