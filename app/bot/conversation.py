@@ -13,8 +13,10 @@ from app.bot.faq import FAQHandler
 from app.bot.accommodations import accommodations_handler
 from app.bot.cart import CartManager
 from app.bot.translations import (
-    get_text, is_language_selection, get_language_from_selection,
-    detect_language_command, LANGUAGES
+    get_text,
+    detect_language_command,
+    get_language_code_from_text,
+    LANGUAGES
 )
 from app.config import get_settings
 from app.db.leads import get_or_create_lead, get_conversation_history
@@ -203,11 +205,11 @@ class ConversationManager:
             
             logger.info(f"Processing message from {contact_name}: {message_text}")
             logger.info(f"Current metadata state: {conversation.get('metadata', {})}")
+            metadata = conversation.setdefault("metadata", {})
             
             # Check if it's the first message - send welcome message
             # Check BEFORE adding the message to history
             is_first = self._is_first_message(conversation)
-            is_greeting = self._is_greeting_message(message_text)
             
             # Add message to history
             conversation["messages"].append({
@@ -217,27 +219,20 @@ class ConversationManager:
                 "message_id": message_id
             })
             
-            # Always show welcome message on first interaction, regardless of greeting
-            if is_first:
-                logger.info("First message - showing language selection")
-                conversation["metadata"]["awaiting_language_selection"] = True
-                response = get_text("welcome_with_language", "es")
-            # PRIORITY 0: Handle language selection (must come before other checks)
-            elif conversation.get("metadata", {}).get("awaiting_language_selection"):
-                if is_language_selection(message_text):
-                    selected_language = get_language_from_selection(message_text.strip())
-                    conversation["metadata"]["language"] = selected_language
-                    conversation["metadata"]["language_selected"] = True
-                    conversation["metadata"]["awaiting_language_selection"] = False
-                    logger.info(f"Language selected: {selected_language}")
-                    
-                    # Send confirmation and main menu in selected language
-                    confirmation = get_text("language_changed", selected_language)
-                    menu = self._get_main_menu_message(selected_language)
-                    response = f"{confirmation}\n\n{menu}"
+            requested_language = get_language_code_from_text(message_text)
+            if requested_language:
+                if requested_language in LANGUAGES:
+                    logger.info(f"Language change requested: {requested_language}")
+                    response = self._switch_language(conversation, requested_language)
                 else:
-                    # Invalid selection, ask again
-                    response = get_text("welcome_with_language", "es")
+                    logger.info(f"Unsupported language requested: {requested_language}")
+                    response = self._language_not_supported_response(conversation)
+            # Always show welcome message on first interaction
+            elif is_first:
+                logger.info("First message - sending welcome menu")
+                metadata["language_selected"] = True
+                language = metadata.get("language", "es")
+                response = self._get_main_menu_message(language)
             # PRIORITY 1: Check if user is responding with number of people (after selecting date/time)
             # This MUST come before menu options to avoid confusion when user types a number
             elif conversation.get("metadata", {}).get("awaiting_party_size"):
@@ -334,12 +329,11 @@ O elige:
                         response = confirm_message
                     else:
                         # Just show cart
-                        response = f"{self.cart_manager.format_cart_message(cart)}\n\n📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+                        response = f"{self.cart_manager.format_cart_message(cart)}\n\n{self._cart_needs_reservation_message(conversation)}"
             # PRIORITY 2.5: Check if user wants to change language
             elif detect_language_command(message_text):
-                logger.info("User requesting language change")
-                current_language = conversation.get("metadata", {}).get("language", "es")
-                conversation["metadata"]["awaiting_language_selection"] = True
+                logger.info("User requesting language change instructions")
+                current_language = metadata.get("language", "es")
                 response = get_text("change_language", current_language)
             # PRIORITY 3: Check if it's a cart option (1-3) when cart has items
             elif await self._is_cart_option_selection(message_text, from_number, conversation):
@@ -687,6 +681,44 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         # If no user messages yet (only bot responses or empty), it's the first user message
         return len(user_messages) == 0
     
+    def _cart_needs_reservation_message(self, conversation: dict) -> str:
+        """Return a localized message explaining that a reservation is required."""
+        language = conversation.get("metadata", {}).get("language", "es")
+        return get_text("cart_needs_reservation", language)
+    
+    async def _require_reservation_for_extras(self, phone_number: str, conversation: dict) -> Optional[str]:
+        """
+        Ensure there is a reservation in the cart before allowing extras.
+        Returns a localized message if reservation is missing, otherwise None.
+        """
+        cart = await self.cart_manager.get_cart(phone_number)
+        has_reservation = any(item.item_type == "reservation" for item in cart)
+        
+        if has_reservation:
+            return None
+        
+        metadata = conversation.setdefault("metadata", {})
+        metadata["awaiting_extra_selection"] = False
+        metadata.pop("awaiting_ice_cream_flavor", None)
+        metadata.pop("pending_ice_cream_quantity", None)
+        metadata.pop("pending_extras", None)
+        
+        return self._cart_needs_reservation_message(conversation)
+    
+    def _switch_language(self, conversation: dict, language_code: str) -> str:
+        """Set the conversation language and return confirmation + menu."""
+        metadata = conversation.setdefault("metadata", {})
+        metadata["language"] = language_code
+        metadata["language_selected"] = True
+        confirmation = get_text("language_changed", language_code)
+        menu = self._get_main_menu_message(language_code)
+        return f"{confirmation}\n\n{menu}"
+    
+    def _language_not_supported_response(self, conversation: dict) -> str:
+        """Return a localized message when user requests an unsupported language."""
+        language = conversation.get("metadata", {}).get("language", "es")
+        return get_text("language_not_supported", language)
+    
     def _contains_date(self, message: str) -> bool:
         """
         Check if message contains a date pattern (even without 'disponibilidad')
@@ -908,6 +940,10 @@ Precio: $3,500 c/u
             
             extra_item = self.cart_manager.parse_extra_from_message(message)
             if extra_item:
+                warning_message = await self._require_reservation_for_extras(phone_number, conversation)
+                if warning_message:
+                    return warning_message
+                
                 await self.cart_manager.add_item(phone_number, contact_name, extra_item)
                 cart = await self.cart_manager.get_cart(phone_number)
                 return (
@@ -948,7 +984,7 @@ Escribe el número que prefieras 🚤"""
             # Check if reservation exists
             has_reservation = any(item.item_type == "reservation" for item in cart)
             if not has_reservation:
-                return "📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+                return self._cart_needs_reservation_message(conversation)
             
             # Show cart with options (don't auto-confirm)
             return self._format_cart_with_flex_options(cart)
@@ -1067,6 +1103,7 @@ Escribe el número que prefieras 🚤"""
             Response message
         """
         option = message.strip()
+        language = conversation.get("metadata", {}).get("language", "es")
         cart = await self.cart_manager.get_cart(phone_number)
         has_flex = any(item.name == "Reserva FLEX (+10%)" for item in cart)
         
@@ -1075,7 +1112,7 @@ Escribe el número que prefieras 🚤"""
             if option == '1':
                 # Option 1: Agregar más extras
                 conversation["metadata"]["awaiting_extra_selection"] = True
-                return self.faq_handler.get_response("extras")
+                return self.faq_handler.get_response("extras", language)
             
             elif option == '2':
                 # Option 2: Proceder con el pago
@@ -1124,7 +1161,7 @@ Escribe el número que prefieras 🚤"""
             if option == '1':
                 # Option 1: Agregar un extra - mostrar menú con números
                 conversation["metadata"]["awaiting_extra_selection"] = True
-                return self.faq_handler.get_response("extras")
+                return self.faq_handler.get_response("extras", language)
             
             elif option == '3':
                 # Option 3: Vaciar el carrito
@@ -1152,7 +1189,7 @@ Escribe el número que prefieras 🚤"""
             # Check if reservation exists
             has_reservation = any(item.item_type == "reservation" for item in cart)
             if not has_reservation:
-                return "📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+                return self._cart_needs_reservation_message(conversation)
             
             total = self.cart_manager.calculate_total(cart)
             reservation = next((item for item in cart if item.item_type == "reservation"), None)
@@ -1534,7 +1571,7 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             language = conversation.get("metadata", {}).get("language", "es")
             return self._get_main_menu_message(language)
         if message_clean == "18":
-            return self.faq_handler.get_response("extras")
+            return self.faq_handler.get_response("extras", language)
         if message_clean == "20":
             cart = await self.cart_manager.get_cart(phone_number)
             if not cart:
@@ -1562,7 +1599,7 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 await self.cart_manager.clear_cart(phone_number)
                 self._reset_reservation_flow(conversation)
                 return confirm_message
-            return f"{self.cart_manager.format_cart_message(cart)}\n\n📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+            return f"{self.cart_manager.format_cart_message(cart)}\n\n{self._cart_needs_reservation_message(conversation)}"
         
         parsed_date = self._parse_reservation_date(message_lower)
         if not parsed_date:
@@ -1613,13 +1650,14 @@ Por ejemplo:
         metadata = conversation.setdefault("metadata", {})
         message_clean = message.strip()
         message_lower = message_clean.lower()
+        language = conversation.get("metadata", {}).get("language", "es")
         
         if message_clean in ["19"] or message_lower in ["menu", "menú", "principal"]:
             self._reset_reservation_flow(conversation)
             language = conversation.get("metadata", {}).get("language", "es")
             return self._get_main_menu_message(language)
         if message_clean == "18":
-            return self.faq_handler.get_response("extras")
+            return self.faq_handler.get_response("extras", language)
         if message_clean == "20":
             cart = await self.cart_manager.get_cart(phone_number)
             if not cart:
@@ -1648,7 +1686,7 @@ Por ejemplo:
                 self._reset_reservation_flow(conversation)
                 conversation["metadata"]["awaiting_party_size"] = False
                 return confirm_message
-            return f"{self.cart_manager.format_cart_message(cart)}\n\n📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+            return f"{self.cart_manager.format_cart_message(cart)}\n\n{self._cart_needs_reservation_message(conversation)}"
         
         pending = metadata.get("pending_reservation")
         if not pending or not pending.get("date_obj_iso"):
@@ -1941,6 +1979,10 @@ Horarios disponibles:
             
             # Get pending extras (if any)
             pending_extras = conversation["metadata"].get("pending_extras", [])
+
+            warning_message = await self._require_reservation_for_extras(phone_number, conversation)
+            if warning_message:
+                return warning_message
             
             # Clear the awaiting state
             conversation["metadata"]["awaiting_ice_cream_flavor"] = False
@@ -2010,6 +2052,7 @@ Escribe el número que prefieras 🚤"""
             import re
             message_clean = message.strip()
             message_lower = message_clean.lower()
+            language = conversation.get("metadata", {}).get("language", "es")
 
             # Normalize special emoji-based numbers like 1️⃣8️⃣, 1️⃣9️⃣, 2️⃣0️⃣
             emoji_number_map = {
@@ -2060,7 +2103,7 @@ Escribe el número que prefieras 🚤"""
                 # Ver extras - mostrar menú de nuevo
                 logger.info("User selected option 18: Ver extras")
                 # Don't clear awaiting_extra_selection, keep them in extras mode
-                return self.faq_handler.get_response("extras")
+                return self.faq_handler.get_response("extras", language)
             
             if "19" in numbers:
                 # Menu principal
@@ -2080,7 +2123,7 @@ Escribe el número que prefieras 🚤"""
                 # Check if reservation exists
                 has_reservation = any(item.item_type == "reservation" for item in cart)
                 if not has_reservation:
-                    return "📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras."
+                    return self._cart_needs_reservation_message(conversation)
                 
                 total = self.cart_manager.calculate_total(cart)
                 reservation = next((item for item in cart if item.item_type == "reservation"), None)
@@ -2119,6 +2162,10 @@ Escribe el número que prefieras 🚤"""
                 return None
             
             logger.info(f"User selected extras: {valid_numbers}")
+
+            warning_message = await self._require_reservation_for_extras(phone_number, conversation)
+            if warning_message:
+                return warning_message
             
             # DON'T clear awaiting_extra_selection here - keep user in extras mode
             # It will be cleared when they explicitly choose to exit (option 19 or 20)
@@ -2258,6 +2305,10 @@ Precio: $3,500 c/u
             if not extracted_extras:
                 return None
             
+            warning_message = await self._require_reservation_for_extras(phone_number, conversation)
+            if warning_message:
+                return warning_message
+            
             added_items = []
             needs_ice_cream_flavor = False
             ice_cream_quantity = 0
@@ -2334,10 +2385,17 @@ Precio: $3,500 c/u
         Deterministically parse a single extra from free text (e.g., '2 jugos', 'una tabla grande').
         Kept same method name for compatibility with existing calls.
         """
+        if conversation is None:
+            conversation = {"metadata": {}}
+        
         try:
             extracted_extras = self._extract_extras_from_message(message)
             if not extracted_extras:
                 return None
+            
+            warning_message = await self._require_reservation_for_extras(phone_number, conversation)
+            if warning_message:
+                return warning_message
             
             # If multiple extras detected, delegate to multi-extra handler
             if len(extracted_extras) > 1:

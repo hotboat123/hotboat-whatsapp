@@ -3,6 +3,8 @@ Multi-language support for HotBoat WhatsApp Bot
 Supports: Spanish (default), English, Portuguese
 """
 
+from typing import Optional
+
 LANGUAGES = {
     "es": "Español 🇨🇱",
     "en": "English 🇺🇸",
@@ -51,9 +53,9 @@ Digite o número do seu idioma"""
     "main_menu": {
         "es": """🥬 ¡Ahoy, grumete! ⚓
 
-Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤
+Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥
 
-Estoy al mando para ayudarte con todas tus consultas sobre nuestras experiencias flotantes 🌊
+Estoy al mando para ayudarte con todas tus dudas sobre nuestras experiencias flotantes en la laguna 🌊
 
 Puedes preguntarme por:
 
@@ -67,15 +69,23 @@ Puedes preguntarme por:
 
 5️⃣ *Ubicación y reseñas*
 
-Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*, o simplemente *6️⃣* 👨‍✈️🌿
+Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *6️⃣* 👨‍✈️🌿
 
-¿Listo para zarpar o qué número eliges, grumete?""",
+¿Listo para zarpar, grumete? ⛵
+
+*¿Qué número eliges?*
+
+Si quieres cambiar de idioma, escribe:
+
+🇧🇷 portugués
+🇺🇸 inglés
+🇨🇱 español""",
         
         "en": """🥬 Ahoy, sailor! ⚓
 
-I'm *Popeye the Sailor*, second mate of *HotBoat Chile* 🚤
+I'm *Popeye the Sailor*, second mate of *HotBoat Chile* 🚤🔥
 
-I'm here to help you with all your questions about our floating experiences 🌊
+I'm here to help you with every question about our floating experiences on the lagoon 🌊
 
 You can ask me about:
 
@@ -89,15 +99,23 @@ You can ask me about:
 
 5️⃣ *Location and reviews*
 
-If you prefer to talk to *Captain Tomás*, write *Call Tomás*, *Help*, or simply *6️⃣* 👨‍✈️🌿
+If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *6️⃣* 👨‍✈️🌿
 
-Ready to set sail or what number do you choose, sailor?""",
+Ready to set sail, sailor? ⛵
+
+*Which number do you choose?*
+
+If you'd like to switch languages, type:
+
+🇺🇸 english
+🇪🇸 spanish
+🇧🇷 portuguese""",
         
         "pt": """🥬 Ahoy, marujo! ⚓
 
-Eu sou *Popeye o Marinheiro*, segundo imediato do *HotBoat Chile* 🚤
+Eu sou *Popeye o Marinheiro*, segundo imediato do *HotBoat Chile* 🚤🔥
 
-Estou no comando para ajudá-lo com todas as suas dúvidas sobre nossas experiências flutuantes 🌊
+Estou no comando para ajudar com todas as tuas dúvidas sobre nossas experiências flutuantes na lagoa 🌊
 
 Você pode me perguntar sobre:
 
@@ -111,9 +129,17 @@ Você pode me perguntar sobre:
 
 5️⃣ *Localização e avaliações*
 
-Se preferir falar com o *Capitão Tomás*, escreva *Ligar para Tomás*, *Ajuda*, ou simplesmente *6️⃣* 👨‍✈️🌿
+Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *6️⃣* 👨‍✈️🌿
 
-Pronto para zarpar ou que número você escolhe, marujo?"""
+Pronto para zarpar, marujo? ⛵
+
+*Qual número você escolhe?*
+
+Se quiser mudar de idioma, escreva:
+
+🇧🇷 português
+🇪🇸 espanhol
+🇺🇸 inglês"""
     },
     
     # Language Changed Confirmation
@@ -122,12 +148,36 @@ Pronto para zarpar ou que número você escolhe, marujo?"""
         "en": "✅ Perfect, sailor. We'll continue in English 🇺🇸",
         "pt": "✅ Perfeito, marujo. Continuaremos em português 🇧🇷"
     },
+
+    "language_not_supported": {
+        "es": "⚠️ Aún no tenemos soporte para ese idioma. Por ahora puedes usar español, inglés o portugués.",
+        "en": "⚠️ We don't support that language yet. For now you can use Spanish, English or Portuguese.",
+        "pt": "⚠️ Ainda não temos suporte para esse idioma. Por enquanto você pode usar espanhol, inglês ou português."
+    },
     
     # Language Menu Option
     "change_language": {
-        "es": "🌍 *Cambiar idioma*\n\nElige tu idioma:\n1️⃣ Español 🇨🇱\n2️⃣ English 🇺🇸\n3️⃣ Português 🇧🇷",
-        "en": "🌍 *Change language*\n\nChoose your language:\n1️⃣ Español 🇨🇱\n2️⃣ English 🇺🇸\n3️⃣ Português 🇧🇷",
-        "pt": "🌍 *Mudar idioma*\n\nEscolha seu idioma:\n1️⃣ Español 🇨🇱\n2️⃣ English 🇺🇸\n3️⃣ Português 🇧🇷"
+        "es": """🌍 *Cambiar idioma*
+
+Escribe el idioma que quieras usar:
+
+🇨🇱 español
+🇺🇸 inglés
+🇧🇷 portugués""",
+        "en": """🌍 *Change language*
+
+Type the language you want to use:
+
+🇺🇸 english
+🇪🇸 spanish
+🇧🇷 portuguese""",
+        "pt": """🌍 *Mudar idioma*
+
+Digite o idioma que deseja usar:
+
+🇧🇷 português
+🇪🇸 espanhol
+🇺🇸 inglês"""
     },
     
     # Common Phrases
@@ -217,9 +267,9 @@ Pronto para zarpar ou que número você escolhe, marujo?"""
     },
     
     "cart_needs_reservation": {
-        "es": "📅 Necesitas agregar una reserva primero. Consulta disponibilidad y luego agrega la fecha y horario que prefieras.",
-        "en": "📅 You need to add a reservation first. Check availability and then add your preferred date and time.",
-        "pt": "📅 Você precisa adicionar uma reserva primeiro. Consulte a disponibilidade e adicione a data e horário de sua preferência."
+        "es": "📅 Necesitas agregar una reserva primero. Usa la opción 1 del menú principal para elegir fecha y horario.",
+        "en": "📅 You need to add a reservation first. Use option 1 in the main menu to choose your date and time.",
+        "pt": "📅 Você precisa adicionar uma reserva primeiro. Use a opção 1 do menu principal para escolher data e horário."
     },
     
     # Call Captain Tomás
@@ -1040,36 +1090,38 @@ def get_text(key: str, language: str = "es") -> str:
     return TRANSLATIONS[key][language]
 
 
-def is_language_selection(message: str) -> bool:
-    """
-    Check if message is a language selection (1, 2, 3)
-    
-    Args:
-        message: User message
-    
-    Returns:
-        True if message is a language selection number
-    """
-    message = message.strip()
-    return message in ["1", "2", "3"]
+LANGUAGE_KEYWORD_MAP = {
+    "es": ["español", "espanol", "spanish"],
+    "en": ["inglés", "ingles", "english"],
+    "pt": ["portugués", "portugues", "português", "portuguese"],
+    "fr": ["francés", "frances", "français", "francais", "french"],
+    "de": ["alemán", "aleman", "german", "deutsch"],
+    "it": ["italiano", "italian", "italien"]
+}
+
+LANGUAGE_FLAG_EMOJIS = ["🇨🇱", "🇪🇸", "🇺🇸", "🇧🇷", "🇫🇷", "🇩🇪", "🇮🇹"]
 
 
-def get_language_from_selection(selection: str) -> str:
+def _normalize_language_phrase(message: str) -> str:
+    normalized = message.lower().strip()
+    for flag in LANGUAGE_FLAG_EMOJIS:
+        normalized = normalized.replace(flag, "")
+    # Remove extra spaces introduced by emojis
+    return " ".join(normalized.split())
+
+
+def get_language_code_from_text(message: str) -> Optional[str]:
     """
-    Convert selection number to language code
-    
-    Args:
-        selection: "1", "2", or "3"
-    
-    Returns:
-        Language code: "es", "en", or "pt"
+    Detect if the message explicitly references a language and return its code.
+    Supports Spanish, English, Portuguese, French, German and Italian keywords.
     """
-    mapping = {
-        "1": "es",
-        "2": "en",
-        "3": "pt"
-    }
-    return mapping.get(selection, "es")
+    if not message:
+        return None
+    normalized_message = _normalize_language_phrase(message)
+    for code, keywords in LANGUAGE_KEYWORD_MAP.items():
+        if normalized_message in keywords:
+            return code
+    return None
 
 
 def detect_language_command(message: str) -> bool:
@@ -1086,7 +1138,12 @@ def detect_language_command(message: str) -> bool:
     language_keywords = [
         "cambiar idioma", "change language", "mudar idioma",
         "idioma", "language", "língua", "lingua",
-        "español", "english", "português", "portugues",
+        "español", "spanish",
+        "english", "inglés", "ingles",
+        "português", "portugues", "portuguese",
+        "francés", "frances", "français", "francais", "french",
+        "alemán", "aleman", "german", "deutsch",
+        "italiano", "italian", "italien",
         "🌍"
     ]
     
