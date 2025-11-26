@@ -233,6 +233,13 @@ class ConversationManager:
                 metadata["language_selected"] = True
                 language = metadata.get("language", "es")
                 response = self._get_main_menu_message(language)
+            # PRIORITY 0.8: Allow users to restart availability flow at any step
+            elif self._should_interrupt_with_new_availability(message_text, conversation):
+                logger.info("Priority availability question detected - restarting flow")
+                self._prepare_reservation_flow(conversation, reset=True)
+                response = await self._handle_reservation_date_response(
+                    message_text, from_number, contact_name, conversation
+                )
             # PRIORITY 1: Check if user is responding with number of people (after selecting date/time)
             # This MUST come before menu options to avoid confusion when user types a number
             elif conversation.get("metadata", {}).get("awaiting_party_size"):
@@ -752,6 +759,30 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             return True
         
         return False
+    
+    def _is_in_reservation_flow(self, conversation: dict) -> bool:
+        """Return True if user is mid reservation flow (date, time or party size)."""
+        metadata = conversation.get("metadata", {})
+        return any([
+            metadata.get("awaiting_reservation_date"),
+            metadata.get("awaiting_reservation_time"),
+            metadata.get("awaiting_party_size"),
+            metadata.get("awaiting_date_time_selection")
+        ])
+    
+    def _should_interrupt_with_new_availability(self, message: str, conversation: dict) -> bool:
+        """
+        Determine if a new availability request should interrupt the current flow.
+        Prioritize messages that mention 'disponibilidad' or provide a new date.
+        """
+        if not message:
+            return False
+        if not self._is_in_reservation_flow(conversation):
+            return False
+        message_lower = message.lower()
+        if "disponibilidad" in message_lower or "disponible" in message_lower:
+            return True
+        return self._contains_date(message)
     
     def is_availability_query(self, message: str) -> bool:
         """
