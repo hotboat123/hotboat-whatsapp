@@ -76,6 +76,8 @@ class ConversationManager:
         self.extra_keywords = sorted(self.cart_manager.EXTRAS_CATALOG.keys(), key=len, reverse=True)
         # In-memory conversation storage (use Redis or DB in production)
         self.conversations: Dict[str, dict] = {}
+        # Track scheduled summary emails per phone number
+        self.conversation_summary_tasks: Dict[str, asyncio.Task] = {}
     
     async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation") -> None:
         """
@@ -218,6 +220,9 @@ class ConversationManager:
                 "timestamp": datetime.now(CHILE_TZ).isoformat(),
                 "message_id": message_id
             })
+            
+            if is_first:
+                self._schedule_conversation_summary_email(from_number, conversation)
             
             requested_language = get_language_code_from_text(message_text)
             if requested_language:
@@ -725,6 +730,77 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         """Return a localized message when user requests an unsupported language."""
         language = conversation.get("metadata", {}).get("language", "es")
         return get_text("language_not_supported", language)
+    
+    def _schedule_conversation_summary_email(self, phone_number: str, conversation: dict) -> None:
+        """
+        Schedule an email with the conversation transcript 1 minute after it starts.
+        Avoid scheduling if already sent or if no notification recipients exist.
+        """
+        metadata = conversation.setdefault("metadata", {})
+        if metadata.get("summary_email_scheduled") or metadata.get("summary_email_sent"):
+            return
+        if not self.notification_email_recipients:
+            return
+        
+        try:
+            task = asyncio.create_task(self._send_conversation_summary_email(phone_number))
+            self.conversation_summary_tasks[phone_number] = task
+            metadata["summary_email_scheduled"] = True
+            metadata["summary_email_delay_seconds"] = 60
+        except RuntimeError as exc:
+            logger.warning(f"Could not schedule conversation summary email: {exc}")
+    
+    def _format_conversation_transcript(self, conversation: dict) -> str:
+        """Build a plain-text transcript combining user and Popeye messages."""
+        lines = []
+        customer_name = conversation.get("name") or "Cliente"
+        phone_number = conversation.get("phone") or "N/A"
+        started_at = conversation.get("created_at", "Sin registro")
+        lines.append(f"📞 Cliente: {customer_name} (+{phone_number})")
+        lines.append(f"🕒 Inicio de la conversación: {started_at}")
+        lines.append("")
+        
+        messages = conversation.get("messages", [])
+        if not messages:
+            lines.append("Sin mensajes registrados.")
+            return "\n".join(lines)
+        
+        for msg in messages:
+            role = msg.get("role", "")
+            speaker = "Cliente" if role == "user" else "Popeye"
+            timestamp = msg.get("timestamp", "")
+            content = msg.get("content", "").strip()
+            lines.append(f"[{timestamp}] {speaker}: {content}")
+        
+        return "\n".join(lines)
+    
+    async def _send_conversation_summary_email(self, phone_number: str) -> None:
+        """
+        Wait the configured delay, then email the conversation transcript.
+        """
+        try:
+            await asyncio.sleep(60)
+            conversation = self.conversations.get(phone_number)
+            if not conversation:
+                return
+            metadata = conversation.setdefault("metadata", {})
+            if metadata.get("summary_email_sent"):
+                return
+            if not conversation.get("messages"):
+                return
+            
+            customer_name = conversation.get("name") or "Cliente HotBoat"
+            subject = f"Nuevo chat con {customer_name}"
+            body = self._format_conversation_transcript(conversation)
+            await self._send_notification_email(subject, body, priority="high")
+            metadata["summary_email_sent"] = True
+        except asyncio.CancelledError:
+            logger.info(f"Conversation summary email cancelled for {phone_number}")
+            raise
+        except Exception as exc:
+            logger.error(f"Error sending conversation summary email for {phone_number}: {exc}")
+        finally:
+            self.conversation_summary_tasks.pop(phone_number, None)
     
     def _contains_date(self, message: str) -> bool:
         """
