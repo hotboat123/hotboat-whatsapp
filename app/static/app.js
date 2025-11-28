@@ -14,6 +14,7 @@ function setViewportHeightVar() {
 
 // API Base URL
 const API_BASE = window.location.origin;
+const DEFAULT_TIME_ZONE = 'America/Santiago';
 
 function normalizeMessages(messages = []) {
     if (!Array.isArray(messages)) {
@@ -699,11 +700,11 @@ function formatTime(timestamp) {
     const diff = now - date;
     
     if (diff < 86400000) { // Less than 24 hours
-        return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: DEFAULT_TIME_ZONE });
     } else if (diff < 604800000) { // Less than 7 days
-        return date.toLocaleDateString('es-ES', { weekday: 'short' });
+        return date.toLocaleDateString('es-ES', { weekday: 'short', timeZone: DEFAULT_TIME_ZONE });
     } else {
-        return date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
+        return date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', timeZone: DEFAULT_TIME_ZONE });
     }
 }
 
@@ -715,7 +716,8 @@ function formatDate(timestamp) {
         month: 'long', 
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: DEFAULT_TIME_ZONE
     });
 }
 
