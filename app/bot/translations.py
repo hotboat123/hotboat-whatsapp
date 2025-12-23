@@ -193,6 +193,12 @@ Digite o idioma que deseja usar:
         "pt": "Para falar diretamente com o Capitão Tomás, escreva *Ajuda* ou *6* 👨‍✈️"
     },
     
+    "thanks_response": {
+        "es": "¡De nada, grumete! ⚓ Si necesitas algo más, dime y te ayudo.",
+        "en": "You're welcome, sailor! ⚓ Let me know if you need anything else.",
+        "pt": "De nada, marujo! ⚓ Me avisa se precisar de mais alguma coisa."
+    },
+    
     # Greetings
     "greeting": {
         "es": "¡Ahoy, grumete! ⚓",

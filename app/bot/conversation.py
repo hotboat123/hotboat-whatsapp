@@ -238,6 +238,10 @@ class ConversationManager:
                 metadata["language_selected"] = True
                 language = metadata.get("language", "es")
                 response = self._get_main_menu_message(language)
+            elif self._is_thanks_message(message_text):
+                logger.info("Gratitude detected - sending friendly reply")
+                language = metadata.get("language", "es")
+                response = get_text("thanks_response", language)
             # PRIORITY 0.8: Allow users to restart availability flow at any step
             elif self._should_interrupt_with_new_availability(message_text, conversation):
                 logger.info("Priority availability question detected - restarting flow")
@@ -675,6 +679,26 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 return True
         
         return False
+    
+    def _is_thanks_message(self, message: str) -> bool:
+        """Return True when user sends a gratitude message."""
+        if not message:
+            return False
+        message_lower = message.lower().strip()
+        thanks_patterns = [
+            r"\bmuchas gracias\b",
+            r"\bmil gracias\b",
+            r"\bgracias\b",
+            r"\bthank you\b",
+            r"\bthanks\b",
+            r"\bthx\b",
+            r"\bty\b",
+            r"\bobrigad[ao]\b",
+            r"\bobg\b",
+            r"\bvaleu\b",
+            r"\bvale\b",
+        ]
+        return any(re.search(pattern, message_lower) for pattern in thanks_patterns)
     
     def _is_first_message(self, conversation: dict) -> bool:
         """
