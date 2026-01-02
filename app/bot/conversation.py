@@ -221,6 +221,11 @@ class ConversationManager:
                 "message_id": message_id
             })
             
+            # Send immediate notification for every incoming user message
+            asyncio.create_task(
+                self._send_incoming_message_email(contact_name, from_number, message_text, message_id)
+            )
+            
             if is_first:
                 self._schedule_conversation_summary_email(from_number, conversation)
             
@@ -797,6 +802,38 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             lines.append(f"[{timestamp}] {speaker}: {content}")
         
         return "\n".join(lines)
+    
+    async def _send_incoming_message_email(
+        self,
+        contact_name: str,
+        phone_number: str,
+        message_text: str,
+        message_id: Optional[str] = None
+    ) -> None:
+        """Send an immediate email notification for each inbound user message."""
+        try:
+            customer_name = contact_name or "Cliente HotBoat"
+            subject = f"Nuevo mensaje de {customer_name} (+{phone_number})"
+            timestamp = datetime.now(CHILE_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
+            
+            body_lines = [
+                f"📞 Cliente: {customer_name} (+{phone_number})",
+                f"🕒 Recibido: {timestamp}",
+            ]
+            if message_id:
+                body_lines.append(f"🔖 Message ID: {message_id}")
+            body_lines.extend([
+                "",
+                "Mensaje:",
+                self._format_plain_text(message_text or "(sin texto)"),
+            ])
+            
+            body = "\n".join(body_lines)
+            await self._send_notification_email(subject, body, priority="high")
+        except Exception as exc:
+            logger.warning(f"Error sending incoming message email: {exc}")
+            import traceback
+            traceback.print_exc()
     
     async def _send_conversation_summary_email(self, phone_number: str) -> None:
         """
