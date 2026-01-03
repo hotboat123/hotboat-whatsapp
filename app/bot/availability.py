@@ -48,6 +48,20 @@ class AvailabilityChecker:
             Parsed datetime or None if not found
         """
         message_lower = message.lower()
+        now = datetime.now(CHILE_TZ)
+
+        def build_date(month: int, day: int) -> Optional[datetime]:
+            """Create a tz-aware date for the requested year, rolling to next year only if the day is before today (ignore time)."""
+            try:
+                parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
+                parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                # Only move to next year if the whole calendar day is in the past, not just the time.
+                if parsed_date.date() < now.date():
+                    parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
+                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                return parsed_date
+            except ValueError:
+                return None
         
         # Remove day of week names if they appear at the start (optional - makes parsing more flexible)
         # Spanish day names: lunes, martes, miércoles, jueves, viernes, sábado, domingo
@@ -65,18 +79,7 @@ class AvailabilityChecker:
             month_name = match.group(2)
             month = SPANISH_MONTHS.get(month_name)
             if month:
-                try:
-                    # Try current year first
-                    parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
-                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
-                    # If date is in the past, try next year
-                    now = datetime.now(CHILE_TZ)
-                    if parsed_date < now:
-                        parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
-                        parsed_date = CHILE_TZ.localize(parsed_date_naive)
-                    return parsed_date
-                except ValueError:
-                    return None
+                return build_date(month, day)
         
         # Pattern 2: "febrero 14", "noviembre 18" (without "de")
         pattern2 = r'(' + '|'.join(SPANISH_MONTHS.keys()) + r')\s+(\d{1,2})'
@@ -86,16 +89,7 @@ class AvailabilityChecker:
             day = int(match.group(2))
             month = SPANISH_MONTHS.get(month_name)
             if month:
-                try:
-                    parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
-                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
-                    now = datetime.now(CHILE_TZ)
-                    if parsed_date < now:
-                        parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
-                        parsed_date = CHILE_TZ.localize(parsed_date_naive)
-                    return parsed_date
-                except ValueError:
-                    return None
+                return build_date(month, day)
         
         # Pattern 3: "14 febrero" (without "de")
         pattern3 = r'(\d{1,2})\s+(' + '|'.join(SPANISH_MONTHS.keys()) + r')'
@@ -105,16 +99,7 @@ class AvailabilityChecker:
             month_name = match.group(2)
             month = SPANISH_MONTHS.get(month_name)
             if month:
-                try:
-                    parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
-                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
-                    now = datetime.now(CHILE_TZ)
-                    if parsed_date < now:
-                        parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
-                        parsed_date = CHILE_TZ.localize(parsed_date_naive)
-                    return parsed_date
-                except ValueError:
-                    return None
+                return build_date(month, day)
         
         # Pattern 4: "14/02", "18/11" (DD/MM format)
         pattern4 = r'(\d{1,2})[/-](\d{1,2})'
@@ -123,16 +108,7 @@ class AvailabilityChecker:
             day = int(match.group(1))
             month = int(match.group(2))
             if 1 <= month <= 12 and 1 <= day <= 31:
-                try:
-                    parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
-                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
-                    now = datetime.now(CHILE_TZ)
-                    if parsed_date < now:
-                        parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
-                        parsed_date = CHILE_TZ.localize(parsed_date_naive)
-                    return parsed_date
-                except ValueError:
-                    return None
+                return build_date(month, day)
         
         return None
     
@@ -471,6 +447,7 @@ class AvailabilityChecker:
             import traceback
             traceback.print_exc()
             return "Disculpa, tuve un problema consultando la disponibilidad. Te responderé en un momento. Gracias por tu paciencia 🙏"
+
 
 
 
