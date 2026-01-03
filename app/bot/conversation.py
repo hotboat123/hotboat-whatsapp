@@ -55,6 +55,12 @@ EXTRAS_NUMBER_MAP = {
     "17": "reserva flex",
 }
 
+# Frases que activan el modo de entrega manual (silencian al bot)
+MANUAL_HANDOVER_TRIGGERS = [
+    "hola, tomas de hotboat por aqui",
+    "hola tomas de hotboat por aqui",
+]
+
 
 class ConversationManager:
     """Manages conversations with users"""
@@ -78,6 +84,35 @@ class ConversationManager:
         self.conversations: Dict[str, dict] = {}
         # Track scheduled summary emails per phone number
         self.conversation_summary_tasks: Dict[str, asyncio.Task] = {}
+    
+    def _normalize_text(self, text: str) -> str:
+        """
+        Normalize text by removing accents and lowercasing for comparisons.
+        """
+        if not text:
+            return ""
+        normalized = unicodedata.normalize("NFKD", text)
+        stripped = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+        return stripped.lower().strip()
+    
+    def is_manual_handover_trigger(self, message: str) -> bool:
+        """
+        Check if a message activates manual handover (silences the bot).
+        """
+        normalized_message = self._normalize_text(message)
+        return any(normalized_message.startswith(trigger) for trigger in MANUAL_HANDOVER_TRIGGERS)
+    
+    async def activate_manual_handover(self, phone_number: str, contact_name: Optional[str] = None) -> None:
+        """
+        Enable manual handover for a conversation so the bot stops replying.
+        """
+        conversation = await self.get_conversation(phone_number, contact_name or phone_number)
+        metadata = conversation.setdefault("metadata", {})
+        metadata["manual_override_active"] = True
+        metadata["manual_override_set_at"] = datetime.now(CHILE_TZ).isoformat()
+        metadata["manual_override_reason"] = "manual_trigger"
+        conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+        logger.info(f"Manual handover enabled for {phone_number}")
     
     async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation") -> None:
         """
@@ -225,6 +260,21 @@ class ConversationManager:
             asyncio.create_task(
                 self._send_incoming_message_email(contact_name, from_number, message_text, message_id)
             )
+            
+            # If manual handover is active, skip bot responses
+            if metadata.get("manual_override_active"):
+                logger.info(f"Manual handover active for {from_number} - skipping bot reply")
+                conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+                return {"type": "manual_override"}
+            
+            # Activate manual handover when the trigger phrase is received
+            if self.is_manual_handover_trigger(message_text):
+                logger.info(f"Manual handover activated by trigger phrase for {from_number}")
+                metadata["manual_override_active"] = True
+                metadata["manual_override_set_at"] = datetime.now(CHILE_TZ).isoformat()
+                metadata["manual_override_reason"] = "manual_trigger"
+                conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+                return {"type": "manual_override"}
             
             if is_first:
                 self._schedule_conversation_summary_email(from_number, conversation)

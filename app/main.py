@@ -354,14 +354,31 @@ async def send_custom_message(request: SendMessageRequest):
         if len(request.message) > 4096:
             raise HTTPException(status_code=400, detail="Message too long (max 4096 characters)")
         
+        # Preload lead info (used for logging and manual handover activation)
+        lead = None
+        try:
+            lead = await get_or_create_lead(request.to)
+        except Exception as lead_error:
+            logger.error(f"Error loading lead before send: {lead_error}")
+            # Continue even if lead lookup fails
+        
         # Send message via WhatsApp API
         result = await whatsapp_client.send_text_message(request.to, request.message)
+        message_id = result.get('messages', [{}])[0].get('id', '')
+        
+        # If this is the manual handover trigger, silence the bot for this conversation
+        try:
+            if conversation_manager.is_manual_handover_trigger(request.message):
+                await conversation_manager.activate_manual_handover(
+                    phone_number=request.to,
+                    contact_name=lead.get('customer_name', request.to) if lead else request.to
+                )
+                logger.info(f"Manual handover activated for {request.to} via custom message trigger")
+        except Exception as handover_error:
+            logger.warning(f"Could not activate manual handover for {request.to}: {handover_error}")
         
         # Log in database
         try:
-            lead = await get_or_create_lead(request.to)
-            message_id = result.get('messages', [{}])[0].get('id', '')
-            
             await save_conversation(
                 phone_number=request.to,
                 customer_name=lead.get('customer_name', request.to) if lead else request.to,
@@ -378,7 +395,7 @@ async def send_custom_message(request: SendMessageRequest):
         return {
             "status": "sent",
             "to": request.to,
-            "message_id": result.get('messages', [{}])[0].get('id', ''),
+            "message_id": message_id,
             "details": result
         }
         
