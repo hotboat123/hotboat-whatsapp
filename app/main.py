@@ -406,8 +406,8 @@ async def send_custom_message(request: SendMessageRequest):
             await save_conversation(
                 phone_number=request.to,
                 customer_name=lead.get('customer_name', request.to) if lead else request.to,
-                message_text=(request.caption or request.message or request.image_url or "") if message_type == "image" else '',
-                response_text=(request.caption or request.message or request.image_url or ""),
+                message_text=(request.caption or request.message or "") if message_type == "image" else '',
+                response_text=(request.image_url or request.caption or request.message or ""),
                 message_type=message_type,
                 message_id=message_id or None,
                 direction='outgoing'

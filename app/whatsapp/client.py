@@ -135,6 +135,27 @@ class WhatsAppClient:
             logger.error(f"❌ Error sending image to {to}: {e}")
             raise
     
+    async def get_media_url(self, media_id: str) -> Optional[str]:
+        """
+        Retrieve a temporary URL for a received media object.
+        """
+        if not media_id:
+            return None
+        url = f"{self.BASE_URL}/{media_id}"
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=self.headers, timeout=15)
+                response.raise_for_status()
+                data = response.json()
+                media_url = data.get("url")
+                if media_url:
+                    delimiter = "&" if "?" in media_url else "?"
+                    return f"{media_url}{delimiter}access_token={self.token}"
+                return None
+        except httpx.HTTPError as e:
+            logger.error(f"❌ Error getting media URL for {media_id}: {e}")
+            return None
+    
     async def mark_as_read(self, message_id: str) -> Dict[str, Any]:
         """Mark a message as read"""
         url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
@@ -157,6 +178,7 @@ class WhatsAppClient:
 
 # Global instance
 whatsapp_client = WhatsAppClient()
+
 
 
 

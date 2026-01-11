@@ -188,6 +188,13 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             caption = (image_obj.get("caption") or "").strip()
             media_id = image_obj.get("id")
             logger.info(f"🖼️ Image message received (media_id={media_id}) caption='{caption}'")
+            media_url = None
+            try:
+                if media_id:
+                    media_url = await whatsapp_client.get_media_url(media_id)
+                    logger.info(f"Media URL fetched for {media_id}: {bool(media_url)}")
+            except Exception as e:
+                logger.warning(f"Could not fetch media URL for {media_id}: {e}")
             
             text_body = caption if caption else "[Imagen sin texto]"
             
@@ -237,6 +244,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             if response_text is not None or manual_handover_only:
                 try:
                     text_to_save = response_text if response_text is not None else ""
+                    if media_url:
+                        text_to_save = media_url
                     await save_conversation(
                         phone_number=from_number,
                         customer_name=contact_name,

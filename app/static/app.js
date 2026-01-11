@@ -47,6 +47,17 @@ function normalizeMessages(messages = []) {
             }
         }
 
+        const isImage = (msg.message_type ?? msg.type) === 'image';
+        const urlCandidates = [
+            msg.media_url,
+            msg.response_text,
+            msg.message_text,
+            msg.content,
+            msg.text
+        ];
+        const httpRegex = /^https?:\/\//i;
+        const mediaUrl = urlCandidates.find(u => typeof u === 'string' && httpRegex.test(u));
+
         const inferredDirection =
             msg.direction ??
             (msg.role === 'assistant' ? 'outgoing' :
@@ -69,7 +80,8 @@ function normalizeMessages(messages = []) {
             id: msg.id ?? `msg_${Date.now()}_${index}`,
             message_text: messageText,
             direction: inferredDirection === 'outgoing' ? 'outgoing' : 'incoming',
-            message_type: msg.message_type ?? msg.type ?? 'text',
+            message_type: isImage ? 'image' : (msg.message_type ?? msg.type ?? 'text'),
+            media_url: mediaUrl,
             timestamp,
             _sortKey: sortKey,
             _originalIndex: index
@@ -454,6 +466,23 @@ function renderCurrentChat(options = {}) {
             const text = (msg.message_text ?? msg.content ?? '').trim();
             const direction = msg.direction ?? (msg.role === 'assistant' ? 'outgoing' : 'incoming');
             const sanitized = escapeHtml(text || '').replace(/\n/g, '<br>');
+            const isImage = (msg.message_type === 'image');
+            const mediaUrl = msg.media_url;
+            
+            if (isImage && mediaUrl) {
+                return `
+                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
+                        <div class="message-text">
+                            <div style="margin-bottom: 0.35rem;">${sanitized || '[Imagen]'}</div>
+                            <a href="${mediaUrl}" target="_blank" rel="noopener">
+                                <img src="${mediaUrl}" alt="Imagen" style="max-width: 220px; border-radius: 6px;" />
+                            </a>
+                        </div>
+                        <div class="message-time">${formatTime(msg.timestamp)}</div>
+                    </div>
+                `;
+            }
+
             return `
                 <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
                     <div class="message-text">${sanitized || '&nbsp;'}</div>
