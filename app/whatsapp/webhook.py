@@ -196,6 +196,12 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             except Exception as e:
                 logger.warning(f"Could not fetch media URL for {media_id}: {e}")
             
+            display_url = None
+            if media_id:
+                display_url = f"/api/media/{media_id}"
+            elif media_url:
+                display_url = media_url
+            
             text_body = caption if caption else "[Imagen sin texto]"
             
             try:
@@ -244,8 +250,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             if response_text is not None or manual_handover_only:
                 try:
                     text_to_save = response_text if response_text is not None else ""
-                    if media_url:
-                        text_to_save = media_url
+                    if display_url:
+                        text_to_save = display_url
                     await save_conversation(
                         phone_number=from_number,
                         customer_name=contact_name,

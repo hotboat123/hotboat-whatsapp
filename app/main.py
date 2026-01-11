@@ -2,9 +2,10 @@
 FastAPI main application
 """
 from fastapi import FastAPI, Request, Response, HTTPException, Query
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import logging
+import httpx
 
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
@@ -428,6 +429,31 @@ async def send_custom_message(request: SendMessageRequest):
     except Exception as e:
         logger.error(f"Error sending custom message: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
+
+
+@app.get("/api/media/{media_id}")
+async def proxy_media(media_id: str):
+    """Proxy a WhatsApp media_id to a temporary URL and stream it to the client."""
+    if not media_id:
+        raise HTTPException(status_code=400, detail="media_id is required")
+    try:
+        media_url = await whatsapp_client.get_media_url(media_id)
+        if not media_url:
+            raise HTTPException(status_code=404, detail="Media not found")
+        
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(media_url, headers={"Authorization": f"Bearer {settings.whatsapp_api_token}"}, timeout=30)
+            if resp.status_code != 200:
+                logger.warning(f"Failed to fetch media {media_id}: {resp.status_code}")
+                raise HTTPException(status_code=404, detail="Media fetch failed")
+            
+            content_type = resp.headers.get("content-type", "application/octet-stream")
+            return StreamingResponse(iter([resp.content]), media_type=content_type)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error proxying media {media_id}: {e}")
+        raise HTTPException(status_code=500, detail="Error fetching media")
 
 
 if __name__ == "__main__":

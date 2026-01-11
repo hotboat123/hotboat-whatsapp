@@ -55,7 +55,7 @@ function normalizeMessages(messages = []) {
             msg.content,
             msg.text
         ];
-        const httpRegex = /^https?:\/\//i;
+        const httpRegex = /^(https?:\/\/|\/api\/media\/)/i;
         const mediaUrl = urlCandidates.find(u => typeof u === 'string' && httpRegex.test(u));
 
         const inferredDirection =
