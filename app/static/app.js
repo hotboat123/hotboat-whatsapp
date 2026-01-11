@@ -543,20 +543,31 @@ async function sendMessage(event) {
     event.preventDefault();
     
     const input = document.getElementById('messageInput');
+    const sendAsImageCheckbox = document.getElementById('sendAsImage');
+    const imageUrlInput = document.getElementById('messageImageUrl');
     const message = input.value.trim();
+    const imageUrl = imageUrlInput ? imageUrlInput.value.trim() : '';
+    const sendAsImage = sendAsImageCheckbox && sendAsImageCheckbox.checked && imageUrl.length > 0;
     
-    if (!message || !currentConversation) return;
+    if ((!message && !sendAsImage) || !currentConversation) return;
     
     try {
+        const payload = sendAsImage ? {
+            to: currentConversation.phone_number,
+            type: 'image',
+            image_url: imageUrl,
+            caption: message || undefined
+        } : {
+            to: currentConversation.phone_number,
+            message: message
+        };
+        
         const response = await fetch(`${API_BASE}/api/send-message`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                to: currentConversation.phone_number,
-                message: message
-            })
+            body: JSON.stringify(payload)
         });
         
         if (!response.ok) throw new Error('Failed to send message');
@@ -567,9 +578,9 @@ async function sendMessage(event) {
         const timestamp = new Date().toISOString();
         const newMessage = {
             id: result?.message_id || `temp_${Date.now()}`,
-            message_text: message,
+            message_text: message || (sendAsImage ? '[Imagen enviada]' : ''),
             direction: 'outgoing',
-            message_type: 'text',
+            message_type: sendAsImage ? 'image' : 'text',
             timestamp
         };
 
@@ -588,6 +599,8 @@ async function sendMessage(event) {
         
         // Clear input
         input.value = '';
+        if (imageUrlInput) imageUrlInput.value = '';
+        if (sendAsImageCheckbox) sendAsImageCheckbox.checked = false;
         updateCharCount('messageInput', 'charCount');
         
         showToast('Message sent successfully! ✅', 'success');
@@ -621,19 +634,30 @@ async function sendNewMessage(event) {
     
     const phone = document.getElementById('recipientPhone').value.trim();
     const message = document.getElementById('newMessageText').value.trim();
+    const sendAsImageCheckbox = document.getElementById('newSendAsImage');
+    const imageUrlInput = document.getElementById('newMessageImageUrl');
+    const imageUrl = imageUrlInput ? imageUrlInput.value.trim() : '';
+    const sendAsImage = sendAsImageCheckbox && sendAsImageCheckbox.checked && imageUrl.length > 0;
     
-    if (!phone || !message) return;
+    if (!phone || (!message && !sendAsImage)) return;
     
     try {
+        const payload = sendAsImage ? {
+            to: phone,
+            type: 'image',
+            image_url: imageUrl,
+            caption: message || undefined
+        } : {
+            to: phone,
+            message: message
+        };
+        
         const response = await fetch(`${API_BASE}/api/send-message`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                to: phone,
-                message: message
-            })
+            body: JSON.stringify(payload)
         });
         
         if (!response.ok) {

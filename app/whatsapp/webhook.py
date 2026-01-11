@@ -183,6 +183,72 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 "Gracias por tu respuesta. Estamos procesando tu solicitud."
             )
         
+        elif message_type == "image":
+            image_obj = message.get("image", {}) or {}
+            caption = (image_obj.get("caption") or "").strip()
+            media_id = image_obj.get("id")
+            logger.info(f"🖼️ Image message received (media_id={media_id}) caption='{caption}'")
+            
+            text_body = caption if caption else "[Imagen sin texto]"
+            
+            try:
+                response = await conversation_manager.process_message(
+                    from_number=from_number,
+                    message_text=text_body,
+                    contact_name=contact_name,
+                    message_id=message_id
+                )
+            except Exception as e:
+                logger.error(f"Error in conversation_manager.process_message for image: {e}")
+                import traceback
+                traceback.print_exc()
+                response = "📸 ¡Recibimos tu imagen! Gracias 🙌"
+            
+            response_text = None
+            manual_handover_only = False
+            
+            if isinstance(response, dict) and response.get("type") == "manual_override":
+                logger.info(f"Manual handover active for {from_number}; skipping bot reply (image)")
+                manual_handover_only = True
+            elif isinstance(response, dict) and response.get("type") == "accommodations":
+                logger.info("Sending accommodations response with images (triggered by image message)")
+                
+                await whatsapp_client.send_text_message(from_number, response["text"])
+                
+                import asyncio
+                for item in response["images"]:
+                    if item["type"] == "text":
+                        await whatsapp_client.send_text_message(from_number, item["content"])
+                    elif item["type"] == "image" and item.get("image_url"):
+                        await whatsapp_client.send_image_message(
+                            from_number,
+                            item["image_url"],
+                            item.get("caption", "")
+                        )
+                        await asyncio.sleep(0.5)
+                    elif item["type"] == "image" and not item.get("image_url"):
+                        await whatsapp_client.send_text_message(from_number, item.get("caption", ""))
+                
+                response_text = response["text"]
+            elif response:
+                await whatsapp_client.send_text_message(from_number, response)
+                response_text = response
+            
+            if response_text is not None or manual_handover_only:
+                try:
+                    text_to_save = response_text if response_text is not None else ""
+                    await save_conversation(
+                        phone_number=from_number,
+                        customer_name=contact_name,
+                        message_text=text_body,
+                        response_text=text_to_save,
+                        message_type="image",
+                        message_id=message_id,
+                        direction="incoming"
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not save image conversation: {e}")
+        
         else:
             logger.info(f"ℹ️ Unsupported message type: {message_type}")
             await whatsapp_client.send_text_message(

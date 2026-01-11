@@ -84,6 +84,19 @@
                             rows="3"
                             maxlength="4096"
                         ></textarea>
+                        <div class="form-group" style="margin-top: 0.5rem;">
+                            <label style="display: flex; gap: 0.5rem; align-items: center;">
+                                <input type="checkbox" id="sendAsImage">
+                                Enviar como imagen (usa URL pública)
+                            </label>
+                            <input 
+                                type="url" 
+                                id="messageImageUrl" 
+                                placeholder="https://ejemplo.com/imagen.jpg"
+                                style="margin-top: 0.35rem;"
+                            >
+                            <small>Si se marca, el texto será el caption (opcional).</small>
+                        </div>
                         <div class="input-actions">
                             <div class="char-counter">
                                 <span id="charCount">0</span>/4096
@@ -137,6 +150,18 @@
                         required
                     ></textarea>
                     <small><span id="newMsgCharCount">0</span>/4096 characters</small>
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; gap: 0.5rem; align-items: center;">
+                        <input type="checkbox" id="newSendAsImage">
+                        Enviar como imagen (usa URL pública)
+                    </label>
+                    <input 
+                        type="url" 
+                        id="newMessageImageUrl" 
+                        placeholder="https://ejemplo.com/imagen.jpg"
+                    >
+                    <small>Si se marca, el texto será el caption (opcional).</small>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" onclick="closeNewMessageModal()">

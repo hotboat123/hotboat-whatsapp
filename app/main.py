@@ -340,7 +340,10 @@ async def get_conversation_detail(
 
 class SendMessageRequest(BaseModel):
     to: str  # Phone number with country code (no +)
-    message: str
+    message: Optional[str] = None
+    type: str = "text"  # "text" or "image"
+    image_url: Optional[str] = None
+    caption: Optional[str] = None
 
 
 @app.post("/api/send-message")
@@ -348,11 +351,21 @@ async def send_custom_message(request: SendMessageRequest):
     """Send a custom WhatsApp message through Kia-Ai"""
     try:
         # Validate inputs
-        if not request.to or not request.message:
-            raise HTTPException(status_code=400, detail="Phone number and message are required")
+        if not request.to:
+            raise HTTPException(status_code=400, detail="Phone number is required")
         
-        if len(request.message) > 4096:
-            raise HTTPException(status_code=400, detail="Message too long (max 4096 characters)")
+        is_image = (request.type or "text").lower() == "image" or bool(request.image_url)
+        
+        if is_image:
+            if not request.image_url:
+                raise HTTPException(status_code=400, detail="image_url is required for image messages")
+            if request.message and len(request.message) > 4096:
+                raise HTTPException(status_code=400, detail="Caption too long (max 4096 characters)")
+        else:
+            if not request.message:
+                raise HTTPException(status_code=400, detail="Message is required for text messages")
+            if len(request.message) > 4096:
+                raise HTTPException(status_code=400, detail="Message too long (max 4096 characters)")
         
         # Preload lead info (used for logging and manual handover activation)
         lead = None
@@ -362,13 +375,24 @@ async def send_custom_message(request: SendMessageRequest):
             logger.error(f"Error loading lead before send: {lead_error}")
             # Continue even if lead lookup fails
         
-        # Send message via WhatsApp API
-        result = await whatsapp_client.send_text_message(request.to, request.message)
-        message_id = result.get('messages', [{}])[0].get('id', '')
+        message_id = ""
+        result = {}
+        message_type = "text"
+        
+        if is_image:
+            caption = request.caption or request.message or ""
+            result = await whatsapp_client.send_image_message(request.to, request.image_url, caption=caption or None)
+            message_id = result.get('messages', [{}])[0].get('id', '')
+            message_type = "image"
+        else:
+            result = await whatsapp_client.send_text_message(request.to, request.message)
+            message_id = result.get('messages', [{}])[0].get('id', '')
+            message_type = "text"
         
         # If this is the manual handover trigger, silence the bot for this conversation
         try:
-            if conversation_manager.is_manual_handover_trigger(request.message):
+            trigger_text = request.message or request.caption or ""
+            if trigger_text and conversation_manager.is_manual_handover_trigger(trigger_text):
                 await conversation_manager.activate_manual_handover(
                     phone_number=request.to,
                     contact_name=lead.get('customer_name', request.to) if lead else request.to
@@ -382,9 +406,9 @@ async def send_custom_message(request: SendMessageRequest):
             await save_conversation(
                 phone_number=request.to,
                 customer_name=lead.get('customer_name', request.to) if lead else request.to,
-                message_text='',
-                response_text=request.message,
-                message_type='text',
+                message_text=(request.caption or request.message or request.image_url or "") if message_type == "image" else '',
+                response_text=(request.caption or request.message or request.image_url or ""),
+                message_type=message_type,
                 message_id=message_id or None,
                 direction='outgoing'
             )
