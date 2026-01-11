@@ -251,8 +251,8 @@ async def get_conversation_history(
                 
                 history = []
                 for row in results:
-                    message_text = row[1]  # User's message
-                    response_text = row[2]  # Bot's response
+                    message_text = row[1]  # User's message (if any)
+                    response_text = row[2]  # Bot's response (or media URL when image)
                     message_type = row[3] if row[3] else 'text'
                     direction = row[4] if row[4] else 'incoming'
                     timestamp = row[5]
@@ -268,25 +268,39 @@ async def get_conversation_history(
                     else:
                         timestamp = None
                     
-                    # Add incoming message (from customer)
-                    if message_text:
+                    if message_type == "image":
+                        # For images, store a single entry with media_url and caption
+                        media_url = response_text or message_text or ""
+                        caption = message_text if message_text and message_text != media_url else ""
                         history.append({
-                            "id": f"{row[0]}_in",
-                            "message_text": message_text,
-                            "direction": "incoming",
-                            "message_type": message_type,
-                            "timestamp": timestamp
+                            "id": f"{row[0]}",
+                            "message_text": caption,
+                            "response_text": media_url,
+                            "direction": direction,
+                            "message_type": "image",
+                            "timestamp": timestamp,
+                            "media_url": media_url
                         })
-                    
-                    # Add outgoing message (bot's response)
-                    if response_text:
-                        history.append({
-                            "id": f"{row[0]}_out",
-                            "message_text": response_text,
-                            "direction": "outgoing",
-                            "message_type": message_type,
-                            "timestamp": timestamp
-                        })
+                    else:
+                        # Add incoming message (from customer)
+                        if message_text:
+                            history.append({
+                                "id": f"{row[0]}_in",
+                                "message_text": message_text,
+                                "direction": "incoming",
+                                "message_type": message_type,
+                                "timestamp": timestamp
+                            })
+                        
+                        # Add outgoing message (bot's response)
+                        if response_text:
+                            history.append({
+                                "id": f"{row[0]}_out",
+                                "message_text": response_text,
+                                "direction": "outgoing",
+                                "message_type": message_type,
+                                "timestamp": timestamp
+                            })
                 
                 if return_has_more:
                     next_cursor = history[0]["timestamp"] if history else None
