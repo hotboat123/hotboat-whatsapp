@@ -357,6 +357,43 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
                 pass
         
         return None
+    
+    def is_multiple_menu_numbers(self, message: str) -> Optional[list]:
+        """
+        Check if message contains multiple menu number selections (e.g., "1,2,3" or "1 2 3")
+        
+        Args:
+            message: User's message
+        
+        Returns:
+            List of numbers selected (1-6) or None if not multiple numbers
+        """
+        import re
+        
+        message_stripped = message.strip()
+        
+        # Pattern to match multiple numbers separated by spaces, commas, or both
+        # Examples: "1,2,3", "1 2 3", "1, 2, 3", "1,2,3,4,5"
+        pattern = r'^[\s,]*([1-6])(?:[\s,]+([1-6]))+[\s,]*$'
+        
+        match = re.match(pattern, message_stripped)
+        if match:
+            # Extract all numbers from the message
+            numbers = re.findall(r'[1-6]', message_stripped)
+            # Convert to integers and remove duplicates while preserving order
+            seen = set()
+            unique_numbers = []
+            for num_str in numbers:
+                num = int(num_str)
+                if num not in seen:
+                    seen.add(num)
+                    unique_numbers.append(num)
+            
+            # Only return if we have at least 2 numbers
+            if len(unique_numbers) >= 2:
+                return unique_numbers
+        
+        return None
 
 
 

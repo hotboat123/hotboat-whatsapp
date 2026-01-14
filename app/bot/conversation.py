@@ -57,7 +57,7 @@ EXTRAS_NUMBER_MAP = {
 
 # Frases que activan el modo de entrega manual (silencian al bot)
 MANUAL_HANDOVER_TRIGGERS = [
-    "hola, tomas de hotboat por aqui",
+    "Tomás de HotBoat por Aquí",
     "hola tomas de hotboat por aqui",
 ]
 
@@ -410,7 +410,13 @@ O elige:
             elif await self._is_cart_option_selection(message_text, from_number, conversation):
                 logger.info(f"Cart option selected: {message_text}")
                 response = await self._handle_cart_option_selection(message_text, from_number, contact_name, conversation)
-            # Check if it's a menu number selection (1-6)
+            # Check if it's MULTIPLE menu number selections (e.g., "1,2,3" or "1 2 3")
+            # BUT ONLY if we're in a menu context (early in conversation or user just asked for menu)
+            elif (menu_numbers := self.faq_handler.is_multiple_menu_numbers(message_text)) and self._should_interpret_as_menu(message_text, conversation):
+                logger.info(f"Multiple menu numbers selected: {menu_numbers}")
+                language = conversation.get("metadata", {}).get("language", "es")
+                response = await self._handle_multiple_menu_selections(menu_numbers, conversation, language, from_number, contact_name)
+            # Check if it's a single menu number selection (1-6)
             # BUT ONLY if we're in a menu context (early in conversation or user just asked for menu)
             elif (menu_number := self.faq_handler.is_menu_number(message_text)) and self._should_interpret_as_menu(message_text, conversation):
                 logger.info(f"Menu number selected: {menu_number}")
@@ -1766,6 +1772,79 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
         metadata["awaiting_party_size"] = False
         metadata["awaiting_date_time_selection"] = False
     
+    async def _handle_multiple_menu_selections(
+        self,
+        menu_numbers: list,
+        conversation: dict,
+        language: str,
+        from_number: str,
+        contact_name: str
+    ) -> str:
+        """
+        Handle multiple menu number selections and return combined response.
+        
+        Args:
+            menu_numbers: List of menu numbers selected (1-6)
+            conversation: Conversation context
+            language: Language code
+            from_number: User's phone number
+            contact_name: User's contact name
+        
+        Returns:
+            Combined response with all selected menu information
+        """
+        responses = []
+        
+        # Menu option titles for separators
+        option_titles = {
+            1: {"es": "📅 DISPONIBILIDAD Y HORARIOS", "en": "📅 AVAILABILITY AND SCHEDULES", "pt": "📅 DISPONIBILIDADE E HORÁRIOS"},
+            2: {"es": "💰 PRECIOS POR PERSONA", "en": "💰 PRICES PER PERSON", "pt": "💰 PREÇOS POR PESSOA"},
+            3: {"es": "🚤 CARACTERÍSTICAS DEL HOTBOAT", "en": "🚤 HOTBOAT FEATURES", "pt": "🚤 CARACTERÍSTICAS DO HOTBOAT"},
+            4: {"es": "✨ EXTRAS Y PROMOCIONES", "en": "✨ EXTRAS AND PROMOTIONS", "pt": "✨ EXTRAS E PROMOÇÕES"},
+            5: {"es": "📍 UBICACIÓN Y RESEÑAS", "en": "📍 LOCATION AND REVIEWS", "pt": "📍 LOCALIZAÇÃO E AVALIAÇÕES"},
+            6: {"es": "📞 LLAMAR AL CAPITÁN TOMÁS", "en": "📞 CALL CAPTAIN TOMÁS", "pt": "📞 LIGAR PARA O CAPITÃO TOMÁS"}
+        }
+        
+        for menu_number in menu_numbers:
+            # Add title separator
+            if menu_number in option_titles:
+                title = option_titles[menu_number].get(language, option_titles[menu_number]["es"])
+                responses.append(f"\n{'='*40}\n{title}\n{'='*40}\n")
+            
+            if menu_number == 1:
+                # Option 1: Disponibilidad y horarios
+                responses.append(self._ask_for_reservation_date(conversation, language))
+            elif menu_number == 2:
+                # Option 2: Precios por persona
+                responses.append(self.faq_handler.get_response("precio", language))
+            elif menu_number == 3:
+                # Option 3: Características del HotBoat
+                responses.append(self.faq_handler.get_response("caracteristicas", language))
+            elif menu_number == 4:
+                # Option 4: Extras y promociones
+                conversation["metadata"]["awaiting_extra_selection"] = True
+                responses.append(self.faq_handler.get_response("extras", language))
+            elif menu_number == 5:
+                # Option 5: Ubicación y reseñas
+                responses.append(self.faq_handler.get_response("ubicación", language))
+            elif menu_number == 6:
+                # Option 6: Llamar a Tomás
+                await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
+                responses.append(self.faq_handler.get_response("llamar a tomas", language))
+        
+        # Combine all responses with a separator
+        combined_response = "\n".join(responses)
+        
+        # Add a final note
+        if language == "es":
+            combined_response += "\n\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n¿Necesitas información adicional? Escríbeme 'menú' para ver todas las opciones ⚓"
+        elif language == "en":
+            combined_response += "\n\n━━━━━━━━━━━━━━━━━━━━━━━━\n\nNeed additional information? Write 'menu' to see all options ⚓"
+        elif language == "pt":
+            combined_response += "\n\n━━━━━━━━━━━━━━━━━━━━━━━━\n\nPrecisa de informações adicionais? Escreva 'menu' para ver todas as opções ⚓"
+        
+        return combined_response
+
     def _ask_for_reservation_date(self, conversation: dict, language: str = "es") -> str:
         """Prompt user to choose a date as first step of reservation flow."""
         self._prepare_reservation_flow(conversation, reset=True)
