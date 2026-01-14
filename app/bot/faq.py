@@ -372,25 +372,26 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
         
         message_stripped = message.strip()
         
-        # Pattern to match multiple numbers separated by spaces, commas, or both
-        # Examples: "1,2,3", "1 2 3", "1, 2, 3", "1,2,3,4,5"
-        pattern = r'^[\s,]*([1-6])(?:[\s,]+([1-6]))+[\s,]*$'
+        # Extract all numbers from 1-6 in the message
+        numbers = re.findall(r'[1-6]', message_stripped)
         
-        match = re.match(pattern, message_stripped)
-        if match:
-            # Extract all numbers from the message
-            numbers = re.findall(r'[1-6]', message_stripped)
-            # Convert to integers and remove duplicates while preserving order
-            seen = set()
-            unique_numbers = []
-            for num_str in numbers:
-                num = int(num_str)
-                if num not in seen:
-                    seen.add(num)
-                    unique_numbers.append(num)
-            
-            # Only return if we have at least 2 numbers
-            if len(unique_numbers) >= 2:
+        # Convert to integers and remove duplicates while preserving order
+        seen = set()
+        unique_numbers = []
+        for num_str in numbers:
+            num = int(num_str)
+            if num not in seen:
+                seen.add(num)
+                unique_numbers.append(num)
+        
+        # Check if we have at least 2 numbers and the message doesn't contain too much extra text
+        # This prevents matching things like "tengo 2 personas y quiero el 3 de enero"
+        # We allow: numbers, spaces, commas, "y", "and", "e"
+        if len(unique_numbers) >= 2:
+            # Remove numbers and allowed separators to check for extra text
+            cleaned = re.sub(r'[1-6\s,yande]+', '', message_stripped.lower())
+            # If there's minimal extra text (less than 3 chars), it's likely a menu selection
+            if len(cleaned) <= 2:
                 return unique_numbers
         
         return None
