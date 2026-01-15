@@ -78,8 +78,7 @@ Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayu
 Si quieres cambiar de idioma, escribe:
 
 🇧🇷 portugués
-🇺🇸 inglés
-🇨🇱 español""",
+🇺🇸 inglés""",
         
         "en": """🥬 Ahoy, sailor! ⚓
 
@@ -107,7 +106,6 @@ Ready to set sail, sailor? ⛵
 
 If you'd like to switch languages, type:
 
-🇺🇸 english
 🇪🇸 spanish
 🇧🇷 portuguese""",
         
@@ -137,7 +135,6 @@ Pronto para zarpar, marujo? ⛵
 
 Se quiser mudar de idioma, escreva:
 
-🇧🇷 português
 🇪🇸 espanhol
 🇺🇸 inglês"""
     },
@@ -977,7 +974,10 @@ Escríbeme la fecha, por ejemplo:
 • "martes 23"
 • "próximo sábado"
 
-¿Qué fecha prefieres, grumete? ⚓""",
+¿Qué fecha prefieres, grumete? ⚓
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+💡 *Tip:* Escribe *"menú"* si quieres volver al menú principal""",
         
         "en": """📅 *What date would you like to book?*
 
@@ -986,7 +986,10 @@ Write me the date, for example:
 • "Tuesday 23rd"
 • "next Saturday"
 
-What date do you prefer, sailor? ⚓""",
+What date do you prefer, sailor? ⚓
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+💡 *Tip:* Write *"menu"* if you want to go back to the main menu""",
         
         "pt": """📅 *Para qual data você gostaria de reservar?*
 
@@ -995,7 +998,10 @@ Escreva-me a data, por exemplo:
 • "terça-feira 23"
 • "próximo sábado"
 
-Que data você prefere, marujo? ⚓"""
+Que data você prefere, marujo? ⚓
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+💡 *Dica:* Escreva *"menu"* se quiser voltar ao menu principal"""
     },
     
     "ask_for_party_size": {
