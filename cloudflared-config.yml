@@ -1,0 +1,24 @@
+# Cloudflare Tunnel Configuration for Kia-Ai WhatsApp Interface
+# This file configures cloudflared to expose your local WhatsApp bot to the internet
+
+# The tunnel UUID will be automatically generated when you run: cloudflared tunnel create kia-ai
+# Replace YOUR_TUNNEL_ID with your actual tunnel ID
+tunnel: c487cddb-7c24-46d2-ac32-fe7c3e33a0fd
+
+# Path to credentials file (generated automatically)
+credentials-file: C:\Users\cuent\.cloudflared\c487cddb-7c24-46d2-ac32-fe7c3e33a0fd.json
+
+# Ingress rules - define how traffic is routed
+ingress:
+  # Route all traffic to your local FastAPI server
+  - hostname: kia-ai.hotboatchile.com
+    service: https://hotboat-whatsapp-production.up.railway.app
+    originRequest:
+      noTLSVerify: true
+  
+  # Catch-all rule (required)
+  - service: http_status:404
+
+# Optional: Enable metrics endpoint
+metrics: 0.0.0.0:2000
+

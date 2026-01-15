@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     email_from: str = "onboarding@resend.dev"  # Change to your verified domain
     notification_emails: str = ""  # Comma-separated list of emails to notify
     
+    # SMTP Email Configuration (alternative to Resend)
+    email_host: str = ""
+    email_port: str = ""
+    email_username: str = ""
+    email_password: str = ""
+    email_use_tls: str = ""
+    email_use_ssl: str = ""
+    
     # Server
     port: int = 8000
     host: str = "0.0.0.0"
@@ -51,6 +59,7 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance"""
     return Settings()
+
 
 
 

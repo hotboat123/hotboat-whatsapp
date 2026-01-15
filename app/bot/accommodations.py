@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Any
 
 from app.config.accommodations_config import ACCOMMODATION_IMAGES
 from app.bot.translations import get_text
+from app.utils.media_handler import get_accommodation_image_path
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +119,18 @@ class AccommodationsHandler:
         Get accommodations formatted for sending with images
         
         Returns:
-            List of dicts with text and image_url for each accommodation
+            List of dicts with text, image_url, and image_path for each accommodation
         """
+        # Mapping of accommodation names to their keys
+        name_to_key = {
+            "Open Sky - Domo con Tina de Baño": "open_sky_domo_bath",
+            "Open Sky - Domo con Hidromasaje": "open_sky_domo_hydromassage",
+            "Raíces de Relikura - Cabaña 2 personas": "relikura_cabin_2",
+            "Raíces de Relikura - Cabaña 4 personas": "relikura_cabin_4",
+            "Raíces de Relikura - Cabaña 6 personas": "relikura_cabin_6",
+            "Raíces de Relikura - Hostal": "relikura_hostel",
+        }
+        
         accommodations = self.get_all_accommodations()
         result = []
         
@@ -137,9 +148,12 @@ class AccommodationsHandler:
         # Open Sky accommodations with images
         for acc in open_sky:
             price_text = f"💰 ${acc.price_per_night:,} / noche ({acc.capacity} pers.)"
+            acc_key = name_to_key.get(acc.name)
+            local_path = get_accommodation_image_path(acc_key) if acc_key else None
             result.append({
                 "type": "image",
                 "image_url": acc.image_url,
+                "image_path": local_path,
                 "caption": f"*{acc.name}*\n\n{acc.description}\n\n{price_text}\n\n" + "\n".join([f"• {f}" for f in acc.features])
             })
         
@@ -152,18 +166,24 @@ class AccommodationsHandler:
         # Relikura cabins with images
         for acc in relikura_cabins:
             price_text = f"💰 ${acc.price_per_night:,} / noche ({acc.capacity} pers.)"
+            acc_key = name_to_key.get(acc.name)
+            local_path = get_accommodation_image_path(acc_key) if acc_key else None
             result.append({
                 "type": "image",
                 "image_url": acc.image_url,
+                "image_path": local_path,
                 "caption": f"*{acc.name}*\n\n{acc.description}\n\n{price_text}\n\n" + "\n".join([f"• {f}" for f in acc.features])
             })
         
         # Hostel with image
         acc = self.relikura_hostel
         price_text = f"💰 ${acc.price_per_night:,} / noche por persona"
+        acc_key = name_to_key.get(acc.name)
+        local_path = get_accommodation_image_path(acc_key) if acc_key else None
         result.append({
             "type": "image",
             "image_url": acc.image_url,
+            "image_path": local_path,
             "caption": f"*{acc.name}*\n\n{acc.description}\n\n{price_text}\n\n" + "\n".join([f"• {f}" for f in acc.features])
         })
         

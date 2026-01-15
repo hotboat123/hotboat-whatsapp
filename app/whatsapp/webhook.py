@@ -134,17 +134,53 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 for item in response["images"]:
                     if item["type"] == "text":
                         await whatsapp_client.send_text_message(from_number, item["content"])
-                    elif item["type"] == "image" and item.get("image_url"):
-                        await whatsapp_client.send_image_message(
-                            from_number,
-                            item["image_url"],
-                            item.get("caption", "")
-                        )
+                    elif item["type"] == "image":
+                        caption = item.get("caption", "")
+                        image_path = item.get("image_path")
+                        image_url = item.get("image_url")
+                        
+                        # Try to send using local file first (more reliable)
+                        if image_path and image_path.startswith("http"):
+                            # It's a URL, not a path
+                            image_path = None
+                        
+                        sent = False
+                        if image_path:
+                            try:
+                                # Upload to WhatsApp and send
+                                logger.info(f"Uploading image from local path: {image_path}")
+                                media_id = await whatsapp_client.upload_media(image_path)
+                                if media_id:
+                                    await whatsapp_client.send_image_message(
+                                        from_number,
+                                        media_id=media_id,
+                                        caption=caption
+                                    )
+                                    sent = True
+                                    logger.info(f"✅ Image sent successfully using media_id")
+                            except Exception as e:
+                                logger.warning(f"Failed to send image via upload: {e}, trying URL fallback")
+                        
+                        # Fallback to URL if local upload failed or not available
+                        if not sent and image_url and not image_url.startswith("https://example.com"):
+                            try:
+                                await whatsapp_client.send_image_message(
+                                    from_number,
+                                    image_url=image_url,
+                                    caption=caption
+                                )
+                                sent = True
+                                logger.info(f"✅ Image sent successfully using URL")
+                            except Exception as e:
+                                logger.warning(f"Failed to send image via URL: {e}")
+                        
+                        # If both failed, send caption as text
+                        if not sent:
+                            logger.warning("Could not send image, sending caption as text")
+                            await whatsapp_client.send_text_message(from_number, caption)
+                        
                         # Small delay between images to avoid rate limiting
                         await asyncio.sleep(0.5)
-                    elif item["type"] == "image" and not item.get("image_url"):
-                        # If no image URL, send caption as text
-                        await whatsapp_client.send_text_message(from_number, item.get("caption", ""))
                 
                 # Store text response for database
                 response_text = response["text"]
@@ -189,15 +225,29 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             media_id = image_obj.get("id")
             logger.info(f"🖼️ Image message received (media_id={media_id}) caption='{caption}'")
             media_url = None
+            local_image_path = None
+            
             try:
                 if media_id:
+                    # Try to download and save the image locally
+                    from app.utils.media_handler import get_received_media_path
+                    local_image_path = get_received_media_path(media_id)
+                    download_success = await whatsapp_client.download_media(media_id, local_image_path)
+                    if download_success:
+                        logger.info(f"✅ Image downloaded and saved: {local_image_path}")
+                    else:
+                        local_image_path = None
+                    
+                    # Also get the URL for fallback
                     media_url = await whatsapp_client.get_media_url(media_id)
                     logger.info(f"Media URL fetched for {media_id}: {bool(media_url)}")
             except Exception as e:
-                logger.warning(f"Could not fetch media URL for {media_id}: {e}")
+                logger.warning(f"Could not fetch/download media for {media_id}: {e}")
             
             display_url = None
-            if media_id:
+            if local_image_path:
+                display_url = f"local:{local_image_path}"
+            elif media_id:
                 display_url = f"/api/media/{media_id}"
             elif media_url:
                 display_url = media_url
@@ -232,15 +282,52 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 for item in response["images"]:
                     if item["type"] == "text":
                         await whatsapp_client.send_text_message(from_number, item["content"])
-                    elif item["type"] == "image" and item.get("image_url"):
-                        await whatsapp_client.send_image_message(
-                            from_number,
-                            item["image_url"],
-                            item.get("caption", "")
-                        )
+                    elif item["type"] == "image":
+                        caption = item.get("caption", "")
+                        image_path = item.get("image_path")
+                        image_url = item.get("image_url")
+                        
+                        # Try to send using local file first (more reliable)
+                        if image_path and image_path.startswith("http"):
+                            # It's a URL, not a path
+                            image_path = None
+                        
+                        sent = False
+                        if image_path:
+                            try:
+                                # Upload to WhatsApp and send
+                                logger.info(f"Uploading image from local path: {image_path}")
+                                media_id = await whatsapp_client.upload_media(image_path)
+                                if media_id:
+                                    await whatsapp_client.send_image_message(
+                                        from_number,
+                                        media_id=media_id,
+                                        caption=caption
+                                    )
+                                    sent = True
+                                    logger.info(f"✅ Image sent successfully using media_id")
+                            except Exception as e:
+                                logger.warning(f"Failed to send image via upload: {e}, trying URL fallback")
+                        
+                        # Fallback to URL if local upload failed or not available
+                        if not sent and image_url and not image_url.startswith("https://example.com"):
+                            try:
+                                await whatsapp_client.send_image_message(
+                                    from_number,
+                                    image_url=image_url,
+                                    caption=caption
+                                )
+                                sent = True
+                                logger.info(f"✅ Image sent successfully using URL")
+                            except Exception as e:
+                                logger.warning(f"Failed to send image via URL: {e}")
+                        
+                        # If both failed, send caption as text
+                        if not sent:
+                            logger.warning("Could not send image, sending caption as text")
+                            await whatsapp_client.send_text_message(from_number, caption)
+                        
                         await asyncio.sleep(0.5)
-                    elif item["type"] == "image" and not item.get("image_url"):
-                        await whatsapp_client.send_text_message(from_number, item.get("caption", ""))
                 
                 response_text = response["text"]
             elif response:

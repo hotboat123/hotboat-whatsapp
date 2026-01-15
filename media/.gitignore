@@ -1,0 +1,16 @@
+# Ignore all files in media directories
+*
+
+# But keep the .gitignore file
+!.gitignore
+
+# And keep .gitkeep files to preserve directory structure
+!.gitkeep
+
+# Keep accommodation images (if you want to version them)
+# Uncomment the lines below if you want to track accommodation images in git:
+# !accommodations/
+# !accommodations/*.jpg
+# !accommodations/*.png
+# !accommodations/*.jpeg
+# !accommodations/*.webp

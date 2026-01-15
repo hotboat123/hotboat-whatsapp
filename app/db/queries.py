@@ -4,8 +4,12 @@ Database queries for availability and appointments
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
+from zoneinfo import ZoneInfo
 
 from app.db.connection import get_connection
+
+# Chilean timezone
+CHILE_TZ = ZoneInfo("America/Santiago")
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +27,7 @@ async def _notify_admin_db_error(error: Exception, function_name: str) -> None:
         from app.whatsapp.client import WhatsAppClient
         
         # Check if we already notified about this recently (within 1 hour)
-        current_time = datetime.now()
+        current_time = datetime.now(CHILE_TZ)
         error_key = f"{function_name}_{type(error).__name__}"
         
         if error_key in _last_error_notification:
@@ -327,6 +331,14 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                         last_message = response_text or message_text
                     else:
                         last_message = message_text or response_text
+                    
+                    # Convert UTC to Chilean timezone
+                    if created_at:
+                        if created_at.tzinfo is None:
+                            # If naive datetime, assume it's UTC
+                            created_at = created_at.replace(tzinfo=ZoneInfo("UTC"))
+                        # Convert to Chilean time
+                        created_at = created_at.astimezone(CHILE_TZ)
                     
                     conversations.append({
                         "phone_number": phone_number,

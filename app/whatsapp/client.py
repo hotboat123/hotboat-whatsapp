@@ -100,14 +100,59 @@ class WhatsAppClient:
             logger.error(f"❌ Error sending template to {to}: {e}")
             raise
     
-    async def send_image_message(self, to: str, image_url: str, caption: Optional[str] = None) -> Dict[str, Any]:
+    async def upload_media(self, file_path: str, mime_type: str = "image/jpeg") -> Optional[str]:
         """
-        Send an image message
+        Upload media file to WhatsApp and get media_id
+        
+        Args:
+            file_path: Path to the file to upload
+            mime_type: MIME type of the file (default: image/jpeg)
+        
+        Returns:
+            media_id if successful, None otherwise
+        """
+        url = f"{self.BASE_URL}/{self.phone_number_id}/media"
+        
+        try:
+            import os
+            if not os.path.exists(file_path):
+                logger.error(f"❌ File not found: {file_path}")
+                return None
+            
+            # Prepare headers without Content-Type (httpx will set it for multipart)
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+            }
+            
+            with open(file_path, "rb") as f:
+                files = {
+                    "file": (os.path.basename(file_path), f, mime_type),
+                    "messaging_product": (None, "whatsapp"),
+                    "type": (None, mime_type),
+                }
+                
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(url, files=files, headers=headers, timeout=60)
+                    response.raise_for_status()
+                    result = response.json()
+                    media_id = result.get("id")
+                    logger.info(f"✅ Media uploaded successfully: {media_id}")
+                    return media_id
+        except Exception as e:
+            logger.error(f"❌ Error uploading media: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    async def send_image_message(self, to: str, image_url: str = None, caption: Optional[str] = None, media_id: str = None) -> Dict[str, Any]:
+        """
+        Send an image message using either URL or media_id
         
         Args:
             to: Recipient phone number (with country code, no + or spaces)
-            image_url: URL of the image (must be publicly accessible)
+            image_url: URL of the image (must be publicly accessible) - Optional if media_id is provided
             caption: Optional caption text
+            media_id: WhatsApp media ID from upload_media() - Optional if image_url is provided
         """
         url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
         
@@ -116,10 +161,17 @@ class WhatsAppClient:
             "recipient_type": "individual",
             "to": to,
             "type": "image",
-            "image": {
-                "link": image_url
-            }
+            "image": {}
         }
+        
+        # Use media_id if provided, otherwise use image_url
+        if media_id:
+            payload["image"]["id"] = media_id
+        elif image_url:
+            payload["image"]["link"] = image_url
+        else:
+            logger.error("❌ Either image_url or media_id must be provided")
+            raise ValueError("Either image_url or media_id must be provided")
         
         if caption:
             payload["image"]["caption"] = caption
@@ -155,6 +207,43 @@ class WhatsAppClient:
         except httpx.HTTPError as e:
             logger.error(f"❌ Error getting media URL for {media_id}: {e}")
             return None
+    
+    async def download_media(self, media_id: str, save_path: str) -> bool:
+        """
+        Download media from WhatsApp and save locally
+        
+        Args:
+            media_id: WhatsApp media ID
+            save_path: Local path to save the file
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get media URL
+            media_url = await self.get_media_url(media_id)
+            if not media_url:
+                logger.error(f"❌ Could not get media URL for {media_id}")
+                return False
+            
+            # Download the file
+            async with httpx.AsyncClient() as client:
+                response = await client.get(media_url, timeout=30)
+                response.raise_for_status()
+                
+                # Create directory if it doesn't exist
+                import os
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                
+                # Save file
+                with open(save_path, "wb") as f:
+                    f.write(response.content)
+                
+                logger.info(f"✅ Media downloaded successfully: {save_path}")
+                return True
+        except Exception as e:
+            logger.error(f"❌ Error downloading media {media_id}: {e}")
+            return False
     
     async def mark_as_read(self, message_id: str) -> Dict[str, Any]:
         """Mark a message as read"""
