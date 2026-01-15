@@ -220,15 +220,21 @@ class WhatsAppClient:
             True if successful, False otherwise
         """
         try:
-            # Get media URL
+            # Get media URL (this already includes access_token as parameter)
             media_url = await self.get_media_url(media_id)
             if not media_url:
                 logger.error(f"❌ Could not get media URL for {media_id}")
                 return False
             
-            # Download the file
+            # Download the file WITH authorization header
+            # WhatsApp requires both the token in URL AND in headers for lookaside.fbsbx.com
+            download_headers = {
+                "Authorization": f"Bearer {self.token}",
+                "User-Agent": "HotBoat-WhatsApp-Bot/1.0"
+            }
+            
             async with httpx.AsyncClient() as client:
-                response = await client.get(media_url, timeout=30)
+                response = await client.get(media_url, headers=download_headers, timeout=30)
                 response.raise_for_status()
                 
                 # Create directory if it doesn't exist
