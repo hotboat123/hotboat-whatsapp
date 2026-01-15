@@ -190,6 +190,8 @@ class WhatsAppClient:
     async def get_media_url(self, media_id: str) -> Optional[str]:
         """
         Retrieve a temporary URL for a received media object.
+        Returns the URL WITHOUT adding access_token parameter.
+        The token should be passed via Authorization header when downloading.
         """
         if not media_id:
             return None
@@ -200,10 +202,9 @@ class WhatsAppClient:
                 response.raise_for_status()
                 data = response.json()
                 media_url = data.get("url")
-                if media_url:
-                    delimiter = "&" if "?" in media_url else "?"
-                    return f"{media_url}{delimiter}access_token={self.token}"
-                return None
+                # Return the URL as-is, don't add access_token parameter
+                # The Authorization header will be used when downloading
+                return media_url
         except httpx.HTTPError as e:
             logger.error(f"❌ Error getting media URL for {media_id}: {e}")
             return None
