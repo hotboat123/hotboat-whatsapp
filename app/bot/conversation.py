@@ -3016,13 +3016,22 @@ Precio: $3,500 c/u
         # e.g., "2 personas", "somos 3", etc.
         message_lower = message_text.lower().strip()
         
-        # If message has words in addition to the number, it's NOT a menu selection
+        # If message has words in addition to the number, check if they're menu-related
         words = message_lower.split()
         if len(words) > 1:
             # Check if it's just emoji numbers like "2️⃣"
             if message_text.strip() not in ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"]:
-                logger.info(f"Message has multiple words, not treating as menu: {message_text}")
-                return False
+                # Allow multiple numbers (e.g., "1 2 3") - check if all words are numbers or separators
+                import re
+                # Remove numbers, spaces, commas, and connectors
+                cleaned = re.sub(r'[1-6\s,yande]+', '', message_lower)
+                # If there's minimal extra text, it's likely multiple menu numbers
+                if len(cleaned) <= 2:
+                    logger.info(f"Message appears to be multiple menu numbers: {message_text}")
+                    # Don't return False here - let it continue to check context
+                else:
+                    logger.info(f"Message has multiple words, not treating as menu: {message_text}")
+                    return False
         
         # If message contains words like "personas", "persona", "somos", "seremos", etc.
         # it's definitely NOT a menu selection
