@@ -433,27 +433,95 @@ async def send_custom_message(request: SendMessageRequest):
 
 @app.get("/api/media/{media_id}")
 async def proxy_media(media_id: str):
-    """Proxy a WhatsApp media_id to a temporary URL and stream it to the client."""
+    """
+    Serve media file from local storage or proxy from WhatsApp.
+    Priority: Local file > WhatsApp proxy
+    """
     if not media_id:
         raise HTTPException(status_code=400, detail="media_id is required")
+    
     try:
+        import os
+        from pathlib import Path
+        
+        # First, try to find the file locally in received directory
+        media_dir = Path("media/received")
+        if media_dir.exists():
+            # Look for files that start with the media_id
+            for file_path in media_dir.glob(f"{media_id}_*.*"):
+                if file_path.is_file():
+                    logger.info(f"Serving media from local file: {file_path}")
+                    
+                    # Determine content type from extension
+                    ext = file_path.suffix.lower()
+                    content_type_map = {
+                        ".jpg": "image/jpeg",
+                        ".jpeg": "image/jpeg",
+                        ".png": "image/png",
+                        ".webp": "image/webp",
+                        ".gif": "image/gif",
+                        ".mp4": "video/mp4",
+                    }
+                    content_type = content_type_map.get(ext, "application/octet-stream")
+                    
+                    # Return the file
+                    from fastapi.responses import FileResponse
+                    return FileResponse(
+                        path=str(file_path),
+                        media_type=content_type,
+                        filename=file_path.name
+                    )
+        
+        # If not found locally, try to download it from WhatsApp first
+        logger.info(f"Media not found locally, attempting to download from WhatsApp: {media_id}")
+        from app.utils.media_handler import get_received_media_path
+        local_path = get_received_media_path(media_id)
+        
+        download_success = await whatsapp_client.download_media(media_id, local_path)
+        if download_success and os.path.exists(local_path):
+            logger.info(f"Media downloaded successfully, serving from: {local_path}")
+            
+            # Determine content type
+            ext = Path(local_path).suffix.lower()
+            content_type_map = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".webp": "image/webp",
+                ".gif": "image/gif",
+                ".mp4": "video/mp4",
+            }
+            content_type = content_type_map.get(ext, "image/jpeg")
+            
+            from fastapi.responses import FileResponse
+            return FileResponse(
+                path=local_path,
+                media_type=content_type,
+                filename=os.path.basename(local_path)
+            )
+        
+        # Last resort: try to proxy directly from WhatsApp (legacy behavior)
+        logger.warning(f"Could not download media, attempting direct proxy from WhatsApp: {media_id}")
         media_url = await whatsapp_client.get_media_url(media_id)
         if not media_url:
             raise HTTPException(status_code=404, detail="Media not found")
         
         async with httpx.AsyncClient() as client:
-            resp = await client.get(media_url, headers={"Authorization": f"Bearer {settings.whatsapp_api_token}"}, timeout=30)
+            resp = await client.get(media_url, timeout=30)
             if resp.status_code != 200:
                 logger.warning(f"Failed to fetch media {media_id}: {resp.status_code}")
                 raise HTTPException(status_code=404, detail="Media fetch failed")
             
             content_type = resp.headers.get("content-type", "application/octet-stream")
             return StreamingResponse(iter([resp.content]), media_type=content_type)
+            
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error proxying media {media_id}: {e}")
-        raise HTTPException(status_code=500, detail="Error fetching media")
+        logger.error(f"Error serving media {media_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error fetching media: {str(e)}")
 
 
 if __name__ == "__main__":
