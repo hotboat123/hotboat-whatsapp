@@ -15,8 +15,8 @@
     <meta property="og:image" content="https://hotboatchile.com/wp-content/uploads/cropped-Screenshot_3-192x192.jpg">
     <meta property="og:url" content="https://hotboat-whatsapp-production.up.railway.app">
     <meta property="og:type" content="website">
-    <link rel="stylesheet" href="/static/styles.css?v=20260117e">
-    <link rel="stylesheet" href="/static/mobile-fix.css?v=20260117e">
+    <link rel="stylesheet" href="/static/styles.css?v=20260117f">
+    <link rel="stylesheet" href="/static/mobile-fix.css?v=20260117f">
 </head>
 <body>
     <div class="container">
@@ -122,6 +122,18 @@
                             <div class="char-counter">
                                 <span id="charCount">0</span>/4096
                             </div>
+                            <div class="bot-toggle-section">
+                                <label class="bot-toggle-label">
+                                    <input 
+                                        type="checkbox" 
+                                        id="botToggleCheckbox" 
+                                        checked 
+                                        onchange="toggleBotFromInput(this.checked)"
+                                        class="bot-toggle-input"
+                                    >
+                                    <span class="bot-toggle-text" id="botToggleText">🤖 Bot Activo</span>
+                                </label>
+                            </div>
                             <button type="submit" class="btn-primary" id="sendButton">
                                 Send 📤
                             </button>
@@ -215,7 +227,7 @@
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="/static/app.js?v=20260117e"></script>
+    <script src="/static/app.js?v=20260117f"></script>
 </body>
 </html>
 
