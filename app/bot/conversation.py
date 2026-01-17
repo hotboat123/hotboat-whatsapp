@@ -57,7 +57,7 @@ EXTRAS_NUMBER_MAP = {
 
 # Frases que activan el modo de entrega manual (silencian al bot)
 MANUAL_HANDOVER_TRIGGERS = [
-    "Tomás de HotBoat por Aquí,
+    "Tomás de HotBoat por Aquí",
     "hola tomas de hotboat por aqui",
 ]
 
