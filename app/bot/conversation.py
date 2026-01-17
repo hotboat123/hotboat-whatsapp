@@ -873,14 +873,10 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             body_lines = [
                 f"📞 Cliente: {customer_name} (+{phone_number})",
                 f"🕒 Recibido: {timestamp}",
-            ]
-            if message_id:
-                body_lines.append(f"🔖 Message ID: {message_id}")
-            body_lines.extend([
                 "",
                 "Mensaje:",
                 self._format_plain_text(message_text or "(sin texto)"),
-            ])
+            ]
             
             body = "\n".join(body_lines)
             await self._send_notification_email(subject, body, priority="high")
