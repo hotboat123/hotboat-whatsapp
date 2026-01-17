@@ -230,7 +230,28 @@ async function loadConversations() {
         const grouped = new Map();
         rawConversations.forEach(item => {
             const phone = item.phone_number;
-            const lastMessage = item.last_message ?? item.message_text ?? item.response_text ?? '';
+            
+            // Format last message based on type
+            let lastMessage = item.last_message ?? item.message_text ?? item.response_text ?? '';
+            const messageType = item.message_type || item.type;
+            
+            // If it's an image, show a nice preview instead of "[imagen sin texto]"
+            if (messageType === 'image') {
+                const caption = item.message_text || '';
+                if (caption && caption !== '[Imagen sin texto]' && caption !== '[imagen sin texto]' && !caption.startsWith('[')) {
+                    lastMessage = `📷 ${caption}`;
+                } else {
+                    lastMessage = '📷 Imagen';
+                }
+            } else if (messageType === 'video') {
+                const caption = item.message_text || '';
+                if (caption && !caption.startsWith('[')) {
+                    lastMessage = `🎥 ${caption}`;
+                } else {
+                    lastMessage = '🎥 Video';
+                }
+            }
+            
             const timestamp = item.last_message_at ?? item.created_at ?? new Date().toISOString();
             const customerName = item.customer_name || phone;
 
