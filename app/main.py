@@ -496,11 +496,13 @@ async def upload_and_send_image(
             
             # Log in database
             try:
+                # Save with the media URL so it can be displayed in the interface
+                media_url = f"/api/media/{media_id}"
                 await save_conversation(
                     phone_number=to,
                     customer_name=lead.get('customer_name', to) if lead else to,
-                    message_text=caption or '[Imagen enviada]',
-                    response_text=f"media_id:{media_id}",
+                    message_text=caption or '',
+                    response_text=media_url,
                     message_type="image",
                     message_id=message_id or None,
                     direction='outgoing'
@@ -513,6 +515,7 @@ async def upload_and_send_image(
                 "to": to,
                 "message_id": message_id,
                 "media_id": media_id,
+                "media_url": media_url,
                 "details": result
             }
             

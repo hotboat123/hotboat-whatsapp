@@ -672,6 +672,28 @@ async function sendImageFromFile(file, caption = '') {
         
         const result = await response.json();
         
+        // Optimistically add the image to the UI immediately
+        const timestamp = new Date().toISOString();
+        const newMessage = {
+            id: result?.message_id || `temp_${Date.now()}`,
+            message_text: caption || '',
+            direction: 'outgoing',
+            message_type: 'image',
+            media_url: result.media_url || `/api/media/${result.media_id}`,
+            timestamp
+        };
+
+        currentConversation.messages.push(newMessage);
+        renderCurrentChat();
+
+        // Update conversations list preview
+        const conversationIndex = conversations.findIndex(conv => conv.phone_number === currentConversation.phone_number);
+        if (conversationIndex >= 0) {
+            conversations[conversationIndex].last_message = caption || '[Imagen]';
+            conversations[conversationIndex].last_message_at = timestamp;
+        }
+        renderConversations();
+        
         // Clear inputs and preview
         document.getElementById('messageInput').value = '';
         clearImageSelection();
@@ -679,8 +701,8 @@ async function sendImageFromFile(file, caption = '') {
         
         showToast('¡Imagen enviada! ✅', 'success');
         
-        // Refresh conversation
-        setTimeout(() => selectConversation(currentConversation.phone_number), 1500);
+        // Refresh conversation after a short delay to sync with server
+        setTimeout(() => selectConversation(currentConversation.phone_number), 2000);
         
     } catch (error) {
         console.error('Error sending image:', error);
