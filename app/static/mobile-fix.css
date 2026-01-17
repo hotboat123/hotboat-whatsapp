@@ -1,0 +1,136 @@
+/* Mobile Fixes - Append to styles.css */
+@media (max-width: 768px) {
+    /* Mobile-specific styles for message input */
+    .message-input-area {
+        padding: 0.8rem !important;
+    }
+    
+    #messageForm {
+        gap: 0.75rem !important;
+    }
+    
+    /* Make attachment button larger and more visible on mobile */
+    .btn-attachment {
+        width: 50px !important;
+        height: 50px !important;
+        font-size: 1.6rem !important;
+        flex-shrink: 0 !important;
+        border: 2px solid var(--border-color) !important;
+    }
+    
+    /* Adjust textarea for mobile */
+    #messageInput,
+    #newMessageText {
+        font-size: 16px !important; /* Prevents zoom on iOS */
+        min-height: 60px !important;
+        padding: 12px !important;
+        border-radius: 8px !important;
+    }
+    
+    /* Mobile layout: attachment button and textarea side by side */
+    #messageForm > div:first-child,
+    .form-group > div:first-child {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 0.75rem !important;
+        align-items: flex-start !important;
+        width: 100% !important;
+    }
+    
+    #messageForm > div:first-child textarea,
+    .form-group > div:first-child textarea {
+        flex: 1 !important;
+        min-width: 0 !important;
+    }
+    
+    /* Move input actions (char counter and send button) below on mobile */
+    .input-actions {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.75rem !important;
+        width: 100% !important;
+        margin-top: 0.5rem !important;
+    }
+    
+    .char-counter {
+        order: 2 !important;
+        text-align: center !important;
+        font-size: 14px !important;
+    }
+    
+    /* Make send button full width and below message input on mobile */
+    .btn-primary,
+    #sendButton {
+        order: 1 !important;
+        width: 100% !important;
+        padding: 14px 20px !important;
+        font-size: 17px !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Image preview on mobile */
+    #imagePreview,
+    #newImagePreview {
+        margin-top: 0.75rem !important;
+        text-align: center;
+    }
+    
+    #imagePreview img,
+    #newImagePreview img {
+        max-width: 100% !important;
+        max-height: 200px !important;
+        border-radius: 12px !important;
+    }
+    
+    #imagePreview button,
+    #newImagePreview button {
+        width: 32px !important;
+        height: 32px !important;
+        font-size: 18px !important;
+        top: 10px !important;
+        right: 10px !important;
+    }
+    
+    /* Form groups spacing on mobile */
+    .form-group {
+        margin-bottom: 1.25rem !important;
+    }
+    
+    /* Modal adjustments for mobile */
+    .modal-content {
+        padding: 1.25rem !important;
+        max-height: 90vh !important;
+        overflow-y: auto !important;
+        width: 95% !important;
+        margin: 10px !important;
+    }
+    
+    .modal-header h2 {
+        font-size: 1.1rem !important;
+    }
+    
+    /* Modal form adjustments */
+    .modal-actions {
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+    }
+    
+    .modal-actions button {
+        width: 100% !important;
+        padding: 14px !important;
+        font-size: 17px !important;
+    }
+    
+    /* Toast notifications for mobile */
+    .toast-container {
+        left: 1rem !important;
+        right: 1rem !important;
+        bottom: 1rem !important;
+    }
+    
+    .toast {
+        width: 100% !important;
+        font-size: 14px !important;
+    }
+}
