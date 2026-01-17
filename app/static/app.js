@@ -471,9 +471,10 @@ function renderCurrentChat(options = {}) {
             const direction = msg.direction ?? (msg.role === 'assistant' ? 'outgoing' : 'incoming');
             const sanitized = escapeHtml(text || '').replace(/\n/g, '<br>');
             const isImage = (msg.message_type === 'image');
-            const mediaUrl = msg.media_url;
+            // For images, the URL can be in media_url (outgoing) or response_text (incoming)
+            const mediaUrl = msg.media_url || msg.response_text;
             
-            if (isImage && mediaUrl) {
+            if (isImage && mediaUrl && !mediaUrl.startsWith('[')) {
                 return `
                     <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
                         <div class="message-text">
