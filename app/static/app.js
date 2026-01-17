@@ -658,13 +658,15 @@ async function sendImageFromFile(file, caption = '') {
             throw new Error('El archivo debe ser una imagen válida');
         }
 
-        // Check file size (5MB limit)
-        if (file.size > 5 * 1024 * 1024) {
-            throw new Error('La imagen es demasiado grande (máximo 5MB)');
+        // Check file size - warn if very large but allow it (server will compress)
+        const fileSizeMB = file.size / (1024 * 1024);
+        console.log(`📤 Sending image from mobile/desktop: ${file.name}, size: ${fileSizeMB.toFixed(2)} MB, type: ${file.type}`);
+        
+        if (fileSizeMB > 5) {
+            showToast(`Comprimiendo imagen (${fileSizeMB.toFixed(1)}MB)...`, 'info');
+        } else {
+            showToast('Subiendo imagen...', 'info');
         }
-
-        console.log(`📤 Sending image from mobile/desktop: ${file.name}, size: ${file.size} bytes, type: ${file.type}`);
-        showToast('Subiendo imagen...', 'info');
         
         const formData = new FormData();
         formData.append('image', file);

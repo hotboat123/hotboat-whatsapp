@@ -460,19 +460,17 @@ async def upload_and_send_image(
         if not image.content_type or not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
         
-        # Validate file size (5MB limit)
+        # Read file contents
         contents = await image.read()
-        if len(contents) > 5 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
-        
-        logger.info(f"📥 Processing image {image.filename} ({len(contents)} bytes) from {to}")
+        original_size_mb = len(contents) / (1024 * 1024)
+        logger.info(f"📥 Processing image {image.filename} ({original_size_mb:.2f} MB) from {to}")
         
         # Save to temporary file for processing
         with tempfile.NamedTemporaryFile(delete=False, suffix='_original') as temp_file:
             temp_file.write(contents)
             original_path = temp_file.name
         
-        # Process image with Pillow to ensure WhatsApp compatibility
+        # Process image with Pillow to ensure WhatsApp compatibility and compress if needed
         try:
             img = PILImage.open(original_path)
             
@@ -491,22 +489,67 @@ async def upload_and_send_image(
                 else:
                     img = img.convert('RGB')
             
-            # Resize if too large (WhatsApp recommends max 1600x1600)
+            # WhatsApp has a 5MB limit, so we need to compress intelligently
+            MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB in bytes
+            
+            # Start with reasonable dimensions
             max_dimension = 1600
+            quality = 85
+            
+            # If the image is huge, reduce dimensions more aggressively
+            if original_size_mb > 10:
+                max_dimension = 1200
+                quality = 75
+            elif original_size_mb > 20:
+                max_dimension = 1000
+                quality = 70
+            
+            # Resize if too large
             if img.width > max_dimension or img.height > max_dimension:
-                logger.info(f"📏 Resizing image from {img.size}")
+                logger.info(f"📏 Resizing image from {img.size} to fit {max_dimension}x{max_dimension}")
                 img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
                 logger.info(f"✅ Resized to {img.size}")
             
-            # Save as JPEG with high quality (JPEG is more reliable than PNG for WhatsApp)
+            # Try to compress until file size is acceptable
             processed_path = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg').name
-            img.save(processed_path, 'JPEG', quality=85, optimize=True)
+            attempts = 0
+            max_attempts = 5
+            
+            while attempts < max_attempts:
+                # Save with current settings
+                img.save(processed_path, 'JPEG', quality=quality, optimize=True)
+                file_size = os.path.getsize(processed_path)
+                file_size_mb = file_size / (1024 * 1024)
+                
+                logger.info(f"🔄 Attempt {attempts + 1}: quality={quality}, size={file_size_mb:.2f}MB")
+                
+                if file_size <= MAX_FILE_SIZE:
+                    logger.info(f"✅ Image compressed successfully: {file_size_mb:.2f}MB (from {original_size_mb:.2f}MB)")
+                    break
+                
+                # If still too large, reduce quality or dimensions
+                if quality > 60:
+                    quality -= 10
+                else:
+                    # If quality is already low, reduce dimensions
+                    current_max = max(img.width, img.height)
+                    new_max = int(current_max * 0.8)  # Reduce by 20%
+                    logger.info(f"📏 Further reducing dimensions to {new_max}x{new_max}")
+                    img.thumbnail((new_max, new_max), PILImage.Resampling.LANCZOS)
+                    quality = 70  # Reset quality a bit
+                
+                attempts += 1
+            
+            # Check final size
+            final_size = os.path.getsize(processed_path)
+            if final_size > MAX_FILE_SIZE:
+                logger.warning(f"⚠️ Image still large after compression: {final_size / (1024 * 1024):.2f}MB")
+                # We'll try to send it anyway, WhatsApp will reject if truly too large
             
             # Clean up original
             os.unlink(original_path)
             
             temp_path = processed_path
-            logger.info(f"✅ Image processed successfully: {os.path.getsize(temp_path)} bytes")
             
         except Exception as img_error:
             logger.error(f"❌ Error processing image: {img_error}")
