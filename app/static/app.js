@@ -952,9 +952,10 @@ function handleImageFileSelect(event) {
         return;
     }
     
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        showToast('La imagen es demasiado grande (máximo 5MB)', 'error');
-        return;
+    // Show info if file is large (will be compressed automatically)
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > 5) {
+        showToast(`Imagen grande (${fileSizeMB.toFixed(1)}MB) - se comprimirá automáticamente`, 'info');
     }
     
     selectedImageFile = file;
@@ -986,9 +987,10 @@ function handleNewImageFileSelect(event) {
         return;
     }
     
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        showToast('La imagen es demasiado grande (máximo 5MB)', 'error');
-        return;
+    // Show info if file is large (will be compressed automatically)
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > 5) {
+        showToast(`Imagen grande (${fileSizeMB.toFixed(1)}MB) - se comprimirá automáticamente`, 'info');
     }
     
     selectedNewImageFile = file;
