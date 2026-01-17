@@ -15,8 +15,8 @@
     <meta property="og:image" content="https://hotboatchile.com/wp-content/uploads/cropped-Screenshot_3-192x192.jpg">
     <meta property="og:url" content="https://hotboat-whatsapp-production.up.railway.app">
     <meta property="og:type" content="website">
-    <link rel="stylesheet" href="/static/styles.css?v=20260117f">
-    <link rel="stylesheet" href="/static/mobile-fix.css?v=20260117f">
+    <link rel="stylesheet" href="/static/styles.css?v=20260117g">
+    <link rel="stylesheet" href="/static/mobile-fix.css?v=20260117g">
 </head>
 <body>
     <div class="container">
@@ -105,19 +105,6 @@
                             <img id="previewImg" src="" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 8px;">
                             <button type="button" onclick="clearImageSelection()" style="position: absolute; top: 5px; right: 5px; background: rgba(0,0,0,0.7); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;">✕</button>
                         </div>
-                        <div class="form-group" style="margin-top: 0.5rem;">
-                            <label style="display: flex; gap: 0.5rem; align-items: center;">
-                                <input type="checkbox" id="sendAsImage">
-                                Enviar como imagen (usa URL pública)
-                            </label>
-                            <input 
-                                type="url" 
-                                id="messageImageUrl" 
-                                placeholder="https://ejemplo.com/imagen.jpg"
-                                style="margin-top: 0.35rem;"
-                            >
-                            <small>Si se marca, el texto será el caption (opcional).</small>
-                        </div>
                         <div class="input-actions">
                             <div class="char-counter">
                                 <span id="charCount">0</span>/4096
@@ -200,18 +187,6 @@
                     </div>
                     <small><span id="newMsgCharCount">0</span>/4096 characters</small>
                 </div>
-                <div class="form-group">
-                    <label style="display: flex; gap: 0.5rem; align-items: center;">
-                        <input type="checkbox" id="newSendAsImage">
-                        Enviar como imagen (usa URL pública)
-                    </label>
-                    <input 
-                        type="url" 
-                        id="newMessageImageUrl" 
-                        placeholder="https://ejemplo.com/imagen.jpg"
-                    >
-                    <small>Si se marca, el texto será el caption (opcional).</small>
-                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" onclick="closeNewMessageModal()">
                         Cancel
@@ -227,7 +202,7 @@
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="/static/app.js?v=20260117f"></script>
+    <script src="/static/app.js?v=20260117g"></script>
 </body>
 </html>
 

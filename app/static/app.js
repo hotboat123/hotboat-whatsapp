@@ -634,11 +634,7 @@ async function sendMessage(event) {
     event.preventDefault();
     
     const input = document.getElementById('messageInput');
-    const sendAsImageCheckbox = document.getElementById('sendAsImage');
-    const imageUrlInput = document.getElementById('messageImageUrl');
     const message = input.value.trim();
-    const imageUrl = imageUrlInput ? imageUrlInput.value.trim() : '';
-    const sendAsImage = sendAsImageCheckbox && sendAsImageCheckbox.checked && imageUrl.length > 0;
     
     // Check if user selected an image file
     if (selectedImageFile) {
@@ -646,15 +642,10 @@ async function sendMessage(event) {
         return;
     }
     
-    if ((!message && !sendAsImage) || !currentConversation) return;
+    if (!message || !currentConversation) return;
     
     try {
-        const payload = sendAsImage ? {
-            to: currentConversation.phone_number,
-            type: 'image',
-            image_url: imageUrl,
-            caption: message || undefined
-        } : {
+        const payload = {
             to: currentConversation.phone_number,
             message: message
         };
@@ -675,9 +666,9 @@ async function sendMessage(event) {
         const timestamp = new Date().toISOString();
         const newMessage = {
             id: result?.message_id || `temp_${Date.now()}`,
-            message_text: message || (sendAsImage ? '[Imagen enviada]' : ''),
+            message_text: message,
             direction: 'outgoing',
-            message_type: sendAsImage ? 'image' : 'text',
+            message_type: 'text',
             timestamp
         };
 
@@ -696,8 +687,6 @@ async function sendMessage(event) {
         
         // Clear input
         input.value = '';
-        if (imageUrlInput) imageUrlInput.value = '';
-        if (sendAsImageCheckbox) sendAsImageCheckbox.checked = false;
         updateCharCount('messageInput', 'charCount');
         
         showToast('Message sent successfully! ✅', 'success');
@@ -823,10 +812,6 @@ async function sendNewMessage(event) {
     
     const phone = document.getElementById('recipientPhone').value.trim();
     const message = document.getElementById('newMessageText').value.trim();
-    const sendAsImageCheckbox = document.getElementById('newSendAsImage');
-    const imageUrlInput = document.getElementById('newMessageImageUrl');
-    const imageUrl = imageUrlInput ? imageUrlInput.value.trim() : '';
-    const sendAsImage = sendAsImageCheckbox && sendAsImageCheckbox.checked && imageUrl.length > 0;
     
     // Check if user selected an image file
     if (selectedNewImageFile) {
@@ -838,15 +823,10 @@ async function sendNewMessage(event) {
         return;
     }
     
-    if (!phone || (!message && !sendAsImage)) return;
+    if (!phone || !message) return;
     
     try {
-        const payload = sendAsImage ? {
-            to: phone,
-            type: 'image',
-            image_url: imageUrl,
-            caption: message || undefined
-        } : {
+        const payload = {
             to: phone,
             message: message
         };
