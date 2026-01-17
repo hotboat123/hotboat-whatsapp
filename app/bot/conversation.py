@@ -57,7 +57,7 @@ EXTRAS_NUMBER_MAP = {
 
 # Frases que activan el modo de entrega manual (silencian al bot)
 MANUAL_HANDOVER_TRIGGERS = [
-    "Tomás de HotBoat por Aquí",
+    "Tomás de HotBoat por Aquí,
     "hola tomas de hotboat por aqui",
 ]
 
@@ -256,10 +256,8 @@ class ConversationManager:
                 "message_id": message_id
             })
             
-            # Send immediate notification for every incoming user message
-            asyncio.create_task(
-                self._send_incoming_message_email(contact_name, from_number, message_text, message_id)
-            )
+            # NOTE: Email notifications are now sent in the webhook handler (webhook.py)
+            # to ensure they're always sent even when the bot is disabled for a user
             
             # If manual handover is active, skip bot responses
             if metadata.get("manual_override_active"):

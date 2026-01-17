@@ -100,6 +100,17 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             text_body = message.get("text", {}).get("body", "")
             logger.info(f"💬 Message text: {text_body}")
             
+            # ALWAYS send email notification for incoming messages (even if bot is disabled)
+            try:
+                await conversation_manager._send_incoming_message_email(
+                    contact_name=contact_name,
+                    phone_number=from_number,
+                    message_text=text_body,
+                    message_id=message_id
+                )
+            except Exception as email_error:
+                logger.warning(f"Could not send email notification: {email_error}")
+            
             # Check if bot is enabled for this user
             from app.db.leads import get_or_create_lead
             lead = await get_or_create_lead(from_number, contact_name)
@@ -275,6 +286,39 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 display_url = media_url
             
             text_body = caption if caption else "[Imagen sin texto]"
+            
+            # ALWAYS send email notification for incoming images (even if bot is disabled)
+            try:
+                await conversation_manager._send_incoming_message_email(
+                    contact_name=contact_name,
+                    phone_number=from_number,
+                    message_text=f"🖼️ [Imagen] {text_body}",
+                    message_id=message_id
+                )
+            except Exception as email_error:
+                logger.warning(f"Could not send email notification for image: {email_error}")
+            
+            # Check if bot is enabled for this user
+            from app.db.leads import get_or_create_lead
+            lead = await get_or_create_lead(from_number, contact_name)
+            bot_enabled = lead.get("bot_enabled", True) if lead else True
+            
+            if not bot_enabled:
+                logger.info(f"🤐 Bot disabled for {from_number}, saving image but not responding")
+                try:
+                    if display_url:
+                        await save_conversation(
+                            phone_number=from_number,
+                            customer_name=contact_name,
+                            message_text=text_body,
+                            response_text=display_url,
+                            message_type="image",
+                            message_id=message_id,
+                            direction="incoming"
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not save image conversation: {e}")
+                return  # Exit early, no bot response
             
             try:
                 response = await conversation_manager.process_message(
