@@ -1,7 +1,7 @@
 """
 FastAPI main application
 """
-from fastapi import FastAPI, Request, Response, HTTPException, Query
+from fastapi import FastAPI, Request, Response, HTTPException, Query, UploadFile, Form
 from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import logging
@@ -429,6 +429,107 @@ async def send_custom_message(request: SendMessageRequest):
     except Exception as e:
         logger.error(f"Error sending custom message: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
+
+
+@app.post("/api/upload-and-send-image")
+async def upload_and_send_image(
+    image: UploadFile,
+    to: str = Form(...),
+    caption: Optional[str] = Form(None)
+):
+    """
+    Upload an image file and send it via WhatsApp
+    
+    Args:
+        image: Image file to upload
+        to: Recipient phone number
+        caption: Optional caption for the image
+    """
+    try:
+        # Validate inputs
+        if not to:
+            raise HTTPException(status_code=400, detail="Phone number is required")
+        
+        if not image:
+            raise HTTPException(status_code=400, detail="Image file is required")
+        
+        # Validate file type
+        if not image.content_type or not image.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        # Validate file size (5MB limit)
+        contents = await image.read()
+        if len(contents) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+        
+        # Save temporarily
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(image.filename)[1]) as temp_file:
+            temp_file.write(contents)
+            temp_path = temp_file.name
+        
+        try:
+            # Upload to WhatsApp
+            logger.info(f"Uploading image {image.filename} to WhatsApp...")
+            media_id = await whatsapp_client.upload_media(temp_path, image.content_type)
+            
+            if not media_id:
+                raise HTTPException(status_code=500, detail="Failed to upload image to WhatsApp")
+            
+            logger.info(f"✅ Image uploaded successfully, media_id: {media_id}")
+            
+            # Send image message
+            result = await whatsapp_client.send_image_message(
+                to=to,
+                media_id=media_id,
+                caption=caption
+            )
+            
+            message_id = result.get('messages', [{}])[0].get('id', '')
+            
+            # Get lead info
+            lead = None
+            try:
+                lead = await get_or_create_lead(to)
+            except Exception as lead_error:
+                logger.error(f"Error loading lead: {lead_error}")
+            
+            # Log in database
+            try:
+                await save_conversation(
+                    phone_number=to,
+                    customer_name=lead.get('customer_name', to) if lead else to,
+                    message_text=caption or '[Imagen enviada]',
+                    response_text=f"media_id:{media_id}",
+                    message_type="image",
+                    message_id=message_id or None,
+                    direction='outgoing'
+                )
+            except Exception as db_error:
+                logger.error(f"Error storing message in DB: {db_error}")
+            
+            return {
+                "status": "sent",
+                "to": to,
+                "message_id": message_id,
+                "media_id": media_id,
+                "details": result
+            }
+            
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading and sending image: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to send image: {str(e)}")
 
 
 @app.get("/api/media/{media_id}")

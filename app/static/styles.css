@@ -715,6 +715,33 @@ body {
     background: var(--text-secondary);
 }
 
+/* Attachment Button */
+.btn-attachment {
+    background: var(--bg-light);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.btn-attachment:hover {
+    background: var(--bg-medium);
+    border-color: var(--primary-color);
+    transform: scale(1.05);
+}
+
+.btn-attachment:active {
+    transform: scale(0.95);
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .right-panel {

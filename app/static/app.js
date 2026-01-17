@@ -578,6 +578,12 @@ async function sendMessage(event) {
     const imageUrl = imageUrlInput ? imageUrlInput.value.trim() : '';
     const sendAsImage = sendAsImageCheckbox && sendAsImageCheckbox.checked && imageUrl.length > 0;
     
+    // Check if user selected an image file
+    if (selectedImageFile) {
+        await sendImageFromFile(selectedImageFile, message);
+        return;
+    }
+    
     if ((!message && !sendAsImage) || !currentConversation) return;
     
     try {
@@ -643,6 +649,45 @@ async function sendMessage(event) {
     }
 }
 
+async function sendImageFromFile(file, caption = '') {
+    if (!currentConversation) return;
+    
+    try {
+        showToast('Subiendo imagen...', 'info');
+        
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('to', currentConversation.phone_number);
+        if (caption) formData.append('caption', caption);
+        
+        const response = await fetch(`${API_BASE}/api/upload-and-send-image`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to upload image');
+        }
+        
+        const result = await response.json();
+        
+        // Clear inputs and preview
+        document.getElementById('messageInput').value = '';
+        clearImageSelection();
+        updateCharCount('messageInput', 'charCount');
+        
+        showToast('¡Imagen enviada! ✅', 'success');
+        
+        // Refresh conversation
+        setTimeout(() => selectConversation(currentConversation.phone_number), 1500);
+        
+    } catch (error) {
+        console.error('Error sending image:', error);
+        showToast('Error al enviar imagen: ' + error.message, 'error');
+    }
+}
+
 // Show New Message Modal
 function showNewMessageModal() {
     const modal = document.getElementById('newMessageModal');
@@ -667,6 +712,16 @@ async function sendNewMessage(event) {
     const imageUrlInput = document.getElementById('newMessageImageUrl');
     const imageUrl = imageUrlInput ? imageUrlInput.value.trim() : '';
     const sendAsImage = sendAsImageCheckbox && sendAsImageCheckbox.checked && imageUrl.length > 0;
+    
+    // Check if user selected an image file
+    if (selectedNewImageFile) {
+        if (!phone) {
+            showToast('Ingresa un número de teléfono', 'error');
+            return;
+        }
+        await sendNewImageFromFile(selectedNewImageFile, phone, message);
+        return;
+    }
     
     if (!phone || (!message && !sendAsImage)) return;
     
@@ -706,6 +761,43 @@ async function sendNewMessage(event) {
     } catch (error) {
         console.error('Error sending new message:', error);
         showToast(error.message || 'Failed to send message', 'error');
+    }
+}
+
+async function sendNewImageFromFile(file, phone, caption = '') {
+    try {
+        showToast('Subiendo imagen...', 'info');
+        
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('to', phone);
+        if (caption) formData.append('caption', caption);
+        
+        const response = await fetch(`${API_BASE}/api/upload-and-send-image`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to upload image');
+        }
+        
+        showToast('¡Imagen enviada! ✅', 'success');
+        closeNewMessageModal();
+        
+        // Clear selection
+        clearNewImageSelection();
+        
+        // Refresh conversations and select the new one
+        setTimeout(() => {
+            loadConversations();
+            selectConversation(phone);
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Error sending image:', error);
+        showToast('Error al enviar imagen: ' + error.message, 'error');
     }
 }
 
@@ -795,6 +887,78 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Image upload handling - Chat area
+let selectedImageFile = null;
+
+function handleImageFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        showToast('Por favor selecciona un archivo de imagen', 'error');
+        return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        showToast('La imagen es demasiado grande (máximo 5MB)', 'error');
+        return;
+    }
+    
+    selectedImageFile = file;
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('previewImg').src = e.target.result;
+        document.getElementById('imagePreview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearImageSelection() {
+    selectedImageFile = null;
+    document.getElementById('imageFileInput').value = '';
+    document.getElementById('imagePreview').style.display = 'none';
+}
+
+// Image upload handling - New message modal
+let selectedNewImageFile = null;
+
+function handleNewImageFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        showToast('Por favor selecciona un archivo de imagen', 'error');
+        return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        showToast('La imagen es demasiado grande (máximo 5MB)', 'error');
+        return;
+    }
+    
+    selectedNewImageFile = file;
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('newPreviewImg').src = e.target.result;
+        document.getElementById('newImagePreview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearNewImageSelection() {
+    selectedNewImageFile = null;
+    document.getElementById('newImageFileInput').value = '';
+    document.getElementById('newImagePreview').style.display = 'none';
+}
+
+window.handleImageFileSelect = handleImageFileSelect;
+window.clearImageSelection = clearImageSelection;
+window.handleNewImageFileSelect = handleNewImageFileSelect;
+window.clearNewImageSelection = clearNewImageSelection;
 window.loadOlderMessages = loadOlderMessages;
 window.showConversationList = showConversationList;
 
