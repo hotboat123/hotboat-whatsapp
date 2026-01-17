@@ -653,6 +653,17 @@ async function sendImageFromFile(file, caption = '') {
     if (!currentConversation) return;
     
     try {
+        // Validate file before sending
+        if (!file || !file.type.startsWith('image/')) {
+            throw new Error('El archivo debe ser una imagen válida');
+        }
+
+        // Check file size (5MB limit)
+        if (file.size > 5 * 1024 * 1024) {
+            throw new Error('La imagen es demasiado grande (máximo 5MB)');
+        }
+
+        console.log(`📤 Sending image from mobile/desktop: ${file.name}, size: ${file.size} bytes, type: ${file.type}`);
         showToast('Subiendo imagen...', 'info');
         
         const formData = new FormData();
@@ -666,13 +677,28 @@ async function sendImageFromFile(file, caption = '') {
         });
         
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to upload image');
+            const errorText = await response.text();
+            console.error('❌ Server error:', response.status, errorText);
+            let errorMessage = 'Failed to upload image';
+            try {
+                const errorJson = JSON.parse(errorText);
+                errorMessage = errorJson.detail || errorMessage;
+            } catch (e) {
+                errorMessage = errorText || errorMessage;
+            }
+            throw new Error(errorMessage);
         }
         
         const result = await response.json();
+        console.log('✅ Image upload response:', result);
         
-        // Optimistically add the image to the UI immediately
+        // Verify the response has the required data
+        if (!result || (!result.media_id && !result.media_url)) {
+            console.error('❌ Invalid server response:', result);
+            throw new Error('El servidor no devolvió información de la imagen');
+        }
+        
+        // Now add the image to the UI only if everything succeeded
         const timestamp = new Date().toISOString();
         const newMessage = {
             id: result?.message_id || `temp_${Date.now()}`,
@@ -705,8 +731,11 @@ async function sendImageFromFile(file, caption = '') {
         setTimeout(() => selectConversation(currentConversation.phone_number), 2000);
         
     } catch (error) {
-        console.error('Error sending image:', error);
+        console.error('❌ Error sending image:', error);
         showToast('Error al enviar imagen: ' + error.message, 'error');
+        
+        // Don't add the message to UI if there was an error
+        // User will see the error toast instead
     }
 }
 

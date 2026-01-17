@@ -446,6 +446,9 @@ async def upload_and_send_image(
         caption: Optional caption for the image
     """
     try:
+        from PIL import Image as PILImage
+        import tempfile
+        
         # Validate inputs
         if not to:
             raise HTTPException(status_code=400, detail="Phone number is required")
@@ -462,16 +465,58 @@ async def upload_and_send_image(
         if len(contents) > 5 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
         
-        # Save temporarily
-        import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(image.filename)[1]) as temp_file:
+        logger.info(f"📥 Processing image {image.filename} ({len(contents)} bytes) from {to}")
+        
+        # Save to temporary file for processing
+        with tempfile.NamedTemporaryFile(delete=False, suffix='_original') as temp_file:
             temp_file.write(contents)
-            temp_path = temp_file.name
+            original_path = temp_file.name
+        
+        # Process image with Pillow to ensure WhatsApp compatibility
+        try:
+            img = PILImage.open(original_path)
+            
+            logger.info(f"🎨 Original image format: {img.format}, mode: {img.mode}, size: {img.size}")
+            
+            # Convert to RGB if needed (removes alpha channel, converts CMYK, P3, etc.)
+            if img.mode not in ('RGB', 'L'):  # L is grayscale
+                logger.info(f"🔄 Converting image from {img.mode} to RGB")
+                # If image has transparency, paste on white background
+                if img.mode in ('RGBA', 'LA', 'PA'):
+                    background = PILImage.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                    img = background
+                else:
+                    img = img.convert('RGB')
+            
+            # Resize if too large (WhatsApp recommends max 1600x1600)
+            max_dimension = 1600
+            if img.width > max_dimension or img.height > max_dimension:
+                logger.info(f"📏 Resizing image from {img.size}")
+                img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+                logger.info(f"✅ Resized to {img.size}")
+            
+            # Save as JPEG with high quality (JPEG is more reliable than PNG for WhatsApp)
+            processed_path = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg').name
+            img.save(processed_path, 'JPEG', quality=85, optimize=True)
+            
+            # Clean up original
+            os.unlink(original_path)
+            
+            temp_path = processed_path
+            logger.info(f"✅ Image processed successfully: {os.path.getsize(temp_path)} bytes")
+            
+        except Exception as img_error:
+            logger.error(f"❌ Error processing image: {img_error}")
+            # If processing fails, try with original
+            temp_path = original_path
         
         try:
-            # Upload to WhatsApp
-            logger.info(f"Uploading image {image.filename} to WhatsApp...")
-            media_id = await whatsapp_client.upload_media(temp_path, image.content_type)
+            # Upload to WhatsApp (always use image/jpeg after processing)
+            logger.info(f"📤 Uploading processed image to WhatsApp...")
+            media_id = await whatsapp_client.upload_media(temp_path, 'image/jpeg')
             
             if not media_id:
                 raise HTTPException(status_code=500, detail="Failed to upload image to WhatsApp")
