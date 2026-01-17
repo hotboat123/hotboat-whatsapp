@@ -32,7 +32,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                 cur.execute("""
                     SELECT 
                         id, phone_number, customer_name, lead_status, 
-                        notes, tags, created_at, updated_at, last_interaction_at
+                        notes, tags, created_at, updated_at, last_interaction_at, bot_enabled
                     FROM whatsapp_leads
                     WHERE phone_number = %s
                 """, (phone_number,))
@@ -67,7 +67,8 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "tags": row[5] if row[5] else [],
                         "created_at": row[6].isoformat() if row[6] else None,
                         "updated_at": row[7].isoformat() if row[7] else None,
-                        "last_interaction_at": row[8].isoformat() if row[8] else None
+                        "last_interaction_at": row[8].isoformat() if row[8] else None,
+                        "bot_enabled": row[9] if len(row) > 9 else True
                     }
                 else:
                     # Create new lead
@@ -90,7 +91,8 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "tags": [],
                         "created_at": datetime.now(CHILE_TZ).isoformat(),
                         "updated_at": datetime.now(CHILE_TZ).isoformat(),
-                        "last_interaction_at": datetime.now(CHILE_TZ).isoformat()
+                        "last_interaction_at": datetime.now(CHILE_TZ).isoformat(),
+                        "bot_enabled": True
                     }
     
     except Exception as e:
@@ -141,6 +143,35 @@ async def update_lead_status(phone_number: str, lead_status: str, notes: str = N
         return False
 
 
+async def toggle_bot_for_lead(phone_number: str, bot_enabled: bool) -> bool:
+    """
+    Enable or disable automatic bot responses for a specific lead
+    
+    Args:
+        phone_number: Contact phone number
+        bot_enabled: True to enable bot, False to disable
+    
+    Returns:
+        True if successful
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE whatsapp_leads
+                    SET bot_enabled = %s, updated_at = NOW()
+                    WHERE phone_number = %s
+                """, (bot_enabled, phone_number))
+                
+                conn.commit()
+                logger.info(f"Bot {'enabled' if bot_enabled else 'disabled'} for {phone_number}")
+                return True
+    
+    except Exception as e:
+        logger.error(f"Error toggling bot for lead: {e}")
+        return False
+
+
 async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50) -> List[Dict]:
     """
     Get leads filtered by status
@@ -159,7 +190,7 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                     cur.execute("""
                         SELECT 
                             id, phone_number, customer_name, lead_status, 
-                            notes, tags, created_at, updated_at, last_interaction_at
+                            notes, tags, created_at, updated_at, last_interaction_at, bot_enabled
                         FROM whatsapp_leads
                         WHERE lead_status = %s
                         ORDER BY last_interaction_at DESC NULLS LAST
@@ -169,7 +200,7 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                     cur.execute("""
                         SELECT 
                             id, phone_number, customer_name, lead_status, 
-                            notes, tags, created_at, updated_at, last_interaction_at
+                            notes, tags, created_at, updated_at, last_interaction_at, bot_enabled
                         FROM whatsapp_leads
                         ORDER BY last_interaction_at DESC NULLS LAST
                         LIMIT %s
@@ -188,7 +219,8 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                         "tags": row[5] if row[5] else [],
                         "created_at": row[6].isoformat() if row[6] else None,
                         "updated_at": row[7].isoformat() if row[7] else None,
-                        "last_interaction_at": row[8].isoformat() if row[8] else None
+                        "last_interaction_at": row[8].isoformat() if row[8] else None,
+                        "bot_enabled": row[9] if len(row) > 9 else True
                     })
                 
                 return leads

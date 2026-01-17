@@ -100,6 +100,28 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             text_body = message.get("text", {}).get("body", "")
             logger.info(f"💬 Message text: {text_body}")
             
+            # Check if bot is enabled for this user
+            from app.db.leads import get_or_create_lead
+            lead = await get_or_create_lead(from_number, contact_name)
+            bot_enabled = lead.get("bot_enabled", True) if lead else True
+            
+            if not bot_enabled:
+                logger.info(f"🤐 Bot disabled for {from_number}, saving message but not responding")
+                # Save incoming message only, no bot response
+                try:
+                    await save_conversation(
+                        phone_number=from_number,
+                        customer_name=contact_name,
+                        message_text=text_body,
+                        response_text="",
+                        message_type="text",
+                        message_id=message_id,
+                        direction="incoming"
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not save conversation: {e}")
+                return  # Exit early, no bot response
+            
             # Process the message with conversation manager
             try:
                 response = await conversation_manager.process_message(

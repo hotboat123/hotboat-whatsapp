@@ -564,7 +564,79 @@ function renderLeadInfo(lead) {
                 <div class="info-value">${escapeHtml(lead.notes)}</div>
             </div>
         ` : ''}
+        <div class="info-item" style="border-top: 1px solid #2a4a5a; padding-top: 1rem; margin-top: 1rem;">
+            <div class="info-label">
+                <span style="font-weight: 600;">🤖 Bot Automático</span>
+            </div>
+            <div class="info-value">
+                <label class="bot-toggle-container" style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input 
+                        type="checkbox" 
+                        id="botToggle" 
+                        ${lead.bot_enabled !== false ? 'checked' : ''} 
+                        onchange="toggleBot('${lead.phone_number}', this.checked)"
+                        style="width: 20px; height: 20px; cursor: pointer;"
+                    >
+                    <span id="botToggleLabel" style="color: ${lead.bot_enabled !== false ? '#4ade80' : '#94a3b8'}; font-weight: 500;">
+                        ${lead.bot_enabled !== false ? 'Activo - Bot responderá automáticamente' : 'Inactivo - Solo modo manual'}
+                    </span>
+                </label>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">
+                    ${lead.bot_enabled !== false 
+                        ? '✓ El bot procesará y responderá mensajes automáticamente' 
+                        : '⚠️ Debes responder manualmente a este usuario'
+                    }
+                </div>
+            </div>
+        </div>
     `;
+}
+
+// Toggle Bot for Lead
+async function toggleBot(phoneNumber, enabled) {
+    try {
+        showToast(`${enabled ? 'Activando' : 'Desactivando'} bot...`, 'info');
+        
+        const response = await fetch(`${API_BASE}/leads/${phoneNumber}/bot-toggle`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ bot_enabled: enabled })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to toggle bot');
+        }
+        
+        const result = await response.json();
+        
+        // Update UI
+        const label = document.getElementById('botToggleLabel');
+        if (label) {
+            label.textContent = enabled 
+                ? 'Activo - Bot responderá automáticamente' 
+                : 'Inactivo - Solo modo manual';
+            label.style.color = enabled ? '#4ade80' : '#94a3b8';
+        }
+        
+        showToast(`✅ Bot ${enabled ? 'activado' : 'desactivado'} correctamente`, 'success');
+        
+        // Reload lead info to update description
+        if (currentConversation) {
+            await loadLeadInfo(currentConversation.phone_number);
+        }
+        
+    } catch (error) {
+        console.error('Error toggling bot:', error);
+        showToast('Error al cambiar estado del bot', 'error');
+        
+        // Revert checkbox
+        const checkbox = document.getElementById('botToggle');
+        if (checkbox) {
+            checkbox.checked = !enabled;
+        }
+    }
 }
 
 // Send Message (Reply in Conversation)

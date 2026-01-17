@@ -249,6 +249,35 @@ async def update_lead(phone_number: str, update: LeadStatusUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class BotToggleUpdate(BaseModel):
+    bot_enabled: bool
+
+
+@app.put("/leads/{phone_number}/bot-toggle")
+async def toggle_bot_for_lead_endpoint(phone_number: str, update: BotToggleUpdate):
+    """Enable or disable automatic bot responses for a specific lead"""
+    try:
+        from app.db.leads import toggle_bot_for_lead
+        
+        success = await toggle_bot_for_lead(
+            phone_number=phone_number,
+            bot_enabled=update.bot_enabled
+        )
+        
+        if success:
+            return {
+                "status": "updated",
+                "phone_number": phone_number,
+                "bot_enabled": update.bot_enabled,
+                "message": f"Bot {'enabled' if update.bot_enabled else 'disabled'} for {phone_number}"
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to toggle bot for lead")
+    except Exception as e:
+        logger.error(f"Error toggling bot for lead: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class ConversationImport(BaseModel):
     phone_number: str
     customer_name: Optional[str] = None
