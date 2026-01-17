@@ -279,7 +279,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             
             display_url = None
             if local_image_path:
-                display_url = f"local:{local_image_path}"
+                # Use API endpoint, not local path (frontend can't access local: prefix)
+                display_url = f"/api/media/{media_id}"
             elif media_id:
                 display_url = f"/api/media/{media_id}"
             elif media_url:
