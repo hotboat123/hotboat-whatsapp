@@ -22,9 +22,9 @@ class AvailabilityConfig:
     exclude_statuses: List[str]  # Statuses to exclude from availability check
 
 # HotBoat specific configuration
-# Ahora con 2 HotBoats, ofrecemos reservas cada 2 horas
+# Ahora con 2 HotBoats, ofrecemos reservas cada 2 horas + horarios especiales
 AVAILABILITY_CONFIG = AvailabilityConfig(
-    operating_hours=[9, 11, 13, 15, 17, 19, 21],  # 9am, 11am, 1pm, 3pm, 5pm, 7pm, 9pm (cada 2 horas)
+    operating_hours=[6, 9, 11, 13, 15, 17, 19, 21, 23.5],  # 6am, 9am, 11am, 1pm, 3pm, 5pm, 7pm, 9pm, 11:30pm
     duration_hours=2.0,  # Each HotBoat trip lasts 2 hours
     buffer_hours=0.0,  # Sin buffer - con 2 HotBoats podemos tener reservas simultáneas
     exclude_statuses=['cancelled', 'rejected']
