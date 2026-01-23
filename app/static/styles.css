@@ -742,6 +742,61 @@ body {
     transform: scale(0.95);
 }
 
+.btn-microphone.recording {
+    background: var(--danger-color);
+    border-color: var(--danger-color);
+    animation: pulse-recording 1.5s infinite;
+}
+
+@keyframes pulse-recording {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
+}
+
+.recording-indicator {
+    width: 10px;
+    height: 10px;
+    background: var(--danger-color);
+    border-radius: 50%;
+    animation: pulse 1s infinite;
+}
+
+/* Audio Message */
+.audio-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem;
+}
+
+.audio-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.audio-message audio {
+    height: 32px;
+    outline: none;
+}
+
+.audio-message audio::-webkit-media-controls-panel {
+    background-color: transparent;
+}
+
+.message.incoming .audio-message audio {
+    filter: brightness(1.2);
+}
+
+.message.outgoing .audio-message audio {
+    filter: invert(1) brightness(2);
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .right-panel {
@@ -749,50 +804,100 @@ body {
     }
 }
 
-
-/* Bot Toggle Styles */
-.bot-toggle-section {
-    display: flex;
-    align-items: center;
-}
-
-.bot-toggle-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    font-size: 0.875rem;
-    user-select: none;
-}
-
-.bot-toggle-input {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-    accent-color: var(--success-color);
-}
-
-.bot-toggle-text {
-    color: var(--text-primary);
-    font-weight: 500;
-    white-space: nowrap;
-}
-
-.bot-toggle-input:checked + .bot-toggle-text {
-    color: var(--success-color);
-}
-
-.bot-toggle-input:not(:checked) + .bot-toggle-text {
-    color: var(--text-secondary);
-}
-
-/* Mobile: Bot toggle below Send button */
-@media (max-width: 900px) {
-    .bot-toggle-section {
-        order: 3;
+@media (max-width: 768px) {
+    /* Mobile-specific styles for message input */
+    .message-input-area {
+        padding: 0.8rem;
+    }
+    
+    #messageForm {
+        gap: 0.5rem;
+    }
+    
+    /* Make attachment button larger and more visible on mobile */
+    .btn-attachment {
+        width: 48px;
+        height: 48px;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+    
+    /* Adjust textarea for mobile */
+    #messageInput,
+    #newMessageText {
+        font-size: 16px !important; /* Prevents zoom on iOS */
+        min-height: 48px;
+        padding: 12px;
+    }
+    
+    /* Mobile layout: attachment button and textarea side by side, then actions below */
+    #messageForm > div:first-child {
+        display: flex;
+        gap: 0.5rem;
+        align-items: flex-start;
         width: 100%;
-        justify-content: center;
-        padding: 0.5rem 0;
-        border-top: 1px solid var(--border-color);
+    }
+    
+    #messageForm > div:first-child textarea {
+        flex: 1;
+    }
+    
+    /* Move input actions (char counter and send button) below on mobile */
+    .input-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+        width: 100%;
+    }
+    
+    .char-counter {
+        order: 2;
+        text-align: center;
+        font-size: 12px;
+    }
+    
+    /* Make send button full width and below message input on mobile */
+    .btn-primary {
+        order: 1;
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 16px;
+        border-radius: 8px;
+    }
+    
+    /* Image preview on mobile */
+    #imagePreview,
+    #newImagePreview {
+        margin-top: 0.5rem;
+    }
+    
+    #imagePreview img,
+    #newImagePreview img {
+        max-width: 100%;
+        max-height: 150px;
+        border-radius: 8px;
+    }
+    
+    /* Form groups spacing on mobile */
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    /* Modal adjustments for mobile */
+    .modal-content {
+        padding: 1rem;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    /* New message form on mobile */
+    #newMessageForm > div:nth-child(2) > div:first-child {
+        display: flex;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+    
+    #newMessageForm > div:nth-child(2) > div:first-child textarea {
+        flex: 1;
     }
 }

@@ -86,6 +86,9 @@
                             <button type="button" class="btn-attachment" onclick="document.getElementById('imageFileInput').click()" title="Adjuntar imagen">
                                 📎
                             </button>
+                            <button type="button" class="btn-attachment btn-microphone" id="microphoneButton" onclick="toggleAudioRecording()" title="Grabar audio">
+                                🎤
+                            </button>
                             <textarea 
                                 id="messageInput" 
                                 placeholder="Type your message..." 
@@ -93,6 +96,27 @@
                                 maxlength="4096"
                                 style="flex: 1;"
                             ></textarea>
+                        </div>
+                        <div id="audioRecordingStatus" style="display: none; margin-top: 0.5rem; padding: 0.5rem; background: var(--bg-light); border-radius: 8px; text-align: center;">
+                            <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                                <span class="recording-indicator"></span>
+                                <span id="recordingTime">0:00</span>
+                                <button type="button" onclick="stopAudioRecording()" class="btn-secondary" style="margin-left: 1rem;">
+                                    ⏹️ Detener
+                                </button>
+                                <button type="button" onclick="cancelAudioRecording()" class="btn-secondary">
+                                    ❌ Cancelar
+                                </button>
+                            </div>
+                        </div>
+                        <div id="audioPreview" style="display: none; margin-top: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; background: var(--bg-light); border-radius: 8px;">
+                                <span>🎤</span>
+                                <audio id="audioPreviewPlayer" controls style="flex: 1; max-width: 200px;"></audio>
+                                <button type="button" onclick="clearAudioRecording()" class="btn-secondary">
+                                    🗑️
+                                </button>
+                            </div>
                         </div>
                         <input 
                             type="file" 

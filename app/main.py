@@ -662,6 +662,121 @@ async def upload_and_send_image(
         raise HTTPException(status_code=500, detail=f"Failed to send image: {str(e)}")
 
 
+@app.post("/api/upload-and-send-audio")
+async def upload_and_send_audio(
+    audio: UploadFile,
+    to: str = Form(...)
+):
+    """
+    Upload an audio file and send it via WhatsApp
+    
+    Args:
+        audio: Audio file to upload
+        to: Recipient phone number
+    """
+    try:
+        import tempfile
+        
+        # Validate inputs
+        if not to:
+            raise HTTPException(status_code=400, detail="Phone number is required")
+        
+        if not audio:
+            raise HTTPException(status_code=400, detail="Audio file is required")
+        
+        # Validate file type (accept audio files)
+        if not audio.content_type or not audio.content_type.startswith('audio/'):
+            # Also accept webm video (often used for audio recording)
+            if not (audio.content_type and 'webm' in audio.content_type):
+                raise HTTPException(status_code=400, detail="File must be an audio file")
+        
+        # Read file contents
+        contents = await audio.read()
+        file_size_mb = len(contents) / (1024 * 1024)
+        logger.info(f"📥 Processing audio {audio.filename} ({file_size_mb:.2f} MB) from {to}")
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.ogg') as temp_file:
+            temp_file.write(contents)
+            temp_path = temp_file.name
+        
+        try:
+            # Determine MIME type
+            mime_type = "audio/ogg"
+            if audio.content_type:
+                if "mp3" in audio.content_type or "mpeg" in audio.content_type:
+                    mime_type = "audio/mpeg"
+                elif "mp4" in audio.content_type or "m4a" in audio.content_type:
+                    mime_type = "audio/mp4"
+                elif "wav" in audio.content_type:
+                    mime_type = "audio/wav"
+                elif "webm" in audio.content_type:
+                    mime_type = "audio/ogg"  # WhatsApp prefers OGG
+            
+            # Upload to WhatsApp
+            logger.info(f"📤 Uploading audio to WhatsApp (MIME: {mime_type})...")
+            media_id = await whatsapp_client.upload_media(temp_path, mime_type)
+            
+            if not media_id:
+                raise HTTPException(status_code=500, detail="Failed to upload audio to WhatsApp")
+            
+            logger.info(f"✅ Audio uploaded successfully, media_id: {media_id}")
+            
+            # Send audio message
+            result = await whatsapp_client.send_audio_message(
+                to=to,
+                media_id=media_id
+            )
+            
+            message_id = result.get('messages', [{}])[0].get('id', '')
+            
+            # Get lead info
+            lead = None
+            try:
+                lead = await get_or_create_lead(to)
+            except Exception as lead_error:
+                logger.error(f"Error loading lead: {lead_error}")
+            
+            # Log in database
+            try:
+                media_url = f"/api/media/{media_id}"
+                await save_conversation(
+                    phone_number=to,
+                    customer_name=lead.get('customer_name', to) if lead else to,
+                    message_text='[Audio]',
+                    response_text=media_url,
+                    message_type="audio",
+                    message_id=message_id or None,
+                    direction='outgoing'
+                )
+            except Exception as db_error:
+                logger.error(f"Error storing audio message in DB: {db_error}")
+            
+            return {
+                "status": "sent",
+                "to": to,
+                "message_id": message_id,
+                "media_id": media_id,
+                "media_url": media_url,
+                "details": result
+            }
+            
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading and sending audio: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to send audio: {str(e)}")
+
+
 @app.get("/api/media/{media_id}")
 async def proxy_media(media_id: str):
     """
@@ -675,41 +790,52 @@ async def proxy_media(media_id: str):
         from pathlib import Path
         from fastapi.responses import FileResponse
         
-        # Get absolute path to media directory
+        # Get absolute path to media directories
         base_dir = Path(__file__).parent.parent  # Go up to project root
-        media_dir = base_dir / "media" / "received"
+        media_received_dir = base_dir / "media" / "received"
+        media_audio_dir = base_dir / "media" / "audio"
         
-        logger.info(f"Looking for media {media_id} in {media_dir}")
+        logger.info(f"Looking for media {media_id} in media directories")
         
-        # First, try to find the file locally in received directory
-        if media_dir.exists():
-            # Look for files that start with the media_id
-            for file_path in media_dir.glob(f"{media_id}_*.*"):
-                if file_path.is_file():
-                    logger.info(f"✅ Serving media from local file: {file_path}")
-                    
-                    # Determine content type from extension
-                    ext = file_path.suffix.lower()
-                    content_type_map = {
-                        ".jpg": "image/jpeg",
-                        ".jpeg": "image/jpeg",
-                        ".png": "image/png",
-                        ".webp": "image/webp",
-                        ".gif": "image/gif",
-                        ".mp4": "video/mp4",
-                    }
-                    content_type = content_type_map.get(ext, "application/octet-stream")
-                    
-                    # Return the file
-                    return FileResponse(
-                        path=str(file_path),
-                        media_type=content_type,
-                        filename=file_path.name
-                    )
-        else:
-            logger.warning(f"Media directory does not exist: {media_dir}")
-            # Create it
-            media_dir.mkdir(parents=True, exist_ok=True)
+        # Content type mapping
+        content_type_map = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+            ".gif": "image/gif",
+            ".mp4": "video/mp4",
+            ".ogg": "audio/ogg",
+            ".oga": "audio/ogg",
+            ".mp3": "audio/mpeg",
+            ".m4a": "audio/mp4",
+            ".wav": "audio/wav",
+            ".aac": "audio/aac",
+            ".webm": "audio/webm",
+        }
+        
+        # Try to find the file in received directory first, then audio directory
+        for media_dir in [media_received_dir, media_audio_dir]:
+            if media_dir.exists():
+                # Look for files that start with the media_id
+                for file_path in media_dir.glob(f"{media_id}_*.*"):
+                    if file_path.is_file():
+                        logger.info(f"✅ Serving media from local file: {file_path}")
+                        
+                        # Determine content type from extension
+                        ext = file_path.suffix.lower()
+                        content_type = content_type_map.get(ext, "application/octet-stream")
+                        
+                        # Return the file
+                        return FileResponse(
+                            path=str(file_path),
+                            media_type=content_type,
+                            filename=file_path.name
+                        )
+            else:
+                logger.warning(f"Media directory does not exist: {media_dir}")
+                # Create it
+                media_dir.mkdir(parents=True, exist_ok=True)
         
         # If not found locally, try to download it from WhatsApp first
         logger.info(f"📥 Media not found locally, attempting to download from WhatsApp: {media_id}")
@@ -729,8 +855,15 @@ async def proxy_media(media_id: str):
                 ".webp": "image/webp",
                 ".gif": "image/gif",
                 ".mp4": "video/mp4",
+                ".ogg": "audio/ogg",
+                ".oga": "audio/ogg",
+                ".mp3": "audio/mpeg",
+                ".m4a": "audio/mp4",
+                ".wav": "audio/wav",
+                ".aac": "audio/aac",
+                ".webm": "audio/webm",
             }
-            content_type = content_type_map.get(ext, "image/jpeg")
+            content_type = content_type_map.get(ext, "application/octet-stream")
             
             return FileResponse(
                 path=local_path,
