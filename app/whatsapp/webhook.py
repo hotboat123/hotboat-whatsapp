@@ -111,6 +111,27 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             except Exception as email_error:
                 logger.warning(f"Could not send email notification: {email_error}")
             
+            # Check global auto-responses setting (for staging testing)
+            from app.config import get_settings
+            settings = get_settings()
+            
+            if not settings.enable_auto_responses:
+                logger.info(f"🔇 Auto-responses DISABLED globally (environment: {settings.environment}), saving message only")
+                # Save incoming message only, no bot response
+                try:
+                    await save_conversation(
+                        phone_number=from_number,
+                        customer_name=contact_name,
+                        message_text=text_body,
+                        response_text="",
+                        message_type="text",
+                        message_id=message_id,
+                        direction="incoming"
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not save conversation: {e}")
+                return  # Exit early, no bot response
+            
             # Check if bot is enabled for this user
             from app.db.leads import get_or_create_lead
             lead = await get_or_create_lead(from_number, contact_name)

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     business_email: str = "info@hotboatchile.com"
     business_website: str = "https://hotboatchile.com/es/"
     
+    # Auto-responses control (useful for testing staging)
+    enable_auto_responses: bool = True  # Set to False to disable all automatic bot responses
+    
     # Automations
     automation_phone_numbers: str = ""  # Comma-separated phone numbers for automation notifications
     
