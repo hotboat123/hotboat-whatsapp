@@ -676,6 +676,7 @@ async def upload_and_send_audio(
     """
     try:
         import tempfile
+        import shutil
         
         # Validate inputs
         if not to:
@@ -695,23 +696,28 @@ async def upload_and_send_audio(
         file_size_mb = len(contents) / (1024 * 1024)
         logger.info(f"📥 Processing audio {audio.filename} ({file_size_mb:.2f} MB) from {to}")
         
-        # Save to temporary file
+        # Save to temporary file for upload
         with tempfile.NamedTemporaryFile(delete=False, suffix='.ogg') as temp_file:
             temp_file.write(contents)
             temp_path = temp_file.name
         
         try:
-            # Determine MIME type
+            # Determine MIME type and extension
             mime_type = "audio/ogg"
+            extension = "ogg"
             if audio.content_type:
                 if "mp3" in audio.content_type or "mpeg" in audio.content_type:
                     mime_type = "audio/mpeg"
+                    extension = "mp3"
                 elif "mp4" in audio.content_type or "m4a" in audio.content_type:
                     mime_type = "audio/mp4"
+                    extension = "m4a"
                 elif "wav" in audio.content_type:
                     mime_type = "audio/wav"
+                    extension = "wav"
                 elif "webm" in audio.content_type:
                     mime_type = "audio/ogg"  # WhatsApp prefers OGG
+                    extension = "ogg"
             
             # Upload to WhatsApp
             logger.info(f"📤 Uploading audio to WhatsApp (MIME: {mime_type})...")
@@ -721,6 +727,18 @@ async def upload_and_send_audio(
                 raise HTTPException(status_code=500, detail="Failed to upload audio to WhatsApp")
             
             logger.info(f"✅ Audio uploaded successfully, media_id: {media_id}")
+            
+            # Save audio permanently to media/audio directory
+            audio_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media", "audio")
+            os.makedirs(audio_dir, exist_ok=True)
+            
+            timestamp = datetime.now(CHILE_TZ).strftime("%Y%m%d_%H%M%S")
+            permanent_filename = f"{media_id}_{timestamp}.{extension}"
+            permanent_path = os.path.join(audio_dir, permanent_filename)
+            
+            # Copy the temporary file to permanent location
+            shutil.copy2(temp_path, permanent_path)
+            logger.info(f"💾 Audio saved locally: {permanent_path}")
             
             # Send audio message
             result = await whatsapp_client.send_audio_message(
@@ -737,7 +755,7 @@ async def upload_and_send_audio(
             except Exception as lead_error:
                 logger.error(f"Error loading lead: {lead_error}")
             
-            # Log in database
+            # Log in database with media_id so it can be served from local storage
             try:
                 media_url = f"/api/media/{media_id}"
                 await save_conversation(
