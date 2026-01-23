@@ -844,11 +844,19 @@ async def proxy_media(media_id: str):
                         ext = file_path.suffix.lower()
                         content_type = content_type_map.get(ext, "application/octet-stream")
                         
-                        # Return the file
+                        # Log serving audio files
+                        if ext in [".ogg", ".mp3", ".m4a", ".wav", ".webm"]:
+                            logger.info(f"🎤 Serving audio file: {file_path.name}, type: {content_type}")
+                        
+                        # Return the file with headers for audio playback
                         return FileResponse(
                             path=str(file_path),
                             media_type=content_type,
-                            filename=file_path.name
+                            filename=file_path.name,
+                            headers={
+                                "Accept-Ranges": "bytes",
+                                "Cache-Control": "no-cache"
+                            }
                         )
             else:
                 logger.warning(f"Media directory does not exist: {media_dir}")
@@ -883,10 +891,18 @@ async def proxy_media(media_id: str):
             }
             content_type = content_type_map.get(ext, "application/octet-stream")
             
+            # Log serving audio files
+            if ext in [".ogg", ".mp3", ".m4a", ".wav", ".webm"]:
+                logger.info(f"🎤 Serving downloaded audio file: {os.path.basename(local_path)}, type: {content_type}")
+            
             return FileResponse(
                 path=local_path,
                 media_type=content_type,
-                filename=os.path.basename(local_path)
+                filename=os.path.basename(local_path),
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Cache-Control": "no-cache"
+                }
             )
         
         # Last resort: try to proxy directly from WhatsApp (legacy behavior)

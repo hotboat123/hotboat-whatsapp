@@ -528,15 +528,19 @@ function renderCurrentChat(options = {}) {
             }
             
             if (isAudio && mediaUrl && !mediaUrl.startsWith('[')) {
+                const audioId = `audio_${msg.id}`;
+                // Add timestamp to force refresh
+                const audioSrc = `${mediaUrl}?t=${Date.now()}`;
                 return `
                     <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
                         <div class="message-text">
                             <div class="audio-message">
                                 <div class="audio-icon">🎤</div>
-                                <audio controls controlsList="nodownload" style="width: 100%; max-width: 250px;">
-                                    <source src="${mediaUrl}" type="audio/ogg">
-                                    <source src="${mediaUrl}" type="audio/mpeg">
-                                    <source src="${mediaUrl}" type="audio/mp4">
+                                <audio id="${audioId}" controls preload="metadata" style="width: 100%; max-width: 250px;">
+                                    <source src="${audioSrc}" type="audio/ogg; codecs=opus">
+                                    <source src="${audioSrc}" type="audio/mpeg">
+                                    <source src="${audioSrc}" type="audio/mp4">
+                                    <source src="${audioSrc}" type="audio/webm">
                                     Tu navegador no soporta audio
                                 </audio>
                             </div>
@@ -574,6 +578,35 @@ function renderCurrentChat(options = {}) {
 
     showChatView();
     updateMobileLayout();
+    
+    // Add error listeners to audio elements
+    setTimeout(() => {
+        const audioElements = messagesContainer.querySelectorAll('audio');
+        audioElements.forEach(audio => {
+            audio.addEventListener('error', (e) => {
+                console.error('❌ Audio error:', {
+                    id: audio.id,
+                    src: audio.currentSrc,
+                    error: audio.error ? {
+                        code: audio.error.code,
+                        message: audio.error.message
+                    } : 'Unknown error'
+                });
+            });
+            
+            audio.addEventListener('loadedmetadata', () => {
+                console.log('✅ Audio loaded:', {
+                    id: audio.id,
+                    src: audio.currentSrc,
+                    duration: audio.duration
+                });
+            });
+            
+            audio.addEventListener('canplay', () => {
+                console.log('✅ Audio can play:', audio.id);
+            });
+        });
+    }, 100);
 }
 
 // Load Lead Info
