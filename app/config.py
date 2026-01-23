@@ -47,8 +47,23 @@ class Settings(BaseSettings):
     # Server
     port: int = 8000
     host: str = "0.0.0.0"
-    environment: str = "development"
+    environment: str = "production"  # Options: production, staging, development
     log_level: str = "INFO"
+    
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production"""
+        return self.environment.lower() == "production"
+    
+    @property
+    def is_staging(self) -> bool:
+        """Check if running in staging/beta"""
+        return self.environment.lower() in ["staging", "beta"]
+    
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development"""
+        return self.environment.lower() == "development"
     
     class Config:
         env_file = ".env"

@@ -68,26 +68,36 @@ async def root():
                 return HTMLResponse(content=f.read())
         else:
             logger.warning("⚠️ Kia-Ai interface not found, returning default health response.")
+            environment_status = "🚀 PRODUCTION" if settings.is_production else "🧪 STAGING" if settings.is_staging else "💻 DEVELOPMENT"
             return {
                 "status": "ok",
                 "service": "HotBoat WhatsApp Bot",
                 "version": "1.0.0",
+                "environment": settings.environment,
+                "environment_status": environment_status,
                 "note": "Kia-Ai interface not found. API is working."
             }
     except Exception as e:
         logger.error(f"Error serving index: {e}")
+        environment_status = "🚀 PRODUCTION" if settings.is_production else "🧪 STAGING" if settings.is_staging else "💻 DEVELOPMENT"
         return {
             "status": "ok",
             "service": "HotBoat WhatsApp Bot",
-            "version": "1.0.0"
+            "version": "1.0.0",
+            "environment": settings.environment,
+            "environment_status": environment_status
         }
 
 
 @app.get("/health")
 async def health():
     """Detailed health check"""
+    environment_status = "🚀 PRODUCTION" if settings.is_production else "🧪 STAGING" if settings.is_staging else "💻 DEVELOPMENT"
     return {
         "status": "healthy",
+        "environment": settings.environment,
+        "environment_status": environment_status,
+        "bot_name": settings.bot_name,
         "database": "connected",  # TODO: Add real DB check
         "whatsapp_api": "configured"
     }
