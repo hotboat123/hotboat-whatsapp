@@ -187,6 +187,48 @@ class WhatsAppClient:
             logger.error(f"❌ Error sending image to {to}: {e}")
             raise
     
+    async def send_audio_message(self, to: str, audio_url: str = None, media_id: str = None) -> Dict[str, Any]:
+        """
+        Send an audio message using either URL or media_id
+        
+        Args:
+            to: Recipient phone number (with country code, no + or spaces)
+            audio_url: URL of the audio file (must be publicly accessible) - Optional if media_id is provided
+            media_id: WhatsApp media ID from upload_media() - Optional if audio_url is provided
+        
+        Returns:
+            Response from WhatsApp API
+        """
+        url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "audio",
+            "audio": {}
+        }
+        
+        # Use media_id if provided, otherwise use audio_url
+        if media_id:
+            payload["audio"]["id"] = media_id
+        elif audio_url:
+            payload["audio"]["link"] = audio_url
+        else:
+            logger.error("❌ Either audio_url or media_id must be provided")
+            raise ValueError("Either audio_url or media_id must be provided")
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, headers=self.headers, timeout=30)
+                response.raise_for_status()
+                result = response.json()
+                logger.info(f"✅ Audio sent to {to}: {result}")
+                return result
+        except httpx.HTTPError as e:
+            logger.error(f"❌ Error sending audio to {to}: {e}")
+            raise
+    
     async def get_media_url(self, media_id: str) -> Optional[str]:
         """
         Retrieve a temporary URL for a received media object.

@@ -2201,6 +2201,62 @@ Horarios disponibles:
             import traceback
             traceback.print_exc()
     
+    async def send_audio_message(self, to: str, audio_path: str = None, audio_url: str = None) -> bool:
+        """
+        Send an audio message to a user
+        
+        Args:
+            to: Recipient phone number
+            audio_path: Local path to audio file (will be uploaded to WhatsApp)
+            audio_url: URL to audio file (publicly accessible)
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            media_id = None
+            
+            # If we have a local file, upload it first
+            if audio_path:
+                logger.info(f"Uploading audio from local path: {audio_path}")
+                # Determine MIME type based on extension
+                import os
+                ext = os.path.splitext(audio_path)[1].lower()
+                mime_type = "audio/ogg"  # Default
+                if ext == ".mp3":
+                    mime_type = "audio/mpeg"
+                elif ext == ".m4a":
+                    mime_type = "audio/mp4"
+                elif ext == ".wav":
+                    mime_type = "audio/wav"
+                elif ext == ".aac":
+                    mime_type = "audio/aac"
+                
+                media_id = await self.whatsapp_client.upload_media(audio_path, mime_type)
+                if not media_id:
+                    logger.error(f"Failed to upload audio file: {audio_path}")
+                    if not audio_url:
+                        return False
+            
+            # Send the audio message
+            if media_id:
+                await self.whatsapp_client.send_audio_message(to, media_id=media_id)
+                logger.info(f"✅ Audio sent successfully using media_id to {to}")
+                return True
+            elif audio_url:
+                await self.whatsapp_client.send_audio_message(to, audio_url=audio_url)
+                logger.info(f"✅ Audio sent successfully using URL to {to}")
+                return True
+            else:
+                logger.error("No audio source provided (neither path nor URL)")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error sending audio message: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     async def _handle_party_size_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Handle user's response with party size after selecting date/time"""
         try:
