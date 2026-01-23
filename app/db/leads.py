@@ -300,8 +300,8 @@ async def get_conversation_history(
                     else:
                         timestamp = None
                     
-                    if message_type == "image":
-                        # For images, store a single entry with media_url and caption
+                    if message_type == "image" or message_type == "audio":
+                        # For images and audio, store a single entry with media_url and caption
                         media_url = response_text or message_text or ""
                         caption = message_text if message_text and message_text != media_url else ""
                         history.append({
@@ -309,7 +309,7 @@ async def get_conversation_history(
                             "message_text": caption,
                             "response_text": media_url,
                             "direction": direction,
-                            "message_type": "image",
+                            "message_type": message_type,
                             "timestamp": timestamp,
                             "media_url": media_url
                         })
