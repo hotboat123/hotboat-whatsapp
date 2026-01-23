@@ -767,36 +767,6 @@ body {
     animation: pulse 1s infinite;
 }
 
-/* Audio Message */
-.audio-message {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.25rem;
-}
-
-.audio-icon {
-    font-size: 1.2rem;
-    flex-shrink: 0;
-}
-
-.audio-message audio {
-    height: 32px;
-    outline: none;
-}
-
-.audio-message audio::-webkit-media-controls-panel {
-    background-color: transparent;
-}
-
-.message.incoming .audio-message audio {
-    filter: brightness(1.2);
-}
-
-.message.outgoing .audio-message audio {
-    filter: invert(1) brightness(2);
-}
-
 /* Responsive */
 @media (max-width: 1024px) {
     .right-panel {
