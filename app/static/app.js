@@ -47,7 +47,10 @@ function normalizeMessages(messages = []) {
             }
         }
 
-        const isImage = (msg.message_type ?? msg.type) === 'image';
+        const messageType = msg.message_type ?? msg.type ?? 'text';
+        const isImage = messageType === 'image';
+        const isAudio = messageType === 'audio';
+        
         const urlCandidates = [
             msg.media_url,
             msg.response_text,
@@ -80,7 +83,7 @@ function normalizeMessages(messages = []) {
             id: msg.id ?? `msg_${Date.now()}_${index}`,
             message_text: messageText,
             direction: inferredDirection === 'outgoing' ? 'outgoing' : 'incoming',
-            message_type: isImage ? 'image' : (msg.message_type ?? msg.type ?? 'text'),
+            message_type: messageType,
             media_url: mediaUrl,
             timestamp,
             _sortKey: sortKey,
@@ -243,6 +246,8 @@ async function loadConversations() {
                 } else {
                     lastMessage = '📷 Imagen';
                 }
+            } else if (messageType === 'audio') {
+                lastMessage = '🎤 Audio';
             } else if (messageType === 'video') {
                 const caption = item.message_text || '';
                 if (caption && !caption.startsWith('[')) {
@@ -495,6 +500,18 @@ function renderCurrentChat(options = {}) {
             const isAudio = (msg.message_type === 'audio');
             // For images/audio, the URL can be in media_url (outgoing) or response_text (incoming)
             const mediaUrl = msg.media_url || msg.response_text;
+            
+            // Debug log for audio messages
+            if (isAudio) {
+                console.log('🎤 Audio message:', {
+                    id: msg.id,
+                    message_type: msg.message_type,
+                    media_url: msg.media_url,
+                    response_text: msg.response_text,
+                    finalMediaUrl: mediaUrl,
+                    message_text: msg.message_text
+                });
+            }
             
             if (isImage && mediaUrl && !mediaUrl.startsWith('[')) {
                 return `
@@ -1213,31 +1230,65 @@ function clearAudioRecording() {
 }
 
 async function sendAudioFromRecording() {
-    if (!recordedAudioBlob || !currentConversation) return;
+    if (!recordedAudioBlob) {
+        console.error('No audio blob available');
+        showToast('No hay audio grabado', 'error');
+        return;
+    }
+    
+    if (!currentConversation) {
+        console.error('No conversation selected');
+        showToast('Selecciona una conversación primero', 'error');
+        return;
+    }
     
     try {
+        console.log('📤 Sending audio...', {
+            blobSize: recordedAudioBlob.size,
+            blobType: recordedAudioBlob.type,
+            to: currentConversation.phone_number
+        });
+        
         showToast('Enviando audio...', 'info');
         
         // Create a file from the blob
         const file = new File([recordedAudioBlob], `audio_${Date.now()}.webm`, {
-            type: recordedAudioBlob.type
+            type: recordedAudioBlob.type || 'audio/webm'
+        });
+        
+        console.log('📦 Created file:', {
+            name: file.name,
+            size: file.size,
+            type: file.type
         });
         
         const formData = new FormData();
         formData.append('audio', file);
         formData.append('to', currentConversation.phone_number);
         
+        console.log('🔄 Fetching API...');
         const response = await fetch(`${API_BASE}/api/upload-and-send-audio`, {
             method: 'POST',
             body: formData
         });
         
+        console.log('📡 Response status:', response.status);
+        
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to send audio');
+            const errorText = await response.text();
+            console.error('❌ Server error:', response.status, errorText);
+            let errorMessage = 'Failed to send audio';
+            try {
+                const errorJson = JSON.parse(errorText);
+                errorMessage = errorJson.detail || errorMessage;
+            } catch (e) {
+                errorMessage = errorText || errorMessage;
+            }
+            throw new Error(errorMessage);
         }
         
         const result = await response.json();
+        console.log('✅ Audio sent successfully:', result);
         
         // Add to UI
         const timestamp = new Date().toISOString();
@@ -1270,7 +1321,7 @@ async function sendAudioFromRecording() {
         setTimeout(() => selectConversation(currentConversation.phone_number), 2000);
         
     } catch (error) {
-        console.error('Error sending audio:', error);
+        console.error('❌ Error sending audio:', error);
         showToast('Error al enviar audio: ' + error.message, 'error');
     }
 }
