@@ -112,13 +112,16 @@ async def check_slot_availability(slot_datetime: datetime, duration_hours: float
     Check if a specific time slot is available
     
     Args:
-        slot_datetime: DateTime to check
+        slot_datetime: DateTime to check (in Chile timezone)
         duration_hours: Duration of the booking in hours
         buffer_hours: Buffer time before/after booking
     
     Returns:
         True if available, False if booked
     """
+    import pytz
+    CHILE_TZ = pytz.timezone('America/Santiago')
+    
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -127,6 +130,15 @@ async def check_slot_availability(slot_datetime: datetime, duration_hours: float
                 slot_start_with_buffer = slot_datetime - timedelta(hours=buffer_hours)
                 slot_end = slot_datetime + timedelta(hours=duration_hours)
                 slot_end_with_buffer = slot_end + timedelta(hours=buffer_hours)
+                
+                # FIX TIMEZONE ISSUE:
+                # Since DB stores Chile time as UTC, we need to compare using naive datetimes
+                # or convert our slot times to "fake UTC" (which is actually Chile time in the DB)
+                
+                # Convert slot times to naive (removing timezone) for comparison
+                # Since DB timestamps are "Chile time marked as UTC"
+                slot_start_naive = slot_start_with_buffer.replace(tzinfo=None) if slot_start_with_buffer.tzinfo else slot_start_with_buffer
+                slot_end_naive = slot_end_with_buffer.replace(tzinfo=None) if slot_end_with_buffer.tzinfo else slot_end_with_buffer
                 
                 # An appointment overlaps if:
                 # 1. Appointment starts before our slot ends (with buffer), AND
@@ -151,9 +163,9 @@ async def check_slot_availability(slot_datetime: datetime, duration_hours: float
                           )
                       )
                 """, (
-                    slot_end_with_buffer,  # Our slot end with buffer
+                    slot_end_naive,  # Our slot end with buffer (naive)
                     appointment_duration_hours + buffer_hours,  # Appointment duration + buffer
-                    slot_start_with_buffer  # Our slot start with buffer
+                    slot_start_naive  # Our slot start with buffer (naive)
                 ))
                 
                 count = cur.fetchone()[0]
@@ -182,6 +194,9 @@ async def get_booked_slots(
     Returns:
         List of booked slots with datetime and service info
     """
+    import pytz
+    CHILE_TZ = pytz.timezone('America/Santiago')
+    
     if exclude_statuses is None:
         exclude_statuses = ['cancelled', 'rejected']
     
@@ -216,9 +231,20 @@ async def get_booked_slots(
                 
                 booked_slots = []
                 for row in results:
+                    starts_at = row[1]
+                    
+                    # FIX TIMEZONE ISSUE: 
+                    # Booknetic stores timestamps with local Chile time but marks them as UTC
+                    # We need to "fix" this by replacing the timezone
+                    if starts_at and starts_at.tzinfo is not None:
+                        # Remove the UTC timezone and treat as naive
+                        naive_dt = starts_at.replace(tzinfo=None)
+                        # Re-apply Chile timezone (the actual timezone of the data)
+                        starts_at = CHILE_TZ.localize(naive_dt)
+                    
                     booked_slots.append({
                         "id": row[0],
-                        "starts_at": row[1],
+                        "starts_at": starts_at,
                         "service_name": row[2],
                         "customer_name": row[3],
                         "status": row[4]
