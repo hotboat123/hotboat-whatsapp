@@ -418,11 +418,184 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 except Exception as e:
                     logger.warning(f"Could not save image conversation: {e}")
         
+        elif message_type == "audio":
+            audio_obj = message.get("audio", {}) or {}
+            media_id = audio_obj.get("id")
+            mime_type = audio_obj.get("mime_type", "audio/ogg")
+            logger.info(f"🎤 Audio message received (media_id={media_id}) mime_type='{mime_type}'")
+            
+            media_url = None
+            local_audio_path = None
+            
+            try:
+                if media_id:
+                    # Try to download and save the audio locally
+                    from app.utils.media_handler import get_received_media_path
+                    
+                    # Determine extension from mime_type
+                    extension = "ogg"  # Default for WhatsApp
+                    if "mp3" in mime_type:
+                        extension = "mp3"
+                    elif "mp4" in mime_type or "m4a" in mime_type:
+                        extension = "m4a"
+                    elif "wav" in mime_type:
+                        extension = "wav"
+                    
+                    local_audio_path = get_received_media_path(media_id, extension=extension, media_type="audio")
+                    download_success = await whatsapp_client.download_media(media_id, local_audio_path)
+                    if download_success:
+                        logger.info(f"✅ Audio downloaded and saved: {local_audio_path}")
+                    else:
+                        local_audio_path = None
+                    
+                    # Also get the URL for fallback
+                    media_url = await whatsapp_client.get_media_url(media_id)
+                    logger.info(f"Media URL fetched for audio {media_id}: {bool(media_url)}")
+            except Exception as e:
+                logger.warning(f"Could not fetch/download audio for {media_id}: {e}")
+            
+            display_url = None
+            if local_audio_path:
+                display_url = f"/api/media/{media_id}"
+            elif media_id:
+                display_url = f"/api/media/{media_id}"
+            elif media_url:
+                display_url = media_url
+            
+            text_body = "[Audio recibido]"
+            
+            # ALWAYS send email notification for incoming audios (even if bot is disabled)
+            try:
+                await conversation_manager._send_incoming_message_email(
+                    contact_name=contact_name,
+                    phone_number=from_number,
+                    message_text=f"🎤 {text_body}",
+                    message_id=message_id
+                )
+            except Exception as email_error:
+                logger.warning(f"Could not send email notification for audio: {email_error}")
+            
+            # Check if bot is enabled for this user
+            from app.db.leads import get_or_create_lead
+            lead = await get_or_create_lead(from_number, contact_name)
+            bot_enabled = lead.get("bot_enabled", True) if lead else True
+            
+            if not bot_enabled:
+                logger.info(f"🤐 Bot disabled for {from_number}, saving audio but not responding")
+                try:
+                    if display_url:
+                        await save_conversation(
+                            phone_number=from_number,
+                            customer_name=contact_name,
+                            message_text=text_body,
+                            response_text=display_url,
+                            message_type="audio",
+                            message_id=message_id,
+                            direction="incoming"
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not save audio conversation: {e}")
+                return  # Exit early, no bot response
+            
+            # Process the audio message
+            try:
+                # For now, respond acknowledging the audio
+                response = await conversation_manager.process_message(
+                    from_number=from_number,
+                    message_text="[El usuario envió un audio]",
+                    contact_name=contact_name,
+                    message_id=message_id
+                )
+            except Exception as e:
+                logger.error(f"Error in conversation_manager.process_message for audio: {e}")
+                import traceback
+                traceback.print_exc()
+                response = "🎤 ¡Recibimos tu audio! Gracias por tu mensaje 🙌"
+            
+            response_text = None
+            manual_handover_only = False
+            
+            if isinstance(response, dict) and response.get("type") == "manual_override":
+                logger.info(f"Manual handover active for {from_number}; skipping bot reply (audio)")
+                manual_handover_only = True
+            elif isinstance(response, dict) and response.get("type") == "accommodations":
+                logger.info("Sending accommodations response with images (triggered by audio message)")
+                
+                await whatsapp_client.send_text_message(from_number, response["text"])
+                
+                import asyncio
+                for item in response["images"]:
+                    if item["type"] == "text":
+                        await whatsapp_client.send_text_message(from_number, item["content"])
+                    elif item["type"] == "image":
+                        caption = item.get("caption", "")
+                        image_path = item.get("image_path")
+                        image_url = item.get("image_url")
+                        
+                        if image_path and image_path.startswith("http"):
+                            image_path = None
+                        
+                        sent = False
+                        if image_path:
+                            try:
+                                logger.info(f"Uploading image from local path: {image_path}")
+                                media_id = await whatsapp_client.upload_media(image_path)
+                                if media_id:
+                                    await whatsapp_client.send_image_message(
+                                        from_number,
+                                        media_id=media_id,
+                                        caption=caption
+                                    )
+                                    sent = True
+                                    logger.info(f"✅ Image sent successfully using media_id")
+                            except Exception as e:
+                                logger.warning(f"Failed to send image via upload: {e}, trying URL fallback")
+                        
+                        if not sent and image_url and not image_url.startswith("https://example.com"):
+                            try:
+                                await whatsapp_client.send_image_message(
+                                    from_number,
+                                    image_url=image_url,
+                                    caption=caption
+                                )
+                                sent = True
+                                logger.info(f"✅ Image sent successfully using URL")
+                            except Exception as e:
+                                logger.warning(f"Failed to send image via URL: {e}")
+                        
+                        if not sent:
+                            logger.warning("Could not send image, sending caption as text")
+                            await whatsapp_client.send_text_message(from_number, caption)
+                        
+                        await asyncio.sleep(0.5)
+                
+                response_text = response["text"]
+            elif response:
+                await whatsapp_client.send_text_message(from_number, response)
+                response_text = response
+            
+            if response_text is not None or manual_handover_only:
+                try:
+                    text_to_save = response_text if response_text is not None else ""
+                    if display_url:
+                        text_to_save = display_url
+                    await save_conversation(
+                        phone_number=from_number,
+                        customer_name=contact_name,
+                        message_text=text_body,
+                        response_text=text_to_save,
+                        message_type="audio",
+                        message_id=message_id,
+                        direction="incoming"
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not save audio conversation: {e}")
+        
         else:
             logger.info(f"ℹ️ Unsupported message type: {message_type}")
             await whatsapp_client.send_text_message(
                 from_number,
-                "Disculpa, solo puedo procesar mensajes de texto por ahora. ¿En qué puedo ayudarte?"
+                "Disculpa, solo puedo procesar mensajes de texto, imágenes y audios por ahora. ¿En qué puedo ayudarte?"
             )
     
     except Exception as e:

@@ -3,7 +3,7 @@ Media handler for managing images and files
 """
 import os
 import logging
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -13,25 +13,32 @@ MEDIA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file_
 RECEIVED_DIR = os.path.join(MEDIA_DIR, "received")
 UPLOADED_DIR = os.path.join(MEDIA_DIR, "uploaded")
 ACCOMMODATION_DIR = os.path.join(MEDIA_DIR, "accommodations")
+AUDIO_DIR = os.path.join(MEDIA_DIR, "audio")
 
 # Create directories if they don't exist
-for directory in [MEDIA_DIR, RECEIVED_DIR, UPLOADED_DIR, ACCOMMODATION_DIR]:
+for directory in [MEDIA_DIR, RECEIVED_DIR, UPLOADED_DIR, ACCOMMODATION_DIR, AUDIO_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 
-def get_received_media_path(media_id: str, extension: str = "jpg") -> str:
+def get_received_media_path(media_id: str, extension: str = "jpg", media_type: str = "image") -> str:
     """
     Get path for a received media file
     
     Args:
         media_id: WhatsApp media ID
         extension: File extension (default: jpg)
+        media_type: Type of media (image, audio, video, etc.)
     
     Returns:
         Path to save the file
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{media_id}_{timestamp}.{extension}"
+    
+    # Save audio files in dedicated audio directory
+    if media_type == "audio":
+        return os.path.join(AUDIO_DIR, filename)
+    
     return os.path.join(RECEIVED_DIR, filename)
 
 
@@ -106,3 +113,36 @@ def save_accommodation_image(accommodation_name: str, file_path: str) -> bool:
     except Exception as e:
         logger.error(f"❌ Error saving accommodation image: {e}")
         return False
+
+
+def get_audio_path(audio_id: str, extension: str = "ogg") -> str:
+    """
+    Get path for an audio file
+    
+    Args:
+        audio_id: Audio file ID
+        extension: File extension (default: ogg for WhatsApp)
+    
+    Returns:
+        Path to the audio file
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{audio_id}_{timestamp}.{extension}"
+    return os.path.join(AUDIO_DIR, filename)
+
+
+def list_audio_files() -> List[str]:
+    """
+    List all audio files in the audio directory
+    
+    Returns:
+        List of audio file paths
+    """
+    if not os.path.exists(AUDIO_DIR):
+        return []
+    
+    return [
+        os.path.join(AUDIO_DIR, f)
+        for f in os.listdir(AUDIO_DIR)
+        if f.lower().endswith(('.ogg', '.mp3', '.wav', '.m4a', '.aac'))
+    ]

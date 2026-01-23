@@ -9,8 +9,44 @@ Bot de WhatsApp con IA para Hot Boat Chile - Automatiza consultas, disponibilida
 - ✅ **Consulta de disponibilidad** en tiempo real
 - ✅ **Base de datos PostgreSQL** - Lee datos de Booknetic
 - ✅ **Webhook de WhatsApp** - Recibe y envía mensajes
+- ✅ **Mensajes multimedia** - Envía y recibe imágenes y audios 🎤
 - ✅ **FastAPI** - API rápida y moderna
 - ✅ **Deploy fácil en Railway**
+- ✅ **Ambientes Beta/Staging** - Prueba sin afectar producción
+
+---
+
+## 🧪 Ambiente de Pruebas (Beta/Staging)
+
+**¡NUEVO!** Configura un ambiente staging/beta separado para probar cambios sin afectar a tus clientes.
+
+### 🚀 Quick Start
+
+**👉 Lee primero: [LEEME_PRIMERO_AMBIENTES.md](LEEME_PRIMERO_AMBIENTES.md)**
+
+**Setup en 5 minutos:**
+1. Ejecuta `./setup_beta.bat` (Windows) o `./setup_beta.sh` (Mac/Linux)
+2. Configura environment en Railway: Settings → Environments → New
+3. Copia variables de `env.staging.template`
+4. ¡Listo! Ya tienes staging funcionando
+
+### 📖 Documentación Completa
+
+| Guía | Para qué | Cuándo |
+|------|----------|--------|
+| **[LEEME_PRIMERO_AMBIENTES.md](LEEME_PRIMERO_AMBIENTES.md)** | 👋 Punto de entrada | Empieza aquí |
+| **[QUICK_START_BETA.md](QUICK_START_BETA.md)** | ⚡ Setup rápido | Setup inicial |
+| **[CHECKLIST_SETUP_BETA.md](CHECKLIST_SETUP_BETA.md)** | ✅ Paso a paso | Durante setup |
+| **[FLUJO_TRABAJO_BETA.md](FLUJO_TRABAJO_BETA.md)** | 🔄 Comandos diarios | Uso diario |
+| **[DIAGRAMA_AMBIENTES.md](DIAGRAMA_AMBIENTES.md)** | 🎨 Arquitectura visual | Referencia |
+
+### ✨ Beneficios
+
+- 🧪 **Prueba sin riesgo** - Experimenta sin afectar clientes
+- 🚀 **Deploy automático** - Push a `beta` → staging, push a `main` → production
+- ✅ **Desarrollo sin estrés** - Siempre prueba en staging primero
+- 💯 **Cero downtime** - Clientes nunca ven tus experimentos
+- 🔄 **Flujo profesional** - Desarrollo → Staging → Production
 
 ---
 
@@ -259,7 +295,29 @@ Bot: Consulta la DB y responde con horarios disponibles
 
 Para cualquier otra pregunta, Claude AI genera respuestas naturales y contextuales.
 
+### 4. Mensajes Multimedia 🎤🖼️
+
+**Nuevo:** El bot ahora puede:
+- ✅ Recibir y procesar imágenes
+- ✅ Enviar imágenes con alojamientos
+- ✅ **Recibir y procesar audios** 🎤
+- ✅ **Enviar audios personalizados** 🎤
+
+**Ver guía completa:** [AUDIO_GUIDE.md](AUDIO_GUIDE.md)
+
 ---
+
+## 🧪 Ambientes Beta/Staging
+
+¿Quieres probar cambios sin afectar a tus clientes? Configura un ambiente de staging/beta:
+
+→ **[START_AMBIENTES.md](START_AMBIENTES.md)** - Guía completa de setup
+
+**Beneficios:**
+- 🧪 Prueba features antes de producción
+- 🚀 Deploy automático a staging y production
+- ✅ Desarrollo sin estrés
+- 💯 Cero downtime para clientes
 
 ## 📈 Próximas Mejoras
 
