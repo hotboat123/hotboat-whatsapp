@@ -901,3 +901,53 @@ body {
         flex: 1;
     }
 }
+
+/* Audio Player Styles */
+.audio-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.audio-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+audio {
+    width: 100%;
+    max-width: 250px;
+    height: 32px;
+    outline: none;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+audio::-webkit-media-controls-panel {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+audio::-webkit-media-controls-play-button {
+    background-color: var(--primary-color);
+    border-radius: 50%;
+}
+
+audio::-webkit-media-controls-current-time-display,
+audio::-webkit-media-controls-time-remaining-display {
+    color: var(--text-primary);
+}
+
+audio::-webkit-media-controls-timeline {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+
+audio::-webkit-media-controls-volume-slider {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
