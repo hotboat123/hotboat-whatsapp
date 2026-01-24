@@ -312,6 +312,11 @@ function renderConversations() {
         const unreadCount = conv.unread_count || 0;
         const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
         
+        // Debug: log conversations with unread
+        if (unreadCount > 0) {
+            console.log(`📬 Unread: ${conv.customer_name || conv.phone_number} has ${unreadCount} unread messages`);
+        }
+        
         return `
         <div class="conversation-item ${currentConversation?.phone_number === conv.phone_number ? 'active' : ''}" 
              onclick="selectConversation('${conv.phone_number}')">
