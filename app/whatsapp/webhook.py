@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional
 
 from app.whatsapp.client import whatsapp_client
 from app.db.queries import save_conversation
+from app.db.leads import increment_unread_count
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +130,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         message_id=message_id,
                         direction="incoming"
                     )
+                    # Increment unread counter for incoming message
+                    await increment_unread_count(from_number)
                 except Exception as e:
                     logger.warning(f"Could not save conversation: {e}")
                 return  # Exit early, no bot response
@@ -235,6 +238,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         message_id=message_id,
                         direction="incoming"
                     )
+                    # Increment unread counter for incoming message
+                    await increment_unread_count(from_number)
                 except Exception as e:
                     logger.warning(f"Could not save conversation: {e}")
         
@@ -317,6 +322,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                             message_id=message_id,
                             direction="incoming"
                         )
+                        # Increment unread counter for incoming image
+                        await increment_unread_count(from_number)
                 except Exception as e:
                     logger.warning(f"Could not save image conversation: {e}")
                 return  # Exit early, no bot response
@@ -415,6 +422,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         message_id=message_id,
                         direction="incoming"
                     )
+                    # Increment unread counter for incoming image
+                    await increment_unread_count(from_number)
                 except Exception as e:
                     logger.warning(f"Could not save image conversation: {e}")
         
@@ -493,6 +502,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                             message_id=message_id,
                             direction="incoming"
                         )
+                        # Increment unread counter for incoming audio
+                        await increment_unread_count(from_number)
                 except Exception as e:
                     logger.warning(f"Could not save audio conversation: {e}")
                 return  # Exit early, no bot response
@@ -588,6 +599,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         message_id=message_id,
                         direction="incoming"
                     )
+                    # Increment unread counter for incoming audio
+                    await increment_unread_count(from_number)
                 except Exception as e:
                     logger.warning(f"Could not save audio conversation: {e}")
         

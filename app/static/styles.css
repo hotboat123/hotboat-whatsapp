@@ -180,11 +180,29 @@ body {
     display: flex;
     justify-content: space-between;
     margin-bottom: 0.1rem;
+    align-items: center;
 }
 
 .conversation-name {
     font-weight: 600;
     font-size: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.unread-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    background-color: var(--primary-color);
+    color: var(--bg-dark);
+    border-radius: 50%;
+    font-size: 0.4rem;
+    font-weight: 700;
+    padding: 0 4px;
 }
 
 .conversation-time {

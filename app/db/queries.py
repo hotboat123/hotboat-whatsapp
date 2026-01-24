@@ -321,12 +321,13 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT 
-                        phone_number,
-                        customer_name,
-                        created_at,
-                        message_text,
-                        response_text,
-                        direction
+                        latest.phone_number,
+                        latest.customer_name,
+                        latest.created_at,
+                        latest.message_text,
+                        latest.response_text,
+                        latest.direction,
+                        COALESCE(l.unread_count, 0) as unread_count
                     FROM (
                         SELECT DISTINCT ON (phone_number)
                             phone_number,
@@ -338,7 +339,8 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                         FROM whatsapp_conversations
                         ORDER BY phone_number, created_at DESC
                     ) latest
-                    ORDER BY created_at DESC
+                    LEFT JOIN whatsapp_leads l ON latest.phone_number = l.phone_number
+                    ORDER BY latest.created_at DESC
                     LIMIT %s
                 """, (limit,))
                 
@@ -352,6 +354,7 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                     message_text = row[3] or ""
                     response_text = row[4] or ""
                     direction = row[5] if row[5] else 'incoming'
+                    unread_count = row[6] if len(row) > 6 else 0
                     
                     if direction == 'outgoing':
                         last_message = response_text or message_text
@@ -371,7 +374,8 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                         "customer_name": customer_name,
                         "last_message_at": created_at.isoformat() if created_at else None,
                         "last_message": last_message,
-                        "direction": direction
+                        "direction": direction,
+                        "unread_count": unread_count
                     })
                 
                 conversations.sort(key=lambda x: x["last_message_at"] or "", reverse=True)

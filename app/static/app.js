@@ -308,18 +308,26 @@ function renderConversations() {
         return;
     }
     
-    container.innerHTML = conversations.map(conv => `
+    container.innerHTML = conversations.map(conv => {
+        const unreadCount = conv.unread_count || 0;
+        const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
+        
+        return `
         <div class="conversation-item ${currentConversation?.phone_number === conv.phone_number ? 'active' : ''}" 
              onclick="selectConversation('${conv.phone_number}')">
             <div class="conversation-header">
-                <div class="conversation-name">${conv.customer_name || conv.phone_number}</div>
+                <div class="conversation-name">
+                    ${conv.customer_name || conv.phone_number}
+                    ${unreadBadge}
+                </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
             </div>
             <div class="conversation-preview">
                 ${truncate(conv.last_message || 'No messages', 50)}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // Select Conversation
@@ -344,6 +352,9 @@ async function selectConversation(phoneNumber) {
         renderConversations();
         showChatView();
         updateMobileLayout();
+        
+        // Mark conversation as read
+        await markConversationAsRead(phoneNumber);
         
     } catch (error) {
         console.error('Error selecting conversation:', error);
@@ -1370,3 +1381,31 @@ window.stopAudioRecording = stopAudioRecording;
 window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
 
+// Mark conversation as read
+async function markConversationAsRead(phoneNumber) {
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/${phoneNumber}/mark-read`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!response.ok) {
+            console.warn('Failed to mark conversation as read');
+            return;
+        }
+        
+        // Update the unread count in the local conversations array
+        const conv = conversations.find(c => c.phone_number === phoneNumber);
+        if (conv) {
+            conv.unread_count = 0;
+            renderConversations(); // Re-render to remove the badge
+        }
+        
+        console.log(`Conversation marked as read for ${phoneNumber}`);
+    } catch (error) {
+        console.error('Error marking conversation as read:', error);
+        // Don't show toast error - this is a background operation
+    }
+}

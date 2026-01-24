@@ -17,7 +17,8 @@ from app.db.leads import (
     update_lead_status, 
     get_leads_by_status,
     get_conversation_history,
-    import_conversation_batch
+    import_conversation_batch,
+    mark_conversation_as_read
 )
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -285,6 +286,25 @@ async def toggle_bot_for_lead_endpoint(phone_number: str, update: BotToggleUpdat
             raise HTTPException(status_code=400, detail="Failed to toggle bot for lead")
     except Exception as e:
         logger.error(f"Error toggling bot for lead: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/conversations/{phone_number}/mark-read")
+async def mark_conversation_read(phone_number: str):
+    """Mark a conversation as read (reset unread counter)"""
+    try:
+        success = await mark_conversation_as_read(phone_number)
+        
+        if success:
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "message": "Conversation marked as read"
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to mark conversation as read")
+    except Exception as e:
+        logger.error(f"Error marking conversation as read: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
