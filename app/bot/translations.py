@@ -932,11 +932,11 @@ Perfecto! Tenemos dos opciones de domos transparentes:
 
 1️⃣ *Domo con Tina de Baño* 🛁
    💰 $100.000 / noche
-   👥 2 personas
+   👥 2 personas (máximo 3)
 
 2️⃣ *Domo con Hidromasaje* 💆
    💰 $120.000 / noche
-   👥 2 personas
+   👥 2 personas (máximo 3)
 
 ¿Cuál prefieres? Escribe *1* o *2* 🌟""",
         
@@ -946,11 +946,11 @@ Perfect! We have two transparent dome options:
 
 1️⃣ *Dome with Bathtub* 🛁
    💰 $100,000 CLP / night
-   👥 2 people
+   👥 2 people (max 3)
 
 2️⃣ *Dome with Hydromassage* 💆
    💰 $120,000 CLP / night
-   👥 2 people
+   👥 2 people (max 3)
 
 Which do you prefer? Type *1* or *2* 🌟""",
         
@@ -960,11 +960,11 @@ Perfeito! Temos duas opções de domos transparentes:
 
 1️⃣ *Domo com Banheira* 🛁
    💰 $100.000 CLP / noite
-   👥 2 pessoas
+   👥 2 pessoas (máximo 3)
 
 2️⃣ *Domo com Hidromassagem* 💆
    💰 $120.000 CLP / noite
-   👥 2 pessoas
+   👥 2 pessoas (máximo 3)
 
 Qual você prefere? Digite *1* ou *2* 🌟"""
     },
