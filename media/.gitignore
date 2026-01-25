@@ -14,3 +14,9 @@
 # !accommodations/*.png
 # !accommodations/*.jpeg
 # !accommodations/*.webp
+
+# Keep documents directory with PDFs and READMEs
+!documents/
+!documents/*.pdf
+!documents/*.md
+!accommodations/*.md
