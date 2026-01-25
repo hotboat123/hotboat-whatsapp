@@ -114,7 +114,7 @@ class ConversationManager:
         conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
         logger.info(f"Manual handover enabled for {phone_number}")
     
-    async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation") -> None:
+    async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation", extra_info: str = None) -> None:
         """
         Send WhatsApp notification to Capitán Tomás
         
@@ -122,7 +122,8 @@ class ConversationManager:
             customer_name: Name of the customer
             customer_phone: Customer's phone number
             cart: Cart items
-            reason: 'reservation' or 'call_request'
+            reason: 'reservation', 'call_request', or 'accommodation_request'
+            extra_info: Additional information for the notification (used for accommodation requests)
         """
         try:
             email_subject: Optional[str] = None
@@ -195,6 +196,27 @@ class ConversationManager:
                 email_subject = f"Solicitud de contacto - {customer_name}"
                 email_body = self._format_plain_text(message)
                 email_priority = "critical"
+            
+            elif reason == "accommodation_request":
+                # Notification for accommodation request
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu solicitud de alojamiento. Te confirmo disponibilidad pronto! 🏠"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                message = f"🏠 *Solicitud de Alojamiento*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"{extra_info}\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Solicitud de alojamiento - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
             
             else:
                 return
