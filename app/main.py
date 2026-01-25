@@ -17,7 +17,8 @@ from app.db.leads import (
     update_lead_status, 
     get_leads_by_status,
     get_conversation_history,
-    import_conversation_batch
+    import_conversation_batch,
+    mark_conversation_as_read
 )
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -285,6 +286,25 @@ async def toggle_bot_for_lead_endpoint(phone_number: str, update: BotToggleUpdat
             raise HTTPException(status_code=400, detail="Failed to toggle bot for lead")
     except Exception as e:
         logger.error(f"Error toggling bot for lead: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/conversations/{phone_number}/mark-read")
+async def mark_conversation_read(phone_number: str):
+    """Mark a conversation as read (reset unread counter)"""
+    try:
+        success = await mark_conversation_as_read(phone_number)
+        
+        if success:
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "message": "Conversation marked as read"
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to mark conversation as read")
+    except Exception as e:
+        logger.error(f"Error marking conversation as read: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -844,11 +864,19 @@ async def proxy_media(media_id: str):
                         ext = file_path.suffix.lower()
                         content_type = content_type_map.get(ext, "application/octet-stream")
                         
-                        # Return the file
+                        # Log serving audio files
+                        if ext in [".ogg", ".mp3", ".m4a", ".wav", ".webm"]:
+                            logger.info(f"🎤 Serving audio file: {file_path.name}, type: {content_type}")
+                        
+                        # Return the file with headers for audio playback
                         return FileResponse(
                             path=str(file_path),
                             media_type=content_type,
-                            filename=file_path.name
+                            filename=file_path.name,
+                            headers={
+                                "Accept-Ranges": "bytes",
+                                "Cache-Control": "no-cache"
+                            }
                         )
             else:
                 logger.warning(f"Media directory does not exist: {media_dir}")
@@ -883,10 +911,18 @@ async def proxy_media(media_id: str):
             }
             content_type = content_type_map.get(ext, "application/octet-stream")
             
+            # Log serving audio files
+            if ext in [".ogg", ".mp3", ".m4a", ".wav", ".webm"]:
+                logger.info(f"🎤 Serving downloaded audio file: {os.path.basename(local_path)}, type: {content_type}")
+            
             return FileResponse(
                 path=local_path,
                 media_type=content_type,
-                filename=os.path.basename(local_path)
+                filename=os.path.basename(local_path),
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Cache-Control": "no-cache"
+                }
             )
         
         # Last resort: try to proxy directly from WhatsApp (legacy behavior)

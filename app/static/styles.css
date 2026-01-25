@@ -180,11 +180,29 @@ body {
     display: flex;
     justify-content: space-between;
     margin-bottom: 0.1rem;
+    align-items: center;
 }
 
 .conversation-name {
     font-weight: 600;
     font-size: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.unread-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    background-color: var(--primary-color);
+    color: var(--bg-dark);
+    border-radius: 50%;
+    font-size: 0.4rem;
+    font-weight: 700;
+    padding: 0 4px;
 }
 
 .conversation-time {
@@ -767,36 +785,6 @@ body {
     animation: pulse 1s infinite;
 }
 
-/* Audio Message */
-.audio-message {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.25rem;
-}
-
-.audio-icon {
-    font-size: 1.2rem;
-    flex-shrink: 0;
-}
-
-.audio-message audio {
-    height: 32px;
-    outline: none;
-}
-
-.audio-message audio::-webkit-media-controls-panel {
-    background-color: transparent;
-}
-
-.message.incoming .audio-message audio {
-    filter: brightness(1.2);
-}
-
-.message.outgoing .audio-message audio {
-    filter: invert(1) brightness(2);
-}
-
 /* Responsive */
 @media (max-width: 1024px) {
     .right-panel {
@@ -900,4 +888,54 @@ body {
     #newMessageForm > div:nth-child(2) > div:first-child textarea {
         flex: 1;
     }
+}
+
+/* Audio Player Styles */
+.audio-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.audio-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+audio {
+    width: 100%;
+    max-width: 250px;
+    height: 32px;
+    outline: none;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+audio::-webkit-media-controls-panel {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+audio::-webkit-media-controls-play-button {
+    background-color: var(--primary-color);
+    border-radius: 50%;
+}
+
+audio::-webkit-media-controls-current-time-display,
+audio::-webkit-media-controls-time-remaining-display {
+    color: var(--text-primary);
+}
+
+audio::-webkit-media-controls-timeline {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+
+audio::-webkit-media-controls-volume-slider {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
 }

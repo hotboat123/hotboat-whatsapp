@@ -222,11 +222,13 @@ function updateCharCount(inputId, counterId) {
 
 // Load Conversations
 async function loadConversations() {
+    console.log('🔄 Loading conversations with unread badges...');
     try {
         const response = await fetch(`${API_BASE}/api/conversations`);
         if (!response.ok) throw new Error('Failed to load conversations');
         
         const data = await response.json();
+        console.log('📊 Raw API response:', data);
         const rawConversations = data.conversations || [];
 
         // Group by phone number and keep latest entry
@@ -267,7 +269,8 @@ async function loadConversations() {
                     customer_name: customerName,
                     last_message: lastMessage,
                     last_message_at: timestamp,
-                    created_at: timestamp
+                    created_at: timestamp,
+                    unread_count: item.unread_count || 0  // ✅ Added unread_count
                 });
             }
         });
@@ -308,18 +311,31 @@ function renderConversations() {
         return;
     }
     
-    container.innerHTML = conversations.map(conv => `
+    container.innerHTML = conversations.map(conv => {
+        const unreadCount = conv.unread_count || 0;
+        const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
+        
+        // Debug: log conversations with unread
+        if (unreadCount > 0) {
+            console.log(`📬 Unread: ${conv.customer_name || conv.phone_number} has ${unreadCount} unread messages`);
+        }
+        
+        return `
         <div class="conversation-item ${currentConversation?.phone_number === conv.phone_number ? 'active' : ''}" 
              onclick="selectConversation('${conv.phone_number}')">
             <div class="conversation-header">
-                <div class="conversation-name">${conv.customer_name || conv.phone_number}</div>
+                <div class="conversation-name">
+                    ${conv.customer_name || conv.phone_number}
+                    ${unreadBadge}
+                </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
             </div>
             <div class="conversation-preview">
                 ${truncate(conv.last_message || 'No messages', 50)}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // Select Conversation
@@ -344,6 +360,9 @@ async function selectConversation(phoneNumber) {
         renderConversations();
         showChatView();
         updateMobileLayout();
+        
+        // Mark conversation as read
+        await markConversationAsRead(phoneNumber);
         
     } catch (error) {
         console.error('Error selecting conversation:', error);
@@ -528,15 +547,21 @@ function renderCurrentChat(options = {}) {
             }
             
             if (isAudio && mediaUrl && !mediaUrl.startsWith('[')) {
+                const audioId = `audio_${msg.id}`;
+                // Add timestamp to force refresh
+                const audioSrc = `${mediaUrl}?t=${Date.now()}`;
+                // Use preload="auto" for mobile to ensure complete audio loading
+                const preloadMode = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'auto' : 'metadata';
                 return `
                     <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
                         <div class="message-text">
                             <div class="audio-message">
                                 <div class="audio-icon">🎤</div>
-                                <audio controls controlsList="nodownload" style="width: 100%; max-width: 250px;">
-                                    <source src="${mediaUrl}" type="audio/ogg">
-                                    <source src="${mediaUrl}" type="audio/mpeg">
-                                    <source src="${mediaUrl}" type="audio/mp4">
+                                <audio id="${audioId}" controls preload="${preloadMode}" style="width: 100%; max-width: 250px;">
+                                    <source src="${audioSrc}" type="audio/ogg; codecs=opus">
+                                    <source src="${audioSrc}" type="audio/mpeg">
+                                    <source src="${audioSrc}" type="audio/mp4">
+                                    <source src="${audioSrc}" type="audio/webm">
                                     Tu navegador no soporta audio
                                 </audio>
                             </div>
@@ -574,6 +599,66 @@ function renderCurrentChat(options = {}) {
 
     showChatView();
     updateMobileLayout();
+    
+    // Add error listeners to audio elements
+    setTimeout(() => {
+        const audioElements = messagesContainer.querySelectorAll('audio');
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
+        audioElements.forEach(audio => {
+            audio.addEventListener('error', (e) => {
+                console.error('❌ Audio error:', {
+                    id: audio.id,
+                    src: audio.currentSrc,
+                    error: audio.error ? {
+                        code: audio.error.code,
+                        message: audio.error.message
+                    } : 'Unknown error'
+                });
+            });
+            
+            audio.addEventListener('loadedmetadata', () => {
+                console.log('✅ Audio loaded:', {
+                    id: audio.id,
+                    src: audio.currentSrc,
+                    duration: audio.duration
+                });
+            });
+            
+            audio.addEventListener('canplay', () => {
+                console.log('✅ Audio can play:', audio.id);
+            });
+            
+            // Mobile-specific: Ensure complete audio buffering before play
+            if (isMobile) {
+                let isFirstPlay = true;
+                
+                audio.addEventListener('play', async (e) => {
+                    if (isFirstPlay && audio.readyState < 3) { // HAVE_FUTURE_DATA
+                        console.log('🔄 Buffering audio on mobile:', audio.id);
+                        e.preventDefault();
+                        audio.pause();
+                        
+                        // Wait for enough data to be loaded
+                        await new Promise((resolve) => {
+                            const checkReady = () => {
+                                if (audio.readyState >= 3) { // HAVE_FUTURE_DATA
+                                    console.log('✅ Audio ready to play:', audio.id);
+                                    resolve();
+                                } else {
+                                    setTimeout(checkReady, 50);
+                                }
+                            };
+                            checkReady();
+                        });
+                        
+                        isFirstPlay = false;
+                        audio.play();
+                    }
+                });
+            }
+        });
+    }, 100);
 }
 
 // Load Lead Info
@@ -1337,3 +1422,31 @@ window.stopAudioRecording = stopAudioRecording;
 window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
 
+// Mark conversation as read
+async function markConversationAsRead(phoneNumber) {
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/${phoneNumber}/mark-read`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!response.ok) {
+            console.warn('Failed to mark conversation as read');
+            return;
+        }
+        
+        // Update the unread count in the local conversations array
+        const conv = conversations.find(c => c.phone_number === phoneNumber);
+        if (conv) {
+            conv.unread_count = 0;
+            renderConversations(); // Re-render to remove the badge
+        }
+        
+        console.log(`Conversation marked as read for ${phoneNumber}`);
+    } catch (error) {
+        console.error('Error marking conversation as read:', error);
+        // Don't show toast error - this is a background operation
+    }
+}

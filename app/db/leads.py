@@ -32,7 +32,8 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                 cur.execute("""
                     SELECT 
                         id, phone_number, customer_name, lead_status, 
-                        notes, tags, created_at, updated_at, last_interaction_at, bot_enabled
+                        notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
+                        unread_count, last_read_at
                     FROM whatsapp_leads
                     WHERE phone_number = %s
                 """, (phone_number,))
@@ -68,7 +69,9 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "created_at": row[6].isoformat() if row[6] else None,
                         "updated_at": row[7].isoformat() if row[7] else None,
                         "last_interaction_at": row[8].isoformat() if row[8] else None,
-                        "bot_enabled": row[9] if len(row) > 9 else True
+                        "bot_enabled": row[9] if len(row) > 9 else True,
+                        "unread_count": row[10] if len(row) > 10 else 0,
+                        "last_read_at": row[11].isoformat() if len(row) > 11 and row[11] else None
                     }
                 else:
                     # Create new lead
@@ -92,7 +95,9 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "created_at": datetime.now(CHILE_TZ).isoformat(),
                         "updated_at": datetime.now(CHILE_TZ).isoformat(),
                         "last_interaction_at": datetime.now(CHILE_TZ).isoformat(),
-                        "bot_enabled": True
+                        "bot_enabled": True,
+                        "unread_count": 0,
+                        "last_read_at": None
                     }
     
     except Exception as e:
@@ -190,7 +195,8 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                     cur.execute("""
                         SELECT 
                             id, phone_number, customer_name, lead_status, 
-                            notes, tags, created_at, updated_at, last_interaction_at, bot_enabled
+                            notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
+                            unread_count, last_read_at
                         FROM whatsapp_leads
                         WHERE lead_status = %s
                         ORDER BY last_interaction_at DESC NULLS LAST
@@ -200,7 +206,8 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                     cur.execute("""
                         SELECT 
                             id, phone_number, customer_name, lead_status, 
-                            notes, tags, created_at, updated_at, last_interaction_at, bot_enabled
+                            notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
+                            unread_count, last_read_at
                         FROM whatsapp_leads
                         ORDER BY last_interaction_at DESC NULLS LAST
                         LIMIT %s
@@ -220,7 +227,9 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                         "created_at": row[6].isoformat() if row[6] else None,
                         "updated_at": row[7].isoformat() if row[7] else None,
                         "last_interaction_at": row[8].isoformat() if row[8] else None,
-                        "bot_enabled": row[9] if len(row) > 9 else True
+                        "bot_enabled": row[9] if len(row) > 9 else True,
+                        "unread_count": row[10] if len(row) > 10 else 0,
+                        "last_read_at": row[11].isoformat() if len(row) > 11 and row[11] else None
                     })
                 
                 return leads
@@ -432,5 +441,64 @@ async def import_conversation_batch(
         return 0
 
 
+async def increment_unread_count(phone_number: str) -> bool:
+    """
+    Increment the unread message counter for a lead
+    Called when a new incoming message arrives
+    
+    Args:
+        phone_number: Contact phone number
+    
+    Returns:
+        True if successful
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE whatsapp_leads
+                    SET unread_count = COALESCE(unread_count, 0) + 1,
+                        updated_at = NOW()
+                    WHERE phone_number = %s
+                """, (phone_number,))
+                
+                conn.commit()
+                logger.info(f"Incremented unread count for {phone_number}")
+                return True
+    
+    except Exception as e:
+        logger.error(f"Error incrementing unread count: {e}")
+        return False
+
+
+async def mark_conversation_as_read(phone_number: str) -> bool:
+    """
+    Mark a conversation as read (reset unread counter)
+    Called when admin opens the conversation in Kia-Ai
+    
+    Args:
+        phone_number: Contact phone number
+    
+    Returns:
+        True if successful
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE whatsapp_leads
+                    SET unread_count = 0,
+                        last_read_at = NOW(),
+                        updated_at = NOW()
+                    WHERE phone_number = %s
+                """, (phone_number,))
+                
+                conn.commit()
+                logger.info(f"Marked conversation as read for {phone_number}")
+                return True
+    
+    except Exception as e:
+        logger.error(f"Error marking conversation as read: {e}")
+        return False
 
 
