@@ -550,12 +550,14 @@ function renderCurrentChat(options = {}) {
                 const audioId = `audio_${msg.id}`;
                 // Add timestamp to force refresh
                 const audioSrc = `${mediaUrl}?t=${Date.now()}`;
+                // Use preload="auto" for mobile to ensure complete audio loading
+                const preloadMode = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'auto' : 'metadata';
                 return `
                     <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
                         <div class="message-text">
                             <div class="audio-message">
                                 <div class="audio-icon">🎤</div>
-                                <audio id="${audioId}" controls preload="metadata" style="width: 100%; max-width: 250px;">
+                                <audio id="${audioId}" controls preload="${preloadMode}" style="width: 100%; max-width: 250px;">
                                     <source src="${audioSrc}" type="audio/ogg; codecs=opus">
                                     <source src="${audioSrc}" type="audio/mpeg">
                                     <source src="${audioSrc}" type="audio/mp4">
@@ -601,6 +603,8 @@ function renderCurrentChat(options = {}) {
     // Add error listeners to audio elements
     setTimeout(() => {
         const audioElements = messagesContainer.querySelectorAll('audio');
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
         audioElements.forEach(audio => {
             audio.addEventListener('error', (e) => {
                 console.error('❌ Audio error:', {
@@ -624,6 +628,35 @@ function renderCurrentChat(options = {}) {
             audio.addEventListener('canplay', () => {
                 console.log('✅ Audio can play:', audio.id);
             });
+            
+            // Mobile-specific: Ensure complete audio buffering before play
+            if (isMobile) {
+                let isFirstPlay = true;
+                
+                audio.addEventListener('play', async (e) => {
+                    if (isFirstPlay && audio.readyState < 3) { // HAVE_FUTURE_DATA
+                        console.log('🔄 Buffering audio on mobile:', audio.id);
+                        e.preventDefault();
+                        audio.pause();
+                        
+                        // Wait for enough data to be loaded
+                        await new Promise((resolve) => {
+                            const checkReady = () => {
+                                if (audio.readyState >= 3) { // HAVE_FUTURE_DATA
+                                    console.log('✅ Audio ready to play:', audio.id);
+                                    resolve();
+                                } else {
+                                    setTimeout(checkReady, 50);
+                                }
+                            };
+                            checkReady();
+                        });
+                        
+                        isFirstPlay = false;
+                        audio.play();
+                    }
+                });
+            }
         });
     }, 100);
 }
