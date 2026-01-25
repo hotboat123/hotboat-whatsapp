@@ -2499,21 +2499,28 @@ Escribe el número que prefieras 🚤"""
                 numbers = re.findall(r'\d+', message_clean)
                 if numbers:
                     flow["guests"] = int(numbers[0])
-                    flow["step"] = "asking_date"
-                    return get_text("accommodations_ask_date", language)
+                    flow["step"] = "asking_checkin"
+                    return get_text("accommodations_ask_checkin_date", language)
                 else:
                     return get_text("accommodations_ask_guests", language)
             
-            # Step 4: Date
-            elif step == "asking_date":
-                flow["date"] = message.strip()
+            # Step 4: Check-in date
+            elif step == "asking_checkin":
+                flow["checkin_date"] = message.strip()
+                flow["step"] = "asking_checkout"
+                return get_text("accommodations_ask_checkout_date", language)
+            
+            # Step 5: Check-out date
+            elif step == "asking_checkout":
+                flow["checkout_date"] = message.strip()
                 
                 # Build summary
                 property_name = "Open Sky" if flow["property"] == "open_sky" else "Raíces de Relikura"
                 summary = f"""📍 *Alojamiento:* {property_name}
 🏠 *Habitación:* {flow["room_type"]}
 👥 *Personas:* {flow["guests"]}
-📅 *Fecha:* {flow["date"]}"""
+📅 *Check-in:* {flow["checkin_date"]}
+📅 *Check-out:* {flow["checkout_date"]}"""
                 
                 # Notify Capitán Tomás
                 await self._notify_capitan_tomas(

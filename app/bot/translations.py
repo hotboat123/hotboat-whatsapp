@@ -1051,10 +1051,10 @@ Exemplo: *2*, *4*, *6*, etc.
 📲 Digite apenas o número 👍"""
     },
     
-    "accommodations_ask_date": {
-        "es": """📅 *¿Qué fecha tienes pensada?*
+    "accommodations_ask_checkin_date": {
+        "es": """📅 *¿Qué fecha tienes pensada?* (Check-in)
 
-Por favor indícame la fecha de entrada.
+Por favor indícame la fecha de **entrada**.
 
 Ejemplos válidos:
 • "15 de febrero"
@@ -1062,11 +1062,11 @@ Ejemplos válidos:
 • "Febrero 15"
 • "próximo sábado"
 
-📲 Escribe la fecha 🗓️""",
+📲 Escribe la fecha de entrada 🗓️""",
         
-        "en": """📅 *What date are you thinking?*
+        "en": """📅 *What date are you thinking?* (Check-in)
 
-Please tell me your check-in date.
+Please tell me your **check-in** date.
 
 Valid examples:
 • "February 15"
@@ -1074,11 +1074,11 @@ Valid examples:
 • "Feb 15"
 • "next Saturday"
 
-📲 Type the date 🗓️""",
+📲 Type the check-in date 🗓️""",
         
-        "pt": """📅 *Que data você está pensando?*
+        "pt": """📅 *Que data você está pensando?* (Check-in)
 
-Por favor me diga a data de entrada.
+Por favor me diga a data de **entrada**.
 
 Exemplos válidos:
 • "15 de fevereiro"
@@ -1086,7 +1086,45 @@ Exemplos válidos:
 • "Fev 15"
 • "próximo sábado"
 
-📲 Digite a data 🗓️"""
+📲 Digite a data de entrada 🗓️"""
+    },
+    
+    "accommodations_ask_checkout_date": {
+        "es": """📅 *¿En qué fecha te vas?* (Check-out)
+
+Por favor indícame la fecha de **salida**.
+
+Ejemplos válidos:
+• "18 de febrero"
+• "28/02/2026"
+• "Febrero 18"
+• "próximo domingo"
+
+📲 Escribe la fecha de salida 🗓️""",
+        
+        "en": """📅 *What date will you leave?* (Check-out)
+
+Please tell me your **check-out** date.
+
+Valid examples:
+• "February 18"
+• "02/28/2026"
+• "Feb 18"
+• "next Sunday"
+
+📲 Type the check-out date 🗓️""",
+        
+        "pt": """📅 *Em que data você vai embora?* (Check-out)
+
+Por favor me diga a data de **saída**.
+
+Exemplos válidos:
+• "18 de fevereiro"
+• "28/02/2026"
+• "Fev 18"
+• "próximo domingo"
+
+📲 Digite a data de saída 🗓️"""
     },
     
     "accommodations_awaiting_confirmation": {
