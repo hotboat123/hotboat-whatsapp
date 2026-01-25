@@ -438,12 +438,20 @@ O elige:
                     # Option 5: Ubicación y reseñas
                     response = self.faq_handler.get_response("ubicación", language)
                 elif menu_number == 6:
-                    # Option 6: Llamar a Tomás
+                    # Option 6: Alojamientos
+                    logger.info("User selected accommodations from menu")
+                    # Return special response object that indicates PDF should be sent
+                    return {
+                        "type": "accommodations_pdf",
+                        "text": get_text("accommodations_intro", language)
+                    }
+                elif menu_number == 7:
+                    # Option 7: Llamar a Tomás
                     # Send notification to Capitán Tomás
                     await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                     response = self.faq_handler.get_response("llamar a tomas", language)
                 else:
-                    response = "No entendí esa opción. Por favor elige un número del 1 al 6, grumete ⚓"
+                    response = "No entendí esa opción. Por favor elige un número del 1 al 7, grumete ⚓"
             # Check if asking about accommodations (special handling with images)
             elif self._is_accommodation_query(message_text):
                 logger.info("User asking about accommodations - will send with images")
@@ -1822,7 +1830,10 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 # Option 5: Ubicación y reseñas
                 responses.append(self.faq_handler.get_response("ubicación", language))
             elif menu_number == 6:
-                # Option 6: Llamar a Tomás
+                # Option 6: Alojamientos
+                responses.append(get_text("accommodations", language))
+            elif menu_number == 7:
+                # Option 7: Llamar a Tomás
                 await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                 responses.append(self.faq_handler.get_response("llamar a tomas", language))
         

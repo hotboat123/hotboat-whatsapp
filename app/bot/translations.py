@@ -69,7 +69,9 @@ Puedes preguntarme por:
 
 5️⃣ *Ubicación y reseñas*
 
-Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *6️⃣* 👨‍✈️🌿
+6️⃣ *Alojamientos en Pucón* 🏠
+
+Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *7️⃣* 👨‍✈️🌿
 
 ¿Listo para zarpar, grumete? ⛵
 
@@ -98,7 +100,9 @@ You can ask me about:
 
 5️⃣ *Location and reviews*
 
-If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *6️⃣* 👨‍✈️🌿
+6️⃣ *Accommodations in Pucón* 🏠
+
+If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *7️⃣* 👨‍✈️🌿
 
 Ready to set sail, sailor? ⛵
 
@@ -127,7 +131,9 @@ Você pode me perguntar sobre:
 
 5️⃣ *Localização e avaliações*
 
-Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *6️⃣* 👨‍✈️🌿
+6️⃣ *Acomodações em Pucón* 🏠
+
+Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *7️⃣* 👨‍✈️🌿
 
 Pronto para zarpar, marujo? ⛵
 
@@ -877,6 +883,97 @@ Precisa de mais informações?"""
     },
     
     # ===== ACCOMMODATION MESSAGES =====
+    
+    "accommodations_intro": {
+        "es": """🏠 *Alojamientos en Pucón*
+
+Te envío un PDF con toda la información detallada de nuestros alojamientos recomendados ⬇️
+
+📄 Revisa el PDF y luego respóndeme:
+
+1️⃣ ¿Qué alojamiento prefieres? (*Open Sky* o *Raíces de Relikura*)
+
+2️⃣ ¿Qué tipo de habitación? (Domo con tina, Domo con hidromasaje, Cabaña 2/4/6 personas, Hostal)
+
+3️⃣ ¿Para cuántas personas?
+
+4️⃣ ¿Qué fecha tienes pensada?
+
+📲 Responde con estos datos y te confirmo disponibilidad 👍""",
+        
+        "en": """🏠 *Accommodations in Pucón*
+
+I'm sending you a PDF with all the detailed information about our recommended accommodations ⬇️
+
+📄 Check the PDF and then tell me:
+
+1️⃣ Which accommodation do you prefer? (*Open Sky* or *Raíces de Relikura*)
+
+2️⃣ What type of room? (Dome with tub, Dome with hydromassage, Cabin 2/4/6 people, Hostel)
+
+3️⃣ For how many people?
+
+4️⃣ What date are you thinking?
+
+📲 Reply with these details and I'll confirm availability 👍""",
+        
+        "pt": """🏠 *Acomodações em Pucón*
+
+Estou enviando um PDF com todas as informações detalhadas sobre nossas acomodações recomendadas ⬇️
+
+📄 Confira o PDF e depois me diga:
+
+1️⃣ Qual acomodação você prefere? (*Open Sky* ou *Raíces de Relikura*)
+
+2️⃣ Que tipo de quarto? (Domo com banheira, Domo com hidromassagem, Cabana 2/4/6 pessoas, Albergue)
+
+3️⃣ Para quantas pessoas?
+
+4️⃣ Que data você está pensando?
+
+📲 Responda com esses dados e confirmo a disponibilidade 👍"""
+    },
+    
+    "accommodations_awaiting_confirmation": {
+        "es": """✅ *Perfecto, grumete!*
+
+He recibido tu solicitud de alojamiento:
+
+📋 *Resumen:*
+{summary}
+
+⏳ Déjame verificar la disponibilidad con el establecimiento y te confirmo lo antes posible.
+
+El *Capitán Tomás* revisará tu solicitud y te contactará para confirmar 👨‍✈️
+
+📲 Te responderemos pronto. ¡Gracias por tu paciencia! ⚓""",
+        
+        "en": """✅ *Perfect, sailor!*
+
+I've received your accommodation request:
+
+📋 *Summary:*
+{summary}
+
+⏳ Let me check availability with the establishment and I'll confirm as soon as possible.
+
+*Captain Tomás* will review your request and contact you to confirm 👨‍✈️
+
+📲 We'll get back to you soon. Thanks for your patience! ⚓""",
+        
+        "pt": """✅ *Perfeito, marujo!*
+
+Recebi sua solicitação de acomodação:
+
+📋 *Resumo:*
+{summary}
+
+⏳ Deixa eu verificar a disponibilidade com o estabelecimento e confirmo o mais rápido possível.
+
+O *Capitão Tomás* revisará sua solicitação e entrará em contato para confirmar 👨‍✈️
+
+📲 Responderemos em breve. Obrigado pela paciência! ⚓"""
+    },
     
     "accommodations": {
         "es": """🌊🔥 *HotBoat + Alojamiento en Pucón*

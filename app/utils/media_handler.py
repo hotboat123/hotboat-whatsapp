@@ -14,9 +14,10 @@ RECEIVED_DIR = os.path.join(MEDIA_DIR, "received")
 UPLOADED_DIR = os.path.join(MEDIA_DIR, "uploaded")
 ACCOMMODATION_DIR = os.path.join(MEDIA_DIR, "accommodations")
 AUDIO_DIR = os.path.join(MEDIA_DIR, "audio")
+DOCUMENTS_DIR = os.path.join(MEDIA_DIR, "documents")
 
 # Create directories if they don't exist
-for directory in [MEDIA_DIR, RECEIVED_DIR, UPLOADED_DIR, ACCOMMODATION_DIR, AUDIO_DIR]:
+for directory in [MEDIA_DIR, RECEIVED_DIR, UPLOADED_DIR, ACCOMMODATION_DIR, AUDIO_DIR, DOCUMENTS_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 
@@ -146,3 +147,16 @@ def list_audio_files() -> List[str]:
         for f in os.listdir(AUDIO_DIR)
         if f.lower().endswith(('.ogg', '.mp3', '.wav', '.m4a', '.aac'))
     ]
+
+
+def get_accommodations_pdf_path() -> Optional[str]:
+    """
+    Get path to the accommodations PDF file
+    
+    Returns:
+        Path to the PDF if it exists, None otherwise
+    """
+    pdf_path = os.path.join(DOCUMENTS_DIR, "alojamientos.pdf")
+    if os.path.exists(pdf_path):
+        return pdf_path
+    return None
