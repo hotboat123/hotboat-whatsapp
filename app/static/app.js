@@ -222,11 +222,13 @@ function updateCharCount(inputId, counterId) {
 
 // Load Conversations
 async function loadConversations() {
+    console.log('🔄 Loading conversations with unread badges...');
     try {
         const response = await fetch(`${API_BASE}/api/conversations`);
         if (!response.ok) throw new Error('Failed to load conversations');
         
         const data = await response.json();
+        console.log('📊 Raw API response:', data);
         const rawConversations = data.conversations || [];
 
         // Group by phone number and keep latest entry
@@ -267,7 +269,8 @@ async function loadConversations() {
                     customer_name: customerName,
                     last_message: lastMessage,
                     last_message_at: timestamp,
-                    created_at: timestamp
+                    created_at: timestamp,
+                    unread_count: item.unread_count || 0  // ✅ Added unread_count
                 });
             }
         });
