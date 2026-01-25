@@ -315,6 +315,10 @@ class ConversationManager:
             elif conversation.get("metadata", {}).get("awaiting_reservation_time"):
                 logger.info("User responding with reservation time")
                 response = await self._handle_reservation_time_response(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.4: Accommodation flow - step by step
+            elif conversation.get("metadata", {}).get("accommodation_flow"):
+                logger.info("User in accommodation flow")
+                response = await self._handle_accommodation_flow(message_text, from_number, contact_name, conversation)
             # PRIORITY 1.5: Check if user is responding with ice cream flavor choice
             elif conversation.get("metadata", {}).get("awaiting_ice_cream_flavor"):
                 logger.info("User responding with ice cream flavor")
@@ -440,6 +444,14 @@ O elige:
                 elif menu_number == 6:
                     # Option 6: Alojamientos
                     logger.info("User selected accommodations from menu")
+                    # Initialize accommodation flow
+                    conversation["metadata"]["accommodation_flow"] = {
+                        "step": "choosing_property",  # Step 1: Open Sky or Relikura
+                        "property": None,
+                        "room_type": None,
+                        "guests": None,
+                        "date": None
+                    }
                     # Return special response object that indicates PDF should be sent
                     return {
                         "type": "accommodations_pdf",
@@ -2403,6 +2415,103 @@ Escribe el número que prefieras 🚤"""
             conversation["metadata"]["pending_ice_cream_quantity"] = None
             conversation["metadata"]["pending_extras"] = []
             return "Hubo un error agregando el helado. Por favor, intenta de nuevo."
+    
+    async def _handle_accommodation_flow(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle step-by-step accommodation booking flow"""
+        try:
+            flow = conversation["metadata"]["accommodation_flow"]
+            step = flow["step"]
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Step 1: Choosing property (Open Sky or Relikura)
+            if step == "choosing_property":
+                if any(word in message_clean for word in ["1", "open", "sky", "domo"]):
+                    flow["property"] = "open_sky"
+                    flow["step"] = "choosing_room"
+                    return get_text("accommodations_open_sky_rooms", language)
+                elif any(word in message_clean for word in ["2", "raices", "raíces", "relikura", "cabaña", "cabana", "hostal"]):
+                    flow["property"] = "relikura"
+                    flow["step"] = "choosing_room"
+                    return get_text("accommodations_relikura_rooms", language)
+                else:
+                    return get_text("accommodations_intro", language)
+            
+            # Step 2: Choosing room type
+            elif step == "choosing_room":
+                if flow["property"] == "open_sky":
+                    if "1" in message_clean or "tina" in message_clean or "baño" in message_clean:
+                        flow["room_type"] = "Domo con Tina de Baño"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    elif "2" in message_clean or "hidromasaje" in message_clean or "hidro" in message_clean:
+                        flow["room_type"] = "Domo con Hidromasaje"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    else:
+                        return get_text("accommodations_open_sky_rooms", language)
+                
+                elif flow["property"] == "relikura":
+                    if "1" in message_clean or ("2" in message_clean and "personas" in message_clean):
+                        flow["room_type"] = "Cabaña para 2 personas"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    elif "2" in message_clean or ("4" in message_clean and "personas" in message_clean):
+                        flow["room_type"] = "Cabaña para 4 personas"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    elif "3" in message_clean or ("6" in message_clean and "personas" in message_clean):
+                        flow["room_type"] = "Cabaña para 6 personas"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    elif "4" in message_clean or "hostal" in message_clean:
+                        flow["room_type"] = "Hostal"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    else:
+                        return get_text("accommodations_relikura_rooms", language)
+            
+            # Step 3: Number of guests
+            elif step == "asking_guests":
+                import re
+                numbers = re.findall(r'\d+', message_clean)
+                if numbers:
+                    flow["guests"] = int(numbers[0])
+                    flow["step"] = "asking_date"
+                    return get_text("accommodations_ask_date", language)
+                else:
+                    return get_text("accommodations_ask_guests", language)
+            
+            # Step 4: Date
+            elif step == "asking_date":
+                flow["date"] = message.strip()
+                
+                # Build summary
+                property_name = "Open Sky" if flow["property"] == "open_sky" else "Raíces de Relikura"
+                summary = f"""📍 *Alojamiento:* {property_name}
+🏠 *Habitación:* {flow["room_type"]}
+👥 *Personas:* {flow["guests"]}
+📅 *Fecha:* {flow["date"]}"""
+                
+                # Notify Capitán Tomás
+                await self._notify_capitan_tomas(
+                    contact_name,
+                    phone_number,
+                    [],
+                    reason="accommodation_request",
+                    extra_info=summary
+                )
+                
+                # Clear accommodation flow
+                del conversation["metadata"]["accommodation_flow"]
+                
+                return get_text("accommodations_awaiting_confirmation", language).format(summary=summary)
+            
+        except Exception as e:
+            logger.error(f"Error in accommodation flow: {e}")
+            if "accommodation_flow" in conversation.get("metadata", {}):
+                del conversation["metadata"]["accommodation_flow"]
+            return "Lo siento, hubo un error procesando tu solicitud de alojamiento. Por favor intenta de nuevo escribiendo 'menu'."
     
     async def _handle_extra_number_selection(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> Optional[str]:
         """Handle user's selection of an extra by number (supports multiple numbers like '5 y 7')"""

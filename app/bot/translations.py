@@ -889,49 +889,204 @@ Precisa de mais informações?"""
 
 Te envío un PDF con toda la información detallada de nuestros alojamientos recomendados ⬇️
 
-📄 Revisa el PDF y luego respóndeme:
+📄 Después de revisar el PDF, respóndeme:
 
-1️⃣ ¿Qué alojamiento prefieres? (*Open Sky* o *Raíces de Relikura*)
+*¿Qué alojamiento te interesa?*
 
-2️⃣ ¿Qué tipo de habitación? (Domo con tina, Domo con hidromasaje, Cabaña 2/4/6 personas, Hostal)
+1️⃣ *Open Sky* - Domos románticos con vista a las estrellas 🌌
+2️⃣ *Raíces de Relikura* - Cabañas y hostal junto al río 🌿
 
-3️⃣ ¿Para cuántas personas?
-
-4️⃣ ¿Qué fecha tienes pensada?
-
-📲 Responde con estos datos y te confirmo disponibilidad 👍""",
+Escribe *1* o *2*, o el nombre del alojamiento 👍""",
         
         "en": """🏠 *Accommodations in Pucón*
 
 I'm sending you a PDF with all the detailed information about our recommended accommodations ⬇️
 
-📄 Check the PDF and then tell me:
+📄 After reviewing the PDF, tell me:
 
-1️⃣ Which accommodation do you prefer? (*Open Sky* or *Raíces de Relikura*)
+*Which accommodation interests you?*
 
-2️⃣ What type of room? (Dome with tub, Dome with hydromassage, Cabin 2/4/6 people, Hostel)
+1️⃣ *Open Sky* - Romantic domes with starry views 🌌
+2️⃣ *Raíces de Relikura* - Cabins and hostel by the river 🌿
 
-3️⃣ For how many people?
-
-4️⃣ What date are you thinking?
-
-📲 Reply with these details and I'll confirm availability 👍""",
+Type *1* or *2*, or the accommodation name 👍""",
         
         "pt": """🏠 *Acomodações em Pucón*
 
 Estou enviando um PDF com todas as informações detalhadas sobre nossas acomodações recomendadas ⬇️
 
-📄 Confira o PDF e depois me diga:
+📄 Depois de revisar o PDF, me diga:
 
-1️⃣ Qual acomodação você prefere? (*Open Sky* ou *Raíces de Relikura*)
+*Qual acomodação te interessa?*
 
-2️⃣ Que tipo de quarto? (Domo com banheira, Domo com hidromassagem, Cabana 2/4/6 pessoas, Albergue)
+1️⃣ *Open Sky* - Domos românticos com vista para as estrelas 🌌
+2️⃣ *Raíces de Relikura* - Cabanas e albergue à beira do rio 🌿
 
-3️⃣ Para quantas pessoas?
+Digite *1* ou *2*, ou o nome da acomodação 👍"""
+    },
+    
+    "accommodations_open_sky_rooms": {
+        "es": """⭐ *Open Sky - Domos Románticos*
 
-4️⃣ Que data você está pensando?
+Perfecto! Tenemos dos opciones de domos transparentes:
 
-📲 Responda com esses dados e confirmo a disponibilidade 👍"""
+1️⃣ *Domo con Tina de Baño* 🛁
+   💰 $100.000 / noche
+   👥 2 personas
+
+2️⃣ *Domo con Hidromasaje* 💆
+   💰 $120.000 / noche
+   👥 2 personas
+
+¿Cuál prefieres? Escribe *1* o *2* 🌟""",
+        
+        "en": """⭐ *Open Sky - Romantic Domes*
+
+Perfect! We have two transparent dome options:
+
+1️⃣ *Dome with Bathtub* 🛁
+   💰 $100,000 CLP / night
+   👥 2 people
+
+2️⃣ *Dome with Hydromassage* 💆
+   💰 $120,000 CLP / night
+   👥 2 people
+
+Which do you prefer? Type *1* or *2* 🌟""",
+        
+        "pt": """⭐ *Open Sky - Domos Românticos*
+
+Perfeito! Temos duas opções de domos transparentes:
+
+1️⃣ *Domo com Banheira* 🛁
+   💰 $100.000 CLP / noite
+   👥 2 pessoas
+
+2️⃣ *Domo com Hidromassagem* 💆
+   💰 $120.000 CLP / noite
+   👥 2 pessoas
+
+Qual você prefere? Digite *1* ou *2* 🌟"""
+    },
+    
+    "accommodations_relikura_rooms": {
+        "es": """🌿 *Raíces de Relikura - Junto al Río*
+
+Excelente elección! Tenemos varias opciones:
+
+1️⃣ *Cabaña para 2 personas*
+   💰 $60.000 / noche
+
+2️⃣ *Cabaña para 4 personas*
+   💰 $80.000 / noche
+
+3️⃣ *Cabaña para 6 personas*
+   💰 $100.000 / noche
+
+4️⃣ *Hostal* (por persona)
+   💰 $20.000 / noche
+
+¿Qué opción prefieres? Escribe el número 🏡""",
+        
+        "en": """🌿 *Raíces de Relikura - By the River*
+
+Excellent choice! We have several options:
+
+1️⃣ *Cabin for 2 people*
+   💰 $60,000 CLP / night
+
+2️⃣ *Cabin for 4 people*
+   💰 $80,000 CLP / night
+
+3️⃣ *Cabin for 6 people*
+   💰 $100,000 CLP / night
+
+4️⃣ *Hostel* (per person)
+   💰 $20,000 CLP / night
+
+Which option do you prefer? Type the number 🏡""",
+        
+        "pt": """🌿 *Raíces de Relikura - À Beira do Rio*
+
+Excelente escolha! Temos várias opções:
+
+1️⃣ *Cabana para 2 pessoas*
+   💰 $60.000 CLP / noite
+
+2️⃣ *Cabana para 4 pessoas*
+   💰 $80.000 CLP / noite
+
+3️⃣ *Cabana para 6 pessoas*
+   💰 $100.000 CLP / noite
+
+4️⃣ *Albergue* (por pessoa)
+   💰 $20.000 CLP / noite
+
+Qual opção você prefere? Digite o número 🏡"""
+    },
+    
+    "accommodations_ask_guests": {
+        "es": """👥 *¿Para cuántas personas?*
+
+Por favor indícame el número de huéspedes.
+
+Ejemplo: *2*, *4*, *6*, etc.
+
+📲 Escribe solo el número 👍""",
+        
+        "en": """👥 *For how many people?*
+
+Please tell me the number of guests.
+
+Example: *2*, *4*, *6*, etc.
+
+📲 Just type the number 👍""",
+        
+        "pt": """👥 *Para quantas pessoas?*
+
+Por favor me diga o número de hóspedes.
+
+Exemplo: *2*, *4*, *6*, etc.
+
+📲 Digite apenas o número 👍"""
+    },
+    
+    "accommodations_ask_date": {
+        "es": """📅 *¿Qué fecha tienes pensada?*
+
+Por favor indícame la fecha de entrada.
+
+Ejemplos válidos:
+• "15 de febrero"
+• "25/02/2026"
+• "Febrero 15"
+• "próximo sábado"
+
+📲 Escribe la fecha 🗓️""",
+        
+        "en": """📅 *What date are you thinking?*
+
+Please tell me your check-in date.
+
+Valid examples:
+• "February 15"
+• "02/25/2026"
+• "Feb 15"
+• "next Saturday"
+
+📲 Type the date 🗓️""",
+        
+        "pt": """📅 *Que data você está pensando?*
+
+Por favor me diga a data de entrada.
+
+Exemplos válidos:
+• "15 de fevereiro"
+• "25/02/2026"
+• "Fev 15"
+• "próximo sábado"
+
+📲 Digite a data 🗓️"""
     },
     
     "accommodations_awaiting_confirmation": {
