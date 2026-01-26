@@ -109,12 +109,18 @@ async def webhook_verify(request: Request):
     """
     Webhook verification endpoint for WhatsApp
     Meta will call this to verify the webhook
+    Also responds to health checks with 200 OK
     """
     try:
         # Get query parameters
         mode = request.query_params.get("hub.mode")
         token = request.query_params.get("hub.verify_token")
         challenge = request.query_params.get("hub.challenge")
+        
+        # If no parameters, this is a health check (e.g., from Railway)
+        # Return 200 OK to prevent container restarts
+        if not mode and not token and not challenge:
+            return {"status": "ok", "message": "Webhook endpoint is ready"}
         
         logger.info(f"Webhook verification request: mode={mode}, token={'***' if token else None}")
         
