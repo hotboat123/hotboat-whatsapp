@@ -2781,18 +2781,46 @@ El *Capitán Tomás* revisará tu solicitud y te contactará para coordinar fech
                         if num not in flow["activities"]:
                             flow["activities"].append(num)
                     
-                    # Show current selection
+                    # Automatically move to next step: asking about more activities or accommodation
+                    flow["step"] = "asking_more_or_continue"
                     activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
-                    return f"""✅ *Actividades en tu pack:*
+                    return f"""✅ *Actividades agregadas a tu pack:*
 {activities_list}
 
-¿Quieres agregar más actividades? Escribe los números separados por comas.
+*¿Qué quieres hacer ahora?*
 
-O escribe *"Terminar"* para continuar.
+1️⃣ Agregar más actividades
+2️⃣ Continuar (elegir si quieres alojamiento)
+
+Escribe *1* o *2* 🎒
 
 💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤"""
                 else:
                     return get_text("build_your_package_intro", language)
+            
+            elif step == "asking_more_or_continue":
+                # User chooses to add more activities or continue
+                if "1" in message_clean or any(word in message_clean for word in ["agregar", "más", "mas", "more", "add", "adicionar", "mais"]):
+                    # Go back to selecting activities
+                    flow["step"] = "selecting_activities"
+                    return get_text("build_your_package_intro", language)
+                elif "2" in message_clean or any(word in message_clean for word in ["continuar", "continue", "seguir", "continuar"]):
+                    # Ask about accommodation
+                    flow["step"] = "asking_accommodation"
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return get_text("build_package_ask_accommodation", language).format(activities=activities_list)
+                else:
+                    # Invalid response, ask again
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return f"""✅ *Actividades en tu pack:*
+{activities_list}
+
+*¿Qué quieres hacer ahora?*
+
+1️⃣ Agregar más actividades
+2️⃣ Continuar (elegir si quieres alojamiento)
+
+Escribe *1* o *2* 🎒"""
             
             elif step == "asking_accommodation":
                 # User answers yes/no for accommodation
