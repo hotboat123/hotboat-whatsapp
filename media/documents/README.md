@@ -8,7 +8,25 @@ Esta carpeta contiene documentos (PDFs) que el bot enviará automáticamente por
 
 **Propósito:** Información completa de alojamientos (Open Sky y Raíces de Relikura)
 
-**Cuándo se envía:** Cuando un cliente selecciona la opción "6. Alojamientos" del menú principal
+**Cuándo se envía:** Cuando un cliente selecciona "6. Alojamientos y Packs" → "2. Solo Alojamientos"
+
+### pack_1_noche.pdf
+
+**Propósito:** Pack completo de 1 noche (Alojamiento + HotBoat)
+
+**Cuándo se envía:** Cuando un cliente selecciona "6. Alojamientos y Packs" → "1. Packs Completos" → "1"
+
+### pack_2_noches.pdf
+
+**Propósito:** Pack completo de 2 noches (Alojamiento + HotBoat + Rafting)
+
+**Cuándo se envía:** Cuando un cliente selecciona "6. Alojamientos y Packs" → "1. Packs Completos" → "2"
+
+### pack_3_noches.pdf
+
+**Propósito:** Pack completo de 3 noches (Alojamiento + HotBoat + Rafting + Cabalgata)
+
+**Cuándo se envía:** Cuando un cliente selecciona "6. Alojamientos y Packs" → "1. Packs Completos" → "3"
 
 **Contenido sugerido:**
 - Fotos de cada alojamiento
@@ -35,16 +53,19 @@ Puedes usar:
 - **PowerPoint** - Guardar como PDF
 - **Adobe InDesign** - Profesional
 
-### Paso 2: Guarda el archivo
+### Paso 2: Guarda los archivos
 
-Guarda tu PDF con el nombre exacto:
+Guarda tus PDFs con los nombres exactos:
 ```
 alojamientos.pdf
+pack_1_noche.pdf
+pack_2_noches.pdf
+pack_3_noches.pdf
 ```
 
 ### Paso 3: Copia a esta carpeta
 
-Copia `alojamientos.pdf` a:
+Copia todos los PDFs a:
 ```
 media/documents/
 ```
@@ -53,10 +74,12 @@ media/documents/
 
 Si estás usando Railway:
 ```bash
-git add media/documents/alojamientos.pdf
-git commit -m "Add accommodations PDF"
+git add media/documents/*.pdf
+git commit -m "Add accommodation and package PDFs"
 git push
 ```
+
+⚠️ **Importante:** Asegúrate de que los archivos estén permitidos en `.gitignore`. El archivo `media/.gitignore` ya está configurado para permitir PDFs en `documents/`.
 
 ---
 
@@ -72,22 +95,51 @@ Para verificar que el PDF funciona:
 
 ## 📊 Flujo Completo
 
+### Opción 1: Packs Completos
 ```
 Cliente: "6"
    ↓
-Bot: "🏠 Alojamientos en Pucón"
-     "Te envío un PDF con toda la información..."
-     [PDF adjunto: alojamientos.pdf]
+Bot: "🏠📦 Alojamientos y Packs en Pucón"
+     "1️⃣ Packs Completos"
+     "2️⃣ Solo Alojamientos"
+     "3️⃣ Arma tu Pack"
    ↓
-Bot: "📄 Revisa el PDF y luego respóndeme:
-      1️⃣ ¿Qué alojamiento prefieres?
-      2️⃣ ¿Qué tipo de habitación?
-      ..."
+Cliente: "1" (Packs Completos)
    ↓
-Cliente responde con sus preferencias
+Bot: "🎁 Packs Completos - Todo Incluido"
+     "¿Cuántas noches? 1, 2, o 3"
    ↓
-Bot: "✅ Perfecto! He recibido tu solicitud..."
-     "⏳ Déjame verificar disponibilidad..."
+Cliente: "2"
+   ↓
+Bot: "✅ Pack de 2 Noches Seleccionado"
+     [PDF adjunto: pack_2_noches.pdf]
+     "El Capitán Tomás te contactará pronto"
+```
+
+### Opción 2: Solo Alojamientos
+```
+Cliente: "6" → "2"
+   ↓
+Bot: [PDF adjunto: alojamientos.pdf]
+     "¿Qué alojamiento prefieres?"
+     "1️⃣ Open Sky"
+     "2️⃣ Raíces de Relikura"
+   ↓
+Cliente responde y sigue el flujo de reserva
+```
+
+### Opción 3: Arma tu Pack
+```
+Cliente: "6" → "3"
+   ↓
+Bot: "🛒 Arma tu Pack Personalizado"
+     "Elige actividades: 1-HotBoat, 2-Rafting, 3-Volcán, 4-Cabalgata, 5-Vehículo"
+   ↓
+Cliente: "1, 2, 4"
+   ↓
+Bot: "¿Quieres agregar alojamiento?"
+   ↓
+Bot notifica al Capitán Tomás con el resumen
 ```
 
 ---

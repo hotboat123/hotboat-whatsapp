@@ -69,7 +69,7 @@ Puedes preguntarme por:
 
 5️⃣ *Ubicación y reseñas*
 
-6️⃣ *Alojamientos en Pucón* 🏠
+6️⃣ *Alojamientos y Packs* 🏠📦
 
 Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *7️⃣* 👨‍✈️🌿
 
@@ -100,7 +100,7 @@ You can ask me about:
 
 5️⃣ *Location and reviews*
 
-6️⃣ *Accommodations in Pucón* 🏠
+6️⃣ *Accommodations and Packages* 🏠📦
 
 If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *7️⃣* 👨‍✈️🌿
 
@@ -131,7 +131,7 @@ Você pode me perguntar sobre:
 
 5️⃣ *Localização e avaliações*
 
-6️⃣ *Acomodações em Pucón* 🏠
+6️⃣ *Acomodações e Pacotes* 🏠📦
 
 Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *7️⃣* 👨‍✈️🌿
 
@@ -884,7 +884,60 @@ Precisa de mais informações?"""
     
     # ===== ACCOMMODATION MESSAGES =====
     
-    "accommodations_intro": {
+    "accommodations_and_packages_menu": {
+        "es": """🏠📦 *Alojamientos y Packs en Pucón*
+
+¡Perfecto grumete! Te ofrezco varias opciones:
+
+1️⃣ *Packs Completos* 🎁
+   Experiencias todo incluido con alojamiento y actividades
+
+2️⃣ *Solo Alojamientos* 🏠
+   Buscar y reservar alojamiento en Pucón
+
+3️⃣ *Arma tu Pack* 🛒
+   Personaliza: elige actividades y agrega alojamiento
+
+📲 Escribe el número que prefieras (1, 2, o 3)
+
+💡 *Recuerda:* Escribe *"Menu"* en cualquier momento para volver al *Menú HotBoat* principal 🚤""",
+        
+        "en": """🏠📦 *Accommodations and Packages in Pucón*
+
+Perfect sailor! I offer you several options:
+
+1️⃣ *Complete Packages* 🎁
+   All-inclusive experiences with accommodation and activities
+
+2️⃣ *Accommodations Only* 🏠
+   Search and book accommodation in Pucón
+
+3️⃣ *Build Your Package* 🛒
+   Customize: choose activities and add accommodation
+
+📲 Type the number you prefer (1, 2, or 3)
+
+💡 *Remember:* Type *"Menu"* anytime to return to the main *HotBoat Menu* 🚤""",
+        
+        "pt": """🏠📦 *Acomodações e Pacotes em Pucón*
+
+Perfeito marinheiro! Ofereço várias opções:
+
+1️⃣ *Pacotes Completos* 🎁
+   Experiências tudo incluído com acomodação e atividades
+
+2️⃣ *Apenas Acomodações* 🏠
+   Buscar e reservar acomodação em Pucón
+
+3️⃣ *Monte seu Pacote* 🛒
+   Personalize: escolha atividades e adicione acomodação
+
+📲 Digite o número que preferir (1, 2, ou 3)
+
+💡 *Lembre-se:* Digite *"Menu"* a qualquer momento para voltar ao *Menu HotBoat* principal 🚤"""
+    },
+    
+    "accommodations_only_intro": {
         "es": """🏠 *Alojamientos en Pucón*
 
 Te envío un PDF con toda la información detallada de nuestros alojamientos recomendados ⬇️
@@ -896,7 +949,9 @@ Te envío un PDF con toda la información detallada de nuestros alojamientos rec
 1️⃣ *Open Sky* - Domos románticos con vista a las estrellas 🌌
 2️⃣ *Raíces de Relikura* - Cabañas y hostal junto al río 🌿
 
-Escribe *1* o *2*, o el nombre del alojamiento 👍""",
+Escribe *1* o *2*, o el nombre del alojamiento 👍
+
+💡 *Tip:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
         
         "en": """🏠 *Accommodations in Pucón*
 
@@ -909,7 +964,9 @@ I'm sending you a PDF with all the detailed information about our recommended ac
 1️⃣ *Open Sky* - Romantic domes with starry views 🌌
 2️⃣ *Raíces de Relikura* - Cabins and hostel by the river 🌿
 
-Type *1* or *2*, or the accommodation name 👍""",
+Type *1* or *2*, or the accommodation name 👍
+
+💡 *Tip:* Type *"Menu"* to return to the *HotBoat Menu* 🚤""",
         
         "pt": """🏠 *Acomodações em Pucón*
 
@@ -922,7 +979,9 @@ Estou enviando um PDF com todas as informações detalhadas sobre nossas acomoda
 1️⃣ *Open Sky* - Domos românticos com vista para as estrelas 🌌
 2️⃣ *Raíces de Relikura* - Cabanas e albergue à beira do rio 🌿
 
-Digite *1* ou *2*, ou o nome da acomodação 👍"""
+Digite *1* ou *2*, ou o nome da acomodação 👍
+
+💡 *Dica:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
     },
     
     "accommodations_open_sky_rooms": {
@@ -1166,6 +1225,203 @@ Recebi sua solicitação de acomodação:
 O *Capitão Tomás* revisará sua solicitação e entrará em contato para confirmar 👨‍✈️
 
 📲 Responderemos em breve. Obrigado pela paciência! ⚓"""
+    },
+    
+    "complete_packages_menu": {
+        "es": """🎁 *Packs Completos - Todo Incluido*
+
+Elige tu pack ideal con alojamiento y actividades:
+
+📦 *Pack 1 Noche*
+🏠 Alojamiento + 🚤 HotBoat
+
+📦 *Pack 2 Noches*
+🏠 Alojamiento + 🚤 HotBoat + 🚣 Rafting
+
+📦 *Pack 3 Noches*
+🏠 Alojamiento + 🚤 HotBoat + 🚣 Rafting + 🐴 Cabalgata
+
+📄 Te enviaré PDFs con todos los detalles de cada pack.
+
+*¿Cuántas noches te gustaría?*
+Escribe *1*, *2*, o *3* 🎒
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """🎁 *Complete Packages - All Inclusive*
+
+Choose your ideal package with accommodation and activities:
+
+📦 *1 Night Package*
+🏠 Accommodation + 🚤 HotBoat
+
+📦 *2 Nights Package*
+🏠 Accommodation + 🚤 HotBoat + 🚣 Rafting
+
+📦 *3 Nights Package*
+🏠 Accommodation + 🚤 HotBoat + 🚣 Rafting + 🐴 Horseback Riding
+
+📄 I'll send you PDFs with all the details of each package.
+
+*How many nights would you like?*
+Type *1*, *2*, or *3* 🎒
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤""",
+        
+        "pt": """🎁 *Pacotes Completos - Tudo Incluído*
+
+Escolha seu pacote ideal com acomodação e atividades:
+
+📦 *Pacote 1 Noite*
+🏠 Acomodação + 🚤 HotBoat
+
+📦 *Pacote 2 Noites*
+🏠 Acomodação + 🚤 HotBoat + 🚣 Rafting
+
+📦 *Pacote 3 Noites*
+🏠 Acomodação + 🚤 HotBoat + 🚣 Rafting + 🐴 Cavalgada
+
+📄 Enviarei PDFs com todos os detalhes de cada pacote.
+
+*Quantas noites você gostaria?*
+Digite *1*, *2*, ou *3* 🎒
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    "build_your_package_intro": {
+        "es": """🛒 *Arma tu Pack Personalizado*
+
+¡Perfecto! Puedes elegir las actividades que quieras y luego agregar alojamiento.
+
+📋 *Actividades Disponibles:*
+
+1️⃣ 🚤 *HotBoat* - Experiencia flotante única
+2️⃣ 🚣 *Rafting* - Adrenalina en el río
+3️⃣ 🌋 *Subida al Volcán* - Trek inolvidable
+4️⃣ 🐴 *Cabalgata* - Naturaleza a caballo
+5️⃣ 🚗 *Arriendo de Vehículo* - Movilidad en Pucón
+
+Puedes elegir *varias opciones*. Escribe los números que te interesan separados por comas.
+
+Ejemplo: "1, 2, 4" para HotBoat + Rafting + Cabalgata
+
+O escribe *"Terminar"* cuando estés listo para continuar.
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """🛒 *Build Your Custom Package*
+
+Perfect! You can choose the activities you want and then add accommodation.
+
+📋 *Available Activities:*
+
+1️⃣ 🚤 *HotBoat* - Unique floating experience
+2️⃣ 🚣 *Rafting* - River adrenaline
+3️⃣ 🌋 *Volcano Climb* - Unforgettable trek
+4️⃣ 🐴 *Horseback Riding* - Nature on horseback
+5️⃣ 🚗 *Vehicle Rental* - Mobility in Pucón
+
+You can choose *multiple options*. Type the numbers you're interested in separated by commas.
+
+Example: "1, 2, 4" for HotBoat + Rafting + Horseback Riding
+
+Or type *"Done"* when you're ready to continue.
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤""",
+        
+        "pt": """🛒 *Monte seu Pacote Personalizado*
+
+Perfeito! Você pode escolher as atividades que quiser e depois adicionar acomodação.
+
+📋 *Atividades Disponíveis:*
+
+1️⃣ 🚤 *HotBoat* - Experiência flutuante única
+2️⃣ 🚣 *Rafting* - Adrenalina no rio
+3️⃣ 🌋 *Subida ao Vulcão* - Trekking inesquecível
+4️⃣ 🐴 *Cavalgada* - Natureza a cavalo
+5️⃣ 🚗 *Aluguel de Veículo* - Mobilidade em Pucón
+
+Você pode escolher *várias opções*. Digite os números que te interessam separados por vírgulas.
+
+Exemplo: "1, 2, 4" para HotBoat + Rafting + Cavalgada
+
+Ou digite *"Terminar"* quando estiver pronto para continuar.
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    "build_package_ask_accommodation": {
+        "es": """✅ *Actividades Seleccionadas:*
+{activities}
+
+¿Quieres agregar *alojamiento* a tu pack? 🏠
+
+1️⃣ Sí, agregar alojamiento
+2️⃣ No, solo actividades
+
+Escribe *1* o *2* 👍
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """✅ *Selected Activities:*
+{activities}
+
+Do you want to add *accommodation* to your package? 🏠
+
+1️⃣ Yes, add accommodation
+2️⃣ No, only activities
+
+Type *1* or *2* 👍
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤""",
+        
+        "pt": """✅ *Atividades Selecionadas:*
+{activities}
+
+Quer adicionar *acomodação* ao seu pacote? 🏠
+
+1️⃣ Sim, adicionar acomodação
+2️⃣ Não, apenas atividades
+
+Digite *1* ou *2* 👍
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    "build_package_confirmation": {
+        "es": """✅ *Pack Personalizado Recibido*
+
+📋 *Tu Selección:*
+{package_summary}
+
+El *Capitán Tomás* revisará tu solicitud y te contactará para coordinar fechas, disponibilidad y pago 👨‍✈️⚓
+
+📲 Te responderemos pronto para confirmar todo!
+
+💡 *Mientras tanto*, escribe *"Menu"* para explorar más opciones del *Menú HotBoat* 🚤""",
+        
+        "en": """✅ *Custom Package Received*
+
+📋 *Your Selection:*
+{package_summary}
+
+*Captain Tomás* will review your request and contact you to coordinate dates, availability and payment 👨‍✈️⚓
+
+📲 We'll get back to you soon to confirm everything!
+
+💡 *Meanwhile*, type *"Menu"* to explore more *HotBoat Menu* options 🚤""",
+        
+        "pt": """✅ *Pacote Personalizado Recebido*
+
+📋 *Sua Seleção:*
+{package_summary}
+
+O *Capitão Tomás* revisará sua solicitação e entrará em contato para coordenar datas, disponibilidade e pagamento 👨‍✈️⚓
+
+📲 Responderemos em breve para confirmar tudo!
+
+💡 *Enquanto isso*, digite *"Menu"* para explorar mais opções do *Menu HotBoat* 🚤"""
     },
     
     "accommodations": {

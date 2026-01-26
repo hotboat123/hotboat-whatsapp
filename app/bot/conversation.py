@@ -218,6 +218,48 @@ class ConversationManager:
                 email_body = self._format_plain_text(message)
                 email_priority = "high"
             
+            elif reason == "package_request":
+                # Notification for complete package request
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu interés en nuestro pack completo. Te confirmo disponibilidad pronto! 🎁"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                message = f"🎁 *Solicitud de Pack Completo*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"📦 *Pack:* {extra_info}\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Solicitud de pack completo - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
+            
+            elif reason == "custom_package_request":
+                # Notification for custom package request
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu pack personalizado. Te contacto pronto para coordinar! 🛒"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                message = f"🛒 *Solicitud de Pack Personalizado*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"{extra_info}\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Solicitud de pack personalizado - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
+            
             else:
                 return
             
@@ -337,10 +379,22 @@ class ConversationManager:
             elif conversation.get("metadata", {}).get("awaiting_reservation_time"):
                 logger.info("User responding with reservation time")
                 response = await self._handle_reservation_time_response(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.3.5: Packages submenu selection
+            elif conversation.get("metadata", {}).get("awaiting_packages_submenu"):
+                logger.info("User selecting from packages submenu")
+                response = await self._handle_packages_submenu(message_text, from_number, contact_name, conversation)
             # PRIORITY 1.4: Accommodation flow - step by step
             elif conversation.get("metadata", {}).get("accommodation_flow"):
                 logger.info("User in accommodation flow")
                 response = await self._handle_accommodation_flow(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.4.5: Complete packages flow
+            elif conversation.get("metadata", {}).get("complete_packages_flow"):
+                logger.info("User in complete packages flow")
+                response = await self._handle_complete_packages_flow(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.4.7: Build your package flow
+            elif conversation.get("metadata", {}).get("build_package_flow"):
+                logger.info("User in build your package flow")
+                response = await self._handle_build_package_flow(message_text, from_number, contact_name, conversation)
             # PRIORITY 1.5: Check if user is responding with ice cream flavor choice
             elif conversation.get("metadata", {}).get("awaiting_ice_cream_flavor"):
                 logger.info("User responding with ice cream flavor")
@@ -464,21 +518,11 @@ O elige:
                     # Option 5: Ubicación y reseñas
                     response = self.faq_handler.get_response("ubicación", language)
                 elif menu_number == 6:
-                    # Option 6: Alojamientos
-                    logger.info("User selected accommodations from menu")
-                    # Initialize accommodation flow
-                    conversation["metadata"]["accommodation_flow"] = {
-                        "step": "choosing_property",  # Step 1: Open Sky or Relikura
-                        "property": None,
-                        "room_type": None,
-                        "guests": None,
-                        "date": None
-                    }
-                    # Return special response object that indicates PDF should be sent
-                    return {
-                        "type": "accommodations_pdf",
-                        "text": get_text("accommodations_intro", language)
-                    }
+                    # Option 6: Alojamientos y Packs
+                    logger.info("User selected accommodations and packages from menu")
+                    # Set state to await submenu selection
+                    conversation["metadata"]["awaiting_packages_submenu"] = True
+                    response = get_text("accommodations_and_packages_menu", language)
                 elif menu_number == 7:
                     # Option 7: Llamar a Tomás
                     # Send notification to Capitán Tomás
@@ -1864,8 +1908,9 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 # Option 5: Ubicación y reseñas
                 responses.append(self.faq_handler.get_response("ubicación", language))
             elif menu_number == 6:
-                # Option 6: Alojamientos
-                responses.append(get_text("accommodations", language))
+                # Option 6: Alojamientos y Packs
+                conversation["metadata"]["awaiting_packages_submenu"] = True
+                responses.append(get_text("accommodations_and_packages_menu", language))
             elif menu_number == 7:
                 # Option 7: Llamar a Tomás
                 await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
@@ -2541,6 +2586,210 @@ Escribe el número que prefieras 🚤"""
             if "accommodation_flow" in conversation.get("metadata", {}):
                 del conversation["metadata"]["accommodation_flow"]
             return "Lo siento, hubo un error procesando tu solicitud de alojamiento. Por favor intenta de nuevo escribiendo 'menu'."
+    
+    async def _handle_packages_submenu(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle user selection from the packages submenu"""
+        try:
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Option 1: Complete Packages
+            if "1" in message_clean or "pack" in message_clean and "complet" in message_clean:
+                logger.info("User selected complete packages")
+                del conversation["metadata"]["awaiting_packages_submenu"]
+                conversation["metadata"]["complete_packages_flow"] = {
+                    "step": "selecting_nights"
+                }
+                return get_text("complete_packages_menu", language)
+            
+            # Option 2: Only Accommodations
+            elif "2" in message_clean or ("solo" in message_clean and "aloj" in message_clean) or ("only" in message_clean and "accom" in message_clean):
+                logger.info("User selected only accommodations")
+                del conversation["metadata"]["awaiting_packages_submenu"]
+                # Start accommodation flow
+                conversation["metadata"]["accommodation_flow"] = {
+                    "step": "choosing_property",
+                    "property": None,
+                    "room_type": None,
+                    "guests": None,
+                    "checkin_date": None,
+                    "checkout_date": None
+                }
+                # Return response to send PDF
+                return {
+                    "type": "accommodations_pdf",
+                    "text": get_text("accommodations_only_intro", language)
+                }
+            
+            # Option 3: Build your package
+            elif "3" in message_clean or "arma" in message_clean or "build" in message_clean or "monte" in message_clean:
+                logger.info("User selected build your package")
+                del conversation["metadata"]["awaiting_packages_submenu"]
+                conversation["metadata"]["build_package_flow"] = {
+                    "step": "selecting_activities",
+                    "activities": []
+                }
+                return get_text("build_your_package_intro", language)
+            
+            else:
+                # Invalid selection, show menu again
+                return get_text("accommodations_and_packages_menu", language)
+                
+        except Exception as e:
+            logger.error(f"Error in packages submenu: {e}")
+            if "awaiting_packages_submenu" in conversation.get("metadata", {}):
+                del conversation["metadata"]["awaiting_packages_submenu"]
+            return "Lo siento, hubo un error. Por favor intenta de nuevo escribiendo 'menu'."
+    
+    async def _handle_complete_packages_flow(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle complete packages (1, 2, or 3 nights) flow"""
+        try:
+            flow = conversation["metadata"]["complete_packages_flow"]
+            step = flow.get("step")
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            if step == "selecting_nights":
+                # User selects 1, 2, or 3 nights
+                if "1" in message_clean:
+                    nights = 1
+                    pdf_name = "pack_1_noche.pdf"
+                elif "2" in message_clean:
+                    nights = 2
+                    pdf_name = "pack_2_noches.pdf"
+                elif "3" in message_clean:
+                    nights = 3
+                    pdf_name = "pack_3_noches.pdf"
+                else:
+                    return get_text("complete_packages_menu", language)
+                
+                # Notify Capitán Tomás
+                pack_summary = f"Pack {nights} noche{'s' if nights > 1 else ''}"
+                await self._notify_capitan_tomas(
+                    contact_name,
+                    phone_number,
+                    [],
+                    reason="package_request",
+                    extra_info=pack_summary
+                )
+                
+                # Clear flow
+                del conversation["metadata"]["complete_packages_flow"]
+                
+                # Return response to send PDF
+                response_text = f"""✅ *Pack de {nights} {'Noche' if nights == 1 else 'Noches'} Seleccionado*
+
+Te enviaré el PDF con todos los detalles del pack ⬇️
+
+El *Capitán Tomás* revisará tu solicitud y te contactará para coordinar fechas y pago 👨‍✈️⚓
+
+💡 *Mientras tanto*, escribe *"Menu"* para explorar más del *Menú HotBoat* 🚤"""
+                
+                return {
+                    "type": "package_pdf",
+                    "pdf_name": pdf_name,
+                    "text": response_text
+                }
+        
+        except Exception as e:
+            logger.error(f"Error in complete packages flow: {e}")
+            if "complete_packages_flow" in conversation.get("metadata", {}):
+                del conversation["metadata"]["complete_packages_flow"]
+            return "Lo siento, hubo un error. Escribe *'Menu'* para volver al inicio."
+    
+    async def _handle_build_package_flow(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle build your own package flow"""
+        try:
+            flow = conversation["metadata"]["build_package_flow"]
+            step = flow.get("step")
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Activity mapping
+            activities_map = {
+                "1": "🚤 HotBoat",
+                "2": "🚣 Rafting",
+                "3": "🌋 Subida al Volcán",
+                "4": "🐴 Cabalgata",
+                "5": "🚗 Arriendo de Vehículo"
+            }
+            
+            if step == "selecting_activities":
+                # Check if user wants to finish
+                if any(word in message_clean for word in ["terminar", "listo", "done", "finish"]):
+                    if not flow["activities"]:
+                        return get_text("build_your_package_intro", language)
+                    
+                    # Ask about accommodation
+                    flow["step"] = "asking_accommodation"
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return get_text("build_package_ask_accommodation", language).format(activities=activities_list)
+                
+                # Parse selected activities (e.g., "1, 2, 4" or "1 2 4")
+                import re
+                numbers = re.findall(r'[1-5]', message_clean)
+                
+                if numbers:
+                    # Add new activities (avoid duplicates)
+                    for num in numbers:
+                        if num not in flow["activities"]:
+                            flow["activities"].append(num)
+                    
+                    # Show current selection
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return f"""✅ *Actividades en tu pack:*
+{activities_list}
+
+¿Quieres agregar más actividades? Escribe los números separados por comas.
+
+O escribe *"Terminar"* para continuar.
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤"""
+                else:
+                    return get_text("build_your_package_intro", language)
+            
+            elif step == "asking_accommodation":
+                # User answers yes/no for accommodation
+                if "1" in message_clean or any(word in message_clean for word in ["si", "sí", "yes", "sim"]):
+                    # User wants accommodation
+                    flow["wants_accommodation"] = True
+                    flow["step"] = "done"
+                elif "2" in message_clean or any(word in message_clean for word in ["no", "não"]):
+                    # User doesn't want accommodation
+                    flow["wants_accommodation"] = False
+                    flow["step"] = "done"
+                else:
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return get_text("build_package_ask_accommodation", language).format(activities=activities_list)
+                
+                # Build summary
+                activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                accommodation_text = "🏠 Alojamiento incluido" if flow["wants_accommodation"] else ""
+                
+                package_summary = f"""*Actividades:*
+{activities_list}
+
+{accommodation_text}"""
+                
+                # Notify Capitán Tomás
+                await self._notify_capitan_tomas(
+                    contact_name,
+                    phone_number,
+                    [],
+                    reason="custom_package_request",
+                    extra_info=package_summary
+                )
+                
+                # Clear flow
+                del conversation["metadata"]["build_package_flow"]
+                
+                return get_text("build_package_confirmation", language).format(package_summary=package_summary)
+        
+        except Exception as e:
+            logger.error(f"Error in build package flow: {e}")
+            if "build_package_flow" in conversation.get("metadata", {}):
+                del conversation["metadata"]["build_package_flow"]
+            return "Lo siento, hubo un error. Escribe *'Menu'* para volver al inicio."
     
     async def _handle_extra_number_selection(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> Optional[str]:
         """Handle user's selection of an extra by number (supports multiple numbers like '5 y 7')"""

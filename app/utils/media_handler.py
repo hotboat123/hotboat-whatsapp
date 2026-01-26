@@ -160,3 +160,19 @@ def get_accommodations_pdf_path() -> Optional[str]:
     if os.path.exists(pdf_path):
         return pdf_path
     return None
+
+
+def get_package_pdf_path(pdf_name: str) -> Optional[str]:
+    """
+    Get path to a specific package PDF file
+    
+    Args:
+        pdf_name: Name of the PDF file (e.g., "pack_1_noche.pdf")
+    
+    Returns:
+        Path to the PDF if it exists, None otherwise
+    """
+    pdf_path = os.path.join(DOCUMENTS_DIR, pdf_name)
+    if os.path.exists(pdf_path):
+        return pdf_path
+    return None

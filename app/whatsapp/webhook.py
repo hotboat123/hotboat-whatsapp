@@ -204,6 +204,53 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 
                 # Store text response for database
                 response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "package_pdf":
+                # Send package PDF
+                logger.info(f"Sending package PDF: {response.get('pdf_name')}")
+                
+                # First send the text introduction
+                await whatsapp_client.send_text_message(from_number, response["text"])
+                
+                # Then send the PDF
+                from app.utils.media_handler import get_package_pdf_path
+                pdf_name = response.get("pdf_name", "pack_1_noche.pdf")
+                pdf_path = get_package_pdf_path(pdf_name)
+                
+                if pdf_path:
+                    try:
+                        # Upload PDF to WhatsApp
+                        logger.info(f"Uploading package PDF from: {pdf_path}")
+                        media_id = await whatsapp_client.upload_media(pdf_path, mime_type="application/pdf")
+                        
+                        if media_id:
+                            await whatsapp_client.send_document_message(
+                                to=from_number,
+                                media_id=media_id,
+                                filename=pdf_name,
+                                caption="📦 Información completa del pack"
+                            )
+                            logger.info("✅ Package PDF sent successfully")
+                        else:
+                            logger.error("❌ Could not upload package PDF")
+                            await whatsapp_client.send_text_message(
+                                from_number,
+                                "⚠️ Lo siento, no pude enviar el PDF. El Capitán Tomás te contactará con la información."
+                            )
+                    except Exception as e:
+                        logger.error(f"❌ Error sending package PDF: {e}")
+                        await whatsapp_client.send_text_message(
+                            from_number,
+                            "⚠️ Lo siento, no pude enviar el PDF. El Capitán Tomás te contactará con la información."
+                        )
+                else:
+                    logger.warning(f"❌ Package PDF not found: {pdf_name}")
+                    await whatsapp_client.send_text_message(
+                        from_number,
+                        "⚠️ Lo siento, el PDF no está disponible en este momento. El Capitán Tomás te contactará con la información."
+                    )
+                
+                # Store text response for database
+                response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "accommodations":
                 # Send accommodations with images
                 logger.info("Sending accommodations response with images")
