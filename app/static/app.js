@@ -1547,10 +1547,13 @@ async function sendReaction(messageId, emoji) {
         return;
     }
     
-    console.log(`➡️ Sending reaction ${emoji} to message ${messageId}`);
+    // Clean message ID - remove any suffixes like "_in" or "_out"
+    const cleanMessageId = String(messageId).replace(/_in$|_out$/, '');
+    
+    console.log(`➡️ Sending reaction ${emoji} to message ${cleanMessageId} (original: ${messageId})`);
     
     try {
-        const response = await fetch(`${API_BASE}/api/messages/${messageId}/react`, {
+        const response = await fetch(`${API_BASE}/api/messages/${cleanMessageId}/react`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
