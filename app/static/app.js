@@ -517,6 +517,8 @@ function renderCurrentChat(options = {}) {
             const sanitized = escapeHtml(text || '').replace(/\n/g, '<br>');
             const isImage = (msg.message_type === 'image');
             const isAudio = (msg.message_type === 'audio');
+            const isIncoming = direction === 'incoming';
+            const messageId = msg.id || '';
             // For images/audio, the URL can be in media_url (outgoing) or response_text (incoming)
             const mediaUrl = msg.media_url || msg.response_text;
             
@@ -532,9 +534,11 @@ function renderCurrentChat(options = {}) {
                 });
             }
             
+            let messageHtml = '';
+            
             if (isImage && mediaUrl && !mediaUrl.startsWith('[')) {
-                return `
-                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
+                messageHtml = `
+                    <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
                         <div class="message-text">
                             <div style="margin-bottom: 0.35rem;">${sanitized || '[Imagen]'}</div>
                             <a href="${mediaUrl}" target="_blank" rel="noopener">
@@ -544,16 +548,14 @@ function renderCurrentChat(options = {}) {
                         <div class="message-time">${formatTime(msg.timestamp)}</div>
                     </div>
                 `;
-            }
-            
-            if (isAudio && mediaUrl && !mediaUrl.startsWith('[')) {
+            } else if (isAudio && mediaUrl && !mediaUrl.startsWith('[')) {
                 const audioId = `audio_${msg.id}`;
                 // Add timestamp to force refresh
                 const audioSrc = `${mediaUrl}?t=${Date.now()}`;
                 // Use preload="auto" for mobile to ensure complete audio loading
                 const preloadMode = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'auto' : 'metadata';
-                return `
-                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
+                messageHtml = `
+                    <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
                         <div class="message-text">
                             <div class="audio-message">
                                 <div class="audio-icon">🎤</div>
@@ -569,14 +571,21 @@ function renderCurrentChat(options = {}) {
                         <div class="message-time">${formatTime(msg.timestamp)}</div>
                     </div>
                 `;
+            } else {
+                messageHtml = `
+                    <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
+                        <div class="message-text">${sanitized || '&nbsp;'}</div>
+                        <div class="message-time">${formatTime(msg.timestamp)}</div>
+                    </div>
+                `;
             }
-
-            return `
-                <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
-                    <div class="message-text">${sanitized || '&nbsp;'}</div>
-                    <div class="message-time">${formatTime(msg.timestamp)}</div>
-                </div>
-            `;
+            
+            // Wrap incoming messages in message-wrapper for reactions
+            if (isIncoming && messageId) {
+                return `<div class="message-wrapper" data-message-id="${messageId}">${messageHtml}</div>`;
+            }
+            
+            return messageHtml;
         }).join('');
 
         const loadMoreHtml = currentConversation.hasMore ? `
@@ -1450,3 +1459,128 @@ async function markConversationAsRead(phoneNumber) {
         // Don't show toast error - this is a background operation
     }
 }
+
+// ========================================
+// MESSAGE REACTIONS
+// ========================================
+
+// Available reaction emojis
+const REACTION_EMOJIS = ['❤️', '😬', '😏', '🙏', '🙌', '💪', '👌', '😭', '🤷‍♂️', '🤦‍♂️', '😔', '😐', '🤔'];
+
+// Currently active reaction menu
+let activeReactionMenu = null;
+
+// Add click listeners for received messages (to show reaction menu)
+function attachReactionListeners() {
+    const messagesContainer = document.getElementById('messagesContainer');
+    if (!messagesContainer) return;
+    
+    // Use event delegation
+    messagesContainer.addEventListener('click', (e) => {
+        // Find if the click is on a received message
+        const messageWrapper = e.target.closest('.message-wrapper');
+        if (messageWrapper) {
+            const messageElement = messageWrapper.querySelector('.message.received');
+            if (messageElement) {
+                showReactionMenu(messageWrapper, messageElement);
+            }
+        }
+    });
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (activeReactionMenu && !e.target.closest('.message-wrapper') && !e.target.closest('.reaction-menu')) {
+            closeReactionMenu();
+        }
+    });
+}
+
+// Show reaction menu for a message
+function showReactionMenu(wrapper, messageElement) {
+    // Close any existing menu
+    closeReactionMenu();
+    
+    // Get message ID
+    const messageId = wrapper.getAttribute('data-message-id');
+    if (!messageId) {
+        console.warn('Message ID not found');
+        return;
+    }
+    
+    // Create reaction menu
+    const menu = document.createElement('div');
+    menu.className = 'reaction-menu';
+    
+    // Add reaction emojis
+    REACTION_EMOJIS.forEach(emoji => {
+        const emojiSpan = document.createElement('span');
+        emojiSpan.className = 'reaction-emoji';
+        emojiSpan.textContent = emoji;
+        emojiSpan.onclick = (e) => {
+            e.stopPropagation();
+            sendReaction(messageId, emoji);
+            closeReactionMenu();
+        };
+        menu.appendChild(emojiSpan);
+    });
+    
+    // Add menu to wrapper
+    wrapper.style.position = 'relative';
+    wrapper.appendChild(menu);
+    activeReactionMenu = menu;
+    
+    console.log(`📌 Reaction menu shown for message ${messageId}`);
+}
+
+// Close reaction menu
+function closeReactionMenu() {
+    if (activeReactionMenu) {
+        activeReactionMenu.remove();
+        activeReactionMenu = null;
+    }
+}
+
+// Send reaction to backend
+async function sendReaction(messageId, emoji) {
+    if (!currentConversation) {
+        console.warn('No active conversation');
+        return;
+    }
+    
+    console.log(`➡️ Sending reaction ${emoji} to message ${messageId}`);
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/messages/${messageId}/react`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                emoji: emoji,
+                phone_number: currentConversation.phone_number
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('✅ Reaction sent:', result);
+        
+        showToast(`Reacción ${emoji} enviada`, 'success');
+        
+        // Optionally refresh the conversation to show the reaction
+        // setTimeout(() => selectConversation(currentConversation.phone_number), 500);
+        
+    } catch (error) {
+        console.error('❌ Error sending reaction:', error);
+        showToast('Error al enviar reacción', 'error');
+    }
+}
+
+// Initialize reactions when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    attachReactionListeners();
+    console.log('✅ Reaction listeners attached');
+});

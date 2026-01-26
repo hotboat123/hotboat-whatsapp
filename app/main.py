@@ -308,6 +308,62 @@ async def mark_conversation_read(phone_number: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class MessageReaction(BaseModel):
+    emoji: str
+    phone_number: str
+
+
+@app.post("/api/messages/{message_id}/react")
+async def react_to_message(message_id: int, reaction: MessageReaction):
+    """Send a reaction to a WhatsApp message"""
+    try:
+        from app.db.connection import get_connection
+        from app.whatsapp.client import WhatsAppClient
+        
+        # Get the WhatsApp message ID from database
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT message_id, phone_number
+                    FROM whatsapp_conversations
+                    WHERE id = %s
+                """, (message_id,))
+                
+                result = cur.fetchone()
+                if not result:
+                    raise HTTPException(status_code=404, detail="Message not found")
+                
+                whatsapp_message_id = result[0]
+                phone_number = result[1]
+                
+                if not whatsapp_message_id:
+                    raise HTTPException(status_code=400, detail="Message does not have a WhatsApp message ID")
+        
+        # Send reaction via WhatsApp API
+        client = WhatsAppClient()
+        response = await client.send_reaction(
+            to=reaction.phone_number,
+            message_id=whatsapp_message_id,
+            emoji=reaction.emoji
+        )
+        
+        logger.info(f"✅ Reaction {reaction.emoji} sent to message {whatsapp_message_id}")
+        
+        return {
+            "status": "success",
+            "message_id": message_id,
+            "whatsapp_message_id": whatsapp_message_id,
+            "emoji": reaction.emoji,
+            "whatsapp_response": response
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error sending reaction: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class ConversationImport(BaseModel):
     phone_number: str
     customer_name: Optional[str] = None

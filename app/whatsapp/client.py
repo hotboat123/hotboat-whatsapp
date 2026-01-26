@@ -281,6 +281,42 @@ class WhatsAppClient:
             logger.error(f"❌ Error sending document to {to}: {e}")
             raise
     
+    async def send_reaction(self, to: str, message_id: str, emoji: str) -> Dict[str, Any]:
+        """
+        Send a reaction to a specific message
+        
+        Args:
+            to: Recipient phone number (with country code, no + or spaces)
+            message_id: WhatsApp message ID to react to
+            emoji: Emoji to send as reaction (e.g., "❤️", "👍", "😂")
+        
+        Returns:
+            Response from WhatsApp API
+        """
+        url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "reaction",
+            "reaction": {
+                "message_id": message_id,
+                "emoji": emoji
+            }
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, headers=self.headers, timeout=30)
+                response.raise_for_status()
+                result = response.json()
+                logger.info(f"✅ Reaction {emoji} sent to message {message_id} for {to}")
+                return result
+        except httpx.HTTPError as e:
+            logger.error(f"❌ Error sending reaction to {to}: {e}")
+            raise
+    
     async def get_media_url(self, media_id: str) -> Optional[str]:
         """
         Retrieve a temporary URL for a received media object.
