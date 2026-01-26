@@ -359,6 +359,27 @@ class ConversationManager:
                 logger.info("Gratitude detected - sending friendly reply")
                 language = metadata.get("language", "es")
                 response = get_text("thanks_response", language)
+            # PRIORITY 0.7: Check if user wants to return to main menu
+            elif self._is_menu_request(message_text):
+                logger.info("User requested main menu - clearing all flows")
+                # Clear all active flows
+                metadata.pop("awaiting_packages_submenu", None)
+                metadata.pop("accommodation_flow", None)
+                metadata.pop("complete_packages_flow", None)
+                metadata.pop("build_package_flow", None)
+                metadata.pop("awaiting_extra_selection", None)
+                metadata.pop("awaiting_ice_cream_flavor", None)
+                metadata.pop("pending_extras", None)
+                metadata.pop("pending_ice_cream_quantity", None)
+                metadata.pop("awaiting_reservation_date", None)
+                metadata.pop("awaiting_reservation_time", None)
+                metadata.pop("awaiting_party_size", None)
+                metadata.pop("pending_reservation", None)
+                metadata.pop("awaiting_date_time_selection", None)
+                metadata.pop("available_times_for_date", None)
+                # Return main menu
+                language = metadata.get("language", "es")
+                response = self._get_main_menu_message(language)
             # PRIORITY 0.8: Allow users to restart availability flow at any step
             elif self._should_interrupt_with_new_availability(message_text, conversation):
                 logger.info("Priority availability question detected - restarting flow")
@@ -844,6 +865,31 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             r"\bvale\b",
         ]
         return any(re.search(pattern, message_lower) for pattern in thanks_patterns)
+    
+    def _is_menu_request(self, message: str) -> bool:
+        """Return True when user wants to return to main menu."""
+        if not message:
+            return False
+        message_lower = message.lower().strip()
+        # Remove accents for matching
+        message_normalized = unicodedata.normalize('NFD', message_lower)
+        message_normalized = ''.join(c for c in message_normalized if unicodedata.category(c) != 'Mn')
+        
+        menu_patterns = [
+            r"^menu$",
+            r"^menú$",
+            r"^menu$",  # normalized
+            r"^volver al menu",
+            r"^volver al menú",
+            r"^volver menu",
+            r"^volver menú",
+            r"^main menu$",
+            r"^back to menu$",
+            r"^voltar ao menu",
+            r"^menu principal",
+            r"^menú principal",
+        ]
+        return any(re.search(pattern, message_normalized) for pattern in menu_patterns)
     
     def _is_first_message(self, conversation: dict) -> bool:
         """
