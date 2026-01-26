@@ -65,7 +65,7 @@ Puedes preguntarme por:
 
 3️⃣ *Características del HotBoat*
 
-4️⃣ *Extras y promociones*
+4️⃣ *Extras*
 
 5️⃣ *Ubicación y reseñas*
 
@@ -96,7 +96,7 @@ You can ask me about:
 
 3️⃣ *HotBoat features*
 
-4️⃣ *Extras and promotions*
+4️⃣ *Extras*
 
 5️⃣ *Location and reviews*
 
@@ -127,7 +127,7 @@ Você pode me perguntar sobre:
 
 3️⃣ *Características do HotBoat*
 
-4️⃣ *Extras e promoções*
+4️⃣ *Extras*
 
 5️⃣ *Localização e avaliações*
 
@@ -229,9 +229,9 @@ Digite o idioma que deseja usar:
     },
     
     "menu_extras": {
-        "es": "Extras y promociones",
-        "en": "Extras and promotions",
-        "pt": "Extras e promoções"
+        "es": "Extras",
+        "en": "Extras",
+        "pt": "Extras"
     },
     
     "menu_location": {
