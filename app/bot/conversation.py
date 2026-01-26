@@ -2613,19 +2613,53 @@ Escribe el número que prefieras 🚤"""
 📅 *Check-in:* {flow["checkin_date"]}
 📅 *Check-out:* {flow["checkout_date"]}"""
                 
+                # Check if this is part of a custom package (has pending activities)
+                pending_activities = conversation["metadata"].get("pending_package_activities")
+                notification_reason = "accommodation_request"
+                
+                if pending_activities:
+                    # This is a custom package with accommodation
+                    activities_map = {
+                        "1": "🚤 HotBoat",
+                        "2": "🚣 Rafting",
+                        "3": "🌋 Subida al Volcán",
+                        "4": "🐴 Cabalgata",
+                        "5": "🚗 Arriendo de Vehículo"
+                    }
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in pending_activities)
+                    
+                    # Add activities to summary
+                    summary = f"""🎒 *Actividades:*
+{activities_list}
+
+📍 *Alojamiento:* {property_name}
+🏠 *Habitación:* {flow["room_type"]}
+👥 *Personas:* {flow["guests"]}
+📅 *Check-in:* {flow["checkin_date"]}
+📅 *Check-out:* {flow["checkout_date"]}"""
+                    
+                    notification_reason = "custom_package_request"
+                    
+                    # Clear pending activities
+                    del conversation["metadata"]["pending_package_activities"]
+                
                 # Notify Capitán Tomás
                 await self._notify_capitan_tomas(
                     contact_name,
                     phone_number,
                     [],
-                    reason="accommodation_request",
+                    reason=notification_reason,
                     extra_info=summary
                 )
                 
                 # Clear accommodation flow
                 del conversation["metadata"]["accommodation_flow"]
                 
-                return get_text("accommodations_awaiting_confirmation", language).format(summary=summary)
+                # Return appropriate message
+                if notification_reason == "custom_package_request":
+                    return get_text("build_package_confirmation", language).format(package_summary=summary)
+                else:
+                    return get_text("accommodations_awaiting_confirmation", language).format(summary=summary)
             
         except Exception as e:
             logger.error(f"Error in accommodation flow: {e}")
@@ -2825,39 +2859,57 @@ Escribe *1* o *2* 🎒"""
             elif step == "asking_accommodation":
                 # User answers yes/no for accommodation
                 if "1" in message_clean or any(word in message_clean for word in ["si", "sí", "yes", "sim"]):
-                    # User wants accommodation
-                    flow["wants_accommodation"] = True
-                    flow["step"] = "done"
+                    # User wants accommodation - start accommodation flow
+                    logger.info("User wants accommodation in build your package - starting accommodation flow")
+                    
+                    # Save activities in metadata for later
+                    conversation["metadata"]["pending_package_activities"] = flow["activities"]
+                    
+                    # Clear build package flow
+                    del conversation["metadata"]["build_package_flow"]
+                    
+                    # Start accommodation flow
+                    conversation["metadata"]["accommodation_flow"] = {
+                        "step": "choosing_property",
+                        "property": None,
+                        "room_type": None,
+                        "guests": None,
+                        "checkin_date": None,
+                        "checkout_date": None
+                    }
+                    
+                    # Return response to send PDF and start accommodation selection
+                    return {
+                        "type": "accommodations_pdf",
+                        "text": get_text("accommodations_only_intro", language)
+                    }
+                    
                 elif "2" in message_clean or any(word in message_clean for word in ["no", "não"]):
-                    # User doesn't want accommodation
-                    flow["wants_accommodation"] = False
-                    flow["step"] = "done"
-                else:
+                    # User doesn't want accommodation - just notify with activities
                     activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
-                    return get_text("build_package_ask_accommodation", language).format(activities=activities_list)
-                
-                # Build summary
-                activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
-                accommodation_text = "🏠 Alojamiento incluido" if flow["wants_accommodation"] else ""
-                
-                package_summary = f"""*Actividades:*
+                    
+                    package_summary = f"""*Actividades:*
 {activities_list}
 
-{accommodation_text}"""
-                
-                # Notify Capitán Tomás
-                await self._notify_capitan_tomas(
-                    contact_name,
-                    phone_number,
-                    [],
-                    reason="custom_package_request",
-                    extra_info=package_summary
-                )
-                
-                # Clear flow
-                del conversation["metadata"]["build_package_flow"]
-                
-                return get_text("build_package_confirmation", language).format(package_summary=package_summary)
+(Sin alojamiento)"""
+                    
+                    # Notify Capitán Tomás
+                    await self._notify_capitan_tomas(
+                        contact_name,
+                        phone_number,
+                        [],
+                        reason="custom_package_request",
+                        extra_info=package_summary
+                    )
+                    
+                    # Clear flow
+                    del conversation["metadata"]["build_package_flow"]
+                    
+                    return get_text("build_package_confirmation", language).format(package_summary=package_summary)
+                else:
+                    # Invalid response, ask again
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return get_text("build_package_ask_accommodation", language).format(activities=activities_list)
         
         except Exception as e:
             logger.error(f"Error in build package flow: {e}")
