@@ -2624,7 +2624,7 @@ Escribe el número que prefieras 🚤"""
                         "2": "🚣 Rafting",
                         "3": "🌋 Subida al Volcán",
                         "4": "🐴 Cabalgata",
-                        "5": "🚗 Arriendo de Vehículo"
+                        "5": "🚗 Arriendo de Vehículo (Suzuki New Baleno - $50.000/día)"
                     }
                     activities_list = "\n".join(f"• {activities_map[a]}" for a in pending_activities)
                     
@@ -2791,7 +2791,7 @@ El *Capitán Tomás* revisará tu solicitud y te contactará para coordinar fech
                 "2": "🚣 Rafting",
                 "3": "🌋 Subida al Volcán",
                 "4": "🐴 Cabalgata",
-                "5": "🚗 Arriendo de Vehículo"
+                "5": "🚗 Arriendo de Vehículo (Suzuki New Baleno - $50.000/día)"
             }
             
             if step == "selecting_activities":

@@ -1300,7 +1300,7 @@ Digite *1*, *2*, ou *3* 🎒
 2️⃣ 🚣 *Rafting* - Adrenalina en el río
 3️⃣ 🌋 *Subida al Volcán* - Trek inolvidable
 4️⃣ 🐴 *Cabalgata* - Naturaleza a caballo
-5️⃣ 🚗 *Arriendo de Vehículo* - Movilidad en Pucón
+5️⃣ 🚗 *Arriendo de Vehículo* - Suzuki New Baleno o similar ($50.000/día)
 
 Puedes elegir *varias opciones*. Escribe los números que te interesan separados por comas.
 
@@ -1320,7 +1320,7 @@ Perfect! You can choose the activities you want and then add accommodation.
 2️⃣ 🚣 *Rafting* - River adrenaline
 3️⃣ 🌋 *Volcano Climb* - Unforgettable trek
 4️⃣ 🐴 *Horseback Riding* - Nature on horseback
-5️⃣ 🚗 *Vehicle Rental* - Mobility in Pucón
+5️⃣ 🚗 *Vehicle Rental* - Suzuki New Baleno or similar ($50,000 CLP/day)
 
 You can choose *multiple options*. Type the numbers you're interested in separated by commas.
 
@@ -1340,7 +1340,7 @@ Perfeito! Você pode escolher as atividades que quiser e depois adicionar acomod
 2️⃣ 🚣 *Rafting* - Adrenalina no rio
 3️⃣ 🌋 *Subida ao Vulcão* - Trekking inesquecível
 4️⃣ 🐴 *Cavalgada* - Natureza a cavalo
-5️⃣ 🚗 *Aluguel de Veículo* - Mobilidade em Pucón
+5️⃣ 🚗 *Aluguel de Veículo* - Suzuki New Baleno ou similar ($50.000 CLP/dia)
 
 Você pode escolher *várias opções*. Digite os números que te interessam separados por vírgulas.
 
