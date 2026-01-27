@@ -176,3 +176,16 @@ def get_package_pdf_path(pdf_name: str) -> Optional[str]:
     if os.path.exists(pdf_path):
         return pdf_path
     return None
+
+
+def get_experiences_pdf_path() -> Optional[str]:
+    """
+    Get path to the experiences PDF file
+    
+    Returns:
+        Path to the PDF if it exists, None otherwise
+    """
+    pdf_path = os.path.join(DOCUMENTS_DIR, "experiencias.pdf")
+    if os.path.exists(pdf_path):
+        return pdf_path
+    return None

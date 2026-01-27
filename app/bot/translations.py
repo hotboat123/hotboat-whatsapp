@@ -65,13 +65,15 @@ Puedes preguntarme por:
 
 3️⃣ *Características del HotBoat*
 
-4️⃣ *Extras*
+4️⃣ *Experiencias y Actividades* 🚣🐴⛵
 
-5️⃣ *Ubicación y reseñas*
+5️⃣ *Extras* (toallas, videos, bebidas, etc.)
 
-6️⃣ *Alojamientos y Packs* 🏠📦
+6️⃣ *Ubicación y reseñas*
 
-Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *7️⃣* 👨‍✈️🌿
+7️⃣ *Alojamientos y Packs* 🏠📦
+
+Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *8️⃣* 👨‍✈️🌿
 
 ¿Listo para zarpar, grumete? ⛵
 
@@ -96,13 +98,15 @@ You can ask me about:
 
 3️⃣ *HotBoat features*
 
-4️⃣ *Extras*
+4️⃣ *Experiences and Activities* 🚣🐴⛵
 
-5️⃣ *Location and reviews*
+5️⃣ *Extras* (towels, videos, drinks, etc.)
 
-6️⃣ *Accommodations and Packages* 🏠📦
+6️⃣ *Location and reviews*
 
-If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *7️⃣* 👨‍✈️🌿
+7️⃣ *Accommodations and Packages* 🏠📦
+
+If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *8️⃣* 👨‍✈️🌿
 
 Ready to set sail, sailor? ⛵
 
@@ -127,13 +131,15 @@ Você pode me perguntar sobre:
 
 3️⃣ *Características do HotBoat*
 
-4️⃣ *Extras*
+4️⃣ *Experiências e Atividades* 🚣🐴⛵
 
-5️⃣ *Localização e avaliações*
+5️⃣ *Extras* (toalhas, vídeos, bebidas, etc.)
 
-6️⃣ *Acomodações e Pacotes* 🏠📦
+6️⃣ *Localização e avaliações*
 
-Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *7️⃣* 👨‍✈️🌿
+7️⃣ *Acomodações e Pacotes* 🏠📦
+
+Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *8️⃣* 👨‍✈️🌿
 
 Pronto para zarpar, marujo? ⛵
 
@@ -1624,6 +1630,316 @@ Obrigado por escolher HotBoat! 🚤🌊"""
         "es": "⏳ Procesando...",
         "en": "⏳ Processing...",
         "pt": "⏳ Processando..."
+    },
+    
+    # ========== EXPERIENCES FLOW ==========
+    
+    "experiences_menu": {
+        "es": """📋 *Experiencias y Actividades*
+
+¡Explora las mejores aventuras en Pucón! 🏔️
+
+📋 *Experiencias Disponibles:*
+
+1️⃣ 🚣 *Rafting* - Adrenalina en el río
+2️⃣ 🐴 *Cabalgata* - Naturaleza a caballo
+3️⃣ ⛵ *Navegación* - Explora lagos y ríos
+
+*¿Qué experiencia te interesa?*
+
+Escribe el número de tu elección (1, 2 o 3)
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """📋 *Experiences and Activities*
+
+Explore the best adventures in Pucón! 🏔️
+
+📋 *Available Experiences:*
+
+1️⃣ 🚣 *Rafting* - River adrenaline
+2️⃣ 🐴 *Horseback Riding* - Nature on horseback
+3️⃣ ⛵ *Navigation* - Explore lakes and rivers
+
+*Which experience interests you?*
+
+Type the number of your choice (1, 2 or 3)
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """📋 *Experiências e Atividades*
+
+Explore as melhores aventuras em Pucón! 🏔️
+
+📋 *Experiências Disponíveis:*
+
+1️⃣ 🚣 *Rafting* - Adrenalina no rio
+2️⃣ 🐴 *Cavalgada* - Natureza a cavalo
+3️⃣ ⛵ *Navegação* - Explore lagos e rios
+
+*Qual experiência te interessa?*
+
+Digite o número da sua escolha (1, 2 ou 3)
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Rafting Options
+    "rafting_options": {
+        "es": """🚣 *Rafting - Elige tu Nivel*
+
+📍 Vive la adrenalina del río en Pucón
+
+*Opciones Disponibles:*
+
+1️⃣ *Rafting Bajo* - Nivel principiante
+   💰 $30.000 por persona
+   ⏱️ Duración: 2-3 horas
+   🌊 Dificultad: Baja (ideal para familias)
+
+2️⃣ *Rafting Alto* - Nivel avanzado
+   💰 $40.000 por persona
+   ⏱️ Duración: 3-4 horas
+   🌊 Dificultad: Alta (más adrenalina)
+
+*¿Qué nivel prefieres?*
+
+Escribe 1 para Bajo o 2 para Alto
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """🚣 *Rafting - Choose Your Level*
+
+📍 Experience the river adrenaline in Pucón
+
+*Available Options:*
+
+1️⃣ *Low Rafting* - Beginner level
+   💰 $30,000 CLP per person
+   ⏱️ Duration: 2-3 hours
+   🌊 Difficulty: Low (ideal for families)
+
+2️⃣ *High Rafting* - Advanced level
+   💰 $40,000 CLP per person
+   ⏱️ Duration: 3-4 hours
+   🌊 Difficulty: High (more adrenaline)
+
+*Which level do you prefer?*
+
+Type 1 for Low or 2 for High
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """🚣 *Rafting - Escolha Seu Nível*
+
+📍 Viva a adrenalina do rio em Pucón
+
+*Opções Disponíveis:*
+
+1️⃣ *Rafting Baixo* - Nível iniciante
+   💰 $30.000 CLP por pessoa
+   ⏱️ Duração: 2-3 horas
+   🌊 Dificuldade: Baixa (ideal para famílias)
+
+2️⃣ *Rafting Alto* - Nível avançado
+   💰 $40.000 CLP por pessoa
+   ⏱️ Duração: 3-4 horas
+   🌊 Dificuldade: Alta (mais adrenalina)
+
+*Qual nível você prefere?*
+
+Digite 1 para Baixo ou 2 para Alto
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Horseback Riding Options
+    "horseback_options": {
+        "es": """🐴 *Cabalgata - Opciones Disponibles*
+
+📍 Explora la naturaleza a caballo
+
+*Opciones Disponibles:*
+
+1️⃣ *Cabalgata Parque Ojos del Caburguá*
+   💰 $50.000 por persona
+   ⏱️ Duración: 3-4 horas
+   🌲 Incluye: Guía, equipo completo y snack
+
+*¿Te interesa esta cabalgata?*
+
+Escribe 1 para confirmar o "Menu" para volver
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """🐴 *Horseback Riding - Available Options*
+
+📍 Explore nature on horseback
+
+*Available Options:*
+
+1️⃣ *Horseback Riding Ojos del Caburguá Park*
+   💰 $50,000 CLP per person
+   ⏱️ Duration: 3-4 hours
+   🌲 Includes: Guide, complete equipment and snack
+
+*Are you interested in this ride?*
+
+Type 1 to confirm or "Menu" to go back
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """🐴 *Cavalgada - Opções Disponíveis*
+
+📍 Explore a natureza a cavalo
+
+*Opções Disponíveis:*
+
+1️⃣ *Cavalgada Parque Ojos del Caburguá*
+   💰 $50.000 CLP por pessoa
+   ⏱️ Duração: 3-4 horas
+   🌲 Inclui: Guia, equipamento completo e lanche
+
+*Você está interessado nesta cavalgada?*
+
+Digite 1 para confirmar ou "Menu" para voltar
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Navigation Options
+    "navigation_options": {
+        "es": """⛵ *Navegación - Elige tu Experiencia*
+
+📍 Explora lagos y ríos en embarcación
+
+*Opciones Disponibles:*
+
+1️⃣ *Travesía 30 minutos (2p)* - $300.000
+2️⃣ *Travesía 30 minutos (4p)* - $340.000
+3️⃣ *Travesía 30 minutos (6p)* - $360.000
+4️⃣ *Travesía 30 minutos (8p)* - $380.000
+5️⃣ *Travesía 30 minutos (10p)* - $400.000
+
+6️⃣ *Yave a vela Akimbo 2p (1.5hr)* - $120.000
+7️⃣ *Yave a vela Akimbo 3p (1.5hr)* - $130.000
+8️⃣ *Yave a vela Akimbo 4p (1.5hr)* - $140.000
+9️⃣ *Yave a vela Akimbo 5p (1.5hr)* - $150.000
+🔟 *Yave a vela Akimbo 5p (1.5hr)* - $160.000
+
+*¿Qué opción prefieres?*
+
+Escribe el número de tu elección (1-10)
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """⛵ *Navigation - Choose Your Experience*
+
+📍 Explore lakes and rivers by boat
+
+*Available Options:*
+
+1️⃣ *30-minute crossing (2p)* - $300,000 CLP
+2️⃣ *30-minute crossing (4p)* - $340,000 CLP
+3️⃣ *30-minute crossing (6p)* - $360,000 CLP
+4️⃣ *30-minute crossing (8p)* - $380,000 CLP
+5️⃣ *30-minute crossing (10p)* - $400,000 CLP
+
+6️⃣ *Sailboat Akimbo 2p (1.5hr)* - $120,000 CLP
+7️⃣ *Sailboat Akimbo 3p (1.5hr)* - $130,000 CLP
+8️⃣ *Sailboat Akimbo 4p (1.5hr)* - $140,000 CLP
+9️⃣ *Sailboat Akimbo 5p (1.5hr)* - $150,000 CLP
+🔟 *Sailboat Akimbo 5p (1.5hr)* - $160,000 CLP
+
+*Which option do you prefer?*
+
+Type the number of your choice (1-10)
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """⛵ *Navegação - Escolha Sua Experiência*
+
+📍 Explore lagos e rios de barco
+
+*Opções Disponíveis:*
+
+1️⃣ *Travessia 30 minutos (2p)* - $300.000 CLP
+2️⃣ *Travessia 30 minutos (4p)* - $340.000 CLP
+3️⃣ *Travessia 30 minutos (6p)* - $360.000 CLP
+4️⃣ *Travessia 30 minutos (8p)* - $380.000 CLP
+5️⃣ *Travessia 30 minutos (10p)* - $400.000 CLP
+
+6️⃣ *Veleiro Akimbo 2p (1.5hr)* - $120.000 CLP
+7️⃣ *Veleiro Akimbo 3p (1.5hr)* - $130.000 CLP
+8️⃣ *Veleiro Akimbo 4p (1.5hr)* - $140.000 CLP
+9️⃣ *Veleiro Akimbo 5p (1.5hr)* - $150.000 CLP
+🔟 *Veleiro Akimbo 5p (1.5hr)* - $160.000 CLP
+
+*Qual opção você prefere?*
+
+Digite o número da sua escolha (1-10)
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Ask for number of people
+    "experience_ask_people": {
+        "es": """👥 *¿Cuántas personas participarán?*
+
+Por favor escribe el número de personas
+
+(El precio se calculará automáticamente)
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """👥 *How many people will participate?*
+
+Please type the number of people
+
+(The price will be calculated automatically)
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """👥 *Quantas pessoas participarão?*
+
+Por favor digite o número de pessoas
+
+(O preço será calculado automaticamente)
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Experience confirmation
+    "experience_confirmation": {
+        "es": """✅ *Solicitud de Experiencia Recibida*
+
+{summary}
+
+*El Capitán Tomás revisará tu solicitud y te contactará pronto para confirmar disponibilidad y coordinar detalles.* 👨‍✈️⚓
+
+🙏 ¡Gracias por elegir HotBoat Chile!
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """✅ *Experience Request Received*
+
+{summary}
+
+*Captain Tomás will review your request and contact you soon to confirm availability and coordinate details.* 👨‍✈️⚓
+
+🙏 Thank you for choosing HotBoat Chile!
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """✅ *Pedido de Experiência Recebido*
+
+{summary}
+
+*O Capitão Tomás revisará seu pedido e te contatar\u00e1 em breve para confirmar disponibilidade e coordenar detalhes.* 👨‍✈️⚓
+
+🙏 Obrigado por escolher HotBoat Chile!
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
     }
 }
 

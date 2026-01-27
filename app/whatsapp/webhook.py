@@ -204,6 +204,52 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 
                 # Store text response for database
                 response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "experiences_pdf":
+                # Send experiences PDF
+                logger.info("Sending experiences response with PDF")
+                
+                # First send the text introduction
+                await whatsapp_client.send_text_message(from_number, response["text"])
+                
+                # Then send the PDF
+                from app.utils.media_handler import get_experiences_pdf_path
+                pdf_path = get_experiences_pdf_path()
+                
+                if pdf_path:
+                    try:
+                        # Upload PDF to WhatsApp
+                        logger.info(f"Uploading experiences PDF from: {pdf_path}")
+                        media_id = await whatsapp_client.upload_media(pdf_path, mime_type="application/pdf")
+                        
+                        if media_id:
+                            await whatsapp_client.send_document_message(
+                                to=from_number,
+                                media_id=media_id,
+                                filename="Experiencias_Pucon_HotBoat.pdf",
+                                caption="📋 Experiencias y actividades en Pucón"
+                            )
+                            logger.info("✅ Experiences PDF sent successfully")
+                        else:
+                            logger.error("❌ Could not upload experiences PDF")
+                            await whatsapp_client.send_text_message(
+                                from_number,
+                                "⚠️ Lo siento, no pude enviar el PDF. Por favor escribe 'experiencias' y te envío la información por texto."
+                            )
+                    except Exception as e:
+                        logger.error(f"❌ Error sending experiences PDF: {e}")
+                        await whatsapp_client.send_text_message(
+                            from_number,
+                            "⚠️ Lo siento, no pude enviar el PDF. Por favor escribe 'experiencias' y te envío la información por texto."
+                        )
+                else:
+                    logger.warning("❌ Experiences PDF not found")
+                    await whatsapp_client.send_text_message(
+                        from_number,
+                        "⚠️ Lo siento, el PDF no está disponible en este momento. Por favor escribe 'experiencias' y te envío la información por texto."
+                    )
+                
+                # Store text response for database
+                response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "package_pdf":
                 # Send package PDF
                 logger.info(f"Sending package PDF: {response.get('pdf_name')}")

@@ -260,6 +260,27 @@ class ConversationManager:
                 email_body = self._format_plain_text(message)
                 email_priority = "high"
             
+            elif reason == "experience_request":
+                # Notification for experience request (rafting, horseback, navigation)
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu solicitud de experiencia. Te confirmo disponibilidad pronto! 🚣"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                message = f"🚣 *Solicitud de Experiencia*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"{extra_info}\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Solicitud de experiencia - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
+            
             else:
                 return
             
@@ -367,6 +388,8 @@ class ConversationManager:
                 metadata.pop("accommodation_flow", None)
                 metadata.pop("complete_packages_flow", None)
                 metadata.pop("build_package_flow", None)
+                metadata.pop("awaiting_experience_menu", None)
+                metadata.pop("experience_flow", None)
                 metadata.pop("awaiting_extra_selection", None)
                 metadata.pop("awaiting_ice_cream_flavor", None)
                 metadata.pop("pending_extras", None)
@@ -401,6 +424,13 @@ class ConversationManager:
                 logger.info("User responding with reservation time")
                 response = await self._handle_reservation_time_response(message_text, from_number, contact_name, conversation)
             # PRIORITY 1.3.5: Packages submenu selection
+            elif conversation.get("metadata", {}).get("awaiting_experience_menu"):
+                logger.info("User selecting from experiences menu")
+                response = await self._handle_experiences_menu(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.35: Experience flow (rafting, horseback, navigation)
+            elif conversation.get("metadata", {}).get("experience_flow"):
+                logger.info("User in experience flow")
+                response = await self._handle_experience_flow(message_text, from_number, contact_name, conversation)
             elif conversation.get("metadata", {}).get("awaiting_packages_submenu"):
                 logger.info("User selecting from packages submenu")
                 response = await self._handle_packages_submenu(message_text, from_number, contact_name, conversation)
@@ -530,27 +560,36 @@ O elige:
                     # Option 3: Características del HotBoat
                     response = self.faq_handler.get_response("caracteristicas", language)
                 elif menu_number == 4:
-                    # Option 4: Extras y promociones
+                    # Option 4: Experiencias y Actividades
+                    logger.info("User selected experiences and activities from menu")
+                    conversation["metadata"]["awaiting_experience_menu"] = True
+                    # Return response to send PDF first
+                    response = {
+                        "type": "experiences_pdf",
+                        "text": get_text("experiences_menu", language)
+                    }
+                elif menu_number == 5:
+                    # Option 5: Extras y promociones
                     conversation["metadata"]["awaiting_extra_selection"] = True
                     logger.info(f"Set awaiting_extra_selection=True for {from_number}")
                     logger.info(f"Metadata: {conversation.get('metadata', {})}")
                     response = self.faq_handler.get_response("extras", language)
-                elif menu_number == 5:
-                    # Option 5: Ubicación y reseñas
-                    response = self.faq_handler.get_response("ubicación", language)
                 elif menu_number == 6:
-                    # Option 6: Alojamientos y Packs
+                    # Option 6: Ubicación y reseñas
+                    response = self.faq_handler.get_response("ubicación", language)
+                elif menu_number == 7:
+                    # Option 7: Alojamientos y Packs
                     logger.info("User selected accommodations and packages from menu")
                     # Set state to await submenu selection
                     conversation["metadata"]["awaiting_packages_submenu"] = True
                     response = get_text("accommodations_and_packages_menu", language)
-                elif menu_number == 7:
-                    # Option 7: Llamar a Tomás
+                elif menu_number == 8:
+                    # Option 8: Llamar a Tomás
                     # Send notification to Capitán Tomás
                     await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                     response = self.faq_handler.get_response("llamar a tomas", language)
                 else:
-                    response = "No entendí esa opción. Por favor elige un número del 1 al 7, grumete ⚓"
+                    response = "No entendí esa opción. Por favor elige un número del 1 al 8, grumete ⚓"
             # Check if asking about accommodations (special handling with images)
             elif self._is_accommodation_query(message_text):
                 logger.info("User asking about accommodations - will send with images")
@@ -2666,6 +2705,227 @@ Escribe el número que prefieras 🚤"""
             if "accommodation_flow" in conversation.get("metadata", {}):
                 del conversation["metadata"]["accommodation_flow"]
             return "Lo siento, hubo un error procesando tu solicitud de alojamiento. Por favor intenta de nuevo escribiendo 'menu'."
+    
+    async def _handle_experiences_menu(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> Union[str, Dict]:
+        """Handle user selection from the experiences menu"""
+        try:
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Check if user is in an experience flow already
+            if conversation.get("metadata", {}).get("experience_flow"):
+                return await self._handle_experience_flow(message, phone_number, contact_name, conversation)
+            
+            # Option 1: Rafting
+            if "1" in message_clean or "rafting" in message_clean:
+                logger.info("User selected rafting experience")
+                del conversation["metadata"]["awaiting_experience_menu"]
+                conversation["metadata"]["experience_flow"] = {
+                    "type": "rafting",
+                    "step": "selecting_level"
+                }
+                return get_text("rafting_options", language)
+            
+            # Option 2: Horseback Riding
+            elif "2" in message_clean or "cabalg" in message_clean or "horse" in message_clean or "cavalgada" in message_clean:
+                logger.info("User selected horseback riding experience")
+                del conversation["metadata"]["awaiting_experience_menu"]
+                conversation["metadata"]["experience_flow"] = {
+                    "type": "horseback",
+                    "step": "confirming",
+                    "price": 50000,
+                    "name": "Cabalgata Parque Ojos del Caburguá"
+                }
+                return get_text("horseback_options", language)
+            
+            # Option 3: Navigation
+            elif "3" in message_clean or "naveg" in message_clean or "navigation" in message_clean:
+                logger.info("User selected navigation experience")
+                del conversation["metadata"]["awaiting_experience_menu"]
+                conversation["metadata"]["experience_flow"] = {
+                    "type": "navigation",
+                    "step": "selecting_option"
+                }
+                return get_text("navigation_options", language)
+            
+            else:
+                # Invalid selection, show menu again
+                return get_text("experiences_menu", language)
+                
+        except Exception as e:
+            logger.error(f"Error in experiences menu: {e}")
+            if "awaiting_experience_menu" in conversation.get("metadata", {}):
+                del conversation["metadata"]["awaiting_experience_menu"]
+            return "Lo siento, hubo un error. Por favor intenta de nuevo escribiendo 'menu'."
+    
+    async def _handle_experience_flow(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle specific experience flow (rafting, horseback, navigation)"""
+        try:
+            flow = conversation["metadata"]["experience_flow"]
+            exp_type = flow.get("type")
+            step = flow.get("step")
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Rafting Flow
+            if exp_type == "rafting":
+                if step == "selecting_level":
+                    # User selects level (bajo or alto)
+                    if "1" in message_clean or "bajo" in message_clean or "low" in message_clean or "baixo" in message_clean:
+                        flow["level"] = "bajo"
+                        flow["price"] = 30000
+                        flow["name"] = "Rafting Bajo"
+                    elif "2" in message_clean or "alto" in message_clean or "high" in message_clean:
+                        flow["level"] = "alto"
+                        flow["price"] = 40000
+                        flow["name"] = "Rafting Alto"
+                    else:
+                        return get_text("rafting_options", language)
+                    
+                    # Ask for number of people
+                    flow["step"] = "asking_people"
+                    return get_text("experience_ask_people", language)
+                
+                elif step == "asking_people":
+                    # Parse number of people
+                    try:
+                        num_people = int(''.join(filter(str.isdigit, message_clean)))
+                        if num_people < 1 or num_people > 50:
+                            return "Por favor ingresa un número válido de personas (entre 1 y 50)."
+                        
+                        flow["num_people"] = num_people
+                        total = flow["price"] * num_people
+                        
+                        # Format summary
+                        summary = f"""📋 *Resumen de tu Experiencia:*
+
+🚣 *{flow["name"]}*
+👥 {num_people} persona{"s" if num_people > 1 else ""}
+💰 ${flow["price"]:,} x {num_people} = *${total:,} CLP*"""
+                        
+                        # Notify Capitán Tomás
+                        await self._notify_capitan_tomas(
+                            contact_name, 
+                            phone_number, 
+                            [], 
+                            reason="experience_request",
+                            extra_info=f"Experiencia: {flow['name']}\nPersonas: {num_people}\nTotal: ${total:,} CLP"
+                        )
+                        
+                        # Clear flow
+                        del conversation["metadata"]["experience_flow"]
+                        
+                        return get_text("experience_confirmation", language).format(summary=summary)
+                    
+                    except ValueError:
+                        return "Por favor escribe solo el número de personas. Ejemplo: 5"
+            
+            # Horseback Riding Flow
+            elif exp_type == "horseback":
+                if step == "confirming":
+                    # User confirms interest
+                    if "1" in message_clean or "si" in message_clean or "yes" in message_clean or "sim" in message_clean:
+                        flow["step"] = "asking_people"
+                        return get_text("experience_ask_people", language)
+                    else:
+                        # User is not interested or invalid, return to experiences menu
+                        del conversation["metadata"]["experience_flow"]
+                        return get_text("experiences_menu", language)
+                
+                elif step == "asking_people":
+                    # Parse number of people
+                    try:
+                        num_people = int(''.join(filter(str.isdigit, message_clean)))
+                        if num_people < 1 or num_people > 50:
+                            return "Por favor ingresa un número válido de personas (entre 1 y 50)."
+                        
+                        flow["num_people"] = num_people
+                        total = flow["price"] * num_people
+                        
+                        # Format summary
+                        summary = f"""📋 *Resumen de tu Experiencia:*
+
+🐴 *{flow["name"]}*
+👥 {num_people} persona{"s" if num_people > 1 else ""}
+💰 ${flow["price"]:,} x {num_people} = *${total:,} CLP*"""
+                        
+                        # Notify Capitán Tomás
+                        await self._notify_capitan_tomas(
+                            contact_name, 
+                            phone_number, 
+                            [], 
+                            reason="experience_request",
+                            extra_info=f"Experiencia: {flow['name']}\nPersonas: {num_people}\nTotal: ${total:,} CLP"
+                        )
+                        
+                        # Clear flow
+                        del conversation["metadata"]["experience_flow"]
+                        
+                        return get_text("experience_confirmation", language).format(summary=summary)
+                    
+                    except ValueError:
+                        return "Por favor escribe solo el número de personas. Ejemplo: 5"
+            
+            # Navigation Flow
+            elif exp_type == "navigation":
+                if step == "selecting_option":
+                    # Define navigation options
+                    navigation_options = {
+                        "1": {"name": "Travesía 30 min (2p)", "price": 300000, "people": 2},
+                        "2": {"name": "Travesía 30 min (4p)", "price": 340000, "people": 4},
+                        "3": {"name": "Travesía 30 min (6p)", "price": 360000, "people": 6},
+                        "4": {"name": "Travesía 30 min (8p)", "price": 380000, "people": 8},
+                        "5": {"name": "Travesía 30 min (10p)", "price": 400000, "people": 10},
+                        "6": {"name": "Yave a vela Akimbo 2p (1.5hr)", "price": 120000, "people": 2},
+                        "7": {"name": "Yave a vela Akimbo 3p (1.5hr)", "price": 130000, "people": 3},
+                        "8": {"name": "Yave a vela Akimbo 4p (1.5hr)", "price": 140000, "people": 4},
+                        "9": {"name": "Yave a vela Akimbo 5p (1.5hr)", "price": 150000, "people": 5},
+                        "10": {"name": "Yave a vela Akimbo 5p (1.5hr)", "price": 160000, "people": 5}
+                    }
+                    
+                    # Parse user selection
+                    selected_option = None
+                    for key in navigation_options.keys():
+                        if key in message_clean:
+                            selected_option = key
+                            break
+                    
+                    if not selected_option:
+                        return get_text("navigation_options", language)
+                    
+                    option_data = navigation_options[selected_option]
+                    flow["name"] = option_data["name"]
+                    flow["price"] = option_data["price"]
+                    flow["people"] = option_data["people"]
+                    
+                    # Format summary (no additional people needed for navigation)
+                    summary = f"""📋 *Resumen de tu Experiencia:*
+
+⛵ *{flow["name"]}*
+👥 {flow["people"]} persona{"s" if flow["people"] > 1 else ""}
+💰 *${flow["price"]:,} CLP*"""
+                    
+                    # Notify Capitán Tomás
+                    await self._notify_capitan_tomas(
+                        contact_name, 
+                        phone_number, 
+                        [], 
+                        reason="experience_request",
+                        extra_info=f"Experiencia: {flow['name']}\nPersonas: {flow['people']}\nTotal: ${flow['price']:,} CLP"
+                    )
+                    
+                    # Clear flow
+                    del conversation["metadata"]["experience_flow"]
+                    
+                    return get_text("experience_confirmation", language).format(summary=summary)
+            
+            return "Lo siento, hubo un error. Por favor intenta de nuevo escribiendo 'menu'."
+            
+        except Exception as e:
+            logger.error(f"Error in experience flow: {e}")
+            if "experience_flow" in conversation.get("metadata", {}):
+                del conversation["metadata"]["experience_flow"]
+            return "Lo siento, hubo un error procesando tu solicitud. Por favor intenta de nuevo escribiendo 'menu'."
     
     async def _handle_packages_submenu(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Handle user selection from the packages submenu"""
