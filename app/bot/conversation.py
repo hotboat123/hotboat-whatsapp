@@ -281,6 +281,31 @@ class ConversationManager:
                 email_body = self._format_plain_text(message)
                 email_priority = "high"
             
+            elif reason == "cart_checkout":
+                # Notification for cart checkout (complete order with experiences/extras)
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu pedido completo. Te confirmo disponibilidad y coordino el pago pronto! 🚤"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                total = self.cart_manager.calculate_total(cart)
+                
+                message = f"🛒 *Pedido Completo - Checkout*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"{extra_info}\n\n"
+                else:
+                    message += f"💰 *Total:* ${total:,} CLP\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Pedido completo - {customer_name} - ${total:,}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
+            
             else:
                 return
             
@@ -1200,6 +1225,47 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         """
         import re
         message_lower = message.lower().strip()
+        
+        # Confirm/Checkout cart - Contact Capitán Tomás
+        if any(cmd in message_lower for cmd in ["confirmar", "proceder", "pago", "proceder con pago", "proceder con el pago", "checkout", "confirmar compra", "20"]):
+            cart = await self.cart_manager.get_cart(phone_number)
+            
+            if not cart:
+                return "🛒 Tu carrito está vacío. Agrega experiencias o reserva el HotBoat primero.\n\nEscribe *Menu* para ver las opciones."
+            
+            # Prepare cart summary for notification
+            cart_summary = self._format_cart_for_notification(cart)
+            total = self.cart_manager.calculate_total(cart)
+            
+            # Notify Capitán Tomás
+            await self._notify_capitan_tomas(
+                contact_name,
+                phone_number,
+                cart,
+                reason="cart_checkout",
+                extra_info=cart_summary
+            )
+            
+            # Confirmation message
+            confirmation = f"""✅ *¡Solicitud Enviada al Capitán Tomás!*
+
+{self.cart_manager.format_cart_message(cart)}
+
+━━━━━━━━━━━━━━━━
+
+👨‍✈️ *El Capitán Tomás revisará tu solicitud y te contactará pronto para:*
+
+• Confirmar disponibilidad
+• Coordinar fechas y horarios
+• Procesar el pago
+
+📲 Te responderemos a la brevedad!
+
+🙏 *¡Gracias por elegir HotBoat Chile!*
+
+💡 Tu carrito se mantendrá guardado. Escribe *Menu* para seguir explorando."""
+            
+            return confirmation
         
         # View cart
         if any(cmd in message_lower for cmd in ["carrito", "ver carrito", "mi carrito", "qué tengo"]):
@@ -2336,6 +2402,51 @@ Horarios disponibles:
         plain = plain.replace("•", "-")
         return plain
     
+    def _format_cart_for_notification(self, cart: List) -> str:
+        """Format cart items for notification to Capitán Tomás"""
+        summary = ""
+        total = 0
+        
+        for item in cart:
+            if item.item_type == "reservation":
+                price = item.price * item.quantity
+                summary += f"📅 Reserva HotBoat\n"
+                summary += f"   Fecha: {item.metadata.get('date', 'N/A')}\n"
+                summary += f"   Horario: {item.metadata.get('time', 'N/A')}\n"
+                summary += f"   Personas: {item.quantity}\n"
+                summary += f"   Subtotal: ${price:,}\n\n"
+                total += price
+            elif item.item_type == "experience":
+                price = item.price * item.quantity
+                exp_type = item.metadata.get('experience_type', '')
+                icon = "🚣" if exp_type == "rafting" else "🐴" if exp_type == "horseback" else "⛵"
+                
+                summary += f"{icon} {item.name}\n"
+                if item.quantity > 1 and exp_type != "navigation":
+                    summary += f"   {item.quantity} personas x ${item.price:,}\n"
+                    summary += f"   Subtotal: ${price:,}\n\n"
+                else:
+                    summary += f"   Precio: ${price:,}\n\n"
+                total += price
+            elif item.item_type == "extra":
+                price = item.price * item.quantity
+                if item.name != "Reserva FLEX (+10%)":
+                    summary += f"✨ {item.name}\n"
+                    summary += f"   {item.quantity}x ${item.price:,} = ${price:,}\n\n"
+                    total += price
+        
+        # Add FLEX if present
+        if any(item.name == "Reserva FLEX (+10%)" for item in cart):
+            reservation_cost = sum(i.price * i.quantity for i in cart if i.item_type == "reservation")
+            flex_amount = int(reservation_cost * 0.1)
+            summary += f"🔒 Reserva FLEX (+10%)\n"
+            summary += f"   ${flex_amount:,}\n\n"
+            total += flex_amount
+        
+        summary += f"💰 TOTAL: ${total:,} CLP"
+        
+        return summary
+    
     async def _send_notification_email(self, subject: str, body: str, priority: str = "high") -> None:
         """Send email notification using Resend API (works on Railway/PaaS)."""
         if not getattr(self.settings, "email_enabled", False):
@@ -2796,26 +2907,33 @@ Escribe el número que prefieras 🚤"""
                         flow["num_people"] = num_people
                         total = flow["price"] * num_people
                         
-                        # Format summary
-                        summary = f"""📋 *Resumen de tu Experiencia:*
-
-🚣 *{flow["name"]}*
-👥 {num_people} persona{"s" if num_people > 1 else ""}
-💰 ${flow["price"]:,} x {num_people} = *${total:,} CLP*"""
-                        
-                        # Notify Capitán Tomás
-                        await self._notify_capitan_tomas(
-                            contact_name, 
-                            phone_number, 
-                            [], 
-                            reason="experience_request",
-                            extra_info=f"Experiencia: {flow['name']}\nPersonas: {num_people}\nTotal: ${total:,} CLP"
+                        # Add to cart instead of notifying immediately
+                        experience_item = CartItem(
+                            item_type="experience",
+                            name=flow["name"],
+                            price=flow["price"],
+                            quantity=num_people,
+                            metadata={
+                                "experience_type": "rafting",
+                                "level": flow["level"]
+                            }
                         )
+                        
+                        await self.cart_manager.add_item(phone_number, contact_name, experience_item)
+                        
+                        # Get updated cart
+                        cart = await self.cart_manager.get_cart(phone_number)
+                        cart_message = self.cart_manager.format_cart_message(cart)
                         
                         # Clear flow
                         del conversation["metadata"]["experience_flow"]
                         
-                        return get_text("experience_confirmation", language).format(summary=summary)
+                        return get_text("experience_added_to_cart", language).format(
+                            name=flow["name"],
+                            quantity=num_people,
+                            total=total,
+                            cart=cart_message
+                        )
                     
                     except ValueError:
                         return "Por favor escribe solo el número de personas. Ejemplo: 5"
@@ -2842,26 +2960,32 @@ Escribe el número que prefieras 🚤"""
                         flow["num_people"] = num_people
                         total = flow["price"] * num_people
                         
-                        # Format summary
-                        summary = f"""📋 *Resumen de tu Experiencia:*
-
-🐴 *{flow["name"]}*
-👥 {num_people} persona{"s" if num_people > 1 else ""}
-💰 ${flow["price"]:,} x {num_people} = *${total:,} CLP*"""
-                        
-                        # Notify Capitán Tomás
-                        await self._notify_capitan_tomas(
-                            contact_name, 
-                            phone_number, 
-                            [], 
-                            reason="experience_request",
-                            extra_info=f"Experiencia: {flow['name']}\nPersonas: {num_people}\nTotal: ${total:,} CLP"
+                        # Add to cart instead of notifying immediately
+                        experience_item = CartItem(
+                            item_type="experience",
+                            name=flow["name"],
+                            price=flow["price"],
+                            quantity=num_people,
+                            metadata={
+                                "experience_type": "horseback"
+                            }
                         )
+                        
+                        await self.cart_manager.add_item(phone_number, contact_name, experience_item)
+                        
+                        # Get updated cart
+                        cart = await self.cart_manager.get_cart(phone_number)
+                        cart_message = self.cart_manager.format_cart_message(cart)
                         
                         # Clear flow
                         del conversation["metadata"]["experience_flow"]
                         
-                        return get_text("experience_confirmation", language).format(summary=summary)
+                        return get_text("experience_added_to_cart", language).format(
+                            name=flow["name"],
+                            quantity=num_people,
+                            total=total,
+                            cart=cart_message
+                        )
                     
                     except ValueError:
                         return "Por favor escribe solo el número de personas. Ejemplo: 5"
@@ -2898,26 +3022,33 @@ Escribe el número que prefieras 🚤"""
                     flow["price"] = option_data["price"]
                     flow["people"] = option_data["people"]
                     
-                    # Format summary (no additional people needed for navigation)
-                    summary = f"""📋 *Resumen de tu Experiencia:*
-
-⛵ *{flow["name"]}*
-👥 {flow["people"]} persona{"s" if flow["people"] > 1 else ""}
-💰 *${flow["price"]:,} CLP*"""
-                    
-                    # Notify Capitán Tomás
-                    await self._notify_capitan_tomas(
-                        contact_name, 
-                        phone_number, 
-                        [], 
-                        reason="experience_request",
-                        extra_info=f"Experiencia: {flow['name']}\nPersonas: {flow['people']}\nTotal: ${flow['price']:,} CLP"
+                    # Add to cart instead of notifying immediately
+                    experience_item = CartItem(
+                        item_type="experience",
+                        name=flow["name"],
+                        price=flow["price"],
+                        quantity=1,  # Navigation is a package price, not per person
+                        metadata={
+                            "experience_type": "navigation",
+                            "people_capacity": flow["people"]
+                        }
                     )
+                    
+                    await self.cart_manager.add_item(phone_number, contact_name, experience_item)
+                    
+                    # Get updated cart
+                    cart = await self.cart_manager.get_cart(phone_number)
+                    cart_message = self.cart_manager.format_cart_message(cart)
                     
                     # Clear flow
                     del conversation["metadata"]["experience_flow"]
                     
-                    return get_text("experience_confirmation", language).format(summary=summary)
+                    return get_text("experience_added_to_cart", language).format(
+                        name=flow["name"],
+                        quantity=f"{flow['people']} personas",
+                        total=flow["price"],
+                        cart=cart_message
+                    )
             
             return "Lo siento, hubo un error. Por favor intenta de nuevo escribiendo 'menu'."
             

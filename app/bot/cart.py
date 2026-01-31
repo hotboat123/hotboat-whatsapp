@@ -322,6 +322,18 @@ class CartManager:
                 message += f"   Personas: {item.quantity}\n"
                 message += f"   Precio: ${price:,}\n\n"
                 total += price
+            elif item.item_type == "experience":
+                price = item.price * item.quantity
+                exp_type = item.metadata.get('experience_type', '')
+                icon = "🚣" if exp_type == "rafting" else "🐴" if exp_type == "horseback" else "⛵"
+                
+                message += f"{icon} *{item.name}*\n"
+                if item.quantity > 1 and exp_type != "navigation":
+                    message += f"   {item.quantity} personas x ${item.price:,}\n"
+                    message += f"   Subtotal: ${price:,}\n\n"
+                else:
+                    message += f"   Precio: ${price:,}\n\n"
+                total += price
             elif item.item_type == "extra":
                 price = item.price * item.quantity
                 if item.name == "Reserva FLEX (+10%)":

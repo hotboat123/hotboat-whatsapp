@@ -1910,6 +1910,62 @@ Por favor digite o número de pessoas
     },
     
     # Experience confirmation
+    "experience_added_to_cart": {
+        "es": """✅ *Experiencia Agregada al Carrito*
+
+🎯 *{name}*
+👥 {quantity}
+💰 ${total:,} CLP
+
+{cart}
+
+━━━━━━━━━━━━━━━━
+
+💡 *Opciones:*
+
+• Escribe *"Menu"* para agregar más experiencias o actividades
+• Escribe *"Carrito"* para ver tu carrito
+• Escribe *"Confirmar"* o *"Proceder con pago"* cuando estés listo
+
+🚤 ¡Seguimos construyendo tu aventura perfecta!""",
+        
+        "en": """✅ *Experience Added to Cart*
+
+🎯 *{name}*
+👥 {quantity}
+💰 ${total:,} CLP
+
+{cart}
+
+━━━━━━━━━━━━━━━━
+
+💡 *Options:*
+
+• Type *"Menu"* to add more experiences or activities
+• Type *"Cart"* to view your cart
+• Type *"Confirm"* or *"Proceed to payment"* when ready
+
+🚤 Let's keep building your perfect adventure!""",
+        
+        "pt": """✅ *Experiência Adicionada ao Carrinho*
+
+🎯 *{name}*
+👥 {quantity}
+💰 ${total:,} CLP
+
+{cart}
+
+━━━━━━━━━━━━━━━━
+
+💡 *Opções:*
+
+• Digite *"Menu"* para adicionar mais experiências ou atividades
+• Digite *"Carrinho"* para ver seu carrinho
+• Digite *"Confirmar"* ou *"Proceder ao pagamento"* quando estiver pronto
+
+🚤 Vamos continuar construindo sua aventura perfeita!"""
+    },
+    
     "experience_confirmation": {
         "es": """✅ *Solicitud de Experiencia Recibida*
 
