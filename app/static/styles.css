@@ -275,6 +275,12 @@ body {
     gap: 0.3rem;
 }
 
+.customer-star {
+    font-size: 0.55rem;
+    display: inline-flex;
+    align-items: center;
+}
+
 .unread-indicator {
     display: inline-flex;
     align-items: center;
@@ -530,6 +536,35 @@ body {
 .char-counter {
     font-size: 0.5rem;
     color: var(--text-secondary);
+}
+
+.toggles-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.customer-toggle-section {
+    display: flex;
+    align-items: center;
+}
+
+.customer-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+    font-size: 0.5rem;
+    user-select: none;
+}
+
+.customer-toggle-input {
+    cursor: pointer;
+}
+
+.customer-toggle-text {
+    color: var(--text-primary);
+    font-weight: 600;
 }
 
 /* Right Panel */

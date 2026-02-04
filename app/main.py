@@ -289,6 +289,40 @@ async def toggle_bot_for_lead_endpoint(phone_number: str, update: BotToggleUpdat
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class CustomerToggleUpdate(BaseModel):
+    is_customer: bool
+
+
+@app.put("/leads/{phone_number}/customer-toggle")
+async def toggle_customer_for_lead_endpoint(phone_number: str, update: CustomerToggleUpdate):
+    """Mark or unmark a lead as a customer (purchaser)"""
+    try:
+        from app.db.leads import update_lead_status
+        
+        # If marking as customer, set lead_status to 'customer'
+        # If unmarking, set to 'potential_client' (assuming they were interested)
+        new_status = 'customer' if update.is_customer else 'potential_client'
+        
+        success = await update_lead_status(
+            phone_number=phone_number,
+            lead_status=new_status
+        )
+        
+        if success:
+            return {
+                "status": "updated",
+                "phone_number": phone_number,
+                "is_customer": update.is_customer,
+                "lead_status": new_status,
+                "message": f"Lead marked as {'customer' if update.is_customer else 'potential client'}"
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to toggle customer status")
+    except Exception as e:
+        logger.error(f"Error toggling customer status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.put("/api/conversations/{phone_number}/mark-read")
 async def mark_conversation_read(phone_number: str):
     """Mark a conversation as read (reset unread counter)"""

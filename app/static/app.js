@@ -272,7 +272,8 @@ async function loadConversations() {
                     last_message: lastMessage,
                     last_message_at: timestamp,
                     created_at: timestamp,
-                    unread_count: item.unread_count || 0  // ✅ Added unread_count
+                    unread_count: item.unread_count || 0,
+                    lead_status: item.lead_status || null  // ✅ Added lead_status
                 });
             }
         });
@@ -316,6 +317,8 @@ function renderConversations() {
     container.innerHTML = conversations.map(conv => {
         const unreadCount = conv.unread_count || 0;
         const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
+        const isCustomer = conv.lead_status === 'customer';
+        const customerStar = isCustomer ? `<span class="customer-star" title="Cliente que compró">⭐</span>` : '';
         
         // Debug: log conversations with unread
         if (unreadCount > 0) {
@@ -327,6 +330,7 @@ function renderConversations() {
              onclick="selectConversation('${conv.phone_number}')">
             <div class="conversation-header">
                 <div class="conversation-name">
+                    ${customerStar}
                     ${conv.customer_name || conv.phone_number}
                     ${unreadBadge}
                 </div>
@@ -355,6 +359,10 @@ async function selectConversation(phoneNumber) {
         // Update bot toggle state from lead info
         const botEnabled = data.lead?.bot_enabled !== false;
         updateBotToggleUI(botEnabled);
+        
+        // Update customer toggle state from lead info
+        const isCustomer = data.lead?.lead_status === 'customer';
+        updateCustomerToggleUI(isCustomer);
         
         loadLeadInfo(phoneNumber);
         
@@ -772,6 +780,72 @@ function updateBotToggleUI(enabled) {
     
     if (text) {
         text.textContent = enabled ? '🤖 Bot Activo' : '🤐 Bot Inactivo';
+    }
+}
+
+// Toggle Customer for Lead (from input area)
+async function toggleCustomerFromInput(isCustomer) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'warning');
+        // Revert checkbox
+        const checkbox = document.getElementById('customerToggleCheckbox');
+        if (checkbox) {
+            checkbox.checked = !isCustomer;
+        }
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/leads/${currentConversation.phone_number}/customer-toggle`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ is_customer: isCustomer })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to toggle customer status');
+        }
+        
+        const result = await response.json();
+        
+        // Update UI
+        updateCustomerToggleUI(isCustomer);
+        
+        showToast(`${isCustomer ? '⭐ Marcado como comprador' : '❌ Desmarcado como comprador'}`, 'success');
+        
+        // Update conversations list to show/hide star
+        await loadConversations();
+        
+        // Update lead info if visible
+        if (currentConversation) {
+            await loadLeadInfo(currentConversation.phone_number);
+        }
+        
+    } catch (error) {
+        console.error('Error toggling customer status:', error);
+        showToast('Error al cambiar estado de comprador', 'error');
+        
+        // Revert checkbox
+        const checkbox = document.getElementById('customerToggleCheckbox');
+        if (checkbox) {
+            checkbox.checked = !isCustomer;
+        }
+    }
+}
+
+// Update customer toggle UI
+function updateCustomerToggleUI(isCustomer) {
+    const checkbox = document.getElementById('customerToggleCheckbox');
+    const text = document.getElementById('customerToggleText');
+    
+    if (checkbox) {
+        checkbox.checked = isCustomer;
+    }
+    
+    if (text) {
+        text.textContent = isCustomer ? '⭐ Es Comprador' : '⭐ Comprador';
     }
 }
 
@@ -1580,6 +1654,7 @@ window.clearAudioRecording = clearAudioRecording;
 window.switchSearchTab = switchSearchTab;
 window.handleSearch = handleSearch;
 window.selectConversationFromSearch = selectConversationFromSearch;
+window.toggleCustomerFromInput = toggleCustomerFromInput;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
