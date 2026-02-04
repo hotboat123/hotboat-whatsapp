@@ -190,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setViewportHeightVar();
     loadConversations();
     setupEventListeners();
+    setupCustomerToggleListener();
     setInterval(loadConversations, 10000); // Refresh every 10 seconds
     setInterval(refreshCurrentConversation, 5000); // Refresh current chat every 5 seconds
     setupResponsiveLayout();
@@ -209,6 +210,16 @@ function setupEventListeners() {
     if (newMessageText) {
         newMessageText.addEventListener('input', () => {
             updateCharCount('newMessageText', 'newMsgCharCount');
+        });
+    }
+}
+
+// Setup Customer Toggle Listener
+function setupCustomerToggleListener() {
+    const checkbox = document.getElementById('customerToggleCheckbox');
+    if (checkbox) {
+        checkbox.addEventListener('change', function() {
+            toggleCustomerFromInput(this.checked);
         });
     }
 }
@@ -787,7 +798,7 @@ function updateBotToggleUI(enabled) {
 async function toggleCustomerFromInput(isCustomer) {
     if (!currentConversation) {
         showToast('Selecciona una conversación primero', 'warning');
-        // Revert checkbox
+        // Revert checkbox immediately
         const checkbox = document.getElementById('customerToggleCheckbox');
         if (checkbox) {
             checkbox.checked = !isCustomer;
@@ -795,7 +806,15 @@ async function toggleCustomerFromInput(isCustomer) {
         return;
     }
     
+    // Prevent multiple simultaneous requests
+    const checkbox = document.getElementById('customerToggleCheckbox');
+    if (checkbox) {
+        checkbox.disabled = true;
+    }
+    
     try {
+        console.log(`🔄 Toggling customer status for ${currentConversation.phone_number}: ${isCustomer}`);
+        
         const response = await fetch(`${API_BASE}/leads/${currentConversation.phone_number}/customer-toggle`, {
             method: 'PUT',
             headers: {
@@ -809,14 +828,18 @@ async function toggleCustomerFromInput(isCustomer) {
         }
         
         const result = await response.json();
-        
-        // Update UI
-        updateCustomerToggleUI(isCustomer);
+        console.log('✅ Customer status updated:', result);
         
         showToast(`${isCustomer ? '⭐ Marcado como comprador' : '❌ Desmarcado como comprador'}`, 'success');
         
+        // Update the local conversation object to reflect the change
+        const conv = conversations.find(c => c.phone_number === currentConversation.phone_number);
+        if (conv) {
+            conv.lead_status = result.lead_status;
+        }
+        
         // Update conversations list to show/hide star
-        await loadConversations();
+        renderConversations();
         
         // Update lead info if visible
         if (currentConversation) {
@@ -824,13 +847,17 @@ async function toggleCustomerFromInput(isCustomer) {
         }
         
     } catch (error) {
-        console.error('Error toggling customer status:', error);
+        console.error('❌ Error toggling customer status:', error);
         showToast('Error al cambiar estado de comprador', 'error');
         
-        // Revert checkbox
-        const checkbox = document.getElementById('customerToggleCheckbox');
+        // Revert checkbox on error
         if (checkbox) {
             checkbox.checked = !isCustomer;
+        }
+    } finally {
+        // Re-enable checkbox
+        if (checkbox) {
+            checkbox.disabled = false;
         }
     }
 }
@@ -840,8 +867,20 @@ function updateCustomerToggleUI(isCustomer) {
     const checkbox = document.getElementById('customerToggleCheckbox');
     const text = document.getElementById('customerToggleText');
     
+    console.log(`🔄 Updating customer toggle UI: ${isCustomer} for ${currentConversation?.phone_number}`);
+    
     if (checkbox) {
-        checkbox.checked = isCustomer;
+        // Temporarily remove event listener to avoid triggering onChange
+        const newCheckbox = checkbox.cloneNode(false);
+        checkbox.parentNode.replaceChild(newCheckbox, checkbox);
+        
+        // Set the new state
+        newCheckbox.checked = isCustomer;
+        
+        // Re-attach event listener
+        newCheckbox.addEventListener('change', function() {
+            toggleCustomerFromInput(this.checked);
+        });
     }
     
     if (text) {
