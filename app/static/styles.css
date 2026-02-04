@@ -139,6 +139,37 @@ body {
     border-bottom: 1px solid var(--border-color);
 }
 
+.search-tabs {
+    display: flex;
+    gap: 0.2rem;
+    margin-bottom: 0.35rem;
+    background-color: var(--bg-dark);
+    border-radius: 4px;
+    padding: 0.15rem;
+}
+
+.search-tab {
+    flex: 1;
+    padding: 0.25rem 0.4rem;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.45rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.2s;
+}
+
+.search-tab:hover {
+    background-color: var(--bg-light);
+}
+
+.search-tab.active {
+    background-color: var(--primary-color);
+    color: white;
+}
+
 .search-box input {
     width: 100%;
     padding: 0.3rem;
@@ -158,6 +189,59 @@ body {
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+}
+
+.search-results-list {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.search-result-item {
+    padding: 0.4rem;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.search-result-item:hover {
+    background-color: var(--bg-light);
+}
+
+.search-result-contact {
+    font-weight: 600;
+    font-size: 0.5rem;
+    color: var(--text-primary);
+    margin-bottom: 0.15rem;
+}
+
+.search-result-message {
+    font-size: 0.45rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-result-message .highlight {
+    background-color: var(--primary-color);
+    color: var(--bg-dark);
+    padding: 0.05rem 0.15rem;
+    border-radius: 2px;
+    font-weight: 600;
+}
+
+.search-result-time {
+    font-size: 0.4rem;
+    color: var(--text-secondary);
+    margin-top: 0.1rem;
+}
+
+.search-no-results {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.5rem;
 }
 
 .conversation-item {
