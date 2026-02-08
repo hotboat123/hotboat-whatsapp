@@ -1113,11 +1113,26 @@ function searchInChats(query) {
         return;
     }
     
+    // Clean query for phone number search (remove +, spaces, dashes, parentheses)
+    const cleanQuery = query.replace(/[\s\+\-\(\)]/g, '');
+    
     // Filter conversations
-    const items = document.querySelectorAll('.conversation-item');
-    items.forEach(item => {
-        const text = item.textContent.toLowerCase();
-        item.style.display = text.includes(query) ? 'block' : 'none';
+    conversations.forEach((conv, index) => {
+        const item = document.querySelectorAll('.conversation-item')[index];
+        if (!item) return;
+        
+        // Search in customer name
+        const nameMatch = (conv.customer_name || '').toLowerCase().includes(query);
+        
+        // Search in phone number (clean both query and phone)
+        const cleanPhone = (conv.phone_number || '').replace(/[\s\+\-\(\)]/g, '');
+        const phoneMatch = cleanPhone.includes(cleanQuery);
+        
+        // Search in visible text (fallback)
+        const textMatch = item.textContent.toLowerCase().includes(query);
+        
+        // Show if any match
+        item.style.display = (nameMatch || phoneMatch || textMatch) ? 'block' : 'none';
     });
 }
 
