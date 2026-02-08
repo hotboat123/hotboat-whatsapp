@@ -47,11 +47,23 @@
                 </div>
                 
                 <div class="search-box">
-                    <input type="text" id="searchConversations" placeholder="Search conversations..." onkeyup="filterConversations()">
+                    <div class="search-tabs">
+                        <button class="search-tab active" data-tab="chats" onclick="switchSearchTab('chats')">
+                            Chats
+                        </button>
+                        <button class="search-tab" data-tab="messages" onclick="switchSearchTab('messages')">
+                            Mensajes
+                        </button>
+                    </div>
+                    <input type="text" id="searchInput" placeholder="Buscar..." onkeyup="handleSearch()">
                 </div>
 
                 <div class="conversations-list" id="conversationsList">
                     <!-- Conversations will be loaded here -->
+                </div>
+                
+                <div class="search-results-list" id="searchResultsList" style="display: none;">
+                    <!-- Search results for messages will appear here -->
                 </div>
             </aside>
 

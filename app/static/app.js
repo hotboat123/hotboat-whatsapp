@@ -6,6 +6,8 @@ let isLoadingOlderMessages = false;
 const MESSAGES_PAGE_SIZE = 20;
 const MAX_REFRESH_LIMIT = 500;
 const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
+let currentSearchTab = 'chats'; // 'chats' or 'messages'
+let allMessagesForSearch = []; // Cache for message search
 
 function setViewportHeightVar() {
     const vh = window.innerHeight * 0.01;
@@ -1055,16 +1057,170 @@ async function sendNewImageFromFile(file, phone, caption = '') {
     }
 }
 
-// Filter Conversations
-function filterConversations() {
-    const searchInput = document.getElementById('searchConversations');
-    const filter = searchInput.value.toLowerCase();
+// Switch Search Tab
+function switchSearchTab(tab) {
+    currentSearchTab = tab;
     
+    // Update tab UI
+    const tabs = document.querySelectorAll('.search-tab');
+    tabs.forEach(t => {
+        if (t.dataset.tab === tab) {
+            t.classList.add('active');
+        } else {
+            t.classList.remove('active');
+        }
+    });
+    
+    // Update placeholder
+    const searchInput = document.getElementById('searchInput');
+    if (tab === 'chats') {
+        searchInput.placeholder = 'Buscar en chats...';
+    } else {
+        searchInput.placeholder = 'Buscar en mensajes...';
+    }
+    
+    // Clear and re-run search
+    handleSearch();
+}
+
+// Handle Search (dispatcher)
+function handleSearch() {
+    const searchInput = document.getElementById('searchInput');
+    const query = searchInput.value.trim().toLowerCase();
+    
+    if (currentSearchTab === 'chats') {
+        searchInChats(query);
+    } else {
+        searchInMessages(query);
+    }
+}
+
+// Search in Chats (names)
+function searchInChats(query) {
+    const conversationsList = document.getElementById('conversationsList');
+    const searchResultsList = document.getElementById('searchResultsList');
+    
+    // Show conversations list, hide search results
+    conversationsList.style.display = 'block';
+    searchResultsList.style.display = 'none';
+    
+    if (!query) {
+        // Show all conversations
+        const items = document.querySelectorAll('.conversation-item');
+        items.forEach(item => {
+            item.style.display = 'block';
+        });
+        return;
+    }
+    
+    // Filter conversations
     const items = document.querySelectorAll('.conversation-item');
     items.forEach(item => {
         const text = item.textContent.toLowerCase();
-        item.style.display = text.includes(filter) ? 'block' : 'none';
+        item.style.display = text.includes(query) ? 'block' : 'none';
     });
+}
+
+// Search in Messages
+async function searchInMessages(query) {
+    const conversationsList = document.getElementById('conversationsList');
+    const searchResultsList = document.getElementById('searchResultsList');
+    
+    if (!query) {
+        // Show conversations list when no query
+        conversationsList.style.display = 'block';
+        searchResultsList.style.display = 'none';
+        return;
+    }
+    
+    // Show search results, hide conversations
+    conversationsList.style.display = 'none';
+    searchResultsList.style.display = 'block';
+    
+    // Show loading
+    searchResultsList.innerHTML = '<div class="search-no-results">Buscando mensajes...</div>';
+    
+    try {
+        // Search through all conversations
+        const results = [];
+        
+        for (const conv of conversations) {
+            // Fetch messages for this conversation
+            const data = await fetchConversationData(conv.phone_number, { limit: 100 });
+            const messages = normalizeMessages(data.messages);
+            
+            // Search in messages
+            messages.forEach(msg => {
+                const text = (msg.message_text || '').toLowerCase();
+                if (text.includes(query)) {
+                    results.push({
+                        phone: conv.phone_number,
+                        name: conv.customer_name || conv.phone_number,
+                        message: msg.message_text,
+                        timestamp: msg.timestamp,
+                        messageId: msg.id
+                    });
+                }
+            });
+        }
+        
+        // Sort by timestamp (most recent first)
+        results.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Render results
+        renderMessageSearchResults(results, query);
+        
+    } catch (error) {
+        console.error('Error searching messages:', error);
+        searchResultsList.innerHTML = '<div class="search-no-results">Error al buscar mensajes</div>';
+    }
+}
+
+// Render Message Search Results
+function renderMessageSearchResults(results, query) {
+    const searchResultsList = document.getElementById('searchResultsList');
+    
+    if (results.length === 0) {
+        searchResultsList.innerHTML = '<div class="search-no-results">No se encontraron mensajes</div>';
+        return;
+    }
+    
+    // Highlight function
+    const highlightText = (text, query) => {
+        const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+        return text.replace(regex, '<span class="highlight">$1</span>');
+    };
+    
+    const html = results.map(result => {
+        const highlightedMessage = highlightText(truncate(result.message, 100), query);
+        
+        return `
+            <div class="search-result-item" onclick="selectConversationFromSearch('${result.phone}')">
+                <div class="search-result-contact">${result.name}</div>
+                <div class="search-result-message">${highlightedMessage}</div>
+                <div class="search-result-time">${formatTime(result.timestamp)}</div>
+            </div>
+        `;
+    }).join('');
+    
+    searchResultsList.innerHTML = html;
+}
+
+// Helper function to escape regex special characters
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Select conversation from search result
+async function selectConversationFromSearch(phoneNumber) {
+    // Clear search
+    document.getElementById('searchInput').value = '';
+    
+    // Switch back to chats tab
+    switchSearchTab('chats');
+    
+    // Select conversation
+    await selectConversation(phoneNumber);
 }
 
 // Update Status Indicator
@@ -1430,6 +1586,9 @@ window.toggleAudioRecording = toggleAudioRecording;
 window.stopAudioRecording = stopAudioRecording;
 window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
+window.switchSearchTab = switchSearchTab;
+window.handleSearch = handleSearch;
+window.selectConversationFromSearch = selectConversationFromSearch;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
