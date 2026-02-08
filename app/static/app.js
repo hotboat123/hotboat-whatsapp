@@ -8,6 +8,8 @@ const MAX_REFRESH_LIMIT = 500;
 const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
 let currentSearchTab = 'chats'; // 'chats' or 'messages'
 let allMessagesForSearch = []; // Cache for message search
+let conversationsLimit = 100; // Start with 100 conversations
+let allConversationsLoaded = false; // Flag to track if all conversations are loaded
 
 function setViewportHeightVar() {
     const vh = window.innerHeight * 0.01;
@@ -223,15 +225,21 @@ function updateCharCount(inputId, counterId) {
 }
 
 // Load Conversations
-async function loadConversations() {
-    console.log('🔄 Loading conversations with unread badges...');
+async function loadConversations(limit = null) {
+    const loadLimit = limit || conversationsLimit;
+    console.log(`🔄 Loading conversations (limit: ${loadLimit})...`);
     try {
-        const response = await fetch(`${API_BASE}/api/conversations`);
+        const response = await fetch(`${API_BASE}/api/conversations?limit=${loadLimit}`);
         if (!response.ok) throw new Error('Failed to load conversations');
         
         const data = await response.json();
         console.log('📊 Raw API response:', data);
         const rawConversations = data.conversations || [];
+        
+        // Check if we got all conversations (if we got less than requested, we have all)
+        if (rawConversations.length < loadLimit) {
+            allConversationsLoaded = true;
+        }
 
         // Group by phone number and keep latest entry
         const grouped = new Map();
@@ -291,6 +299,12 @@ async function loadConversations() {
     }
 }
 
+// Load More Conversations
+async function loadMoreConversations() {
+    conversationsLimit += 50; // Increase limit by 50
+    await loadConversations(conversationsLimit);
+}
+
 async function fetchConversationData(phoneNumber, { limit = MESSAGES_PAGE_SIZE, before = null } = {}) {
     const params = new URLSearchParams();
     params.append('limit', Math.min(Math.max(limit, 1), MAX_REFRESH_LIMIT).toString());
@@ -313,7 +327,7 @@ function renderConversations() {
         return;
     }
     
-    container.innerHTML = conversations.map(conv => {
+    const conversationsHtml = conversations.map(conv => {
         const unreadCount = conv.unread_count || 0;
         const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
         
@@ -338,6 +352,17 @@ function renderConversations() {
         </div>
     `;
     }).join('');
+    
+    // Add "Load More" button if not all conversations are loaded
+    const loadMoreButton = !allConversationsLoaded ? `
+        <div class="load-more-conversations">
+            <button class="btn-secondary load-more-btn" onclick="loadMoreConversations()">
+                📜 Cargar más conversaciones
+            </button>
+        </div>
+    ` : '';
+    
+    container.innerHTML = conversationsHtml + loadMoreButton;
 }
 
 // Select Conversation
@@ -1096,7 +1121,7 @@ function handleSearch() {
 }
 
 // Search in Chats (names)
-function searchInChats(query) {
+async function searchInChats(query) {
     const conversationsList = document.getElementById('conversationsList');
     const searchResultsList = document.getElementById('searchResultsList');
     
@@ -1116,7 +1141,8 @@ function searchInChats(query) {
     // Clean query for phone number search (remove +, spaces, dashes, parentheses)
     const cleanQuery = query.replace(/[\s\+\-\(\)]/g, '');
     
-    // Filter conversations
+    // Search in loaded conversations first
+    let foundMatch = false;
     conversations.forEach((conv, index) => {
         const item = document.querySelectorAll('.conversation-item')[index];
         if (!item) return;
@@ -1132,8 +1158,40 @@ function searchInChats(query) {
         const textMatch = item.textContent.toLowerCase().includes(query);
         
         // Show if any match
-        item.style.display = (nameMatch || phoneMatch || textMatch) ? 'block' : 'none';
+        const isMatch = nameMatch || phoneMatch || textMatch;
+        item.style.display = isMatch ? 'block' : 'none';
+        
+        if (isMatch) {
+            foundMatch = true;
+        }
     });
+    
+    // If no match found and not all conversations loaded, suggest loading more
+    if (!foundMatch && !allConversationsLoaded) {
+        const loadMoreHint = document.querySelector('.load-more-conversations');
+        if (loadMoreHint) {
+            loadMoreHint.innerHTML = `
+                <div style="padding: 1rem; text-align: center;">
+                    <p style="color: var(--text-secondary); font-size: 0.5rem; margin-bottom: 0.5rem;">
+                        No se encontró en las conversaciones cargadas
+                    </p>
+                    <button class="btn-primary" onclick="loadMoreAndSearch('${query}')" style="font-size: 0.5rem;">
+                        🔍 Buscar en más conversaciones
+                    </button>
+                </div>
+            `;
+        }
+    }
+}
+
+// Load more conversations and search again
+async function loadMoreAndSearch(query) {
+    await loadMoreConversations();
+    // Wait a bit for rendering
+    setTimeout(() => {
+        document.getElementById('searchInput').value = query;
+        searchInChats(query.toLowerCase());
+    }, 100);
 }
 
 // Search in Messages
@@ -1604,6 +1662,8 @@ window.clearAudioRecording = clearAudioRecording;
 window.switchSearchTab = switchSearchTab;
 window.handleSearch = handleSearch;
 window.selectConversationFromSearch = selectConversationFromSearch;
+window.loadMoreConversations = loadMoreConversations;
+window.loadMoreAndSearch = loadMoreAndSearch;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
