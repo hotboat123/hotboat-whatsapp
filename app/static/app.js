@@ -8,7 +8,7 @@ const MAX_REFRESH_LIMIT = 500;
 const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
 let currentSearchTab = 'chats'; // 'chats' or 'messages'
 let allMessagesForSearch = []; // Cache for message search
-let conversationsLimit = 100; // Start with 100 conversations
+let conversationsLimit = 30; // Start with 30 conversations
 let allConversationsLoaded = false; // Flag to track if all conversations are loaded
 
 function setViewportHeightVar() {
