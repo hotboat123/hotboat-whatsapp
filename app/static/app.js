@@ -192,8 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setViewportHeightVar();
     loadConversations();
     setupEventListeners();
-    setInterval(loadConversations, 10000); // Refresh every 10 seconds
-    setInterval(refreshCurrentConversation, 5000); // Refresh current chat every 5 seconds
+    setInterval(loadConversations, 30000); // Refresh every 30 seconds (reduced load)
+    setInterval(refreshCurrentConversation, 15000); // Refresh current chat every 15 seconds
     setupResponsiveLayout();
 });
 
