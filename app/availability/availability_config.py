@@ -24,8 +24,8 @@ class AvailabilityConfig:
 # HotBoat specific configuration
 # Configuración de paseos cada 3 horas
 AVAILABILITY_CONFIG = AvailabilityConfig(
-    operating_hours=[9, 12, 15, 18, 21],  # 9am, 12pm, 3pm, 6pm, 9pm (cada 3 horas)
-    duration_hours=2.0,  # Each HotBoat trip lasts 2 hours
+    operating_hours=[8, 11, 14, 17, 20, 23],  # 9am, 12pm, 3pm, 6pm, 9pm (cada 3 horas)
+    duration_hours=3.0,  # Each HotBoat trip lasts 2 hours
     buffer_hours=0.0,  # Sin buffer - con 2 HotBoats podemos tener reservas simultáneas
     exclude_statuses=['cancelled', 'rejected']
 )
