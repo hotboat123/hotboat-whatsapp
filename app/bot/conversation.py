@@ -132,6 +132,41 @@ class ConversationManager:
         except Exception as e:
             logger.error(f"Error auto-assigning priority: {e}")
     
+    async def _check_repeated_ad_message(self, phone_number: str, message_text: str, conversation: dict):
+        """
+        Check if user has sent the ad message "¡Hola! Quiero más información." more than once
+        and auto-assign priority 2 (medium)
+        
+        Args:
+            phone_number: Contact phone number
+            message_text: Current message text
+            conversation: Conversation context
+        """
+        try:
+            # Normalize message for comparison (remove extra spaces, case insensitive)
+            normalized_message = " ".join(message_text.strip().lower().split())
+            ad_message_normalized = "¡hola! quiero más información."
+            
+            if normalized_message == ad_message_normalized:
+                # Count how many times this message appears in history
+                messages = conversation.get("messages", [])
+                ad_message_count = sum(
+                    1 for msg in messages 
+                    if msg.get("role") == "user" and 
+                    " ".join(msg.get("content", "").strip().lower().split()) == ad_message_normalized
+                )
+                
+                # If user has sent this message 2 or more times, set priority 2
+                if ad_message_count >= 2:
+                    from app.db.leads import update_lead_priority
+                    success = await update_lead_priority(phone_number, 2)
+                    if success:
+                        logger.info(f"🟡 Auto-assigned priority 2 to {phone_number}: mensaje de anuncio repetido ({ad_message_count} veces)")
+                    else:
+                        logger.warning(f"Failed to auto-assign priority 2 to {phone_number}")
+        except Exception as e:
+            logger.error(f"Error checking repeated ad message: {e}")
+    
     async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation") -> None:
         """
         Send WhatsApp notification to Capitán Tomás
@@ -273,6 +308,9 @@ class ConversationManager:
                 "timestamp": datetime.now(CHILE_TZ).isoformat(),
                 "message_id": message_id
             })
+            
+            # Check for repeated ad messages ("¡Hola! Quiero más información.")
+            await self._check_repeated_ad_message(from_number, message_text, conversation)
             
             # NOTE: Email notifications are now sent in the webhook handler (webhook.py)
             # to ensure they're always sent even when the bot is disabled for a user
