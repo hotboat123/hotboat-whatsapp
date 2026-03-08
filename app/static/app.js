@@ -6,10 +6,6 @@ let isLoadingOlderMessages = false;
 const MESSAGES_PAGE_SIZE = 20;
 const MAX_REFRESH_LIMIT = 500;
 const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
-let currentSearchTab = 'chats'; // 'chats' or 'messages'
-let allMessagesForSearch = []; // Cache for message search
-let conversationsLimit = 30; // Start with 30 conversations
-let allConversationsLoaded = false; // Flag to track if all conversations are loaded
 
 function setViewportHeightVar() {
     const vh = window.innerHeight * 0.01;
@@ -192,8 +188,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setViewportHeightVar();
     loadConversations();
     setupEventListeners();
-    setInterval(loadConversations, 30000); // Refresh every 30 seconds (reduced load)
-    setInterval(refreshCurrentConversation, 15000); // Refresh current chat every 15 seconds
+    setInterval(loadConversations, 10000); // Refresh every 10 seconds
+    setInterval(refreshCurrentConversation, 5000); // Refresh current chat every 5 seconds
     setupResponsiveLayout();
 });
 
@@ -225,21 +221,15 @@ function updateCharCount(inputId, counterId) {
 }
 
 // Load Conversations
-async function loadConversations(limit = null) {
-    const loadLimit = limit || conversationsLimit;
-    console.log(`🔄 Loading conversations (limit: ${loadLimit})...`);
+async function loadConversations() {
+    console.log('🔄 Loading conversations with unread badges...');
     try {
-        const response = await fetch(`${API_BASE}/api/conversations?limit=${loadLimit}`);
+        const response = await fetch(`${API_BASE}/api/conversations`);
         if (!response.ok) throw new Error('Failed to load conversations');
         
         const data = await response.json();
         console.log('📊 Raw API response:', data);
         const rawConversations = data.conversations || [];
-        
-        // Check if we got all conversations (if we got less than requested, we have all)
-        if (rawConversations.length < loadLimit) {
-            allConversationsLoaded = true;
-        }
 
         // Group by phone number and keep latest entry
         const grouped = new Map();
@@ -280,7 +270,8 @@ async function loadConversations(limit = null) {
                     last_message: lastMessage,
                     last_message_at: timestamp,
                     created_at: timestamp,
-                    unread_count: item.unread_count || 0  // ✅ Added unread_count
+                    unread_count: item.unread_count || 0,
+                    priority: item.priority || 0
                 });
             }
         });
@@ -297,12 +288,6 @@ async function loadConversations(limit = null) {
         updateStatus('disconnected', 'Connection Error');
         showToast('Failed to load conversations', 'error');
     }
-}
-
-// Load More Conversations
-async function loadMoreConversations() {
-    conversationsLimit += 50; // Increase limit by 50
-    await loadConversations(conversationsLimit);
 }
 
 async function fetchConversationData(phoneNumber, { limit = MESSAGES_PAGE_SIZE, before = null } = {}) {
@@ -327,9 +312,20 @@ function renderConversations() {
         return;
     }
     
-    const conversationsHtml = conversations.map(conv => {
+    container.innerHTML = conversations.map(conv => {
         const unreadCount = conv.unread_count || 0;
         const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
+        
+        // Priority badge
+        const priority = conv.priority || 0;
+        let priorityBadge = '';
+        if (priority === 1) {
+            priorityBadge = '<span class="priority-badge priority-1">1</span>';
+        } else if (priority === 2) {
+            priorityBadge = '<span class="priority-badge priority-2">2</span>';
+        } else if (priority === 3) {
+            priorityBadge = '<span class="priority-badge priority-3">3</span>';
+        }
         
         // Debug: log conversations with unread
         if (unreadCount > 0) {
@@ -342,6 +338,7 @@ function renderConversations() {
             <div class="conversation-header">
                 <div class="conversation-name">
                     ${conv.customer_name || conv.phone_number}
+                    ${priorityBadge}
                     ${unreadBadge}
                 </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
@@ -352,17 +349,6 @@ function renderConversations() {
         </div>
     `;
     }).join('');
-    
-    // Add "Load More" button if not all conversations are loaded
-    const loadMoreButton = !allConversationsLoaded ? `
-        <div class="load-more-conversations">
-            <button class="btn-secondary load-more-btn" onclick="loadMoreConversations()">
-                📜 Cargar más conversaciones
-            </button>
-        </div>
-    ` : '';
-    
-    container.innerHTML = conversationsHtml + loadMoreButton;
 }
 
 // Select Conversation
@@ -374,12 +360,16 @@ async function selectConversation(phoneNumber) {
             customer_name: data.lead?.customer_name || phoneNumber,
             messages: normalizeMessages(data.messages),
             hasMore: Boolean(data.has_more),
-            nextCursor: data.next_cursor || null
+            nextCursor: data.next_cursor || null,
+            priority: data.lead?.priority || 0
         };
         
         // Update bot toggle state from lead info
         const botEnabled = data.lead?.bot_enabled !== false;
         updateBotToggleUI(botEnabled);
+        
+        // Update priority UI
+        updatePriorityUI(currentConversation.priority);
         
         loadLeadInfo(phoneNumber);
         
@@ -544,8 +534,6 @@ function renderCurrentChat(options = {}) {
             const sanitized = escapeHtml(text || '').replace(/\n/g, '<br>');
             const isImage = (msg.message_type === 'image');
             const isAudio = (msg.message_type === 'audio');
-            const isIncoming = direction === 'incoming';
-            const messageId = msg.id || '';
             // For images/audio, the URL can be in media_url (outgoing) or response_text (incoming)
             const mediaUrl = msg.media_url || msg.response_text;
             
@@ -561,11 +549,9 @@ function renderCurrentChat(options = {}) {
                 });
             }
             
-            let messageHtml = '';
-            
             if (isImage && mediaUrl && !mediaUrl.startsWith('[')) {
-                messageHtml = `
-                    <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
+                return `
+                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
                         <div class="message-text">
                             <div style="margin-bottom: 0.35rem;">${sanitized || '[Imagen]'}</div>
                             <a href="${mediaUrl}" target="_blank" rel="noopener">
@@ -575,14 +561,16 @@ function renderCurrentChat(options = {}) {
                         <div class="message-time">${formatTime(msg.timestamp)}</div>
                     </div>
                 `;
-            } else if (isAudio && mediaUrl && !mediaUrl.startsWith('[')) {
+            }
+            
+            if (isAudio && mediaUrl && !mediaUrl.startsWith('[')) {
                 const audioId = `audio_${msg.id}`;
                 // Add timestamp to force refresh
                 const audioSrc = `${mediaUrl}?t=${Date.now()}`;
                 // Use preload="auto" for mobile to ensure complete audio loading
                 const preloadMode = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'auto' : 'metadata';
-                messageHtml = `
-                    <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
+                return `
+                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
                         <div class="message-text">
                             <div class="audio-message">
                                 <div class="audio-icon">🎤</div>
@@ -598,21 +586,14 @@ function renderCurrentChat(options = {}) {
                         <div class="message-time">${formatTime(msg.timestamp)}</div>
                     </div>
                 `;
-            } else {
-                messageHtml = `
-                    <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
-                        <div class="message-text">${sanitized || '&nbsp;'}</div>
-                        <div class="message-time">${formatTime(msg.timestamp)}</div>
-                    </div>
-                `;
             }
-            
-            // Wrap incoming messages in message-wrapper for reactions
-            if (isIncoming && messageId) {
-                return `<div class="message-wrapper" data-message-id="${messageId}">${messageHtml}</div>`;
-            }
-            
-            return messageHtml;
+
+            return `
+                <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
+                    <div class="message-text">${sanitized || '&nbsp;'}</div>
+                    <div class="message-time">${formatTime(msg.timestamp)}</div>
+                </div>
+            `;
         }).join('');
 
         const loadMoreHtml = currentConversation.hasMore ? `
@@ -808,6 +789,63 @@ function updateBotToggleUI(enabled) {
         text.textContent = enabled ? '🤖 Bot Activo' : '🤐 Bot Inactivo';
     }
 }
+
+// Update priority for conversation
+async function updatePriority(priority) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/priority`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ priority: priority })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to update priority');
+        }
+        
+        const result = await response.json();
+        
+        // Update UI
+        updatePriorityUI(priority);
+        
+        // Update in conversations list
+        const conv = conversations.find(c => c.phone_number === currentConversation.phone_number);
+        if (conv) {
+            conv.priority = priority;
+            renderConversations();
+        }
+        
+        const priorityText = priority === 0 ? 'Sin prioridad' : `Prioridad ${priority}`;
+        showToast(`✅ ${priorityText}`, 'success');
+        
+    } catch (error) {
+        console.error('Error updating priority:', error);
+        showToast('Error al cambiar prioridad', 'error');
+    }
+}
+
+// Update priority UI buttons
+function updatePriorityUI(priority) {
+    // Update button states
+    for (let i = 0; i <= 3; i++) {
+        const btn = document.getElementById(`priorityBtn${i}`);
+        if (btn) {
+            if (i === priority) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    }
+}
+
 
 // Send Message (Reply in Conversation)
 async function sendMessage(event) {
@@ -1082,218 +1120,16 @@ async function sendNewImageFromFile(file, phone, caption = '') {
     }
 }
 
-// Switch Search Tab
-function switchSearchTab(tab) {
-    currentSearchTab = tab;
+// Filter Conversations
+function filterConversations() {
+    const searchInput = document.getElementById('searchConversations');
+    const filter = searchInput.value.toLowerCase();
     
-    // Update tab UI
-    const tabs = document.querySelectorAll('.search-tab');
-    tabs.forEach(t => {
-        if (t.dataset.tab === tab) {
-            t.classList.add('active');
-        } else {
-            t.classList.remove('active');
-        }
+    const items = document.querySelectorAll('.conversation-item');
+    items.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = text.includes(filter) ? 'block' : 'none';
     });
-    
-    // Update placeholder
-    const searchInput = document.getElementById('searchInput');
-    if (tab === 'chats') {
-        searchInput.placeholder = 'Buscar en chats...';
-    } else {
-        searchInput.placeholder = 'Buscar en mensajes...';
-    }
-    
-    // Clear and re-run search
-    handleSearch();
-}
-
-// Handle Search (dispatcher)
-function handleSearch() {
-    const searchInput = document.getElementById('searchInput');
-    const query = searchInput.value.trim().toLowerCase();
-    
-    if (currentSearchTab === 'chats') {
-        searchInChats(query);
-    } else {
-        searchInMessages(query);
-    }
-}
-
-// Search in Chats (names)
-async function searchInChats(query) {
-    const conversationsList = document.getElementById('conversationsList');
-    const searchResultsList = document.getElementById('searchResultsList');
-    
-    // Show conversations list, hide search results
-    conversationsList.style.display = 'block';
-    searchResultsList.style.display = 'none';
-    
-    if (!query) {
-        // Show all conversations
-        const items = document.querySelectorAll('.conversation-item');
-        items.forEach(item => {
-            item.style.display = 'block';
-        });
-        return;
-    }
-    
-    // Clean query for phone number search (remove +, spaces, dashes, parentheses)
-    const cleanQuery = query.replace(/[\s\+\-\(\)]/g, '');
-    
-    // Search in loaded conversations first
-    let foundMatch = false;
-    conversations.forEach((conv, index) => {
-        const item = document.querySelectorAll('.conversation-item')[index];
-        if (!item) return;
-        
-        // Search in customer name
-        const nameMatch = (conv.customer_name || '').toLowerCase().includes(query);
-        
-        // Search in phone number (clean both query and phone)
-        const cleanPhone = (conv.phone_number || '').replace(/[\s\+\-\(\)]/g, '');
-        const phoneMatch = cleanPhone.includes(cleanQuery);
-        
-        // Search in visible text (fallback)
-        const textMatch = item.textContent.toLowerCase().includes(query);
-        
-        // Show if any match
-        const isMatch = nameMatch || phoneMatch || textMatch;
-        item.style.display = isMatch ? 'block' : 'none';
-        
-        if (isMatch) {
-            foundMatch = true;
-        }
-    });
-    
-    // If no match found and not all conversations loaded, suggest loading more
-    if (!foundMatch && !allConversationsLoaded) {
-        const loadMoreHint = document.querySelector('.load-more-conversations');
-        if (loadMoreHint) {
-            loadMoreHint.innerHTML = `
-                <div style="padding: 1rem; text-align: center;">
-                    <p style="color: var(--text-secondary); font-size: 0.5rem; margin-bottom: 0.5rem;">
-                        No se encontró en las conversaciones cargadas
-                    </p>
-                    <button class="btn-primary" onclick="loadMoreAndSearch('${query}')" style="font-size: 0.5rem;">
-                        🔍 Buscar en más conversaciones
-                    </button>
-                </div>
-            `;
-        }
-    }
-}
-
-// Load more conversations and search again
-async function loadMoreAndSearch(query) {
-    await loadMoreConversations();
-    // Wait a bit for rendering
-    setTimeout(() => {
-        document.getElementById('searchInput').value = query;
-        searchInChats(query.toLowerCase());
-    }, 100);
-}
-
-// Search in Messages
-async function searchInMessages(query) {
-    const conversationsList = document.getElementById('conversationsList');
-    const searchResultsList = document.getElementById('searchResultsList');
-    
-    if (!query) {
-        // Show conversations list when no query
-        conversationsList.style.display = 'block';
-        searchResultsList.style.display = 'none';
-        return;
-    }
-    
-    // Show search results, hide conversations
-    conversationsList.style.display = 'none';
-    searchResultsList.style.display = 'block';
-    
-    // Show loading
-    searchResultsList.innerHTML = '<div class="search-no-results">Buscando mensajes...</div>';
-    
-    try {
-        // Search through all conversations
-        const results = [];
-        
-        for (const conv of conversations) {
-            // Fetch messages for this conversation
-            const data = await fetchConversationData(conv.phone_number, { limit: 100 });
-            const messages = normalizeMessages(data.messages);
-            
-            // Search in messages
-            messages.forEach(msg => {
-                const text = (msg.message_text || '').toLowerCase();
-                if (text.includes(query)) {
-                    results.push({
-                        phone: conv.phone_number,
-                        name: conv.customer_name || conv.phone_number,
-                        message: msg.message_text,
-                        timestamp: msg.timestamp,
-                        messageId: msg.id
-                    });
-                }
-            });
-        }
-        
-        // Sort by timestamp (most recent first)
-        results.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        
-        // Render results
-        renderMessageSearchResults(results, query);
-        
-    } catch (error) {
-        console.error('Error searching messages:', error);
-        searchResultsList.innerHTML = '<div class="search-no-results">Error al buscar mensajes</div>';
-    }
-}
-
-// Render Message Search Results
-function renderMessageSearchResults(results, query) {
-    const searchResultsList = document.getElementById('searchResultsList');
-    
-    if (results.length === 0) {
-        searchResultsList.innerHTML = '<div class="search-no-results">No se encontraron mensajes</div>';
-        return;
-    }
-    
-    // Highlight function
-    const highlightText = (text, query) => {
-        const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
-        return text.replace(regex, '<span class="highlight">$1</span>');
-    };
-    
-    const html = results.map(result => {
-        const highlightedMessage = highlightText(truncate(result.message, 100), query);
-        
-        return `
-            <div class="search-result-item" onclick="selectConversationFromSearch('${result.phone}')">
-                <div class="search-result-contact">${result.name}</div>
-                <div class="search-result-message">${highlightedMessage}</div>
-                <div class="search-result-time">${formatTime(result.timestamp)}</div>
-            </div>
-        `;
-    }).join('');
-    
-    searchResultsList.innerHTML = html;
-}
-
-// Helper function to escape regex special characters
-function escapeRegExp(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Select conversation from search result
-async function selectConversationFromSearch(phoneNumber) {
-    // Clear search
-    document.getElementById('searchInput').value = '';
-    
-    // Switch back to chats tab
-    switchSearchTab('chats');
-    
-    // Select conversation
-    await selectConversation(phoneNumber);
 }
 
 // Update Status Indicator
@@ -1659,11 +1495,7 @@ window.toggleAudioRecording = toggleAudioRecording;
 window.stopAudioRecording = stopAudioRecording;
 window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
-window.switchSearchTab = switchSearchTab;
-window.handleSearch = handleSearch;
-window.selectConversationFromSearch = selectConversationFromSearch;
-window.loadMoreConversations = loadMoreConversations;
-window.loadMoreAndSearch = loadMoreAndSearch;
+window.updatePriority = updatePriority;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
@@ -1693,131 +1525,3 @@ async function markConversationAsRead(phoneNumber) {
         // Don't show toast error - this is a background operation
     }
 }
-
-// ========================================
-// MESSAGE REACTIONS
-// ========================================
-
-// Available reaction emojis
-const REACTION_EMOJIS = ['❤️', '😬', '😏', '🙏', '🙌', '💪', '👌', '😭', '🤷‍♂️', '🤦‍♂️', '😔', '😐', '🤔'];
-
-// Currently active reaction menu
-let activeReactionMenu = null;
-
-// Add click listeners for received messages (to show reaction menu)
-function attachReactionListeners() {
-    const messagesContainer = document.getElementById('messagesContainer');
-    if (!messagesContainer) return;
-    
-    // Use event delegation
-    messagesContainer.addEventListener('click', (e) => {
-        // Find if the click is on a received message
-        const messageWrapper = e.target.closest('.message-wrapper');
-        if (messageWrapper) {
-            const messageElement = messageWrapper.querySelector('.message.received');
-            if (messageElement) {
-                showReactionMenu(messageWrapper, messageElement);
-            }
-        }
-    });
-    
-    // Close menu when clicking outside
-    document.addEventListener('click', (e) => {
-        if (activeReactionMenu && !e.target.closest('.message-wrapper') && !e.target.closest('.reaction-menu')) {
-            closeReactionMenu();
-        }
-    });
-}
-
-// Show reaction menu for a message
-function showReactionMenu(wrapper, messageElement) {
-    // Close any existing menu
-    closeReactionMenu();
-    
-    // Get message ID
-    const messageId = wrapper.getAttribute('data-message-id');
-    if (!messageId) {
-        console.warn('Message ID not found');
-        return;
-    }
-    
-    // Create reaction menu
-    const menu = document.createElement('div');
-    menu.className = 'reaction-menu';
-    
-    // Add reaction emojis
-    REACTION_EMOJIS.forEach(emoji => {
-        const emojiSpan = document.createElement('span');
-        emojiSpan.className = 'reaction-emoji';
-        emojiSpan.textContent = emoji;
-        emojiSpan.onclick = (e) => {
-            e.stopPropagation();
-            sendReaction(messageId, emoji);
-            closeReactionMenu();
-        };
-        menu.appendChild(emojiSpan);
-    });
-    
-    // Add menu to wrapper
-    wrapper.style.position = 'relative';
-    wrapper.appendChild(menu);
-    activeReactionMenu = menu;
-    
-    console.log(`📌 Reaction menu shown for message ${messageId}`);
-}
-
-// Close reaction menu
-function closeReactionMenu() {
-    if (activeReactionMenu) {
-        activeReactionMenu.remove();
-        activeReactionMenu = null;
-    }
-}
-
-// Send reaction to backend
-async function sendReaction(messageId, emoji) {
-    if (!currentConversation) {
-        console.warn('No active conversation');
-        return;
-    }
-    
-    // Clean message ID - remove any suffixes like "_in" or "_out"
-    const cleanMessageId = String(messageId).replace(/_in$|_out$/, '');
-    
-    console.log(`➡️ Sending reaction ${emoji} to message ${cleanMessageId} (original: ${messageId})`);
-    
-    try {
-        const response = await fetch(`${API_BASE}/api/messages/${cleanMessageId}/react`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                emoji: emoji,
-                phone_number: currentConversation.phone_number
-            })
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const result = await response.json();
-        console.log('✅ Reaction sent:', result);
-        
-        showToast(`Reacción ${emoji} enviada`, 'success');
-        
-        // Optionally refresh the conversation to show the reaction
-        // setTimeout(() => selectConversation(currentConversation.phone_number), 500);
-        
-    } catch (error) {
-        console.error('❌ Error sending reaction:', error);
-        showToast('Error al enviar reacción', 'error');
-    }
-}
-
-// Initialize reactions when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    attachReactionListeners();
-    console.log('✅ Reaction listeners attached');
-});

@@ -15,7 +15,7 @@
     <meta property="og:image" content="https://hotboatchile.com/wp-content/uploads/cropped-Screenshot_3-192x192.jpg">
     <meta property="og:url" content="https://hotboat-whatsapp-production.up.railway.app">
     <meta property="og:type" content="website">
-    <link rel="stylesheet" href="/static/styles.css?v=20260126reactions1">
+    <link rel="stylesheet" href="/static/styles.css?v=20260308priority">
     <link rel="stylesheet" href="/static/mobile-fix.css?v=20260117g">
 </head>
 <body>
@@ -47,23 +47,11 @@
                 </div>
                 
                 <div class="search-box">
-                    <div class="search-tabs">
-                        <button class="search-tab active" data-tab="chats" onclick="switchSearchTab('chats')">
-                            Chats
-                        </button>
-                        <button class="search-tab" data-tab="messages" onclick="switchSearchTab('messages')">
-                            Mensajes
-                        </button>
-                    </div>
-                    <input type="text" id="searchInput" placeholder="Buscar..." onkeyup="handleSearch()">
+                    <input type="text" id="searchConversations" placeholder="Search conversations..." onkeyup="filterConversations()">
                 </div>
 
                 <div class="conversations-list" id="conversationsList">
                     <!-- Conversations will be loaded here -->
-                </div>
-                
-                <div class="search-results-list" id="searchResultsList" style="display: none;">
-                    <!-- Search results for messages will appear here -->
                 </div>
             </aside>
 
@@ -144,6 +132,23 @@
                         <div class="input-actions">
                             <div class="char-counter">
                                 <span id="charCount">0</span>/4096
+                            </div>
+                            <div class="priority-section">
+                                <label class="priority-label">Prioridad:</label>
+                                <div class="priority-buttons">
+                                    <button type="button" id="priorityBtn0" class="priority-btn priority-btn-0 active" onclick="updatePriority(0)" title="Sin prioridad">
+                                        ➖
+                                    </button>
+                                    <button type="button" id="priorityBtn1" class="priority-btn priority-btn-1" onclick="updatePriority(1)" title="Prioridad Alta">
+                                        1
+                                    </button>
+                                    <button type="button" id="priorityBtn2" class="priority-btn priority-btn-2" onclick="updatePriority(2)" title="Prioridad Media">
+                                        2
+                                    </button>
+                                    <button type="button" id="priorityBtn3" class="priority-btn priority-btn-3" onclick="updatePriority(3)" title="Prioridad Baja">
+                                        3
+                                    </button>
+                                </div>
                             </div>
                             <div class="bot-toggle-section">
                                 <label class="bot-toggle-label">
@@ -238,7 +243,7 @@
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="/static/app.js?v=20260126reactions2"></script>
+    <script src="/static/app.js?v=20260308priority"></script>
 </body>
 </html>
 

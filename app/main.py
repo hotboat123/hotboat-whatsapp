@@ -18,7 +18,8 @@ from app.db.leads import (
     get_leads_by_status,
     get_conversation_history,
     import_conversation_batch,
-    mark_conversation_as_read
+    mark_conversation_as_read,
+    update_lead_priority
 )
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -314,6 +315,33 @@ async def mark_conversation_read(phone_number: str):
             raise HTTPException(status_code=400, detail="Failed to mark conversation as read")
     except Exception as e:
         logger.error(f"Error marking conversation as read: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PriorityUpdate(BaseModel):
+    priority: int  # 0 = none, 1 = high, 2 = medium, 3 = low
+
+
+@app.put("/api/conversations/{phone_number}/priority")
+async def update_conversation_priority(phone_number: str, update: PriorityUpdate):
+    """Update conversation priority level"""
+    try:
+        success = await update_lead_priority(
+            phone_number=phone_number,
+            priority=update.priority
+        )
+        
+        if success:
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "priority": update.priority,
+                "message": f"Priority updated to {update.priority}"
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to update priority")
+    except Exception as e:
+        logger.error(f"Error updating priority: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

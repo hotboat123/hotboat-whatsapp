@@ -33,7 +33,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                     SELECT 
                         id, phone_number, customer_name, lead_status, 
                         notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
-                        unread_count, last_read_at
+                        unread_count, last_read_at, priority
                     FROM whatsapp_leads
                     WHERE phone_number = %s
                 """, (phone_number,))
@@ -71,7 +71,8 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "last_interaction_at": row[8].isoformat() if row[8] else None,
                         "bot_enabled": row[9] if len(row) > 9 else True,
                         "unread_count": row[10] if len(row) > 10 else 0,
-                        "last_read_at": row[11].isoformat() if len(row) > 11 and row[11] else None
+                        "last_read_at": row[11].isoformat() if len(row) > 11 and row[11] else None,
+                        "priority": row[12] if len(row) > 12 else 0
                     }
                 else:
                     # Create new lead
@@ -97,7 +98,8 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "last_interaction_at": datetime.now(CHILE_TZ).isoformat(),
                         "bot_enabled": True,
                         "unread_count": 0,
-                        "last_read_at": None
+                        "last_read_at": None,
+                        "priority": 0
                     }
     
     except Exception as e:
@@ -196,7 +198,7 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                         SELECT 
                             id, phone_number, customer_name, lead_status, 
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
-                            unread_count, last_read_at
+                            unread_count, last_read_at, priority
                         FROM whatsapp_leads
                         WHERE lead_status = %s
                         ORDER BY last_interaction_at DESC NULLS LAST
@@ -207,7 +209,7 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                         SELECT 
                             id, phone_number, customer_name, lead_status, 
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
-                            unread_count, last_read_at
+                            unread_count, last_read_at, priority
                         FROM whatsapp_leads
                         ORDER BY last_interaction_at DESC NULLS LAST
                         LIMIT %s
@@ -229,7 +231,8 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                         "last_interaction_at": row[8].isoformat() if row[8] else None,
                         "bot_enabled": row[9] if len(row) > 9 else True,
                         "unread_count": row[10] if len(row) > 10 else 0,
-                        "last_read_at": row[11].isoformat() if len(row) > 11 and row[11] else None
+                        "last_read_at": row[11].isoformat() if len(row) > 11 and row[11] else None,
+                        "priority": row[12] if len(row) > 12 else 0
                     })
                 
                 return leads
@@ -499,6 +502,41 @@ async def mark_conversation_as_read(phone_number: str) -> bool:
     
     except Exception as e:
         logger.error(f"Error marking conversation as read: {e}")
+        return False
+
+
+async def update_lead_priority(phone_number: str, priority: int) -> bool:
+    """
+    Update conversation priority level
+    
+    Args:
+        phone_number: Contact phone number
+        priority: Priority level (0 = none, 1 = high, 2 = medium, 3 = low)
+    
+    Returns:
+        True if successful
+    """
+    try:
+        # Validate priority value
+        if priority not in [0, 1, 2, 3]:
+            logger.error(f"Invalid priority value: {priority}")
+            return False
+        
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE whatsapp_leads
+                    SET priority = %s,
+                        updated_at = NOW()
+                    WHERE phone_number = %s
+                """, (priority, phone_number))
+                
+                conn.commit()
+                logger.info(f"Updated priority to {priority} for {phone_number}")
+                return True
+    
+    except Exception as e:
+        logger.error(f"Error updating priority: {e}")
         return False
 
 
