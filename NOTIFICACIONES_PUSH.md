@@ -64,7 +64,7 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 
 // CAMBIA ESTA URL POR LA DE TU SERVIDOR RAILWAY
-const API_URL = 'https://tu-app.up.railway.app';
+const API_URL = 'https://hotboat-whatsapp-production.up.railway.app';
 
 // Configurar cómo se muestran las notificaciones
 Notifications.setNotificationHandler({
