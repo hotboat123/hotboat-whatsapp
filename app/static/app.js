@@ -195,8 +195,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Event Listeners
 function setupEventListeners() {
-    console.log('🔧 setupEventListeners called');
-    
     const messageInput = document.getElementById('messageInput');
     const newMessageText = document.getElementById('newMessageText');
 
@@ -211,42 +209,23 @@ function setupEventListeners() {
             updateCharCount('newMessageText', 'newMsgCharCount');
         });
     }
-    
+
     // Event delegation for reaction buttons
     const messagesContainer = document.getElementById('chatMessages');
-    console.log('🔍 messagesContainer found:', !!messagesContainer, messagesContainer);
-    
     if (messagesContainer) {
-        console.log('✅ Adding click listener to messagesContainer');
-        
         messagesContainer.addEventListener('click', (e) => {
-            console.log('🖱️ Click detected on messagesContainer', e.target);
-            
             const reactionBtn = e.target.closest('.reaction-btn');
-            console.log('🔍 Searching for .reaction-btn, found:', !!reactionBtn, reactionBtn);
-            
             if (reactionBtn) {
-                e.preventDefault();
-                e.stopPropagation();
-                
                 const emoji = reactionBtn.dataset.emoji;
-                const messageId = parseInt(reactionBtn.dataset.msgId);
-                const phoneNumber = reactionBtn.dataset.phone;
-                
-                console.log('🎯 Reaction button clicked:', { emoji, messageId, phoneNumber });
-                console.log('🎯 All datasets:', reactionBtn.dataset);
+                const messageDiv = reactionBtn.closest('.message');
+                const messageId = messageDiv.dataset.messageId;
+                const phoneNumber = messageDiv.dataset.phone;
                 
                 if (messageId && phoneNumber && emoji) {
-                    sendReaction(messageId, phoneNumber, emoji);
-                } else {
-                    console.error('❌ Missing data:', { messageId, phoneNumber, emoji });
+                    sendReaction(parseInt(messageId), phoneNumber, emoji);
                 }
             }
         });
-        
-        console.log('✅ Click listener added successfully');
-    } else {
-        console.error('❌ messagesContainer not found!');
     }
 }
 
@@ -602,11 +581,11 @@ function renderCurrentChat(options = {}) {
                         </div>
                         ${direction === 'incoming' ? `
                             <div class="message-reactions">
-                                <button class="reaction-btn" data-emoji="👍" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👍</button>
-                                <button class="reaction-btn" data-emoji="❤️" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">❤️</button>
-                                <button class="reaction-btn" data-emoji="😂" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😂</button>
-                                <button class="reaction-btn" data-emoji="😮" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😮</button>
-                                <button class="reaction-btn" data-emoji="👏" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👏</button>
+                                <button class="reaction-btn" data-emoji="👍" title="Me gusta">👍</button>
+                                <button class="reaction-btn" data-emoji="❤️" title="Me encanta">❤️</button>
+                                <button class="reaction-btn" data-emoji="😂" title="Risa">😂</button>
+                                <button class="reaction-btn" data-emoji="😮" title="Sorpresa">😮</button>
+                                <button class="reaction-btn" data-emoji="👏" title="Aplauso">👏</button>
                             </div>
                         ` : ''}
                     </div>
@@ -615,7 +594,9 @@ function renderCurrentChat(options = {}) {
             
             if (isAudio && mediaUrl && !mediaUrl.startsWith('[')) {
                 const audioId = `audio_${msg.id}`;
+                // Add timestamp to force refresh
                 const audioSrc = `${mediaUrl}?t=${Date.now()}`;
+                // Use preload="auto" for mobile to ensure complete audio loading
                 const preloadMode = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'auto' : 'metadata';
                 return `
                     <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}" data-message-id="${msg.id}" data-phone="${currentConversation.phone_number}">
@@ -636,11 +617,11 @@ function renderCurrentChat(options = {}) {
                         </div>
                         ${direction === 'incoming' ? `
                             <div class="message-reactions">
-                                <button class="reaction-btn" data-emoji="👍" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👍</button>
-                                <button class="reaction-btn" data-emoji="❤️" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">❤️</button>
-                                <button class="reaction-btn" data-emoji="😂" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😂</button>
-                                <button class="reaction-btn" data-emoji="😮" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😮</button>
-                                <button class="reaction-btn" data-emoji="👏" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👏</button>
+                                <button class="reaction-btn" data-emoji="👍" title="Me gusta">👍</button>
+                                <button class="reaction-btn" data-emoji="❤️" title="Me encanta">❤️</button>
+                                <button class="reaction-btn" data-emoji="😂" title="Risa">😂</button>
+                                <button class="reaction-btn" data-emoji="😮" title="Sorpresa">😮</button>
+                                <button class="reaction-btn" data-emoji="👏" title="Aplauso">👏</button>
                             </div>
                         ` : ''}
                     </div>
@@ -655,11 +636,11 @@ function renderCurrentChat(options = {}) {
                     </div>
                     ${direction === 'incoming' ? `
                         <div class="message-reactions">
-                            <button class="reaction-btn" data-emoji="👍" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👍</button>
-                            <button class="reaction-btn" data-emoji="❤️" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">❤️</button>
-                            <button class="reaction-btn" data-emoji="😂" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😂</button>
-                            <button class="reaction-btn" data-emoji="😮" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😮</button>
-                            <button class="reaction-btn" data-emoji="👏" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👏</button>
+                            <button class="reaction-btn" data-emoji="👍" title="Me gusta">👍</button>
+                            <button class="reaction-btn" data-emoji="❤️" title="Me encanta">❤️</button>
+                            <button class="reaction-btn" data-emoji="😂" title="Risa">😂</button>
+                            <button class="reaction-btn" data-emoji="😮" title="Sorpresa">😮</button>
+                            <button class="reaction-btn" data-emoji="👏" title="Aplauso">👏</button>
                         </div>
                     ` : ''}
                 </div>
@@ -964,13 +945,7 @@ async function sendQuickReply(menuOption) {
 // Send reaction to message
 async function sendReaction(messageId, phoneNumber, emoji) {
     try {
-        console.log('📤 sendReaction called with:', { messageId, phoneNumber, emoji });
-        console.log('📤 API_BASE:', API_BASE);
-        
-        const url = `${API_BASE}/api/messages/${messageId}/react`;
-        console.log('📤 Sending to URL:', url);
-        
-        const response = await fetch(url, {
+        const response = await fetch(`${API_BASE}/api/messages/${messageId}/react`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -982,18 +957,13 @@ async function sendReaction(messageId, phoneNumber, emoji) {
         });
         
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ Server response:', response.status, errorText);
             throw new Error('Failed to send reaction');
         }
         
-        const result = await response.json();
-        console.log('✅ Reaction sent successfully:', result);
         showToast(`${emoji} Reacción enviada`, 'success');
         
     } catch (error) {
-        console.error('❌ Error sending reaction:', error);
-        console.error('❌ Error stack:', error.stack);
+        console.error('Error sending reaction:', error);
         showToast('Error al enviar reacción', 'error');
     }
 }
@@ -1649,6 +1619,7 @@ window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
 window.updatePriority = updatePriority;
 window.sendQuickReply = sendQuickReply;
+window.sendReaction = sendReaction;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
