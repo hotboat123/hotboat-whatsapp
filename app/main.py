@@ -1,5 +1,5 @@
 """
-FastAPI main application
+FastAPI main application - Updated 2026-03-08
 """
 from fastapi import FastAPI, Request, Response, HTTPException, Query, UploadFile, Form
 from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
@@ -44,6 +44,16 @@ app = FastAPI(
     description="Bot de WhatsApp para Hot Boat Chile",
     version="1.0.0"
 )
+
+# Add middleware to prevent caching of static files
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # Mount static files for Kia-Ai interface
 static_dir = os.path.join(os.path.dirname(__file__), "static")
