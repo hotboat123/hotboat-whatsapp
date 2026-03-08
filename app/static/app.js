@@ -216,13 +216,17 @@ function setupEventListeners() {
         messagesContainer.addEventListener('click', (e) => {
             const reactionBtn = e.target.closest('.reaction-btn');
             if (reactionBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                
                 const emoji = reactionBtn.dataset.emoji;
-                const messageDiv = reactionBtn.closest('.message');
-                const messageId = messageDiv.dataset.messageId;
-                const phoneNumber = messageDiv.dataset.phone;
+                const messageId = parseInt(reactionBtn.dataset.msgId);
+                const phoneNumber = reactionBtn.dataset.phone;
+                
+                console.log('🎯 Reaction button clicked:', { emoji, messageId, phoneNumber });
                 
                 if (messageId && phoneNumber && emoji) {
-                    sendReaction(parseInt(messageId), phoneNumber, emoji);
+                    sendReaction(messageId, phoneNumber, emoji);
                 }
             }
         });
@@ -581,11 +585,11 @@ function renderCurrentChat(options = {}) {
                         </div>
                         ${direction === 'incoming' ? `
                             <div class="message-reactions">
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👍')">👍</button>
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '❤️')">❤️</button>
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😂')">😂</button>
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😮')">😮</button>
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👏')">👏</button>
+                                <button class="reaction-btn" data-emoji="👍" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👍</button>
+                                <button class="reaction-btn" data-emoji="❤️" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">❤️</button>
+                                <button class="reaction-btn" data-emoji="😂" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😂</button>
+                                <button class="reaction-btn" data-emoji="😮" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😮</button>
+                                <button class="reaction-btn" data-emoji="👏" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👏</button>
                             </div>
                         ` : ''}
                     </div>
@@ -615,11 +619,11 @@ function renderCurrentChat(options = {}) {
                         </div>
                         ${direction === 'incoming' ? `
                             <div class="message-reactions">
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👍')">👍</button>
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '❤️')">❤️</button>
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😂')">😂</button>
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😮')">😮</button>
-                                <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👏')">👏</button>
+                                <button class="reaction-btn" data-emoji="👍" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👍</button>
+                                <button class="reaction-btn" data-emoji="❤️" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">❤️</button>
+                                <button class="reaction-btn" data-emoji="😂" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😂</button>
+                                <button class="reaction-btn" data-emoji="😮" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😮</button>
+                                <button class="reaction-btn" data-emoji="👏" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👏</button>
                             </div>
                         ` : ''}
                     </div>
@@ -634,11 +638,11 @@ function renderCurrentChat(options = {}) {
                     </div>
                     ${direction === 'incoming' ? `
                         <div class="message-reactions">
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👍')">👍</button>
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '❤️')">❤️</button>
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😂')">😂</button>
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😮')">😮</button>
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👏')">👏</button>
+                            <button class="reaction-btn" data-emoji="👍" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👍</button>
+                            <button class="reaction-btn" data-emoji="❤️" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">❤️</button>
+                            <button class="reaction-btn" data-emoji="😂" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😂</button>
+                            <button class="reaction-btn" data-emoji="😮" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">😮</button>
+                            <button class="reaction-btn" data-emoji="👏" data-msg-id="${msg.id}" data-phone="${currentConversation.phone_number}">👏</button>
                         </div>
                     ` : ''}
                 </div>
@@ -1628,7 +1632,6 @@ window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
 window.updatePriority = updatePriority;
 window.sendQuickReply = sendQuickReply;
-window.sendReaction = sendReaction;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
