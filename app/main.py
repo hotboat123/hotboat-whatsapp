@@ -362,9 +362,13 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         conv_manager = ConversationManager()
         faq_handler = FAQHandler()
         
-        # Get or create conversation
+        # Get or create conversation and lead
         conversation = await conv_manager.get_conversation(phone_number, "Manual")
         language = conversation.get("metadata", {}).get("language", "es")
+        
+        # Get lead info for customer name
+        lead = await get_or_create_lead(phone_number, "Manual")
+        customer_name = lead.get('customer_name', phone_number)
         
         # Determine response based on menu option
         response_text = ""
@@ -395,7 +399,17 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             message=response_text
         )
         
-        # Add to conversation history
+        # Save to database
+        await save_conversation(
+            phone_number=phone_number,
+            customer_name=customer_name,
+            message_text="",  # No incoming message, this is an outgoing response
+            response_text=response_text,
+            message_type="text",
+            direction="outgoing"
+        )
+        
+        # Add to conversation history (in-memory)
         conversation["messages"].append({
             "role": "assistant",
             "content": response_text,
