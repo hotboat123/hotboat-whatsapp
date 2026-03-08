@@ -4,6 +4,7 @@ Alternative to email notifications
 """
 import logging
 import httpx
+import json
 from typing import List, Optional, Dict
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -168,6 +169,9 @@ class PushNotifier:
         try:
             from app.db.connection import get_connection
             
+            # Convert device_info dict to JSON string for PostgreSQL JSONB
+            device_info_json = json.dumps(device_info) if device_info else None
+            
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     # Check if token already exists
@@ -183,16 +187,16 @@ class PushNotifier:
                         cur.execute("""
                             UPDATE push_tokens 
                             SET last_used_at = NOW(),
-                                device_info = %s
+                                device_info = %s::jsonb
                             WHERE token = %s
-                        """, (device_info, token))
+                        """, (device_info_json, token))
                         logger.info(f"Updated existing push token")
                     else:
                         # Insert new token
                         cur.execute("""
                             INSERT INTO push_tokens (token, device_info, created_at, last_used_at)
-                            VALUES (%s, %s, NOW(), NOW())
-                        """, (token, device_info))
+                            VALUES (%s, %s::jsonb, NOW(), NOW())
+                        """, (token, device_info_json))
                         logger.info(f"✅ Registered new push token")
                     
                     conn.commit()
