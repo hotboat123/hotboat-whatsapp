@@ -315,6 +315,17 @@ function renderConversations() {
         const unreadCount = conv.unread_count || 0;
         const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
         
+        // Priority badge
+        const priority = conv.priority || 0;
+        let priorityBadge = '';
+        if (priority === 1) {
+            priorityBadge = '<span class="priority-badge priority-1">1</span>';
+        } else if (priority === 2) {
+            priorityBadge = '<span class="priority-badge priority-2">2</span>';
+        } else if (priority === 3) {
+            priorityBadge = '<span class="priority-badge priority-3">3</span>';
+        }
+        
         // Debug: log conversations with unread
         if (unreadCount > 0) {
             console.log(`📬 Unread: ${conv.customer_name || conv.phone_number} has ${unreadCount} unread messages`);
@@ -326,6 +337,7 @@ function renderConversations() {
             <div class="conversation-header">
                 <div class="conversation-name">
                     ${conv.customer_name || conv.phone_number}
+                    ${priorityBadge}
                     ${unreadBadge}
                 </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
@@ -347,12 +359,16 @@ async function selectConversation(phoneNumber) {
             customer_name: data.lead?.customer_name || phoneNumber,
             messages: normalizeMessages(data.messages),
             hasMore: Boolean(data.has_more),
-            nextCursor: data.next_cursor || null
+            nextCursor: data.next_cursor || null,
+            priority: data.lead?.priority || 0
         };
         
         // Update bot toggle state from lead info
         const botEnabled = data.lead?.bot_enabled !== false;
         updateBotToggleUI(botEnabled);
+        
+        // Update priority UI
+        updatePriorityUI(currentConversation.priority);
         
         loadLeadInfo(phoneNumber);
         
@@ -772,6 +788,63 @@ function updateBotToggleUI(enabled) {
         text.textContent = enabled ? '🤖 Bot Activo' : '🤐 Bot Inactivo';
     }
 }
+
+// Update priority for conversation
+async function updatePriority(priority) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/priority`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ priority: priority })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to update priority');
+        }
+        
+        const result = await response.json();
+        
+        // Update UI
+        updatePriorityUI(priority);
+        
+        // Update in conversations list
+        const conv = conversations.find(c => c.phone_number === currentConversation.phone_number);
+        if (conv) {
+            conv.priority = priority;
+            renderConversations();
+        }
+        
+        const priorityText = priority === 0 ? 'Sin prioridad' : `Prioridad ${priority}`;
+        showToast(`✅ ${priorityText}`, 'success');
+        
+    } catch (error) {
+        console.error('Error updating priority:', error);
+        showToast('Error al cambiar prioridad', 'error');
+    }
+}
+
+// Update priority UI buttons
+function updatePriorityUI(priority) {
+    // Update button states
+    for (let i = 0; i <= 3; i++) {
+        const btn = document.getElementById(`priorityBtn${i}`);
+        if (btn) {
+            if (i === priority) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    }
+}
+
 
 // Send Message (Reply in Conversation)
 async function sendMessage(event) {
@@ -1421,6 +1494,7 @@ window.toggleAudioRecording = toggleAudioRecording;
 window.stopAudioRecording = stopAudioRecording;
 window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
+window.updatePriority = updatePriority;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
