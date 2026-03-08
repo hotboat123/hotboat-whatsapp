@@ -195,6 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Event Listeners
 function setupEventListeners() {
+    console.log('🔧 setupEventListeners called');
+    
     const messageInput = document.getElementById('messageInput');
     const newMessageText = document.getElementById('newMessageText');
 
@@ -209,12 +211,20 @@ function setupEventListeners() {
             updateCharCount('newMessageText', 'newMsgCharCount');
         });
     }
-
+    
     // Event delegation for reaction buttons
     const messagesContainer = document.getElementById('chatMessages');
+    console.log('🔍 messagesContainer found:', !!messagesContainer, messagesContainer);
+    
     if (messagesContainer) {
+        console.log('✅ Adding click listener to messagesContainer');
+        
         messagesContainer.addEventListener('click', (e) => {
+            console.log('🖱️ Click detected on messagesContainer', e.target);
+            
             const reactionBtn = e.target.closest('.reaction-btn');
+            console.log('🔍 Searching for .reaction-btn, found:', !!reactionBtn, reactionBtn);
+            
             if (reactionBtn) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -224,12 +234,19 @@ function setupEventListeners() {
                 const phoneNumber = reactionBtn.dataset.phone;
                 
                 console.log('🎯 Reaction button clicked:', { emoji, messageId, phoneNumber });
+                console.log('🎯 All datasets:', reactionBtn.dataset);
                 
                 if (messageId && phoneNumber && emoji) {
                     sendReaction(messageId, phoneNumber, emoji);
+                } else {
+                    console.error('❌ Missing data:', { messageId, phoneNumber, emoji });
                 }
             }
         });
+        
+        console.log('✅ Click listener added successfully');
+    } else {
+        console.error('❌ messagesContainer not found!');
     }
 }
 
