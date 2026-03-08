@@ -844,6 +844,49 @@ body {
     border-color: #ffd700;
 }
 
+/* Quick Reply Section */
+.quick-reply-section {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.quick-reply-label {
+    font-size: 0.5rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.quick-reply-buttons {
+    display: flex;
+    gap: 0.2rem;
+}
+
+.quick-reply-btn {
+    padding: 0.25rem 0.4rem;
+    border: 1px solid #2196F3;
+    border-radius: 4px;
+    background-color: var(--bg-light);
+    color: #2196F3;
+    cursor: pointer;
+    font-size: 0.6rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    min-width: 28px;
+}
+
+.quick-reply-btn:hover {
+    background-color: #2196F3;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3);
+}
+
+.quick-reply-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(33, 150, 243, 0.3);
+}
+
 .bot-toggle-section {
     display: flex;
     align-items: center;
@@ -991,11 +1034,31 @@ body {
         min-width: 36px;
     }
     
+    /* Quick Reply section on mobile - full width row */
+    .quick-reply-section {
+        width: 100%;
+        justify-content: center;
+        order: 1;
+        padding: 0.5rem;
+        background: var(--bg-light);
+        border-radius: 6px;
+    }
+    
+    .quick-reply-label {
+        font-size: 14px;
+    }
+    
+    .quick-reply-btn {
+        font-size: 16px;
+        padding: 8px 10px;
+        min-width: 36px;
+    }
+    
     /* Bot toggle on mobile */
     .bot-toggle-section {
         width: 100%;
         justify-content: center;
-        order: 1;
+        order: 2;
         padding: 0.5rem;
         background: var(--bg-light);
         border-radius: 6px;
@@ -1006,14 +1069,14 @@ body {
     }
     
     .char-counter {
-        order: 3;
+        order: 4;
         text-align: center;
         font-size: 12px;
     }
     
     /* Make send button full width and below message input on mobile */
     .btn-primary {
-        order: 2;
+        order: 3;
         width: 100%;
         padding: 12px 16px;
         font-size: 16px;
