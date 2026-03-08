@@ -197,16 +197,34 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupEventListeners() {
     const messageInput = document.getElementById('messageInput');
     const newMessageText = document.getElementById('newMessageText');
-    
+
     if (messageInput) {
         messageInput.addEventListener('input', () => {
             updateCharCount('messageInput', 'charCount');
         });
     }
-    
+
     if (newMessageText) {
         newMessageText.addEventListener('input', () => {
             updateCharCount('newMessageText', 'newMsgCharCount');
+        });
+    }
+
+    // Event delegation for reaction buttons
+    const messagesContainer = document.getElementById('chatMessages');
+    if (messagesContainer) {
+        messagesContainer.addEventListener('click', (e) => {
+            const reactionBtn = e.target.closest('.reaction-btn');
+            if (reactionBtn) {
+                const emoji = reactionBtn.dataset.emoji;
+                const messageDiv = reactionBtn.closest('.message');
+                const messageId = messageDiv.dataset.messageId;
+                const phoneNumber = messageDiv.dataset.phone;
+                
+                if (messageId && phoneNumber && emoji) {
+                    sendReaction(parseInt(messageId), phoneNumber, emoji);
+                }
+            }
         });
     }
 }
@@ -551,14 +569,25 @@ function renderCurrentChat(options = {}) {
             
             if (isImage && mediaUrl && !mediaUrl.startsWith('[')) {
                 return `
-                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
-                        <div class="message-text">
-                            <div style="margin-bottom: 0.35rem;">${sanitized || '[Imagen]'}</div>
-                            <a href="${mediaUrl}" target="_blank" rel="noopener">
-                                <img src="${mediaUrl}" alt="Imagen" style="max-width: 220px; border-radius: 6px;" />
-                            </a>
+                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}" data-message-id="${msg.id}" data-phone="${currentConversation.phone_number}">
+                        <div class="message-content">
+                            <div class="message-text">
+                                <div style="margin-bottom: 0.35rem;">${sanitized || '[Imagen]'}</div>
+                                <a href="${mediaUrl}" target="_blank" rel="noopener">
+                                    <img src="${mediaUrl}" alt="Imagen" style="max-width: 220px; border-radius: 6px;" />
+                                </a>
+                            </div>
+                            <div class="message-time">${formatTime(msg.timestamp)}</div>
                         </div>
-                        <div class="message-time">${formatTime(msg.timestamp)}</div>
+                        ${direction === 'incoming' ? `
+                            <div class="message-reactions">
+                                <button class="reaction-btn" data-emoji="👍" title="Me gusta">👍</button>
+                                <button class="reaction-btn" data-emoji="❤️" title="Me encanta">❤️</button>
+                                <button class="reaction-btn" data-emoji="😂" title="Risa">😂</button>
+                                <button class="reaction-btn" data-emoji="😮" title="Sorpresa">😮</button>
+                                <button class="reaction-btn" data-emoji="👏" title="Aplauso">👏</button>
+                            </div>
+                        ` : ''}
                     </div>
                 `;
             }
@@ -570,35 +599,48 @@ function renderCurrentChat(options = {}) {
                 // Use preload="auto" for mobile to ensure complete audio loading
                 const preloadMode = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'auto' : 'metadata';
                 return `
-                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
-                        <div class="message-text">
-                            <div class="audio-message">
-                                <div class="audio-icon">🎤</div>
-                                <audio id="${audioId}" controls preload="${preloadMode}" style="width: 100%; max-width: 250px;">
-                                    <source src="${audioSrc}" type="audio/ogg; codecs=opus">
-                                    <source src="${audioSrc}" type="audio/mpeg">
-                                    <source src="${audioSrc}" type="audio/mp4">
-                                    <source src="${audioSrc}" type="audio/webm">
-                                    Tu navegador no soporta audio
-                                </audio>
+                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}" data-message-id="${msg.id}" data-phone="${currentConversation.phone_number}">
+                        <div class="message-content">
+                            <div class="message-text">
+                                <div class="audio-message">
+                                    <div class="audio-icon">🎤</div>
+                                    <audio id="${audioId}" controls preload="${preloadMode}" style="width: 100%; max-width: 250px;">
+                                        <source src="${audioSrc}" type="audio/ogg; codecs=opus">
+                                        <source src="${audioSrc}" type="audio/mpeg">
+                                        <source src="${audioSrc}" type="audio/mp4">
+                                        <source src="${audioSrc}" type="audio/webm">
+                                        Tu navegador no soporta audio
+                                    </audio>
+                                </div>
                             </div>
+                            <div class="message-time">${formatTime(msg.timestamp)}</div>
                         </div>
-                        <div class="message-time">${formatTime(msg.timestamp)}</div>
+                        ${direction === 'incoming' ? `
+                            <div class="message-reactions">
+                                <button class="reaction-btn" data-emoji="👍" title="Me gusta">👍</button>
+                                <button class="reaction-btn" data-emoji="❤️" title="Me encanta">❤️</button>
+                                <button class="reaction-btn" data-emoji="😂" title="Risa">😂</button>
+                                <button class="reaction-btn" data-emoji="😮" title="Sorpresa">😮</button>
+                                <button class="reaction-btn" data-emoji="👏" title="Aplauso">👏</button>
+                            </div>
+                        ` : ''}
                     </div>
                 `;
             }
 
             return `
-                <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}" data-message-id="${msg.id}">
-                    <div class="message-text">${sanitized || '&nbsp;'}</div>
-                    <div class="message-time">${formatTime(msg.timestamp)}</div>
+                <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}" data-message-id="${msg.id}" data-phone="${currentConversation.phone_number}">
+                    <div class="message-content">
+                        <div class="message-text">${sanitized || '&nbsp;'}</div>
+                        <div class="message-time">${formatTime(msg.timestamp)}</div>
+                    </div>
                     ${direction === 'incoming' ? `
                         <div class="message-reactions">
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👍')" title="Me gusta">👍</button>
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '❤️')" title="Me encanta">❤️</button>
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😂')" title="Risa">😂</button>
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😮')" title="Sorpresa">😮</button>
-                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👏')" title="Aplauso">👏</button>
+                            <button class="reaction-btn" data-emoji="👍" title="Me gusta">👍</button>
+                            <button class="reaction-btn" data-emoji="❤️" title="Me encanta">❤️</button>
+                            <button class="reaction-btn" data-emoji="😂" title="Risa">😂</button>
+                            <button class="reaction-btn" data-emoji="😮" title="Sorpresa">😮</button>
+                            <button class="reaction-btn" data-emoji="👏" title="Aplauso">👏</button>
                         </div>
                     ` : ''}
                 </div>
