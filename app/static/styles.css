@@ -414,79 +414,42 @@ body {
     color: rgba(255, 255, 255, 0.7);
 }
 
-/* Message Reactions - WhatsApp Style */
-.message-reactions-trigger {
-    position: relative;
+/* Message reactions - simple direct buttons */
+.message-reactions {
     display: flex;
-    align-items: center;
-    margin-left: 0.3rem;
+    gap: 0.2rem;
+    margin-left: 0.5rem;
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.2s;
 }
 
-.message:hover .message-reactions-trigger {
+.message:hover .message-reactions {
     opacity: 1;
 }
 
-.reaction-trigger-btn {
-    background: white;
-    border: 1px solid rgba(0, 0, 0, 0.2);
-    border-radius: 50%;
-    width: 1.5rem;
-    height: 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    color: #666;
-    font-weight: bold;
-}
-
-.reaction-trigger-btn:hover {
-    background-color: #f0f0f0;
-    transform: scale(1.1);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
-}
-
-.reaction-menu {
-    position: absolute;
-    right: 100%;
-    top: 50%;
-    transform: translateY(-50%);
-    background: white;
-    border-radius: 20px;
-    padding: 0.3rem;
-    display: none;
-    gap: 0.2rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    z-index: 1000;
-    margin-right: 0.3rem;
-}
-
-.reaction-menu .reaction-btn {
+.reaction-btn {
     background: none;
     border: none;
     border-radius: 50%;
-    width: 2rem;
-    height: 2rem;
+    width: 1.8rem;
+    height: 1.8rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.2rem;
+    font-size: 1rem;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
-.reaction-menu .reaction-btn:hover {
+.reaction-btn:hover {
     background-color: #f0f0f0;
-    transform: scale(1.3);
+    transform: scale(1.2);
 }
 
-.reaction-menu .reaction-btn:active {
+.reaction-btn:active {
     transform: scale(1);
 }
+
 
 .message-input-area {
     padding: 0.4rem 0.9rem;
