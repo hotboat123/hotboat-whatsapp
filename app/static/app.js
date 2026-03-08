@@ -846,6 +846,51 @@ function updatePriorityUI(priority) {
     }
 }
 
+// Send quick reply menu option
+async function sendQuickReply(menuOption) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'warning');
+        return;
+    }
+    
+    const menuNames = {
+        1: 'Disponibilidad',
+        2: 'Precios',
+        3: 'Características',
+        4: 'Extras',
+        5: 'Ubicación'
+    };
+    
+    try {
+        showToast(`Enviando respuesta: ${menuNames[menuOption]}...`, 'info');
+        
+        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/quick-reply`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ menu_option: menuOption })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to send quick reply');
+        }
+        
+        const result = await response.json();
+        
+        showToast(`✅ Enviado: ${menuNames[menuOption]}`, 'success');
+        
+        // Reload conversation to show new message
+        setTimeout(() => {
+            selectConversation(currentConversation.phone_number);
+        }, 500);
+        
+    } catch (error) {
+        console.error('Error sending quick reply:', error);
+        showToast('Error al enviar respuesta rápida', 'error');
+    }
+}
+
 
 // Send Message (Reply in Conversation)
 async function sendMessage(event) {
@@ -1496,6 +1541,7 @@ window.stopAudioRecording = stopAudioRecording;
 window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
 window.updatePriority = updatePriority;
+window.sendQuickReply = sendQuickReply;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {

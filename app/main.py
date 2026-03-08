@@ -345,6 +345,83 @@ async def update_conversation_priority(phone_number: str, update: PriorityUpdate
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class QuickReplyRequest(BaseModel):
+    menu_option: int  # 1-5 for menu options
+
+
+@app.post("/api/conversations/{phone_number}/quick-reply")
+async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
+    """Send automatic menu response to conversation"""
+    try:
+        # Import here to avoid circular imports
+        from app.bot.conversation import ConversationManager
+        from app.bot.faq import FAQHandler
+        from app.bot.translations import get_text
+        
+        # Initialize managers
+        conv_manager = ConversationManager()
+        faq_handler = FAQHandler()
+        
+        # Get or create conversation
+        conversation = await conv_manager.get_conversation(phone_number, "Manual")
+        language = conversation.get("metadata", {}).get("language", "es")
+        
+        # Determine response based on menu option
+        response_text = ""
+        menu_option = request.menu_option
+        
+        if menu_option == 1:
+            # Disponibilidad y horarios
+            response_text = conv_manager._ask_for_reservation_date(conversation, language)
+        elif menu_option == 2:
+            # Precios por persona
+            response_text = faq_handler.get_response("precio", language)
+        elif menu_option == 3:
+            # Características del HotBoat
+            response_text = faq_handler.get_response("caracteristicas", language)
+        elif menu_option == 4:
+            # Extras y promociones
+            conversation["metadata"]["awaiting_extra_selection"] = True
+            response_text = faq_handler.get_response("extras", language)
+        elif menu_option == 5:
+            # Ubicación y reseñas
+            response_text = faq_handler.get_response("ubicación", language)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid menu option (must be 1-5)")
+        
+        # Send message via WhatsApp
+        result = await whatsapp_client.send_text_message(
+            to=phone_number,
+            message=response_text
+        )
+        
+        # Add to conversation history
+        conversation["messages"].append({
+            "role": "assistant",
+            "content": response_text,
+            "timestamp": datetime.now(CHILE_TZ).isoformat()
+        })
+        
+        # Update last interaction
+        conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+        
+        return {
+            "status": "success",
+            "phone_number": phone_number,
+            "menu_option": menu_option,
+            "message_sent": response_text[:100] + "..." if len(response_text) > 100 else response_text,
+            "whatsapp_response": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending quick reply: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class MessageReaction(BaseModel):
     emoji: str
     phone_number: str
