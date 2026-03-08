@@ -212,14 +212,20 @@ function setupEventListeners() {
 
     // Event delegation for reaction trigger buttons
     const messagesContainer = document.getElementById('chatMessages');
+    console.log('🔍 Setting up reaction listeners, container found:', !!messagesContainer);
     if (messagesContainer) {
         messagesContainer.addEventListener('click', (e) => {
+            console.log('🖱️ Click detected in messages container', e.target);
+            
             // Check if clicked on trigger button
             const triggerBtn = e.target.closest('.reaction-trigger-btn');
             if (triggerBtn) {
                 e.stopPropagation();
+                console.log('✅ Trigger button clicked!', triggerBtn);
                 const messageId = triggerBtn.dataset.messageId;
+                console.log('📝 Message ID:', messageId);
                 const menu = messagesContainer.querySelector(`.reaction-menu[data-menu-id="${messageId}"]`);
+                console.log('📋 Menu found:', !!menu, menu);
                 
                 // Close all other menus
                 messagesContainer.querySelectorAll('.reaction-menu').forEach(m => {
