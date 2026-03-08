@@ -353,13 +353,13 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         conv_manager = ConversationManager()
         faq_handler = FAQHandler()
         
-        # Get or create conversation and lead
-        conversation = await conv_manager.get_conversation(phone_number, "Manual")
-        language = conversation.get("metadata", {}).get("language", "es")
-        
-        # Get lead info for customer name
-        lead = await get_or_create_lead(phone_number, "Manual")
+        # Get lead info first (without updating name)
+        lead = await get_or_create_lead(phone_number)
         customer_name = lead.get('customer_name', phone_number)
+        
+        # Get or create conversation with the correct customer name
+        conversation = await conv_manager.get_conversation(phone_number, customer_name)
+        language = conversation.get("metadata", {}).get("language", "es")
         
         # Determine response based on menu option
         response_text = ""
