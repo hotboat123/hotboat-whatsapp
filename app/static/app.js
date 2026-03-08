@@ -210,68 +210,23 @@ function setupEventListeners() {
         });
     }
 
-    // Event delegation for reaction trigger buttons
+    // Event delegation for reaction buttons
     const messagesContainer = document.getElementById('chatMessages');
-    console.log('🔍 Setting up reaction listeners, container found:', !!messagesContainer);
     if (messagesContainer) {
         messagesContainer.addEventListener('click', (e) => {
-            console.log('🖱️ Click detected in messages container', e.target);
-            
-            // Check if clicked on trigger button
-            const triggerBtn = e.target.closest('.reaction-trigger-btn');
-            if (triggerBtn) {
-                e.stopPropagation();
-                console.log('✅ Trigger button clicked!', triggerBtn);
-                const messageId = triggerBtn.dataset.messageId;
-                console.log('📝 Message ID:', messageId);
-                const menu = messagesContainer.querySelector(`.reaction-menu[data-menu-id="${messageId}"]`);
-                console.log('📋 Menu found:', !!menu, menu);
-                
-                // Close all other menus
-                messagesContainer.querySelectorAll('.reaction-menu').forEach(m => {
-                    if (m.dataset.menuId !== messageId) {
-                        m.classList.remove('show');
-                    }
-                });
-                
-                // Toggle current menu
-                if (menu) {
-                    menu.classList.toggle('show');
-                    console.log('Menu toggled for message:', messageId, 'Show:', menu.classList.contains('show'));
-                }
-                return;
-            }
-            
-            // Check if clicked on emoji button
-            const emojiBtn = e.target.closest('.reaction-emoji-btn');
-            if (emojiBtn) {
-                e.stopPropagation();
-                const emoji = emojiBtn.dataset.emoji;
-                const menu = emojiBtn.closest('.reaction-menu');
-                const messageId = menu.dataset.menuId;
-                const messageDiv = menu.closest('.message');
+            const reactionBtn = e.target.closest('.reaction-btn');
+            if (reactionBtn) {
+                const emoji = reactionBtn.dataset.emoji;
+                const messageDiv = reactionBtn.closest('.message');
+                const messageId = messageDiv.dataset.messageId;
                 const phoneNumber = messageDiv.dataset.phone;
                 
-                console.log('Emoji clicked:', { messageId, phoneNumber, emoji });
-                
-                // Close menu
-                menu.classList.remove('show');
-                
-                // Send reaction
                 if (messageId && phoneNumber && emoji) {
                     sendReaction(parseInt(messageId), phoneNumber, emoji);
                 }
-                return;
             }
         });
     }
-    
-    // Close menus when clicking outside
-    document.addEventListener('click', () => {
-        document.querySelectorAll('.reaction-menu').forEach(menu => {
-            menu.classList.remove('show');
-        });
-    });
 }
 
 // Character Counter
@@ -626,13 +581,15 @@ function renderCurrentChat(options = {}) {
                         </div>
                         ${direction === 'incoming' ? `
                             <div class="message-reactions-trigger">
-                                <button class="reaction-trigger-btn" data-message-id="${msg.id}">⊕</button>
-                                <div class="reaction-menu" data-menu-id="${msg.id}">
-                                    <button class="reaction-emoji-btn" data-emoji="👍">👍</button>
-                                    <button class="reaction-emoji-btn" data-emoji="❤️">❤️</button>
-                                    <button class="reaction-emoji-btn" data-emoji="😂">😂</button>
-                                    <button class="reaction-emoji-btn" data-emoji="😮">😮</button>
-                                    <button class="reaction-emoji-btn" data-emoji="👏">👏</button>
+                                <button class="reaction-trigger-btn" onclick="toggleReactionMenu(event, ${msg.id})">
+                                    <span style="font-size: 0.8rem;">⊕</span>
+                                </button>
+                                <div class="reaction-menu" id="reaction-menu-${msg.id}" style="display: none;">
+                                    <button class="reaction-btn" data-emoji="👍" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👍')">👍</button>
+                                    <button class="reaction-btn" data-emoji="❤️" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '❤️')">❤️</button>
+                                    <button class="reaction-btn" data-emoji="😂" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😂')">😂</button>
+                                    <button class="reaction-btn" data-emoji="😮" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😮')">😮</button>
+                                    <button class="reaction-btn" data-emoji="👏" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👏')">👏</button>
                                 </div>
                             </div>
                         ` : ''}
@@ -663,13 +620,15 @@ function renderCurrentChat(options = {}) {
                         </div>
                         ${direction === 'incoming' ? `
                             <div class="message-reactions-trigger">
-                                <button class="reaction-trigger-btn" data-message-id="${msg.id}">⊕</button>
-                                <div class="reaction-menu" data-menu-id="${msg.id}">
-                                    <button class="reaction-emoji-btn" data-emoji="👍">👍</button>
-                                    <button class="reaction-emoji-btn" data-emoji="❤️">❤️</button>
-                                    <button class="reaction-emoji-btn" data-emoji="😂">😂</button>
-                                    <button class="reaction-emoji-btn" data-emoji="😮">😮</button>
-                                    <button class="reaction-emoji-btn" data-emoji="👏">👏</button>
+                                <button class="reaction-trigger-btn" onclick="toggleReactionMenu(event, ${msg.id})">
+                                    <span style="font-size: 0.8rem;">⊕</span>
+                                </button>
+                                <div class="reaction-menu" id="reaction-menu-${msg.id}" style="display: none;">
+                                    <button class="reaction-btn" data-emoji="👍" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👍')">👍</button>
+                                    <button class="reaction-btn" data-emoji="❤️" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '❤️')">❤️</button>
+                                    <button class="reaction-btn" data-emoji="😂" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😂')">😂</button>
+                                    <button class="reaction-btn" data-emoji="😮" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😮')">😮</button>
+                                    <button class="reaction-btn" data-emoji="👏" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👏')">👏</button>
                                 </div>
                             </div>
                         ` : ''}
@@ -685,13 +644,15 @@ function renderCurrentChat(options = {}) {
                     </div>
                     ${direction === 'incoming' ? `
                         <div class="message-reactions-trigger">
-                            <button class="reaction-trigger-btn" data-message-id="${msg.id}">⊕</button>
-                            <div class="reaction-menu" data-menu-id="${msg.id}">
-                                <button class="reaction-emoji-btn" data-emoji="👍">👍</button>
-                                <button class="reaction-emoji-btn" data-emoji="❤️">❤️</button>
-                                <button class="reaction-emoji-btn" data-emoji="😂">😂</button>
-                                <button class="reaction-emoji-btn" data-emoji="😮">😮</button>
-                                <button class="reaction-emoji-btn" data-emoji="👏">👏</button>
+                            <button class="reaction-trigger-btn" onclick="toggleReactionMenu(event, ${msg.id})">
+                                <span style="font-size: 0.8rem;">⊕</span>
+                            </button>
+                            <div class="reaction-menu" id="reaction-menu-${msg.id}" style="display: none;">
+                                <button class="reaction-btn" data-emoji="👍" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👍')">👍</button>
+                                <button class="reaction-btn" data-emoji="❤️" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '❤️')">❤️</button>
+                                <button class="reaction-btn" data-emoji="😂" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😂')">😂</button>
+                                <button class="reaction-btn" data-emoji="😮" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😮')">😮</button>
+                                <button class="reaction-btn" data-emoji="👏" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👏')">👏</button>
                             </div>
                         </div>
                     ` : ''}
@@ -994,10 +955,44 @@ async function sendQuickReply(menuOption) {
     }
 }
 
+// Toggle reaction menu
+function toggleReactionMenu(event, messageId) {
+    event.stopPropagation();
+    const menu = document.getElementById(`reaction-menu-${messageId}`);
+    const allMenus = document.querySelectorAll('.reaction-menu');
+    
+    // Close all other menus
+    allMenus.forEach(m => {
+        if (m.id !== `reaction-menu-${messageId}`) {
+            m.style.display = 'none';
+        }
+    });
+    
+    // Toggle current menu
+    if (menu) {
+        menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+    }
+}
+
+// Close all reaction menus when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.message-reactions-trigger')) {
+        document.querySelectorAll('.reaction-menu').forEach(menu => {
+            menu.style.display = 'none';
+        });
+    }
+});
+
 // Send reaction to message
 async function sendReaction(messageId, phoneNumber, emoji) {
+    // Close the reaction menu
+    const menu = document.getElementById(`reaction-menu-${messageId}`);
+    if (menu) {
+        menu.style.display = 'none';
+    }
+    
     try {
-        console.log('📤 Sending reaction:', { messageId, phoneNumber, emoji });
+        console.log('Sending reaction:', { messageId, phoneNumber, emoji });
         
         const response = await fetch(`${API_BASE}/api/messages/${messageId}/react`, {
             method: 'POST',
@@ -1012,16 +1007,14 @@ async function sendReaction(messageId, phoneNumber, emoji) {
         
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('❌ Server response:', response.status, errorText);
+            console.error('Server response:', errorText);
             throw new Error('Failed to send reaction');
         }
         
-        const result = await response.json();
-        console.log('✅ Reaction sent successfully:', result);
         showToast(`${emoji} Reacción enviada`, 'success');
         
     } catch (error) {
-        console.error('❌ Error sending reaction:', error);
+        console.error('Error sending reaction:', error);
         showToast('Error al enviar reacción', 'error');
     }
 }
@@ -1678,6 +1671,7 @@ window.clearAudioRecording = clearAudioRecording;
 window.updatePriority = updatePriority;
 window.sendQuickReply = sendQuickReply;
 window.sendReaction = sendReaction;
+window.toggleReactionMenu = toggleReactionMenu;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
