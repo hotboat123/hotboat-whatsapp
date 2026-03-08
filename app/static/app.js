@@ -943,9 +943,13 @@ async function sendQuickReply(menuOption) {
 // Send reaction to message
 async function sendReaction(messageId, phoneNumber, emoji) {
     try {
-        console.log('Sending reaction:', { messageId, phoneNumber, emoji });
+        console.log('📤 sendReaction called with:', { messageId, phoneNumber, emoji });
+        console.log('📤 API_BASE:', API_BASE);
         
-        const response = await fetch(`${API_BASE}/api/messages/${messageId}/react`, {
+        const url = `${API_BASE}/api/messages/${messageId}/react`;
+        console.log('📤 Sending to URL:', url);
+        
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -958,14 +962,17 @@ async function sendReaction(messageId, phoneNumber, emoji) {
         
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Server response:', errorText);
+            console.error('❌ Server response:', response.status, errorText);
             throw new Error('Failed to send reaction');
         }
         
+        const result = await response.json();
+        console.log('✅ Reaction sent successfully:', result);
         showToast(`${emoji} Reacción enviada`, 'success');
         
     } catch (error) {
-        console.error('Error sending reaction:', error);
+        console.error('❌ Error sending reaction:', error);
+        console.error('❌ Error stack:', error.stack);
         showToast('Error al enviar reacción', 'error');
     }
 }
