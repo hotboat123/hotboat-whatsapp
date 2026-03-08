@@ -21,10 +21,11 @@ from app.db.leads import (
     mark_conversation_as_read,
     update_lead_priority
 )
+from app.notifications import push_notifier
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 # Chilean timezone
 CHILE_TZ = ZoneInfo("America/Santiago")
@@ -433,6 +434,91 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         logger.error(f"Error sending quick reply: {e}")
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# PUSH NOTIFICATIONS ENDPOINTS
+# ============================================================================
+
+class PushTokenRegister(BaseModel):
+    token: str  # Expo push token
+    device_info: Optional[Dict] = None
+
+
+class PushTokenUnregister(BaseModel):
+    token: str
+
+
+class PushTestNotification(BaseModel):
+    title: str
+    body: str
+
+
+@app.post("/api/push/register")
+async def register_push_token(request: PushTokenRegister):
+    """Register a device for push notifications"""
+    try:
+        success = await push_notifier.register_push_token(
+            token=request.token,
+            device_info=request.device_info
+        )
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Push token registered successfully"
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to register push token")
+            
+    except Exception as e:
+        logger.error(f"Error registering push token: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/push/unregister")
+async def unregister_push_token(request: PushTokenUnregister):
+    """Unregister a device from push notifications"""
+    try:
+        success = await push_notifier.unregister_push_token(token=request.token)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Push token unregistered successfully"
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to unregister push token")
+            
+    except Exception as e:
+        logger.error(f"Error unregistering push token: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/push/test")
+async def send_test_notification(request: PushTestNotification):
+    """Send a test push notification to all registered devices"""
+    try:
+        success = await push_notifier.send_notification(
+            title=request.title,
+            body=request.body,
+            priority="high"
+        )
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Test notification sent"
+            }
+        else:
+            return {
+                "status": "warning",
+                "message": "No devices registered or notification failed"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error sending test notification: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

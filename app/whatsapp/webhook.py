@@ -101,16 +101,16 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             text_body = message.get("text", {}).get("body", "")
             logger.info(f"💬 Message text: {text_body}")
             
-            # ALWAYS send email notification for incoming messages (even if bot is disabled)
+            # Send push notification for incoming messages (replaces email)
             try:
-                await conversation_manager._send_incoming_message_email(
+                from app.notifications import push_notifier
+                await push_notifier.send_new_message_notification(
                     contact_name=contact_name,
                     phone_number=from_number,
-                    message_text=text_body,
-                    message_id=message_id
+                    message_preview=text_body
                 )
-            except Exception as email_error:
-                logger.warning(f"Could not send email notification: {email_error}")
+            except Exception as push_error:
+                logger.warning(f"Could not send push notification: {push_error}")
             
             # Check if bot is enabled for this user
             from app.db.leads import get_or_create_lead
