@@ -35,6 +35,29 @@ class AvailabilityChecker:
     
     def __init__(self):
         self.config = AVAILABILITY_CONFIG
+        self.phone_number = None
+    
+    def set_phone_number(self, phone_number: str):
+        """Set phone number for auto-priority assignment"""
+        self.phone_number = phone_number
+    
+    async def _auto_set_priority_high(self, phone_number: str, reason: str):
+        """
+        Auto-assign priority 1 (high) to a conversation
+        
+        Args:
+            phone_number: Contact phone number
+            reason: Reason for high priority
+        """
+        try:
+            from app.db.leads import update_lead_priority
+            success = await update_lead_priority(phone_number, 1)
+            if success:
+                logger.info(f"🔴 Auto-assigned priority 1 to {phone_number}: {reason}")
+            else:
+                logger.warning(f"Failed to auto-assign priority to {phone_number}")
+        except Exception as e:
+            logger.error(f"Error auto-assigning priority: {e}")
     
     def _parse_spanish_date(self, message: str, current_year: int) -> Optional[datetime]:
         """
@@ -277,6 +300,9 @@ class AvailabilityChecker:
             # First, try to parse a specific date (e.g., "14 de febrero")
             specific_date = self._parse_spanish_date(message, current_year)
             
+            # Flag to track if this is a high-priority query (next 3 days)
+            is_next_3_days = False
+            
             if specific_date:
                 # User asked for a specific date
                 start_date = specific_date.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -284,6 +310,12 @@ class AvailabilityChecker:
                 days_to_show = 1
                 specific_date_requested = True
                 logger.info(f"Parsed specific date from message: {specific_date.date()}")
+                
+                # Check if the specific date is within next 3 days
+                days_until_date = (specific_date - now).days
+                if 0 <= days_until_date <= 3:
+                    is_next_3_days = True
+                    logger.info(f"🔴 High priority: Date within next 3 days ({days_until_date} days)")
             else:
                 # Determine end date based on query
                 specific_date_requested = False
@@ -293,7 +325,9 @@ class AvailabilityChecker:
                     start_date = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
                     end_date = tomorrow.replace(hour=23, minute=59, second=59)
                     days_to_show = 1
+                    is_next_3_days = True  # Tomorrow is within next 3 days
                     logger.info(f"User asked for tomorrow: {start_date.date()}")
+                    logger.info("🔴 High priority: Tomorrow query")
                 elif "próxima semana" in message_lower or "next week" in message_lower:
                     end_date = now + timedelta(days=7)
                     days_to_show = 7
@@ -306,11 +340,20 @@ class AvailabilityChecker:
                     end_date = now.replace(hour=23, minute=59, second=59)
                     days_to_show = 1
                     specific_date_requested = True  # Treat "today" as specific date for better messaging
+                    is_next_3_days = True  # Today is definitely within next 3 days
                     logger.info(f"User asked for today: {now.date()} starting from {now.strftime('%H:%M')}")
+                    logger.info("🔴 High priority: Today query")
                 else:
                     # Default: next 7 days
                     end_date = now + timedelta(days=7)
                     days_to_show = 7
+                    # Check if default search overlaps with next 3 days
+                    if days_to_show <= 3:
+                        is_next_3_days = True
+            
+            # Auto-assign priority if querying for next 3 days
+            if is_next_3_days and self.phone_number:
+                await self._auto_set_priority_high(self.phone_number, "Consulta disponibilidad próximos 3 días")
             
             # Get available slots
             available_slots = await self.get_available_slots(start_date, end_date)

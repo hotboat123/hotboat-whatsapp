@@ -114,6 +114,24 @@ class ConversationManager:
         conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
         logger.info(f"Manual handover enabled for {phone_number}")
     
+    async def _auto_set_priority_high(self, phone_number: str, reason: str):
+        """
+        Auto-assign priority 1 (high) to a conversation
+        
+        Args:
+            phone_number: Contact phone number
+            reason: Reason for high priority
+        """
+        try:
+            from app.db.leads import update_lead_priority
+            success = await update_lead_priority(phone_number, 1)
+            if success:
+                logger.info(f"🔴 Auto-assigned priority 1 to {phone_number}: {reason}")
+            else:
+                logger.warning(f"Failed to auto-assign priority to {phone_number}")
+        except Exception as e:
+            logger.error(f"Error auto-assigning priority: {e}")
+    
     async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation", extra_info: str = None) -> None:
         """
         Send WhatsApp notification to Capitán Tomás
@@ -1463,6 +1481,9 @@ Escribe el número que prefieras 🚤"""
         # Agregar la reserva
         await self.cart_manager.add_item(phone_number, contact_name, reservation_item)
         
+        # Auto-assign priority 1 when adding reservation to cart
+        await self._auto_set_priority_high(phone_number, "Agregó reserva al carrito")
+
         # Verificar si ya existe un FLEX en el carrito
         cart = await self.cart_manager.get_cart(phone_number)
         has_flex = any(item.name == "Reserva FLEX (+10%)" for item in cart)
@@ -2143,6 +2164,15 @@ Por ejemplo:
 • *mañana*
 
 ¿Qué día prefieres?"""
+        
+        # Check if date is within next 3 days and auto-assign priority
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        CHILE_TZ = ZoneInfo("America/Santiago")
+        now = datetime.now(CHILE_TZ)
+        days_until = (parsed_date["date_obj"] - now).days
+        if 0 <= days_until <= 3:
+            await self._auto_set_priority_high(phone_number, f"Reserva próximos 3 días ({days_until} días)")
         
         available_slots = await self.availability_checker.get_slots_for_date(parsed_date["date_obj"])
         available_times = sorted({slot['time'] for slot in available_slots})
