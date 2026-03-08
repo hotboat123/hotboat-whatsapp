@@ -589,9 +589,18 @@ function renderCurrentChat(options = {}) {
             }
 
             return `
-                <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}">
+                <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}" data-message-id="${msg.id}">
                     <div class="message-text">${sanitized || '&nbsp;'}</div>
                     <div class="message-time">${formatTime(msg.timestamp)}</div>
+                    ${direction === 'incoming' ? `
+                        <div class="message-reactions">
+                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👍')" title="Me gusta">👍</button>
+                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '❤️')" title="Me encanta">❤️</button>
+                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😂')" title="Risa">😂</button>
+                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '😮')" title="Sorpresa">😮</button>
+                            <button class="reaction-btn" onclick="sendReaction(${msg.id}, '${currentConversation.phone_number}', '👏')" title="Aplauso">👏</button>
+                        </div>
+                    ` : ''}
                 </div>
             `;
         }).join('');
@@ -888,6 +897,32 @@ async function sendQuickReply(menuOption) {
     } catch (error) {
         console.error('Error sending quick reply:', error);
         showToast('Error al enviar respuesta rápida', 'error');
+    }
+}
+
+// Send reaction to message
+async function sendReaction(messageId, phoneNumber, emoji) {
+    try {
+        const response = await fetch(`${API_BASE}/api/messages/${messageId}/react`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                emoji: emoji,
+                phone_number: phoneNumber
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to send reaction');
+        }
+        
+        showToast(`${emoji} Reacción enviada`, 'success');
+        
+    } catch (error) {
+        console.error('Error sending reaction:', error);
+        showToast('Error al enviar reacción', 'error');
     }
 }
 
@@ -1542,6 +1577,7 @@ window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
 window.updatePriority = updatePriority;
 window.sendQuickReply = sendQuickReply;
+window.sendReaction = sendReaction;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {

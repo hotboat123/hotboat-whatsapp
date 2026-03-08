@@ -407,6 +407,41 @@ body {
     color: rgba(255, 255, 255, 0.7);
 }
 
+/* Message Reactions */
+.message-reactions {
+    display: flex;
+    gap: 0.25rem;
+    margin-top: 0.3rem;
+    padding-top: 0.3rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.message:hover .message-reactions {
+    opacity: 1;
+}
+
+.reaction-btn {
+    background: none;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    padding: 0.15rem 0.3rem;
+    font-size: 0.6rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.reaction-btn:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    transform: scale(1.2);
+    border-color: rgba(0, 0, 0, 0.3);
+}
+
+.reaction-btn:active {
+    transform: scale(1);
+}
+
 .message-input-area {
     padding: 0.4rem 0.9rem;
     background-color: var(--bg-medium);
