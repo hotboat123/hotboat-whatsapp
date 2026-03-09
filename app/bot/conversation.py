@@ -368,6 +368,7 @@ class ConversationManager:
                 metadata.pop("awaiting_reservation_date", None)
                 metadata.pop("awaiting_reservation_time", None)
                 metadata.pop("awaiting_party_size", None)
+                metadata.pop("awaiting_accommodation_selection", None)
                 language = metadata.get("language", "es")
                 response = self._get_main_menu_message(language)
             # PRIORITY 0.8: Allow users to restart availability flow at any step
@@ -417,6 +418,25 @@ O elige:
 2️⃣0️⃣ Proceder con el pago
 
 ¿Qué número eliges? 🚤"""
+            # PRIORITY 1.7: Check if user is selecting an accommodation (after viewing accommodations menu)
+            elif conversation.get("metadata", {}).get("awaiting_accommodation_selection"):
+                logger.info(f"User awaiting accommodation selection, processing: {message_text}")
+                accommodation_response = await self._handle_accommodation_selection(message_text, from_number, contact_name, conversation)
+                if accommodation_response:
+                    response = accommodation_response
+                else:
+                    # If can't parse accommodation selection, ask them to clarify
+                    conversation["metadata"]["awaiting_accommodation_selection"] = False
+                    response = """❌ No entendí tu selección de alojamiento.
+
+Por favor, escríbeme de nuevo qué alojamiento te interesa y para qué fechas.
+
+Por ejemplo:
+• "Open Sky con tina para el 15 de marzo"
+• "Cabaña de 4 personas para el 20-22 de abril"
+• "Hostal para 2 noches desde el 10 de mayo"
+
+O escribe *"menú"* para volver al menú principal 🚤"""
             # PRIORITY 2: Check for global shortcuts (18, 19, 20) - work anywhere
             elif message_text.strip() == "18":
                 logger.info("Global shortcut 18: Ver extras")
@@ -518,6 +538,9 @@ O elige:
                     response = get_text("experiences_menu", language) if language in ["es", "en", "pt"] else "Próximamente disponible / Coming soon / Em breve"
                 elif menu_number == 7:
                     # Option 7: Alojamientos y Packs Pucón
+                    # Set flag to await accommodation selection
+                    conversation["metadata"]["awaiting_accommodation_selection"] = True
+                    logger.info(f"Set awaiting_accommodation_selection=True for {from_number}")
                     # Return special response for accommodations with images
                     return {
                         "type": "accommodations",
@@ -1407,6 +1430,9 @@ Escribe el número que prefieras 🚤"""
             return False
         if conversation and conversation.get("metadata", {}).get("awaiting_party_size"):
             return False
+        if conversation and conversation.get("metadata", {}).get("awaiting_accommodation_selection"):
+            logger.info("Not a cart option: awaiting_accommodation_selection is True")
+            return False
         
         # CRITICAL: If user just requested main menu, numbers are menu options, NOT cart options
         metadata = conversation.get("metadata", {}) if conversation else {}
@@ -1957,6 +1983,7 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 responses.append(get_text("experiences_menu", language) if language in ["es", "en", "pt"] else "Próximamente disponible / Coming soon / Em breve")
             elif menu_number == 7:
                 # Option 7: Alojamientos y Packs Pucón
+                conversation["metadata"]["awaiting_accommodation_selection"] = True
                 responses.append(accommodations_handler.get_text_response())
             elif menu_number == 8:
                 # Option 8: Llamar al Capitán Tomás
@@ -2872,7 +2899,114 @@ Precio: $3,500 c/u
             import traceback
             traceback.print_exc()
             return None
-    
+
+    async def _handle_accommodation_selection(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> Optional[str]:
+        """
+        Handle user's selection of an accommodation.
+        The user might say something like:
+        - "Open Sky con tina para el 15 de marzo"
+        - "Cabaña de 4 personas del 20 al 22 de abril"
+        - "Hostal para 2 noches desde el 10 de mayo"
+        
+        We need to:
+        1. Parse which accommodation they want
+        2. Parse dates (check-in and duration/check-out)
+        3. Create a cart item
+        4. Add to cart
+        5. Ask if they want to add more items
+        
+        Returns:
+            Response message or None if couldn't parse
+        """
+        try:
+            import re
+            from datetime import datetime, timedelta
+            message_lower = message.lower().strip()
+            language = conversation.get("metadata", {}).get("language", "es")
+            
+            # Clear the flag
+            conversation["metadata"]["awaiting_accommodation_selection"] = False
+            
+            # For now, since parsing dates and accommodation types from free text is complex,
+            # we'll take a simpler approach: just add the accommodation inquiry to the cart
+            # as a special item that requires Capitán Tomás to contact them
+            
+            # Try to identify which accommodation they're interested in
+            accommodation_name = None
+            accommodation_price = None
+            
+            # Check for Open Sky Domo con Tina
+            if any(keyword in message_lower for keyword in ["open sky", "domo", "tina", "baño"]):
+                if any(keyword in message_lower for keyword in ["hidro", "jacuzzi"]):
+                    accommodation_name = "Open Sky - Domo con Hidromasaje"
+                    accommodation_price = 120000
+                else:
+                    accommodation_name = "Open Sky - Domo con Tina de Baño"
+                    accommodation_price = 100000
+            
+            # Check for Raíces de Relikura Cabañas
+            elif any(keyword in message_lower for keyword in ["cabaña", "cabana", "relikura"]):
+                if any(keyword in message_lower for keyword in ["6", "seis", "grande"]):
+                    accommodation_name = "Raíces de Relikura - Cabaña 6 personas"
+                    accommodation_price = 100000
+                elif any(keyword in message_lower for keyword in ["4", "cuatro"]):
+                    accommodation_name = "Raíces de Relikura - Cabaña 4 personas"
+                    accommodation_price = 80000
+                elif any(keyword in message_lower for keyword in ["2", "dos", "pareja"]):
+                    accommodation_name = "Raíces de Relikura - Cabaña 2 personas"
+                    accommodation_price = 60000
+                else:
+                    # Default to 4 personas if not specified
+                    accommodation_name = "Raíces de Relikura - Cabaña 4 personas"
+                    accommodation_price = 80000
+            
+            # Check for Hostal
+            elif any(keyword in message_lower for keyword in ["hostal", "económico", "economico"]):
+                accommodation_name = "Raíces de Relikura - Hostal"
+                accommodation_price = 20000
+            
+            if not accommodation_name:
+                logger.info("Could not identify accommodation type from message")
+                return None
+            
+            # Create a cart item for the accommodation
+            from app.cart.models import CartItem
+            accommodation_item = CartItem(
+                name=accommodation_name,
+                price=accommodation_price,
+                quantity=1,
+                item_type="accommodation",
+                notes=f"Fechas solicitadas: {message}"
+            )
+            
+            # Add to cart
+            await self.cart_manager.add_item(phone_number, contact_name, accommodation_item)
+            cart = await self.cart_manager.get_cart(phone_number)
+            
+            # Build response
+            response = f"""✅ *{accommodation_name} agregado al carrito*
+
+{self.cart_manager.format_cart_message(cart)}
+
+📋 *¿Qué deseas hacer ahora?*
+
+• Escribe *"7"* para agregar más alojamientos
+• Escribe *"4"* para agregar extras (toallas, videos, etc.)
+• Escribe *"menú"* para ver el menú principal
+• Escribe *"carrito"* o *"20"* para proceder con el pago
+
+¿Qué opción eliges, grumete? ⚓"""
+            
+            logger.info(f"Added accommodation to cart: {accommodation_name}")
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error handling accommodation selection: {e}")
+            import traceback
+            traceback.print_exc()
+            conversation["metadata"]["awaiting_accommodation_selection"] = False
+            return None
+
     async def _try_parse_extra_with_ai(self, message: str, phone_number: str, contact_name: str, conversation: dict = None) -> Optional[str]:
         """
         Deterministically parse a single extra from free text (e.g., '2 jugos', 'una tabla grande').
@@ -3221,7 +3355,8 @@ Precio: $3,500 c/u
             "awaiting_extra_selection",
             "awaiting_ice_cream_flavor",
             "awaiting_packages_submenu",
-            "awaiting_experience_menu"
+            "awaiting_experience_menu",
+            "awaiting_accommodation_selection"
         ]
         
         for flow in active_flows:
