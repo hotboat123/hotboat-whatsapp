@@ -1212,10 +1212,10 @@ async def proxy_media(media_id: str):
             )
         
         # Last resort: try to proxy directly from WhatsApp (legacy behavior)
-        logger.warning(f"⚠️ Could not download media, attempting direct proxy from WhatsApp: {media_id}")
+        logger.debug(f"Attempting direct proxy from WhatsApp for media: {media_id}")
         media_url = await whatsapp_client.get_media_url(media_id)
         if not media_url:
-            logger.error(f"❌ Could not get media URL from WhatsApp for {media_id}")
+            logger.debug(f"Media URL not available for {media_id} (likely expired)")
             raise HTTPException(status_code=404, detail="Media not found - URL unavailable")
         
         logger.info(f"Attempting to proxy from: {media_url[:100]}...")
