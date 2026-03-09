@@ -2892,7 +2892,6 @@ Escribe el número que prefieras 🚤"""
                 
                 else:
                     # This is a simple accommodation booking - add to cart instead of notifying
-                    from app.cart.models import CartItem
                     
                     # Determine price based on property and room type
                     if flow["property"] == "open_sky":
@@ -2912,11 +2911,15 @@ Escribe el número que prefieras 🚤"""
                     
                     # Create accommodation cart item
                     accommodation_item = CartItem(
+                        item_type="accommodation",
                         name=f"{property_name} - {flow['room_type']}",
                         price=price,
                         quantity=1,
-                        item_type="accommodation",
-                        notes=f"Guests: {flow['guests']}, Check-in: {flow['checkin_date']}, Check-out: {flow['checkout_date']}"
+                        metadata={
+                            "guests": flow['guests'],
+                            "checkin_date": flow['checkin_date'],
+                            "checkout_date": flow['checkout_date']
+                        }
                     )
                     
                     # Add to cart
