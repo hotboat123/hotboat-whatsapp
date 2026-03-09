@@ -229,94 +229,6 @@ class WhatsAppClient:
             logger.error(f"❌ Error sending audio to {to}: {e}")
             raise
     
-    async def send_document_message(self, to: str, document_url: str = None, caption: Optional[str] = None, media_id: str = None, filename: str = None) -> Dict[str, Any]:
-        """
-        Send a document message (PDF, DOC, etc.) using either URL or media_id
-        
-        Args:
-            to: Recipient phone number (with country code, no + or spaces)
-            document_url: URL of the document (must be publicly accessible) - Optional if media_id is provided
-            caption: Optional caption for the document
-            media_id: WhatsApp media ID from upload_media() - Optional if document_url is provided
-            filename: Optional filename to display
-        
-        Returns:
-            Response from WhatsApp API
-        """
-        url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
-        
-        payload = {
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": to,
-            "type": "document",
-            "document": {}
-        }
-        
-        # Use media_id if provided, otherwise use document_url
-        if media_id:
-            payload["document"]["id"] = media_id
-        elif document_url:
-            payload["document"]["link"] = document_url
-        else:
-            logger.error("❌ Either document_url or media_id must be provided")
-            raise ValueError("Either document_url or media_id must be provided")
-        
-        # Add caption if provided
-        if caption:
-            payload["document"]["caption"] = caption
-        
-        # Add filename if provided
-        if filename:
-            payload["document"]["filename"] = filename
-        
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=payload, headers=self.headers, timeout=30)
-                response.raise_for_status()
-                result = response.json()
-                logger.info(f"✅ Document sent to {to}: {result}")
-                return result
-        except httpx.HTTPError as e:
-            logger.error(f"❌ Error sending document to {to}: {e}")
-            raise
-    
-    async def send_reaction(self, to: str, message_id: str, emoji: str) -> Dict[str, Any]:
-        """
-        Send a reaction to a specific message
-        
-        Args:
-            to: Recipient phone number (with country code, no + or spaces)
-            message_id: WhatsApp message ID to react to
-            emoji: Emoji to send as reaction (e.g., "❤️", "👍", "😂")
-        
-        Returns:
-            Response from WhatsApp API
-        """
-        url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
-        
-        payload = {
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": to,
-            "type": "reaction",
-            "reaction": {
-                "message_id": message_id,
-                "emoji": emoji
-            }
-        }
-        
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=payload, headers=self.headers, timeout=30)
-                response.raise_for_status()
-                result = response.json()
-                logger.info(f"✅ Reaction {emoji} sent to message {message_id} for {to}")
-                return result
-        except httpx.HTTPError as e:
-            logger.error(f"❌ Error sending reaction to {to}: {e}")
-            raise
-    
     async def get_media_url(self, media_id: str) -> Optional[str]:
         """
         Retrieve a temporary URL for a received media object.
@@ -399,6 +311,44 @@ class WhatsAppClient:
                 return response.json()
         except httpx.HTTPError as e:
             logger.error(f"❌ Error marking message as read: {e}")
+            raise
+    
+    async def send_reaction(self, to: str, message_id: str, emoji: str) -> Dict[str, Any]:
+        """
+        Send a reaction to a WhatsApp message
+        
+        Args:
+            to: Recipient phone number (with country code, no + or spaces)
+            message_id: WhatsApp message ID to react to
+            emoji: Emoji to send as reaction
+        
+        Returns:
+            Response from WhatsApp API
+        """
+        url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "reaction",
+            "reaction": {
+                "message_id": message_id,
+                "emoji": emoji
+            }
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, headers=self.headers, timeout=30)
+                response.raise_for_status()
+                result = response.json()
+                logger.info(f"✅ Reaction {emoji} sent to message {message_id}: {result}")
+                return result
+        except httpx.HTTPError as e:
+            logger.error(f"❌ Error sending reaction to {to}: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"❌ Response body: {e.response.text}")
             raise
 
 

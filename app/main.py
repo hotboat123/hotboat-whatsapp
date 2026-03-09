@@ -1,5 +1,5 @@
 """
-FastAPI main application
+FastAPI main application - Updated 2026-03-08
 """
 from fastapi import FastAPI, Request, Response, HTTPException, Query, UploadFile, Form
 from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
@@ -44,6 +44,16 @@ app = FastAPI(
     description="Bot de WhatsApp para Hot Boat Chile",
     version="1.0.0"
 )
+
+# Add middleware to prevent caching of static files
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # Mount static files for Kia-Ai interface
 static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -111,18 +121,12 @@ async def webhook_verify(request: Request):
     """
     Webhook verification endpoint for WhatsApp
     Meta will call this to verify the webhook
-    Also responds to health checks with 200 OK
     """
     try:
         # Get query parameters
         mode = request.query_params.get("hub.mode")
         token = request.query_params.get("hub.verify_token")
         challenge = request.query_params.get("hub.challenge")
-        
-        # If no parameters, this is a health check (e.g., from Railway)
-        # Return 200 OK to prevent container restarts
-        if not mode and not token and not challenge:
-            return {"status": "ok", "message": "Webhook endpoint is ready"}
         
         logger.info(f"Webhook verification request: mode={mode}, token={'***' if token else None}")
         
@@ -134,9 +138,6 @@ async def webhook_verify(request: Request):
             logger.warning("❌ Webhook verification failed")
             raise HTTPException(status_code=403, detail="Verification failed")
             
-    except HTTPException:
-        # Re-raise HTTPExceptions as-is (don't convert to 500)
-        raise
     except Exception as e:
         logger.error(f"Error in webhook verification: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -522,6 +523,10 @@ async def send_test_notification(request: PushTestNotification):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================================
+# MESSAGE REACTIONS ENDPOINT
+# ============================================================================
+
 class MessageReaction(BaseModel):
     emoji: str
     phone_number: str
@@ -531,9 +536,11 @@ class MessageReaction(BaseModel):
 async def react_to_message(message_id: int, reaction: MessageReaction):
     """Send a reaction to a WhatsApp message"""
     try:
+        logger.info(f"📨 Received reaction request: message_id={message_id}, emoji={reaction.emoji}, phone={reaction.phone_number}")
+        
         from app.db.connection import get_connection
         from app.whatsapp.client import WhatsAppClient
-        
+
         # Get the WhatsApp message ID from database
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -542,27 +549,34 @@ async def react_to_message(message_id: int, reaction: MessageReaction):
                     FROM whatsapp_conversations
                     WHERE id = %s
                 """, (message_id,))
-                
+
                 result = cur.fetchone()
-                if not result:
-                    raise HTTPException(status_code=404, detail="Message not found")
+                logger.info(f"🔍 Database query result: {result}")
                 
+                if not result:
+                    logger.error(f"❌ Message {message_id} not found in database")
+                    raise HTTPException(status_code=404, detail="Message not found")
+
                 whatsapp_message_id = result[0]
                 phone_number = result[1]
                 
+                logger.info(f"📱 WhatsApp message_id: {whatsapp_message_id}, phone: {phone_number}")
+
                 if not whatsapp_message_id:
+                    logger.error(f"❌ Message {message_id} has no WhatsApp message ID")
                     raise HTTPException(status_code=400, detail="Message does not have a WhatsApp message ID")
-        
+
         # Send reaction via WhatsApp API
         client = WhatsAppClient()
+        logger.info(f"📤 Sending reaction to WhatsApp API...")
         response = await client.send_reaction(
             to=reaction.phone_number,
             message_id=whatsapp_message_id,
             emoji=reaction.emoji
         )
-        
+
         logger.info(f"✅ Reaction {reaction.emoji} sent to message {whatsapp_message_id}")
-        
+
         return {
             "status": "success",
             "message_id": message_id,
@@ -575,6 +589,8 @@ async def react_to_message(message_id: int, reaction: MessageReaction):
         raise
     except Exception as e:
         logger.error(f"❌ Error sending reaction: {e}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        logger.error(f"❌ Error details: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
