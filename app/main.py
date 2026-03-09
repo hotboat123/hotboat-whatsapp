@@ -536,9 +536,11 @@ class MessageReaction(BaseModel):
 async def react_to_message(message_id: int, reaction: MessageReaction):
     """Send a reaction to a WhatsApp message"""
     try:
+        logger.info(f"📨 Received reaction request: message_id={message_id}, emoji={reaction.emoji}, phone={reaction.phone_number}")
+        
         from app.db.connection import get_connection
         from app.whatsapp.client import WhatsAppClient
-        
+
         # Get the WhatsApp message ID from database
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -547,27 +549,34 @@ async def react_to_message(message_id: int, reaction: MessageReaction):
                     FROM whatsapp_conversations
                     WHERE id = %s
                 """, (message_id,))
-                
+
                 result = cur.fetchone()
-                if not result:
-                    raise HTTPException(status_code=404, detail="Message not found")
+                logger.info(f"🔍 Database query result: {result}")
                 
+                if not result:
+                    logger.error(f"❌ Message {message_id} not found in database")
+                    raise HTTPException(status_code=404, detail="Message not found")
+
                 whatsapp_message_id = result[0]
                 phone_number = result[1]
                 
+                logger.info(f"📱 WhatsApp message_id: {whatsapp_message_id}, phone: {phone_number}")
+
                 if not whatsapp_message_id:
+                    logger.error(f"❌ Message {message_id} has no WhatsApp message ID")
                     raise HTTPException(status_code=400, detail="Message does not have a WhatsApp message ID")
-        
+
         # Send reaction via WhatsApp API
         client = WhatsAppClient()
+        logger.info(f"📤 Sending reaction to WhatsApp API...")
         response = await client.send_reaction(
             to=reaction.phone_number,
             message_id=whatsapp_message_id,
             emoji=reaction.emoji
         )
-        
+
         logger.info(f"✅ Reaction {reaction.emoji} sent to message {whatsapp_message_id}")
-        
+
         return {
             "status": "success",
             "message_id": message_id,
@@ -580,6 +589,8 @@ async def react_to_message(message_id: int, reaction: MessageReaction):
         raise
     except Exception as e:
         logger.error(f"❌ Error sending reaction: {e}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        logger.error(f"❌ Error details: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
