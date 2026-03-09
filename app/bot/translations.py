@@ -900,6 +900,64 @@ Need more information?""",
 Precisa de mais informações?"""
     },
     
+    # ===== EXPERIENCES MENU =====
+    
+    "experiences_menu": {
+        "es": """🚣🐴⛵ *Otras Experiencias en Pucón*
+
+Además del HotBoat, te ofrecemos estas increíbles experiencias en Pucón:
+
+🌊 *Rafting*
+Desciende los rápidos del río en una aventura llena de adrenalina
+
+🐴 *Cabalgatas*
+Explora la naturaleza a caballo por hermosos senderos
+
+⛵ *Velerismo*
+Navega por el lago Villarrica con el viento como motor
+
+📲 *¿Te interesa alguna?*
+Escríbeme y te daré más detalles sobre fechas, precios y disponibilidad 🚤
+
+O escribe *"menú"* para volver al menú principal ⚓""",
+        
+        "en": """🚣🐴⛵ *Other Experiences in Pucón*
+
+Besides HotBoat, we offer these amazing experiences in Pucón:
+
+🌊 *Rafting*
+Descend the river rapids in an adrenaline-filled adventure
+
+🐴 *Horseback Riding*
+Explore nature on horseback through beautiful trails
+
+⛵ *Sailing*
+Sail Lake Villarrica with the wind as your motor
+
+📲 *Interested in any?*
+Write to me and I'll give you more details about dates, prices and availability 🚤
+
+Or write *"menu"* to return to the main menu ⚓""",
+        
+        "pt": """🚣🐴⛵ *Outras Experiências em Pucón*
+
+Além do HotBoat, oferecemos estas experiências incríveis em Pucón:
+
+🌊 *Rafting*
+Desça as corredeiras do rio em uma aventura cheia de adrenalina
+
+🐴 *Cavalgadas*
+Explore a natureza a cavalo por belas trilhas
+
+⛵ *Vela*
+Navegue pelo lago Villarrica com o vento como motor
+
+📲 *Interessado em alguma?*
+Escreva-me e darei mais detalhes sobre datas, preços e disponibilidade 🚤
+
+Ou escreva *"menu"* para voltar ao menu principal ⚓"""
+    },
+    
     # ===== ACCOMMODATION MESSAGES =====
     
     "accommodations": {

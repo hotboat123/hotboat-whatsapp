@@ -489,36 +489,47 @@ O elige:
                 logger.info(f"Multiple menu numbers selected: {menu_numbers}")
                 language = conversation.get("metadata", {}).get("language", "es")
                 response = await self._handle_multiple_menu_selections(menu_numbers, conversation, language, from_number, contact_name)
-            # Check if it's a single menu number selection (1-6)
+            # Check if it's a single menu number selection (1-8)
             # BUT ONLY if we're in a menu context (early in conversation or user just asked for menu)
             elif (menu_number := self.faq_handler.is_menu_number(message_text)) and self._should_interpret_as_menu(message_text, conversation):
                 logger.info(f"Menu number selected: {menu_number}")
                 language = conversation.get("metadata", {}).get("language", "es")
                 if menu_number == 1:
-                    # Option 1: Disponibilidad y horarios
+                    # Option 1: Disponibilidad y horarios HotBoat
                     response = self._ask_for_reservation_date(conversation, language)
                 elif menu_number == 2:
-                    # Option 2: Precios por persona
+                    # Option 2: Precios por persona HotBoat
                     response = self.faq_handler.get_response("precio", language)
                 elif menu_number == 3:
-                    # Option 3: Características del HotBoat
+                    # Option 3: Características Experiencia HotBoat
                     response = self.faq_handler.get_response("caracteristicas", language)
                 elif menu_number == 4:
-                    # Option 4: Extras y promociones
+                    # Option 4: Extras HotBoat
                     conversation["metadata"]["awaiting_extra_selection"] = True
                     logger.info(f"Set awaiting_extra_selection=True for {from_number}")
                     logger.info(f"Metadata: {conversation.get('metadata', {})}")
                     response = self.faq_handler.get_response("extras", language)
                 elif menu_number == 5:
-                    # Option 5: Ubicación y reseñas
+                    # Option 5: Ubicación y Reseñas HotBoat
                     response = self.faq_handler.get_response("ubicación", language)
                 elif menu_number == 6:
-                    # Option 6: Llamar a Tomás
-                    # Send notification to Capitán Tomás
+                    # Option 6: Otras Experiencias Pucón (experiences/activities)
+                    # TODO: Implement experiences handler
+                    response = get_text("experiences_menu", language) if language in ["es", "en", "pt"] else "Próximamente disponible / Coming soon / Em breve"
+                elif menu_number == 7:
+                    # Option 7: Alojamientos y Packs Pucón
+                    # Return special response for accommodations with images
+                    return {
+                        "type": "accommodations",
+                        "text": accommodations_handler.get_text_response(),
+                        "images": accommodations_handler.get_accommodations_with_images()
+                    }
+                elif menu_number == 8:
+                    # Option 8: Llamar al Capitán Tomás
                     await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                     response = self.faq_handler.get_response("llamar a tomas", language)
                 else:
-                    response = "No entendí esa opción. Por favor elige un número del 1 al 6, grumete ⚓"
+                    response = "No entendí esa opción. Por favor elige un número del 1 al 8, grumete ⚓"
             # Check if asking about accommodations (special handling with images)
             elif self._is_accommodation_query(message_text):
                 logger.info("User asking about accommodations - will send with images")
@@ -1908,38 +1919,46 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
         
         # Menu option titles for separators
         option_titles = {
-            1: {"es": "📅 DISPONIBILIDAD Y HORARIOS", "en": "📅 AVAILABILITY AND SCHEDULES", "pt": "📅 DISPONIBILIDADE E HORÁRIOS"},
-            2: {"es": "💰 PRECIOS POR PERSONA", "en": "💰 PRICES PER PERSON", "pt": "💰 PREÇOS POR PESSOA"},
-            3: {"es": "🚤 CARACTERÍSTICAS DEL HOTBOAT", "en": "🚤 HOTBOAT FEATURES", "pt": "🚤 CARACTERÍSTICAS DO HOTBOAT"},
-            4: {"es": "✨ EXTRAS Y PROMOCIONES", "en": "✨ EXTRAS AND PROMOTIONS", "pt": "✨ EXTRAS E PROMOÇÕES"},
-            5: {"es": "📍 UBICACIÓN Y RESEÑAS", "en": "📍 LOCATION AND REVIEWS", "pt": "📍 LOCALIZAÇÃO E AVALIAÇÕES"},
-            6: {"es": "📞 LLAMAR AL CAPITÁN TOMÁS", "en": "📞 CALL CAPTAIN TOMÁS", "pt": "📞 LIGAR PARA O CAPITÃO TOMÁS"}
+            1: {"es": "📅 DISPONIBILIDAD Y HORARIOS HOTBOAT", "en": "📅 HOTBOAT AVAILABILITY AND SCHEDULES", "pt": "📅 DISPONIBILIDADE E HORÁRIOS HOTBOAT"},
+            2: {"es": "💰 PRECIOS POR PERSONA HOTBOAT", "en": "💰 HOTBOAT PRICES PER PERSON", "pt": "💰 PREÇOS POR PESSOA HOTBOAT"},
+            3: {"es": "🚤 CARACTERÍSTICAS EXPERIENCIA HOTBOAT", "en": "🚤 HOTBOAT EXPERIENCE FEATURES", "pt": "🚤 CARACTERÍSTICAS EXPERIÊNCIA HOTBOAT"},
+            4: {"es": "✨ EXTRAS HOTBOAT", "en": "✨ HOTBOAT EXTRAS", "pt": "✨ EXTRAS HOTBOAT"},
+            5: {"es": "📍 UBICACIÓN Y RESEÑAS HOTBOAT", "en": "📍 HOTBOAT LOCATION AND REVIEWS", "pt": "📍 LOCALIZAÇÃO E AVALIAÇÕES HOTBOAT"},
+            6: {"es": "🚣 OTRAS EXPERIENCIAS PUCÓN", "en": "🚣 OTHER PUCÓN EXPERIENCES", "pt": "🚣 OUTRAS EXPERIÊNCIAS PUCÓN"},
+            7: {"es": "🏠 ALOJAMIENTOS Y PACKS PUCÓN", "en": "🏠 PUCÓN ACCOMMODATIONS AND PACKAGES", "pt": "🏠 HOSPEDAGENS E PACOTES PUCÓN"},
+            8: {"es": "📞 LLAMAR AL CAPITÁN TOMÁS", "en": "📞 CALL CAPTAIN TOMÁS", "pt": "📞 LIGAR PARA O CAPITÃO TOMÁS"}
         }
-        
+
         for menu_number in menu_numbers:
             # Add title separator
             if menu_number in option_titles:
                 title = option_titles[menu_number].get(language, option_titles[menu_number]["es"])
                 responses.append(f"\n{'='*40}\n{title}\n{'='*40}\n")
-            
+
             if menu_number == 1:
-                # Option 1: Disponibilidad y horarios
+                # Option 1: Disponibilidad y horarios HotBoat
                 responses.append(self._ask_for_reservation_date(conversation, language))
             elif menu_number == 2:
-                # Option 2: Precios por persona
+                # Option 2: Precios por persona HotBoat
                 responses.append(self.faq_handler.get_response("precio", language))
             elif menu_number == 3:
-                # Option 3: Características del HotBoat
+                # Option 3: Características Experiencia HotBoat
                 responses.append(self.faq_handler.get_response("caracteristicas", language))
             elif menu_number == 4:
-                # Option 4: Extras y promociones
+                # Option 4: Extras HotBoat
                 conversation["metadata"]["awaiting_extra_selection"] = True
                 responses.append(self.faq_handler.get_response("extras", language))
             elif menu_number == 5:
-                # Option 5: Ubicación y reseñas
+                # Option 5: Ubicación y Reseñas HotBoat
                 responses.append(self.faq_handler.get_response("ubicación", language))
             elif menu_number == 6:
-                # Option 6: Llamar a Tomás
+                # Option 6: Otras Experiencias Pucón
+                responses.append(get_text("experiences_menu", language) if language in ["es", "en", "pt"] else "Próximamente disponible / Coming soon / Em breve")
+            elif menu_number == 7:
+                # Option 7: Alojamientos y Packs Pucón
+                responses.append(accommodations_handler.get_text_response())
+            elif menu_number == 8:
+                # Option 8: Llamar al Capitán Tomás
                 await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                 responses.append(self.faq_handler.get_response("llamar a tomas", language))
         
