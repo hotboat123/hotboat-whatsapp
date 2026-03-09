@@ -59,17 +59,21 @@ Estoy al mando para ayudarte con todas tus dudas sobre nuestras experiencias flo
 
 Puedes preguntarme por:
 
-1️⃣ *Disponibilidad y horarios*
+1️⃣ *Disponibilidad y horarios HotBoat*
 
-2️⃣ *Precios por persona*
+2️⃣ *Precios por persona HotBoat*
 
-3️⃣ *Características del HotBoat*
+3️⃣ *Características Experiencia HotBoat*
 
-4️⃣ *Extras y promociones*
+4️⃣ *Extras HotBoat (toallas, videos, tablas, etc.)*
 
-5️⃣ *Ubicación y reseñas*
+5️⃣ *Ubicación y Reseñas HotBoat*
 
-Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *6️⃣* 👨‍✈️🌿
+6️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*
+
+7️⃣ *Alojamientos y Packs Pucón*
+
+Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *8️⃣* 👨‍✈️🌿
 
 ¿Listo para zarpar, grumete? ⛵
 
@@ -88,17 +92,21 @@ I'm here to help you with every question about our floating experiences on the l
 
 You can ask me about:
 
-1️⃣ *Availability and schedules*
+1️⃣ *HotBoat Availability and schedules*
 
-2️⃣ *Prices per person*
+2️⃣ *HotBoat Prices per person*
 
-3️⃣ *HotBoat features*
+3️⃣ *HotBoat Experience Features*
 
-4️⃣ *Extras and promotions*
+4️⃣ *HotBoat Extras (towels, videos, boards, etc.)*
 
-5️⃣ *Location and reviews*
+5️⃣ *HotBoat Location and reviews*
 
-If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *6️⃣* 👨‍✈️🌿
+6️⃣ *Other Pucón Experiences (Rafting, horseback riding, sailing)*
+
+7️⃣ *Pucón Accommodations and Packages*
+
+If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *8️⃣* 👨‍✈️🌿
 
 Ready to set sail, sailor? ⛵
 
@@ -117,17 +125,21 @@ Estou no comando para ajudar com todas as tuas dúvidas sobre nossas experiênci
 
 Você pode me perguntar sobre:
 
-1️⃣ *Disponibilidade e horários*
+1️⃣ *Disponibilidade e horários HotBoat*
 
-2️⃣ *Preços por pessoa*
+2️⃣ *Preços por pessoa HotBoat*
 
-3️⃣ *Características do HotBoat*
+3️⃣ *Características Experiência HotBoat*
 
-4️⃣ *Extras e promoções*
+4️⃣ *Extras HotBoat (toalhas, vídeos, tábuas, etc.)*
 
-5️⃣ *Localização e avaliações*
+5️⃣ *Localização e avaliações HotBoat*
 
-Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *6️⃣* 👨‍✈️🌿
+6️⃣ *Outras Experiências Pucón (Rafting, cavalgadas, vela)*
+
+7️⃣ *Hospedagens e Pacotes Pucón*
+
+Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *8️⃣* 👨‍✈️🌿
 
 Pronto para zarpar, marujo? ⛵
 
@@ -205,33 +217,45 @@ Digite o idioma que deseja usar:
     
     # Menu Items Translations
     "menu_availability": {
-        "es": "Disponibilidad y horarios",
-        "en": "Availability and schedules",
-        "pt": "Disponibilidade e horários"
+        "es": "Disponibilidad y horarios HotBoat",
+        "en": "HotBoat Availability and schedules",
+        "pt": "Disponibilidade e horários HotBoat"
     },
     
     "menu_prices": {
-        "es": "Precios por persona",
-        "en": "Prices per person",
-        "pt": "Preços por pessoa"
+        "es": "Precios por persona HotBoat",
+        "en": "HotBoat Prices per person",
+        "pt": "Preços por pessoa HotBoat"
     },
     
     "menu_features": {
-        "es": "Características del HotBoat",
-        "en": "HotBoat features",
-        "pt": "Características do HotBoat"
+        "es": "Características Experiencia HotBoat",
+        "en": "HotBoat Experience Features",
+        "pt": "Características Experiência HotBoat"
     },
     
     "menu_extras": {
-        "es": "Extras y promociones",
-        "en": "Extras and promotions",
-        "pt": "Extras e promoções"
+        "es": "Extras HotBoat (toallas, videos, tablas, etc.)",
+        "en": "HotBoat Extras (towels, videos, boards, etc.)",
+        "pt": "Extras HotBoat (toalhas, vídeos, tábuas, etc.)"
     },
     
     "menu_location": {
-        "es": "Ubicación y reseñas",
-        "en": "Location and reviews",
-        "pt": "Localização e avaliações"
+        "es": "Ubicación y Reseñas HotBoat",
+        "en": "HotBoat Location and reviews",
+        "pt": "Localização e avaliações HotBoat"
+    },
+    
+    "menu_experiences": {
+        "es": "Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)",
+        "en": "Other Pucón Experiences (Rafting, horseback riding, sailing)",
+        "pt": "Outras Experiências Pucón (Rafting, cavalgadas, vela)"
+    },
+    
+    "menu_accommodations": {
+        "es": "Alojamientos y Packs Pucón",
+        "en": "Pucón Accommodations and Packages",
+        "pt": "Hospedagens e Pacotes Pucón"
     },
     
     # System Prompts for AI (context for each language)
@@ -518,7 +542,7 @@ Gostaria de reservar sua experiência?"""
     
     # Extras menu
     "extras_menu": {
-        "es": """✨ *Servicios Extra:*
+        "es": """✨ *Extras HotBoat:*
 
 ¿Quieres agregar algo especial a tu HotBoat?
 
@@ -557,7 +581,7 @@ Gostaria de reservar sua experiência?"""
 
 📝 *Escribe el número del extra que deseas agregar* 🚤""",
         
-        "en": """✨ *Extra Services:*
+        "en": """✨ *HotBoat Extras:*
 
 Want to add something special to your HotBoat?
 
@@ -596,7 +620,7 @@ Want to add something special to your HotBoat?
 
 📝 *Type the number of the extra you want to add* 🚤""",
         
-        "pt": """✨ *Serviços Extras:*
+        "pt": """✨ *Extras HotBoat:*
 
 Quer adicionar algo especial ao seu HotBoat?
 
