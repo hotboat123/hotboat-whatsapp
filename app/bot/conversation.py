@@ -1599,7 +1599,8 @@ Escribe el número que prefieras 🚤"""
             if msg.get("role") == "assistant":
                 content = msg.get("content", "")
                 # If the last message contains main menu options, prioritize menu interpretation
-                if "1️⃣ *Disponibilidad y horarios*" in content or "¿Qué número eliges? 🚤" in content:
+                # Check for the updated menu text or the closing phrase
+                if "1️⃣ *Disponibilidad y horarios HotBoat*" in content or "¿Qué número eliges?*" in content or "Which number do you choose?" in content or "Qual número você escolhe?" in content:
                     logger.info("Not a cart option: user just saw main menu")
                     return False
                 break
