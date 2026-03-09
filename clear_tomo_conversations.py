@@ -1,64 +1,82 @@
 """
 Script para limpiar el historial de conversaciones con Tomo
 """
-import asyncio
 import os
-from app.db.connection import get_db_pool
+import sys
+from app.db.connection import get_connection
 
-async def clear_tomo_conversations():
+def clear_tomo_conversations():
     """Elimina todas las conversaciones con el número de Tomo"""
     
     # Número de Tomo
     tomo_phone = "56977577307"
     
-    pool = await get_db_pool()
+    # Auto-confirm desde argumentos de línea de comandos
+    auto_confirm = len(sys.argv) > 1 and sys.argv[1] == "--yes"
     
     try:
-        async with pool.acquire() as conn:
-            # Contar mensajes antes de eliminar
-            count_query = """
-                SELECT COUNT(*) as total 
-                FROM conversations 
-                WHERE phone_number = $1
-            """
-            result = await conn.fetchrow(count_query, tomo_phone)
-            total_messages = result['total']
-            
-            print(f"📊 Total de mensajes con Tomo ({tomo_phone}): {total_messages}")
-            
-            if total_messages == 0:
-                print("✅ No hay mensajes para eliminar")
-                return
-            
-            # Confirmar
-            print(f"\n⚠️  ¿Estás seguro de eliminar {total_messages} mensajes?")
-            print("   Escribe 'SI' para confirmar: ", end="")
-            confirmation = input().strip().upper()
-            
-            if confirmation != "SI":
-                print("❌ Operación cancelada")
-                return
-            
-            # Eliminar mensajes
-            delete_query = """
-                DELETE FROM conversations 
-                WHERE phone_number = $1
-            """
-            await conn.execute(delete_query, tomo_phone)
-            
-            print(f"✅ Se eliminaron {total_messages} mensajes de Tomo")
-            
-            # Verificar
-            verify_result = await conn.fetchrow(count_query, tomo_phone)
-            remaining = verify_result['total']
-            print(f"📊 Mensajes restantes: {remaining}")
-            
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Contar mensajes antes de eliminar
+                count_query = """
+                    SELECT COUNT(*) as total 
+                    FROM whatsapp_conversations 
+                    WHERE phone_number = %s
+                """
+                cur.execute(count_query, (tomo_phone,))
+                result = cur.fetchone()
+                total_messages = result[0]
+                
+                print(f"[INFO] Total de mensajes con Tomo ({tomo_phone}): {total_messages}")
+                
+                if total_messages == 0:
+                    print("[OK] No hay mensajes para eliminar")
+                    return
+                
+                # Confirmar
+                if not auto_confirm:
+                    print(f"\n[WARNING] Estas seguro de eliminar {total_messages} mensajes?")
+                    print("   Escribe 'SI' para confirmar: ", end="")
+                    confirmation = input().strip().upper()
+                    
+                    if confirmation != "SI":
+                        print("[CANCELADO] Operacion cancelada")
+                        return
+                else:
+                    print(f"[INFO] Auto-confirmando eliminacion de {total_messages} mensajes...")
+                
+                # Eliminar mensajes
+                delete_query = """
+                    DELETE FROM whatsapp_conversations 
+                    WHERE phone_number = %s
+                """
+                cur.execute(delete_query, (tomo_phone,))
+                conn.commit()
+                
+                print(f"[OK] Se eliminaron {total_messages} mensajes de Tomo")
+                
+                # Verificar
+                cur.execute(count_query, (tomo_phone,))
+                verify_result = cur.fetchone()
+                remaining = verify_result[0]
+                print(f"[INFO] Mensajes restantes: {remaining}")
+                
+                # También limpiar metadata del lead
+                print("\n[INFO] Limpiando metadata del lead...")
+                reset_lead_query = """
+                    UPDATE whatsapp_leads 
+                    SET bot_enabled = true 
+                    WHERE phone_number = %s
+                """
+                cur.execute(reset_lead_query, (tomo_phone,))
+                conn.commit()
+                print("[OK] Metadata del lead limpiada")
+                
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         import traceback
         traceback.print_exc()
-    finally:
-        await pool.close()
+        sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(clear_tomo_conversations())
+    clear_tomo_conversations()
