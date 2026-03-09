@@ -248,7 +248,8 @@ class WhatsAppClient:
                 # The Authorization header will be used when downloading
                 return media_url
         except httpx.HTTPError as e:
-            logger.error(f"❌ Error getting media URL for {media_id}: {e}")
+            # Media URLs expire after 30 days - this is normal, use DEBUG level
+            logger.debug(f"Media URL not available for {media_id}: {e}")
             return None
     
     async def download_media(self, media_id: str, save_path: str) -> bool:
@@ -266,7 +267,7 @@ class WhatsAppClient:
             # Get media URL (this already includes access_token as parameter)
             media_url = await self.get_media_url(media_id)
             if not media_url:
-                logger.error(f"❌ Could not get media URL for {media_id}")
+                logger.debug(f"Could not get media URL for {media_id} (likely expired)")
                 return False
             
             # Download the file WITH authorization header
