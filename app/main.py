@@ -35,6 +35,9 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Reduce httpx logging noise (403 errors from expired media)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 # Get settings
 settings = get_settings()
 
@@ -1119,7 +1122,7 @@ async def proxy_media(media_id: str):
         media_received_dir = base_dir / "media" / "received"
         media_audio_dir = base_dir / "media" / "audio"
         
-        logger.info(f"Looking for media {media_id} in media directories")
+        logger.debug(f"Looking for media {media_id} in media directories")
         
         # Content type mapping
         content_type_map = {
@@ -1170,7 +1173,7 @@ async def proxy_media(media_id: str):
                 media_dir.mkdir(parents=True, exist_ok=True)
         
         # If not found locally, try to download it from WhatsApp first
-        logger.info(f"📥 Media not found locally, attempting to download from WhatsApp: {media_id}")
+        logger.debug(f"📥 Media not found locally, attempting to download from WhatsApp: {media_id}")
         from app.utils.media_handler import get_received_media_path
         local_path = get_received_media_path(media_id)
         
