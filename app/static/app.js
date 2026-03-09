@@ -6,6 +6,8 @@ let isLoadingOlderMessages = false;
 const MESSAGES_PAGE_SIZE = 20;
 const MAX_REFRESH_LIMIT = 500;
 const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
+let currentSearchTab = 'chats'; // 'chats' or 'messages'
+let allMessagesForSearch = []; // Cache for message search
 
 function setViewportHeightVar() {
     const vh = window.innerHeight * 0.01;
@@ -197,34 +199,16 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupEventListeners() {
     const messageInput = document.getElementById('messageInput');
     const newMessageText = document.getElementById('newMessageText');
-
+    
     if (messageInput) {
         messageInput.addEventListener('input', () => {
             updateCharCount('messageInput', 'charCount');
         });
     }
-
+    
     if (newMessageText) {
         newMessageText.addEventListener('input', () => {
             updateCharCount('newMessageText', 'newMsgCharCount');
-        });
-    }
-
-    // Event delegation for reaction buttons
-    const messagesContainer = document.getElementById('chatMessages');
-    if (messagesContainer) {
-        messagesContainer.addEventListener('click', (e) => {
-            const reactionBtn = e.target.closest('.reaction-btn');
-            if (reactionBtn) {
-                const emoji = reactionBtn.dataset.emoji;
-                const messageDiv = reactionBtn.closest('.message');
-                const messageId = messageDiv.dataset.messageId;
-                const phoneNumber = messageDiv.dataset.phone;
-                
-                if (messageId && phoneNumber && emoji) {
-                    sendReaction(parseInt(messageId), phoneNumber, emoji);
-                }
-            }
         });
     }
 }
@@ -288,8 +272,7 @@ async function loadConversations() {
                     last_message: lastMessage,
                     last_message_at: timestamp,
                     created_at: timestamp,
-                    unread_count: item.unread_count || 0,
-                    priority: item.priority || 0
+                    unread_count: item.unread_count || 0  // ✅ Added unread_count
                 });
             }
         });
@@ -334,17 +317,6 @@ function renderConversations() {
         const unreadCount = conv.unread_count || 0;
         const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
         
-        // Priority badge
-        const priority = conv.priority || 0;
-        let priorityBadge = '';
-        if (priority === 1) {
-            priorityBadge = '<span class="priority-badge priority-1">1</span>';
-        } else if (priority === 2) {
-            priorityBadge = '<span class="priority-badge priority-2">2</span>';
-        } else if (priority === 3) {
-            priorityBadge = '<span class="priority-badge priority-3">3</span>';
-        }
-        
         // Debug: log conversations with unread
         if (unreadCount > 0) {
             console.log(`📬 Unread: ${conv.customer_name || conv.phone_number} has ${unreadCount} unread messages`);
@@ -356,7 +328,6 @@ function renderConversations() {
             <div class="conversation-header">
                 <div class="conversation-name">
                     ${conv.customer_name || conv.phone_number}
-                    ${priorityBadge}
                     ${unreadBadge}
                 </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
@@ -378,16 +349,12 @@ async function selectConversation(phoneNumber) {
             customer_name: data.lead?.customer_name || phoneNumber,
             messages: normalizeMessages(data.messages),
             hasMore: Boolean(data.has_more),
-            nextCursor: data.next_cursor || null,
-            priority: data.lead?.priority || 0
+            nextCursor: data.next_cursor || null
         };
         
         // Update bot toggle state from lead info
         const botEnabled = data.lead?.bot_enabled !== false;
         updateBotToggleUI(botEnabled);
-        
-        // Update priority UI
-        updatePriorityUI(currentConversation.priority);
         
         loadLeadInfo(phoneNumber);
         
@@ -552,6 +519,8 @@ function renderCurrentChat(options = {}) {
             const sanitized = escapeHtml(text || '').replace(/\n/g, '<br>');
             const isImage = (msg.message_type === 'image');
             const isAudio = (msg.message_type === 'audio');
+            const isIncoming = direction === 'incoming';
+            const messageId = msg.id || '';
             // For images/audio, the URL can be in media_url (outgoing) or response_text (incoming)
             const mediaUrl = msg.media_url || msg.response_text;
             
@@ -567,84 +536,58 @@ function renderCurrentChat(options = {}) {
                 });
             }
             
+            let messageHtml = '';
+            
             if (isImage && mediaUrl && !mediaUrl.startsWith('[')) {
-                return `
-                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}" data-message-id="${msg.id}" data-phone="${currentConversation.phone_number}">
-                        <div class="message-content">
-                            <div class="message-text">
-                                <div style="margin-bottom: 0.35rem;">${sanitized || '[Imagen]'}</div>
-                                <a href="${mediaUrl}" target="_blank" rel="noopener">
-                                    <img src="${mediaUrl}" alt="Imagen" style="max-width: 220px; border-radius: 6px;" />
-                                </a>
-                            </div>
-                            <div class="message-time">${formatTime(msg.timestamp)}</div>
+                messageHtml = `
+                    <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
+                        <div class="message-text">
+                            <div style="margin-bottom: 0.35rem;">${sanitized || '[Imagen]'}</div>
+                            <a href="${mediaUrl}" target="_blank" rel="noopener">
+                                <img src="${mediaUrl}" alt="Imagen" style="max-width: 220px; border-radius: 6px;" />
+                            </a>
                         </div>
-                        ${direction === 'incoming' ? `
-                            <div class="message-reactions">
-                                <button class="reaction-btn" data-emoji="👍" title="Me gusta">👍</button>
-                                <button class="reaction-btn" data-emoji="❤️" title="Me encanta">❤️</button>
-                                <button class="reaction-btn" data-emoji="😂" title="Risa">😂</button>
-                                <button class="reaction-btn" data-emoji="😮" title="Sorpresa">😮</button>
-                                <button class="reaction-btn" data-emoji="👏" title="Aplauso">👏</button>
-                            </div>
-                        ` : ''}
+                        <div class="message-time">${formatTime(msg.timestamp)}</div>
                     </div>
                 `;
-            }
-            
-            if (isAudio && mediaUrl && !mediaUrl.startsWith('[')) {
+            } else if (isAudio && mediaUrl && !mediaUrl.startsWith('[')) {
                 const audioId = `audio_${msg.id}`;
                 // Add timestamp to force refresh
                 const audioSrc = `${mediaUrl}?t=${Date.now()}`;
                 // Use preload="auto" for mobile to ensure complete audio loading
                 const preloadMode = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'auto' : 'metadata';
-                return `
-                    <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}" data-message-id="${msg.id}" data-phone="${currentConversation.phone_number}">
-                        <div class="message-content">
-                            <div class="message-text">
-                                <div class="audio-message">
-                                    <div class="audio-icon">🎤</div>
-                                    <audio id="${audioId}" controls preload="${preloadMode}" style="width: 100%; max-width: 250px;">
-                                        <source src="${audioSrc}" type="audio/ogg; codecs=opus">
-                                        <source src="${audioSrc}" type="audio/mpeg">
-                                        <source src="${audioSrc}" type="audio/mp4">
-                                        <source src="${audioSrc}" type="audio/webm">
-                                        Tu navegador no soporta audio
-                                    </audio>
-                                </div>
+                messageHtml = `
+                    <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
+                        <div class="message-text">
+                            <div class="audio-message">
+                                <div class="audio-icon">🎤</div>
+                                <audio id="${audioId}" controls preload="${preloadMode}" style="width: 100%; max-width: 250px;">
+                                    <source src="${audioSrc}" type="audio/ogg; codecs=opus">
+                                    <source src="${audioSrc}" type="audio/mpeg">
+                                    <source src="${audioSrc}" type="audio/mp4">
+                                    <source src="${audioSrc}" type="audio/webm">
+                                    Tu navegador no soporta audio
+                                </audio>
                             </div>
-                            <div class="message-time">${formatTime(msg.timestamp)}</div>
                         </div>
-                        ${direction === 'incoming' ? `
-                            <div class="message-reactions">
-                                <button class="reaction-btn" data-emoji="👍" title="Me gusta">👍</button>
-                                <button class="reaction-btn" data-emoji="❤️" title="Me encanta">❤️</button>
-                                <button class="reaction-btn" data-emoji="😂" title="Risa">😂</button>
-                                <button class="reaction-btn" data-emoji="😮" title="Sorpresa">😮</button>
-                                <button class="reaction-btn" data-emoji="👏" title="Aplauso">👏</button>
-                            </div>
-                        ` : ''}
+                        <div class="message-time">${formatTime(msg.timestamp)}</div>
                     </div>
                 `;
-            }
-
-            return `
-                <div class="message ${direction === 'outgoing' ? 'outgoing' : 'incoming'}" data-message-id="${msg.id}" data-phone="${currentConversation.phone_number}">
-                    <div class="message-content">
+            } else {
+                messageHtml = `
+                    <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
                         <div class="message-text">${sanitized || '&nbsp;'}</div>
                         <div class="message-time">${formatTime(msg.timestamp)}</div>
                     </div>
-                    ${direction === 'incoming' ? `
-                        <div class="message-reactions">
-                            <button class="reaction-btn" data-emoji="👍" title="Me gusta">👍</button>
-                            <button class="reaction-btn" data-emoji="❤️" title="Me encanta">❤️</button>
-                            <button class="reaction-btn" data-emoji="😂" title="Risa">😂</button>
-                            <button class="reaction-btn" data-emoji="😮" title="Sorpresa">😮</button>
-                            <button class="reaction-btn" data-emoji="👏" title="Aplauso">👏</button>
-                        </div>
-                    ` : ''}
-                </div>
-            `;
+                `;
+            }
+            
+            // Wrap incoming messages in message-wrapper for reactions
+            if (isIncoming && messageId) {
+                return `<div class="message-wrapper" data-message-id="${messageId}">${messageHtml}</div>`;
+            }
+            
+            return messageHtml;
         }).join('');
 
         const loadMoreHtml = currentConversation.hasMore ? `
@@ -840,134 +783,6 @@ function updateBotToggleUI(enabled) {
         text.textContent = enabled ? '🤖 Bot Activo' : '🤐 Bot Inactivo';
     }
 }
-
-// Update priority for conversation
-async function updatePriority(priority) {
-    if (!currentConversation) {
-        showToast('Selecciona una conversación primero', 'warning');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/priority`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ priority: priority })
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to update priority');
-        }
-        
-        const result = await response.json();
-        
-        // Update UI
-        updatePriorityUI(priority);
-        
-        // Update in conversations list
-        const conv = conversations.find(c => c.phone_number === currentConversation.phone_number);
-        if (conv) {
-            conv.priority = priority;
-            renderConversations();
-        }
-        
-        const priorityText = priority === 0 ? 'Sin prioridad' : `Prioridad ${priority}`;
-        showToast(`✅ ${priorityText}`, 'success');
-        
-    } catch (error) {
-        console.error('Error updating priority:', error);
-        showToast('Error al cambiar prioridad', 'error');
-    }
-}
-
-// Update priority UI buttons
-function updatePriorityUI(priority) {
-    // Update button states
-    for (let i = 0; i <= 3; i++) {
-        const btn = document.getElementById(`priorityBtn${i}`);
-        if (btn) {
-            if (i === priority) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        }
-    }
-}
-
-// Send quick reply menu option
-async function sendQuickReply(menuOption) {
-    if (!currentConversation) {
-        showToast('Selecciona una conversación primero', 'warning');
-        return;
-    }
-    
-    const menuNames = {
-        1: 'Disponibilidad',
-        2: 'Precios',
-        3: 'Características',
-        4: 'Extras',
-        5: 'Ubicación'
-    };
-    
-    try {
-        showToast(`Enviando respuesta: ${menuNames[menuOption]}...`, 'info');
-        
-        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/quick-reply`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ menu_option: menuOption })
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to send quick reply');
-        }
-        
-        const result = await response.json();
-        
-        showToast(`✅ Enviado: ${menuNames[menuOption]}`, 'success');
-        
-        // Reload conversation to show new message
-        setTimeout(() => {
-            selectConversation(currentConversation.phone_number);
-        }, 500);
-        
-    } catch (error) {
-        console.error('Error sending quick reply:', error);
-        showToast('Error al enviar respuesta rápida', 'error');
-    }
-}
-
-// Send reaction to message
-async function sendReaction(messageId, phoneNumber, emoji) {
-    try {
-        const response = await fetch(`${API_BASE}/api/messages/${messageId}/react`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                emoji: emoji,
-                phone_number: phoneNumber
-            })
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to send reaction');
-        }
-        
-        showToast(`${emoji} Reacción enviada`, 'success');
-        
-    } catch (error) {
-        console.error('Error sending reaction:', error);
-        showToast('Error al enviar reacción', 'error');
-    }
-}
-
 
 // Send Message (Reply in Conversation)
 async function sendMessage(event) {
@@ -1242,16 +1057,170 @@ async function sendNewImageFromFile(file, phone, caption = '') {
     }
 }
 
-// Filter Conversations
-function filterConversations() {
-    const searchInput = document.getElementById('searchConversations');
-    const filter = searchInput.value.toLowerCase();
+// Switch Search Tab
+function switchSearchTab(tab) {
+    currentSearchTab = tab;
     
+    // Update tab UI
+    const tabs = document.querySelectorAll('.search-tab');
+    tabs.forEach(t => {
+        if (t.dataset.tab === tab) {
+            t.classList.add('active');
+        } else {
+            t.classList.remove('active');
+        }
+    });
+    
+    // Update placeholder
+    const searchInput = document.getElementById('searchInput');
+    if (tab === 'chats') {
+        searchInput.placeholder = 'Buscar en chats...';
+    } else {
+        searchInput.placeholder = 'Buscar en mensajes...';
+    }
+    
+    // Clear and re-run search
+    handleSearch();
+}
+
+// Handle Search (dispatcher)
+function handleSearch() {
+    const searchInput = document.getElementById('searchInput');
+    const query = searchInput.value.trim().toLowerCase();
+    
+    if (currentSearchTab === 'chats') {
+        searchInChats(query);
+    } else {
+        searchInMessages(query);
+    }
+}
+
+// Search in Chats (names)
+function searchInChats(query) {
+    const conversationsList = document.getElementById('conversationsList');
+    const searchResultsList = document.getElementById('searchResultsList');
+    
+    // Show conversations list, hide search results
+    conversationsList.style.display = 'block';
+    searchResultsList.style.display = 'none';
+    
+    if (!query) {
+        // Show all conversations
+        const items = document.querySelectorAll('.conversation-item');
+        items.forEach(item => {
+            item.style.display = 'block';
+        });
+        return;
+    }
+    
+    // Filter conversations
     const items = document.querySelectorAll('.conversation-item');
     items.forEach(item => {
         const text = item.textContent.toLowerCase();
-        item.style.display = text.includes(filter) ? 'block' : 'none';
+        item.style.display = text.includes(query) ? 'block' : 'none';
     });
+}
+
+// Search in Messages
+async function searchInMessages(query) {
+    const conversationsList = document.getElementById('conversationsList');
+    const searchResultsList = document.getElementById('searchResultsList');
+    
+    if (!query) {
+        // Show conversations list when no query
+        conversationsList.style.display = 'block';
+        searchResultsList.style.display = 'none';
+        return;
+    }
+    
+    // Show search results, hide conversations
+    conversationsList.style.display = 'none';
+    searchResultsList.style.display = 'block';
+    
+    // Show loading
+    searchResultsList.innerHTML = '<div class="search-no-results">Buscando mensajes...</div>';
+    
+    try {
+        // Search through all conversations
+        const results = [];
+        
+        for (const conv of conversations) {
+            // Fetch messages for this conversation
+            const data = await fetchConversationData(conv.phone_number, { limit: 100 });
+            const messages = normalizeMessages(data.messages);
+            
+            // Search in messages
+            messages.forEach(msg => {
+                const text = (msg.message_text || '').toLowerCase();
+                if (text.includes(query)) {
+                    results.push({
+                        phone: conv.phone_number,
+                        name: conv.customer_name || conv.phone_number,
+                        message: msg.message_text,
+                        timestamp: msg.timestamp,
+                        messageId: msg.id
+                    });
+                }
+            });
+        }
+        
+        // Sort by timestamp (most recent first)
+        results.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Render results
+        renderMessageSearchResults(results, query);
+        
+    } catch (error) {
+        console.error('Error searching messages:', error);
+        searchResultsList.innerHTML = '<div class="search-no-results">Error al buscar mensajes</div>';
+    }
+}
+
+// Render Message Search Results
+function renderMessageSearchResults(results, query) {
+    const searchResultsList = document.getElementById('searchResultsList');
+    
+    if (results.length === 0) {
+        searchResultsList.innerHTML = '<div class="search-no-results">No se encontraron mensajes</div>';
+        return;
+    }
+    
+    // Highlight function
+    const highlightText = (text, query) => {
+        const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+        return text.replace(regex, '<span class="highlight">$1</span>');
+    };
+    
+    const html = results.map(result => {
+        const highlightedMessage = highlightText(truncate(result.message, 100), query);
+        
+        return `
+            <div class="search-result-item" onclick="selectConversationFromSearch('${result.phone}')">
+                <div class="search-result-contact">${result.name}</div>
+                <div class="search-result-message">${highlightedMessage}</div>
+                <div class="search-result-time">${formatTime(result.timestamp)}</div>
+            </div>
+        `;
+    }).join('');
+    
+    searchResultsList.innerHTML = html;
+}
+
+// Helper function to escape regex special characters
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Select conversation from search result
+async function selectConversationFromSearch(phoneNumber) {
+    // Clear search
+    document.getElementById('searchInput').value = '';
+    
+    // Switch back to chats tab
+    switchSearchTab('chats');
+    
+    // Select conversation
+    await selectConversation(phoneNumber);
 }
 
 // Update Status Indicator
@@ -1617,9 +1586,9 @@ window.toggleAudioRecording = toggleAudioRecording;
 window.stopAudioRecording = stopAudioRecording;
 window.cancelAudioRecording = cancelAudioRecording;
 window.clearAudioRecording = clearAudioRecording;
-window.updatePriority = updatePriority;
-window.sendQuickReply = sendQuickReply;
-window.sendReaction = sendReaction;
+window.switchSearchTab = switchSearchTab;
+window.handleSearch = handleSearch;
+window.selectConversationFromSearch = selectConversationFromSearch;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
@@ -1649,3 +1618,131 @@ async function markConversationAsRead(phoneNumber) {
         // Don't show toast error - this is a background operation
     }
 }
+
+// ========================================
+// MESSAGE REACTIONS
+// ========================================
+
+// Available reaction emojis
+const REACTION_EMOJIS = ['❤️', '😬', '😏', '🙏', '🙌', '💪', '👌', '😭', '🤷‍♂️', '🤦‍♂️', '😔', '😐', '🤔'];
+
+// Currently active reaction menu
+let activeReactionMenu = null;
+
+// Add click listeners for received messages (to show reaction menu)
+function attachReactionListeners() {
+    const messagesContainer = document.getElementById('messagesContainer');
+    if (!messagesContainer) return;
+    
+    // Use event delegation
+    messagesContainer.addEventListener('click', (e) => {
+        // Find if the click is on a received message
+        const messageWrapper = e.target.closest('.message-wrapper');
+        if (messageWrapper) {
+            const messageElement = messageWrapper.querySelector('.message.received');
+            if (messageElement) {
+                showReactionMenu(messageWrapper, messageElement);
+            }
+        }
+    });
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (activeReactionMenu && !e.target.closest('.message-wrapper') && !e.target.closest('.reaction-menu')) {
+            closeReactionMenu();
+        }
+    });
+}
+
+// Show reaction menu for a message
+function showReactionMenu(wrapper, messageElement) {
+    // Close any existing menu
+    closeReactionMenu();
+    
+    // Get message ID
+    const messageId = wrapper.getAttribute('data-message-id');
+    if (!messageId) {
+        console.warn('Message ID not found');
+        return;
+    }
+    
+    // Create reaction menu
+    const menu = document.createElement('div');
+    menu.className = 'reaction-menu';
+    
+    // Add reaction emojis
+    REACTION_EMOJIS.forEach(emoji => {
+        const emojiSpan = document.createElement('span');
+        emojiSpan.className = 'reaction-emoji';
+        emojiSpan.textContent = emoji;
+        emojiSpan.onclick = (e) => {
+            e.stopPropagation();
+            sendReaction(messageId, emoji);
+            closeReactionMenu();
+        };
+        menu.appendChild(emojiSpan);
+    });
+    
+    // Add menu to wrapper
+    wrapper.style.position = 'relative';
+    wrapper.appendChild(menu);
+    activeReactionMenu = menu;
+    
+    console.log(`📌 Reaction menu shown for message ${messageId}`);
+}
+
+// Close reaction menu
+function closeReactionMenu() {
+    if (activeReactionMenu) {
+        activeReactionMenu.remove();
+        activeReactionMenu = null;
+    }
+}
+
+// Send reaction to backend
+async function sendReaction(messageId, emoji) {
+    if (!currentConversation) {
+        console.warn('No active conversation');
+        return;
+    }
+    
+    // Clean message ID - remove any suffixes like "_in" or "_out"
+    const cleanMessageId = String(messageId).replace(/_in$|_out$/, '');
+    
+    console.log(`➡️ Sending reaction ${emoji} to message ${cleanMessageId} (original: ${messageId})`);
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/messages/${cleanMessageId}/react`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                emoji: emoji,
+                phone_number: currentConversation.phone_number
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('✅ Reaction sent:', result);
+        
+        showToast(`Reacción ${emoji} enviada`, 'success');
+        
+        // Optionally refresh the conversation to show the reaction
+        // setTimeout(() => selectConversation(currentConversation.phone_number), 500);
+        
+    } catch (error) {
+        console.error('❌ Error sending reaction:', error);
+        showToast('Error al enviar reacción', 'error');
+    }
+}
+
+// Initialize reactions when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    attachReactionListeners();
+    console.log('✅ Reaction listeners attached');
+});
