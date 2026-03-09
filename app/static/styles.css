@@ -1101,3 +1101,141 @@ audio::-webkit-media-controls-volume-slider {
     right: auto;
     left: 8px;
 }
+
+/* Priority Badge */
+.priority-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 0.4rem;
+    font-weight: 700;
+    padding: 0 4px;
+    margin-left: 0.2rem;
+    color: white;
+}
+
+/* Priority Section in Message Input */
+.priority-section {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.priority-label {
+    font-size: 0.5rem;
+    color: var(--text-secondary);
+    whitespace: nowrap;
+}
+
+.priority-buttons {
+    display: flex;
+    gap: 0.2rem;
+}
+
+.priority-btn {
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-light);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.5rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    min-width: 28px;
+}
+
+.priority-btn:hover {
+    background-color: var(--bg-medium);
+    transform: translateY(-1px);
+}
+
+.priority-btn.active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.priority-btn-0.active {
+    background-color: var(--text-secondary);
+    color: white;
+    border-color: var(--text-secondary);
+}
+
+.priority-btn-1 {
+    color: #ff4444;
+    border-color: #ff4444;
+}
+
+.priority-btn-1.active {
+    background-color: #ff4444;
+    color: white;
+    border-color: #ff4444;
+}
+
+.priority-btn-2 {
+    color: #ff9800;
+    border-color: #ff9800;
+}
+
+.priority-btn-2.active {
+    background-color: #ff9800;
+    color: white;
+    border-color: #ff9800;
+}
+
+.priority-btn-3 {
+    color: #ffd700;
+    border-color: #ffd700;
+}
+
+.priority-btn-3.active {
+    background-color: #ffd700;
+    color: #000;
+    border-color: #ffd700;
+}
+
+/* Quick Reply Section */
+.quick-reply-section {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.quick-reply-label {
+    font-size: 0.5rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.quick-reply-buttons {
+    display: flex;
+    gap: 0.2rem;
+}
+
+.quick-reply-btn {
+    padding: 0.25rem 0.4rem;
+    border: 1px solid #2196F3;
+    border-radius: 4px;
+    background-color: var(--bg-light);
+    color: #2196F3;
+    cursor: pointer;
+    font-size: 0.6rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    min-width: 28px;
+}
+
+.quick-reply-btn:hover {
+    background-color: #2196F3;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3);
+}
+
+.quick-reply-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(33, 150, 243, 0.3);
+}

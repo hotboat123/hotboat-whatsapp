@@ -307,28 +307,36 @@ async function fetchConversationData(phoneNumber, { limit = MESSAGES_PAGE_SIZE, 
 function renderConversations() {
     const container = document.getElementById('conversationsList');
     if (!container) return;
-    
+
     if (conversations.length === 0) {
         container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No conversations yet</div>';
         return;
     }
-    
+
     container.innerHTML = conversations.map(conv => {
         const unreadCount = conv.unread_count || 0;
         const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
         
+        // Priority badge
+        const priority = conv.priority || 0;
+        const priorityColors = ['#808080', '#dc3545', '#ffc107', '#28a745'];
+        const priorityNames = ['Sin prioridad', 'Alta', 'Media', 'Baja'];
+        const priorityBadge = priority > 0 ? 
+            `<span class="priority-badge" style="background-color: ${priorityColors[priority]}" title="Prioridad: ${priorityNames[priority]}">${priority}</span>` : '';
+
         // Debug: log conversations with unread
         if (unreadCount > 0) {
             console.log(`📬 Unread: ${conv.customer_name || conv.phone_number} has ${unreadCount} unread messages`);
         }
-        
+
         return `
-        <div class="conversation-item ${currentConversation?.phone_number === conv.phone_number ? 'active' : ''}" 
+        <div class="conversation-item ${currentConversation?.phone_number === conv.phone_number ? 'active' : ''}"
              onclick="selectConversation('${conv.phone_number}')">
             <div class="conversation-header">
                 <div class="conversation-name">
                     ${conv.customer_name || conv.phone_number}
                     ${unreadBadge}
+                    ${priorityBadge}
                 </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
             </div>
@@ -349,23 +357,27 @@ async function selectConversation(phoneNumber) {
             customer_name: data.lead?.customer_name || phoneNumber,
             messages: normalizeMessages(data.messages),
             hasMore: Boolean(data.has_more),
-            nextCursor: data.next_cursor || null
+            nextCursor: data.next_cursor || null,
+            priority: data.lead?.priority || 0
         };
-        
+
         // Update bot toggle state from lead info
         const botEnabled = data.lead?.bot_enabled !== false;
         updateBotToggleUI(botEnabled);
         
+        // Update priority UI
+        updatePriorityUI(currentConversation.priority);
+
         loadLeadInfo(phoneNumber);
-        
+
         renderCurrentChat({ scrollToBottom: true });
         renderConversations();
         showChatView();
         updateMobileLayout();
-        
+
         // Mark conversation as read
         await markConversationAsRead(phoneNumber);
-        
+
     } catch (error) {
         console.error('Error selecting conversation:', error);
         showToast('Failed to load conversation', 'error');
@@ -1589,6 +1601,8 @@ window.clearAudioRecording = clearAudioRecording;
 window.switchSearchTab = switchSearchTab;
 window.handleSearch = handleSearch;
 window.selectConversationFromSearch = selectConversationFromSearch;
+window.updatePriority = updatePriority;
+window.sendQuickReply = sendQuickReply;
 
 // Mark conversation as read
 async function markConversationAsRead(phoneNumber) {
@@ -1696,6 +1710,106 @@ function closeReactionMenu() {
     if (activeReactionMenu) {
         activeReactionMenu.remove();
         activeReactionMenu = null;
+    }
+}
+
+// ========================================
+// PRIORITY AND QUICK REPLY FUNCTIONS
+// ========================================
+
+// Update conversation priority
+async function updatePriority(priority) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/priority`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ priority: priority })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to update priority');
+        }
+        
+        const result = await response.json();
+        
+        // Update UI
+        updatePriorityUI(priority);
+        
+        // Update in conversations list
+        const conv = conversations.find(c => c.phone_number === currentConversation.phone_number);
+        if (conv) {
+            conv.priority = priority;
+            renderConversations();
+        }
+        
+        showToast('Prioridad actualizada', 'success');
+        
+    } catch (error) {
+        console.error('Error updating priority:', error);
+        showToast('Error al actualizar prioridad', 'error');
+    }
+}
+
+// Update priority UI buttons
+function updatePriorityUI(priority) {
+    // Update button states
+    for (let i = 0; i <= 3; i++) {
+        const btn = document.getElementById(`priorityBtn${i}`);
+        if (btn) {
+            if (i === priority) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    }
+}
+
+// Send quick reply menu option
+async function sendQuickReply(menuOption) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'warning');
+        return;
+    }
+    
+    const menuNames = {
+        1: 'Disponibilidad',
+        2: 'Precios',
+        3: 'Características',
+        4: 'Extras',
+        5: 'Ubicación'
+    };
+    
+    try {
+        showToast(`Enviando respuesta: ${menuNames[menuOption]}...`, 'info');
+        
+        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/quick-reply`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ menu_option: menuOption })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to send quick reply');
+        }
+        
+        showToast(`Respuesta "${menuNames[menuOption]}" enviada`, 'success');
+        
+        // Reload conversation to show the sent message
+        await selectConversation(currentConversation.phone_number);
+        
+    } catch (error) {
+        console.error('Error sending quick reply:', error);
+        showToast('Error al enviar respuesta rápida', 'error');
     }
 }
 
