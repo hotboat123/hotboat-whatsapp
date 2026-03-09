@@ -3122,14 +3122,35 @@ Precio: $3,500 c/u
         """
         Determine if a number (1-6) should be interpreted as a menu option.
         Returns True only if we're in a menu context, not in the middle of another conversation flow.
-        
+
         Args:
             message_text: The user's message
             conversation: The conversation context
-            
+
         Returns:
             bool: True if the number should be treated as a menu option
         """
+        # CRITICAL: If user is in any active flow, DON'T interpret as menu
+        metadata = conversation.get("metadata", {})
+        active_flows = [
+            "experience_flow",
+            "accommodation_flow",
+            "complete_packages_flow",
+            "build_package_flow",
+            "awaiting_party_size",
+            "awaiting_reservation_date",
+            "awaiting_reservation_time",
+            "awaiting_extra_selection",
+            "awaiting_ice_cream_flavor",
+            "awaiting_packages_submenu",
+            "awaiting_experience_menu"
+        ]
+        
+        for flow in active_flows:
+            if metadata.get(flow):
+                logger.info(f"User in active flow '{flow}', NOT treating as menu option")
+                return False
+        
         # If the message contains more than just a number, it's not a menu selection
         # e.g., "2 personas", "somos 3", etc.
         message_lower = message_text.lower().strip()
