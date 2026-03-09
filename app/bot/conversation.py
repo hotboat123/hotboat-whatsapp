@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS, CHILE_TZ
 from app.bot.faq import FAQHandler
 from app.bot.accommodations import accommodations_handler
-from app.bot.cart import CartManager
+from app.bot.cart import CartManager, CartItem
 from app.bot.translations import (
     get_text,
     detect_language_command,
