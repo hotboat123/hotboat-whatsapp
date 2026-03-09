@@ -316,13 +316,13 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
     
     def is_menu_number(self, message: str) -> Optional[int]:
         """
-        Check if message is a menu number selection (1-6)
+        Check if message is a menu number selection (1-8)
         
         Args:
             message: User's message
         
         Returns:
-            Number selected (1-6) or None
+            Number selected (1-8) or None
         """
         message_stripped = message.strip()
         
@@ -334,6 +334,8 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
             "4️⃣": 4,
             "5️⃣": 5,
             "6️⃣": 6,
+            "7️⃣": 7,
+            "8️⃣": 8,
         }
         
         # Check exact match with emoji
@@ -342,16 +344,16 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
         
         # Check for plain numbers (just the digit, possibly with spaces)
         message_lower = message.lower().strip()
-        if message_lower in ["1", "2", "3", "4", "5", "6"]:
+        if message_lower in ["1", "2", "3", "4", "5", "6", "7", "8"]:
             return int(message_lower)
         
         # Check if message starts with a number (e.g., "1 disponibilidad")
         first_char = message_lower[0] if message_lower else ""
-        if first_char in ["1", "2", "3", "4", "5", "6"]:
+        if first_char in ["1", "2", "3", "4", "5", "6", "7", "8"]:
             try:
                 # Try to parse just the number
                 num = int(first_char)
-                if 1 <= num <= 6:
+                if 1 <= num <= 8:
                     return num
             except ValueError:
                 pass
