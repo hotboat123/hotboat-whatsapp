@@ -29,13 +29,19 @@ def clear_tomo_conversations():
                 
                 print(f"[INFO] Total de mensajes con Tomo ({tomo_phone}): {total_messages}")
                 
-                if total_messages == 0:
-                    print("[OK] No hay mensajes para eliminar")
+                # Contar items en carrito
+                cart_query = "SELECT COUNT(*) FROM whatsapp_carts WHERE phone_number = %s"
+                cur.execute(cart_query, (tomo_phone,))
+                cart_count = cur.fetchone()[0]
+                print(f"[INFO] Items en carrito: {cart_count}")
+                
+                if total_messages == 0 and cart_count == 0:
+                    print("[OK] No hay datos para eliminar")
                     return
                 
                 # Confirmar
                 if not auto_confirm:
-                    print(f"\n[WARNING] Estas seguro de eliminar {total_messages} mensajes?")
+                    print(f"\n[WARNING] Estas seguro de eliminar {total_messages} mensajes y {cart_count} items del carrito?")
                     print("   Escribe 'SI' para confirmar: ", end="")
                     confirmation = input().strip().upper()
                     
@@ -43,34 +49,47 @@ def clear_tomo_conversations():
                         print("[CANCELADO] Operacion cancelada")
                         return
                 else:
-                    print(f"[INFO] Auto-confirmando eliminacion de {total_messages} mensajes...")
+                    print(f"[INFO] Auto-confirmando limpieza completa...")
                 
-                # Eliminar mensajes
+                # 1. Eliminar items del carrito
+                print("[INFO] Eliminando items del carrito...")
+                delete_cart = "DELETE FROM whatsapp_carts WHERE phone_number = %s"
+                cur.execute(delete_cart, (tomo_phone,))
+                print(f"[OK] {cart_count} items eliminados del carrito")
+                
+                # 2. Eliminar mensajes
+                print("[INFO] Eliminando mensajes...")
                 delete_query = """
                     DELETE FROM whatsapp_conversations 
                     WHERE phone_number = %s
                 """
                 cur.execute(delete_query, (tomo_phone,))
-                conn.commit()
+                print(f"[OK] {total_messages} mensajes eliminados")
                 
-                print(f"[OK] Se eliminaron {total_messages} mensajes de Tomo")
-                
-                # Verificar
-                cur.execute(count_query, (tomo_phone,))
-                verify_result = cur.fetchone()
-                remaining = verify_result[0]
-                print(f"[INFO] Mensajes restantes: {remaining}")
-                
-                # También limpiar metadata del lead
-                print("\n[INFO] Limpiando metadata del lead...")
+                # 3. Resetear el lead (mantener el lead pero limpiar estado)
+                print("[INFO] Reseteando lead...")
                 reset_lead_query = """
                     UPDATE whatsapp_leads 
-                    SET bot_enabled = true 
+                    SET bot_enabled = true,
+                        lead_status = 'new',
+                        unread_count = 0
                     WHERE phone_number = %s
                 """
                 cur.execute(reset_lead_query, (tomo_phone,))
+                print("[OK] Lead reseteado")
+                
                 conn.commit()
-                print("[OK] Metadata del lead limpiada")
+                
+                # Verificar
+                print("\n[INFO] Verificando limpieza...")
+                cur.execute(count_query, (tomo_phone,))
+                remaining = cur.fetchone()[0]
+                cur.execute(cart_query, (tomo_phone,))
+                remaining_cart = cur.fetchone()[0]
+                
+                print(f"[RESULT] Mensajes restantes: {remaining}")
+                print(f"[RESULT] Items en carrito restantes: {remaining_cart}")
+                print("\n[OK] Limpieza completa exitosa!")
                 
     except Exception as e:
         print(f"[ERROR] Error: {e}")
