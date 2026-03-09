@@ -2853,10 +2853,9 @@ Escribe el número que prefieras 🚤"""
                 
                 # Check if this is part of a custom package (has pending activities)
                 pending_activities = conversation["metadata"].get("pending_package_activities")
-                notification_reason = "accommodation_request"
                 
                 if pending_activities:
-                    # This is a custom package with accommodation
+                    # This is a custom package with accommodation - notify Capitán Tomás
                     activities_map = {
                         "1": "🚤 HotBoat",
                         "2": "🚣 Rafting",
@@ -2876,28 +2875,72 @@ Escribe el número que prefieras 🚤"""
 📅 *Check-in:* {flow["checkin_date"]}
 📅 *Check-out:* {flow["checkout_date"]}"""
                     
-                    notification_reason = "custom_package_request"
+                    # Notify Capitán Tomás for custom packages
+                    await self._notify_capitan_tomas(
+                        contact_name,
+                        phone_number,
+                        [],
+                        reason="custom_package_request",
+                        extra_info=summary
+                    )
                     
-                    # Clear pending activities
+                    # Clear pending activities and accommodation flow
                     del conversation["metadata"]["pending_package_activities"]
-                
-                # Notify Capitán Tomás
-                await self._notify_capitan_tomas(
-                    contact_name,
-                    phone_number,
-                    [],
-                    reason=notification_reason,
-                    extra_info=summary
-                )
-                
-                # Clear accommodation flow
-                del conversation["metadata"]["accommodation_flow"]
-                
-                # Return appropriate message
-                if notification_reason == "custom_package_request":
+                    del conversation["metadata"]["accommodation_flow"]
+                    
                     return get_text("build_package_confirmation", language).format(package_summary=summary)
+                
                 else:
-                    return get_text("accommodations_awaiting_confirmation", language).format(summary=summary)
+                    # This is a simple accommodation booking - add to cart instead of notifying
+                    from app.cart.models import CartItem
+                    
+                    # Determine price based on property and room type
+                    if flow["property"] == "open_sky":
+                        if "Hidromasaje" in flow["room_type"]:
+                            price = 120000
+                        else:
+                            price = 100000
+                    else:  # relikura
+                        if "Hostal" in flow["room_type"]:
+                            price = 20000
+                        elif "6 personas" in flow["room_type"]:
+                            price = 100000
+                        elif "4 personas" in flow["room_type"]:
+                            price = 80000
+                        else:  # 2 personas
+                            price = 60000
+                    
+                    # Create accommodation cart item
+                    accommodation_item = CartItem(
+                        name=f"{property_name} - {flow['room_type']}",
+                        price=price,
+                        quantity=1,
+                        item_type="accommodation",
+                        notes=f"Guests: {flow['guests']}, Check-in: {flow['checkin_date']}, Check-out: {flow['checkout_date']}"
+                    )
+                    
+                    # Add to cart
+                    await self.cart_manager.add_item(phone_number, contact_name, accommodation_item)
+                    cart = await self.cart_manager.get_cart(phone_number)
+                    
+                    # Clear accommodation flow
+                    del conversation["metadata"]["accommodation_flow"]
+                    
+                    # Return cart message with options
+                    return f"""✅ *Alojamiento agregado al carrito*
+
+{summary}
+
+{self.cart_manager.format_cart_message(cart)}
+
+📋 *¿Qué deseas hacer ahora?*
+
+• Escribe *"7"* para agregar más alojamientos
+• Escribe *"4"* para agregar extras (toallas, videos, etc.)
+• Escribe *"menú"* para ver el menú principal
+• Escribe *"carrito"* o *"20"* para proceder con el pago
+
+¿Qué opción eliges, grumete? ⚓"""
             
         except Exception as e:
             logger.error(f"Error in accommodation flow: {e}")
