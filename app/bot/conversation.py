@@ -1589,6 +1589,20 @@ Escribe el número que prefieras 🚤"""
             return False
         if conversation and conversation.get("metadata", {}).get("awaiting_party_size"):
             return False
+        
+        # CRITICAL: If user just requested main menu, numbers are menu options, NOT cart options
+        metadata = conversation.get("metadata", {}) if conversation else {}
+        last_messages = conversation.get("messages", [])[-2:] if conversation else []
+        
+        # Check if the last bot message was the main menu
+        for msg in reversed(last_messages):
+            if msg.get("role") == "assistant":
+                content = msg.get("content", "")
+                # If the last message contains main menu options, prioritize menu interpretation
+                if "1️⃣ *Disponibilidad y horarios*" in content or "¿Qué número eliges? 🚤" in content:
+                    logger.info("Not a cart option: user just saw main menu")
+                    return False
+                break
             
         message_stripped = message.strip()
         cart = await self.cart_manager.get_cart(phone_number)
