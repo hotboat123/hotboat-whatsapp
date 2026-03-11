@@ -958,9 +958,9 @@ Perfeito marinheiro! Ofereço várias opções:
     "accommodations_only_intro": {
         "es": """🏠 *Alojamientos en Pucón*
 
-Te envío un PDF con toda la información detallada de nuestros alojamientos recomendados ⬇️
+Te envío imágenes con toda la información detallada de nuestros alojamientos recomendados ⬇️
 
-📄 Después de revisar el PDF, respóndeme:
+📸 Después de revisar las imágenes, respóndeme:
 
 *¿Qué alojamiento te interesa?*
 
@@ -973,9 +973,9 @@ Escribe *1* o *2*, o el nombre del alojamiento 👍
         
         "en": """🏠 *Accommodations in Pucón*
 
-I'm sending you a PDF with all the detailed information about our recommended accommodations ⬇️
+I'm sending you images with all the detailed information about our recommended accommodations ⬇️
 
-📄 After reviewing the PDF, tell me:
+📸 After reviewing the images, tell me:
 
 *Which accommodation interests you?*
 
@@ -988,9 +988,9 @@ Type *1* or *2*, or the accommodation name 👍
         
         "pt": """🏠 *Acomodações em Pucón*
 
-Estou enviando um PDF com todas as informações detalhadas sobre nossas acomodações recomendadas ⬇️
+Estou enviando imagens com todas as informações detalhadas sobre nossas acomodações recomendadas ⬇️
 
-📄 Depois de revisar o PDF, me diga:
+📸 Depois de revisar as imagens, me diga:
 
 *Qual acomodação te interessa?*
 
@@ -1259,7 +1259,7 @@ Elige tu pack ideal con alojamiento y actividades:
 📦 *Pack 3 Noches*
 🏠 Alojamiento + 🚤 HotBoat + 🚣 Rafting + 🐴 Cabalgata
 
-📄 Te enviaré PDFs con todos los detalles de cada pack.
+📸 Te enviaré imágenes con todos los detalles de cada pack.
 
 *¿Cuántas noches te gustaría?*
 Escribe *1*, *2*, o *3* 🎒
@@ -1279,7 +1279,7 @@ Choose your ideal package with accommodation and activities:
 📦 *3 Nights Package*
 🏠 Accommodation + 🚤 HotBoat + 🚣 Rafting + 🐴 Horseback Riding
 
-📄 I'll send you PDFs with all the details of each package.
+📸 I'll send you images with all the details of each package.
 
 *How many nights would you like?*
 Type *1*, *2*, or *3* 🎒
@@ -1299,7 +1299,7 @@ Escolha seu pacote ideal com acomodação e atividades:
 📦 *Pacote 3 Noites*
 🏠 Acomodação + 🚤 HotBoat + 🚣 Rafting + 🐴 Cavalgada
 
-📄 Enviarei PDFs com todos os detalhes de cada pacote.
+📸 Enviarei imagens com todos os detalhes de cada pacote.
 
 *Quantas noites você gostaria?*
 Digite *1*, *2*, ou *3* 🎒
