@@ -2575,6 +2575,126 @@ Horarios disponibles:
             import traceback
             traceback.print_exc()
     
+    async def _send_accommodation_availability_email(
+        self,
+        customer_name: str,
+        customer_phone: str,
+        property_key: str,
+        accommodation_name: str,
+        guests: int,
+        checkin_date: str,
+        checkout_date: str
+    ) -> None:
+        """
+        Send email notification with WhatsApp link to check accommodation availability
+        
+        Args:
+            customer_name: Customer's name
+            customer_phone: Customer's phone number
+            property_key: "open_sky" or "relikura"
+            accommodation_name: Full accommodation name
+            guests: Number of guests
+            checkin_date: Check-in date
+            checkout_date: Check-out date
+        """
+        from app.config.accommodations_contacts import get_accommodation_contact, generate_whatsapp_link
+        
+        # Get accommodation contact
+        contact = get_accommodation_contact(property_key)
+        if not contact:
+            logger.error(f"No contact found for accommodation: {property_key}")
+            return
+        
+        # Generate WhatsApp message
+        whatsapp_message = f"""Hola! Tengo una consulta de disponibilidad:
+
+🏠 *Alojamiento:* {accommodation_name}
+👥 *Personas:* {guests}
+📅 *Check-in:* {checkin_date}
+📅 *Check-out:* {checkout_date}
+
+¿Tienen disponibilidad para estas fechas?
+
+Cliente: {customer_name} ({customer_phone})"""
+        
+        # Generate WhatsApp link
+        whatsapp_link = generate_whatsapp_link(contact["whatsapp"], whatsapp_message)
+        
+        # Email subject
+        subject = f"🏠 Nueva solicitud de alojamiento: {accommodation_name}"
+        
+        # Email body (HTML)
+        html_body = f"""
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <h2 style="color: #2563eb;">🏠 Nueva Solicitud de Alojamiento</h2>
+    
+    <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #1f2937;">Detalles de la Reserva</h3>
+        <p><strong>🏠 Alojamiento:</strong> {accommodation_name}</p>
+        <p><strong>👥 Personas:</strong> {guests}</p>
+        <p><strong>📅 Check-in:</strong> {checkin_date}</p>
+        <p><strong>📅 Check-out:</strong> {checkout_date}</p>
+    </div>
+    
+    <div style="background-color: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #1f2937;">👤 Cliente</h3>
+        <p><strong>Nombre:</strong> {customer_name}</p>
+        <p><strong>WhatsApp:</strong> {customer_phone}</p>
+    </div>
+    
+    <div style="background-color: #ecfdf5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #065f46;">📞 Contactar a {contact["name"]}</h3>
+        <p style="margin-bottom: 15px;">Haz clic en el botón para abrir WhatsApp con el mensaje pre-escrito:</p>
+        <a href="{whatsapp_link}" 
+           style="display: inline-block; background-color: #25D366; color: white; padding: 12px 24px; 
+                  text-decoration: none; border-radius: 6px; font-weight: bold;">
+            💬 Consultar Disponibilidad en WhatsApp
+        </a>
+    </div>
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+        <p>Este es un mensaje automático del sistema HotBoat WhatsApp Bot.</p>
+        <p>El cliente ha agregado este alojamiento a su carrito y está esperando confirmación de disponibilidad.</p>
+    </div>
+</div>
+"""
+        
+        # Send email
+        if not getattr(self.settings, "email_enabled", False):
+            logger.info("Email notifications disabled; skipping accommodation availability email.")
+            return
+        
+        if not RESEND_AVAILABLE:
+            logger.warning("Resend library not installed; cannot send accommodation email.")
+            return
+        
+        if not self.notification_email_recipients:
+            logger.warning("No notification emails configured. Skipping accommodation email.")
+            return
+        
+        resend_key = getattr(self.settings, "resend_api_key", "")
+        if not resend_key:
+            logger.warning("RESEND_API_KEY not configured; cannot send accommodation email.")
+            return
+        
+        try:
+            # Configure Resend API key
+            resend.api_key = resend_key
+            
+            # Send email via Resend API
+            result = resend.Emails.send({
+                "from": self.email_sender,
+                "to": self.notification_email_recipients,
+                "subject": subject,
+                "html": html_body,
+            })
+            
+            logger.info(f"✅ Accommodation availability email sent: {accommodation_name} (ID: {result.get('id', 'N/A')})")
+        except Exception as e:
+            logger.error(f"❌ Error sending accommodation availability email: {e}")
+            import traceback
+            traceback.print_exc()
+    
     async def send_audio_message(self, to: str, audio_path: str = None, audio_url: str = None) -> bool:
         """
         Send an audio message to a user
@@ -2925,6 +3045,19 @@ Escribe el número que prefieras 🚤"""
                     # Add to cart
                     await self.cart_manager.add_item(phone_number, contact_name, accommodation_item)
                     cart = await self.cart_manager.get_cart(phone_number)
+                    
+                    # Send email notification with WhatsApp link to check availability
+                    asyncio.create_task(
+                        self._send_accommodation_availability_email(
+                            customer_name=contact_name,
+                            customer_phone=phone_number,
+                            property_key=flow["property"],
+                            accommodation_name=f"{property_name} - {flow['room_type']}",
+                            guests=flow['guests'],
+                            checkin_date=flow['checkin_date'],
+                            checkout_date=flow['checkout_date']
+                        )
+                    )
                     
                     # Clear accommodation flow
                     del conversation["metadata"]["accommodation_flow"]
