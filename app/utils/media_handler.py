@@ -15,9 +15,14 @@ UPLOADED_DIR = os.path.join(MEDIA_DIR, "uploaded")
 ACCOMMODATION_DIR = os.path.join(MEDIA_DIR, "accommodations")
 AUDIO_DIR = os.path.join(MEDIA_DIR, "audio")
 DOCUMENTS_DIR = os.path.join(MEDIA_DIR, "documents")
+IMAGES_DIR = os.path.join(MEDIA_DIR, "images")
+ALOJAMIENTOS_IMAGES_DIR = os.path.join(IMAGES_DIR, "alojamientos")
+EXPERIENCIAS_IMAGES_DIR = os.path.join(IMAGES_DIR, "experiencias")
+PACKS_IMAGES_DIR = os.path.join(IMAGES_DIR, "packs")
 
 # Create directories if they don't exist
-for directory in [MEDIA_DIR, RECEIVED_DIR, UPLOADED_DIR, ACCOMMODATION_DIR, AUDIO_DIR, DOCUMENTS_DIR]:
+for directory in [MEDIA_DIR, RECEIVED_DIR, UPLOADED_DIR, ACCOMMODATION_DIR, AUDIO_DIR, DOCUMENTS_DIR, 
+                  IMAGES_DIR, ALOJAMIENTOS_IMAGES_DIR, EXPERIENCIAS_IMAGES_DIR, PACKS_IMAGES_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 
@@ -189,3 +194,68 @@ def get_experiences_pdf_path() -> Optional[str]:
     if os.path.exists(pdf_path):
         return pdf_path
     return None
+
+
+def get_experiences_images() -> List[str]:
+    """
+    Get all images from the experiences folder
+    
+    Returns:
+        List of image file paths sorted alphabetically
+    """
+    if not os.path.exists(EXPERIENCIAS_IMAGES_DIR):
+        logger.warning(f"Experiences images directory not found: {EXPERIENCIAS_IMAGES_DIR}")
+        return []
+    
+    image_files = []
+    for filename in sorted(os.listdir(EXPERIENCIAS_IMAGES_DIR)):
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+            image_files.append(os.path.join(EXPERIENCIAS_IMAGES_DIR, filename))
+    
+    logger.info(f"Found {len(image_files)} experience images")
+    return image_files
+
+
+def get_alojamientos_images() -> List[str]:
+    """
+    Get all images from the alojamientos folder
+    
+    Returns:
+        List of image file paths sorted alphabetically
+    """
+    if not os.path.exists(ALOJAMIENTOS_IMAGES_DIR):
+        logger.warning(f"Alojamientos images directory not found: {ALOJAMIENTOS_IMAGES_DIR}")
+        return []
+    
+    image_files = []
+    for filename in sorted(os.listdir(ALOJAMIENTOS_IMAGES_DIR)):
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+            image_files.append(os.path.join(ALOJAMIENTOS_IMAGES_DIR, filename))
+    
+    logger.info(f"Found {len(image_files)} alojamiento images")
+    return image_files
+
+
+def get_pack_images(pack_name: str) -> List[str]:
+    """
+    Get all images for a specific pack
+    
+    Args:
+        pack_name: Name of the pack folder (e.g., "pack_1_noche", "pack_2_noches", "pack_3_noches")
+    
+    Returns:
+        List of image file paths sorted alphabetically
+    """
+    pack_dir = os.path.join(PACKS_IMAGES_DIR, pack_name)
+    
+    if not os.path.exists(pack_dir):
+        logger.warning(f"Pack images directory not found: {pack_dir}")
+        return []
+    
+    image_files = []
+    for filename in sorted(os.listdir(pack_dir)):
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+            image_files.append(os.path.join(pack_dir, filename))
+    
+    logger.info(f"Found {len(image_files)} images for {pack_name}")
+    return image_files

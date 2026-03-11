@@ -159,140 +159,121 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 logger.info(f"Manual handover active for {from_number}; skipping bot reply")
                 manual_handover_only = True
             elif isinstance(response, dict) and response.get("type") == "accommodations_pdf":
-                # Send accommodations PDF
-                logger.info("Sending accommodations response with PDF")
+                # Send accommodations images instead of PDF
+                logger.info("Sending accommodations response with images")
                 
                 # First send the text introduction
                 await whatsapp_client.send_text_message(from_number, response["text"])
                 
-                # Then send the PDF
-                from app.utils.media_handler import get_accommodations_pdf_path
-                pdf_path = get_accommodations_pdf_path()
+                # Then send all images from alojamientos folder
+                from app.utils.media_handler import get_alojamientos_images
+                image_paths = get_alojamientos_images()
                 
-                if pdf_path:
-                    try:
-                        # Upload PDF to WhatsApp
-                        logger.info(f"Uploading PDF from: {pdf_path}")
-                        media_id = await whatsapp_client.upload_media(pdf_path, mime_type="application/pdf")
-                        
-                        if media_id:
-                            await whatsapp_client.send_document_message(
-                                to=from_number,
-                                media_id=media_id,
-                                filename="Alojamientos_Pucon_HotBoat.pdf",
-                                caption="📄 Información completa de alojamientos"
-                            )
-                            logger.info("✅ PDF sent successfully")
-                        else:
-                            logger.error("❌ Could not upload PDF")
-                            await whatsapp_client.send_text_message(
-                                from_number,
-                                "⚠️ Lo siento, no pude enviar el PDF. Por favor escribe 'alojamiento' y te envío la información por texto."
-                            )
-                    except Exception as e:
-                        logger.error(f"❌ Error sending PDF: {e}")
-                        await whatsapp_client.send_text_message(
-                            from_number,
-                            "⚠️ Lo siento, no pude enviar el PDF. Por favor escribe 'alojamiento' y te envío la información por texto."
-                        )
+                if image_paths:
+                    for idx, image_path in enumerate(image_paths, 1):
+                        try:
+                            logger.info(f"Uploading alojamiento image {idx}/{len(image_paths)}: {image_path}")
+                            media_id = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                            
+                            if media_id:
+                                # Only add caption to the first image
+                                caption = "📄 Información completa de alojamientos" if idx == 1 else None
+                                await whatsapp_client.send_image_message(
+                                    to=from_number,
+                                    media_id=media_id,
+                                    caption=caption
+                                )
+                                logger.info(f"✅ Alojamiento image {idx} sent successfully")
+                            else:
+                                logger.error(f"❌ Could not upload alojamiento image {idx}")
+                        except Exception as e:
+                            logger.error(f"❌ Error sending alojamiento image {idx}: {e}")
                 else:
-                    logger.warning("❌ Accommodations PDF not found")
+                    logger.warning("❌ No alojamiento images found")
                     await whatsapp_client.send_text_message(
                         from_number,
-                        "⚠️ Lo siento, el PDF no está disponible en este momento. Por favor escribe 'alojamiento' y te envío la información por texto."
+                        "⚠️ Lo siento, las imágenes no están disponibles en este momento. Por favor escribe 'alojamiento' y te envío la información por texto."
                     )
                 
                 # Store text response for database
                 response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "experiences_pdf":
-                # Send experiences PDF
-                logger.info("Sending experiences response with PDF")
+                # Send experiences images instead of PDF
+                logger.info("Sending experiences response with images")
                 
                 # First send the text introduction
                 await whatsapp_client.send_text_message(from_number, response["text"])
                 
-                # Then send the PDF
-                from app.utils.media_handler import get_experiences_pdf_path
-                pdf_path = get_experiences_pdf_path()
+                # Then send all images from experiences folder
+                from app.utils.media_handler import get_experiences_images
+                image_paths = get_experiences_images()
                 
-                if pdf_path:
-                    try:
-                        # Upload PDF to WhatsApp
-                        logger.info(f"Uploading experiences PDF from: {pdf_path}")
-                        media_id = await whatsapp_client.upload_media(pdf_path, mime_type="application/pdf")
-                        
-                        if media_id:
-                            await whatsapp_client.send_document_message(
-                                to=from_number,
-                                media_id=media_id,
-                                filename="Experiencias_Pucon_HotBoat.pdf",
-                                caption="📋 Experiencias y actividades en Pucón"
-                            )
-                            logger.info("✅ Experiences PDF sent successfully")
-                        else:
-                            logger.error("❌ Could not upload experiences PDF")
-                            await whatsapp_client.send_text_message(
-                                from_number,
-                                "⚠️ Lo siento, no pude enviar el PDF. Por favor escribe 'experiencias' y te envío la información por texto."
-                            )
-                    except Exception as e:
-                        logger.error(f"❌ Error sending experiences PDF: {e}")
-                        await whatsapp_client.send_text_message(
-                            from_number,
-                            "⚠️ Lo siento, no pude enviar el PDF. Por favor escribe 'experiencias' y te envío la información por texto."
-                        )
+                if image_paths:
+                    for idx, image_path in enumerate(image_paths, 1):
+                        try:
+                            logger.info(f"Uploading experience image {idx}/{len(image_paths)}: {image_path}")
+                            media_id = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                            
+                            if media_id:
+                                # Only add caption to the first image
+                                caption = "📋 Experiencias y actividades en Pucón" if idx == 1 else None
+                                await whatsapp_client.send_image_message(
+                                    to=from_number,
+                                    media_id=media_id,
+                                    caption=caption
+                                )
+                                logger.info(f"✅ Experience image {idx} sent successfully")
+                            else:
+                                logger.error(f"❌ Could not upload experience image {idx}")
+                        except Exception as e:
+                            logger.error(f"❌ Error sending experience image {idx}: {e}")
                 else:
-                    logger.warning("❌ Experiences PDF not found")
+                    logger.warning("❌ No experience images found")
                     await whatsapp_client.send_text_message(
                         from_number,
-                        "⚠️ Lo siento, el PDF no está disponible en este momento. Por favor escribe 'experiencias' y te envío la información por texto."
+                        "⚠️ Lo siento, las imágenes no están disponibles en este momento. Por favor escribe 'experiencias' y te envío la información por texto."
                     )
                 
                 # Store text response for database
                 response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "package_pdf":
-                # Send package PDF
-                logger.info(f"Sending package PDF: {response.get('pdf_name')}")
+                # Send package images instead of PDF
+                logger.info(f"Sending package images: {response.get('pdf_name')}")
                 
                 # First send the text introduction
                 await whatsapp_client.send_text_message(from_number, response["text"])
                 
-                # Then send the PDF
-                from app.utils.media_handler import get_package_pdf_path
+                # Then send all images from the pack folder
+                from app.utils.media_handler import get_pack_images
+                # Convert pdf_name to folder name (e.g., "pack_1_noche.pdf" -> "pack_1_noche")
                 pdf_name = response.get("pdf_name", "pack_1_noche.pdf")
-                pdf_path = get_package_pdf_path(pdf_name)
+                pack_name = pdf_name.replace(".pdf", "")
+                image_paths = get_pack_images(pack_name)
                 
-                if pdf_path:
-                    try:
-                        # Upload PDF to WhatsApp
-                        logger.info(f"Uploading package PDF from: {pdf_path}")
-                        media_id = await whatsapp_client.upload_media(pdf_path, mime_type="application/pdf")
-                        
-                        if media_id:
-                            await whatsapp_client.send_document_message(
-                                to=from_number,
-                                media_id=media_id,
-                                filename=pdf_name,
-                                caption="📦 Información completa del pack"
-                            )
-                            logger.info("✅ Package PDF sent successfully")
-                        else:
-                            logger.error("❌ Could not upload package PDF")
-                            await whatsapp_client.send_text_message(
-                                from_number,
-                                "⚠️ Lo siento, no pude enviar el PDF. El Capitán Tomás te contactará con la información."
-                            )
-                    except Exception as e:
-                        logger.error(f"❌ Error sending package PDF: {e}")
-                        await whatsapp_client.send_text_message(
-                            from_number,
-                            "⚠️ Lo siento, no pude enviar el PDF. El Capitán Tomás te contactará con la información."
-                        )
+                if image_paths:
+                    for idx, image_path in enumerate(image_paths, 1):
+                        try:
+                            logger.info(f"Uploading pack image {idx}/{len(image_paths)}: {image_path}")
+                            media_id = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                            
+                            if media_id:
+                                # Only add caption to the first image
+                                caption = "📦 Información completa del pack" if idx == 1 else None
+                                await whatsapp_client.send_image_message(
+                                    to=from_number,
+                                    media_id=media_id,
+                                    caption=caption
+                                )
+                                logger.info(f"✅ Pack image {idx} sent successfully")
+                            else:
+                                logger.error(f"❌ Could not upload pack image {idx}")
+                        except Exception as e:
+                            logger.error(f"❌ Error sending pack image {idx}: {e}")
                 else:
-                    logger.warning(f"❌ Package PDF not found: {pdf_name}")
+                    logger.warning(f"❌ No pack images found for: {pack_name}")
                     await whatsapp_client.send_text_message(
                         from_number,
-                        "⚠️ Lo siento, el PDF no está disponible en este momento. El Capitán Tomás te contactará con la información."
+                        "⚠️ Lo siento, las imágenes no están disponibles en este momento. El Capitán Tomás te contactará con la información."
                     )
                 
                 # Store text response for database
