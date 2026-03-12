@@ -334,6 +334,14 @@ class CartManager:
                 else:
                     message += f"   Precio: ${price:,}\n\n"
                 total += price
+            elif item.item_type == "accommodation":
+                price = item.price * item.quantity
+                message += f"🏠 *{item.name}*\n"
+                message += f"   Check-in: {item.metadata.get('checkin_date', 'N/A')}\n"
+                message += f"   Check-out: {item.metadata.get('checkout_date', 'N/A')}\n"
+                message += f"   Huéspedes: {item.metadata.get('guests', 'N/A')}\n"
+                message += f"   Precio: ${price:,}\n\n"
+                total += price
             elif item.item_type == "extra":
                 price = item.price * item.quantity
                 if item.name == "Reserva FLEX (+10%)":
