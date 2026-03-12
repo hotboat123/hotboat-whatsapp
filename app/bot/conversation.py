@@ -2599,14 +2599,15 @@ Horarios disponibles:
         """
         from app.bot.accommodations_contacts import get_accommodation_contact, generate_whatsapp_link
         
-        # Get accommodation contact
-        contact = get_accommodation_contact(property_key)
-        if not contact:
-            logger.error(f"No contact found for accommodation: {property_key}")
-            return
-        
-        # Generate WhatsApp message
-        whatsapp_message = f"""Hola! Tengo una consulta de disponibilidad:
+        try:
+            # Get accommodation contact
+            contact = get_accommodation_contact(property_key)
+            if not contact:
+                logger.error(f"No contact found for accommodation: {property_key}")
+                return
+            
+            # Generate WhatsApp message
+            whatsapp_message = f"""Hola! Tengo una consulta de disponibilidad:
 
 🏠 *Alojamiento:* {accommodation_name}
 👥 *Personas:* {guests}
@@ -2616,15 +2617,15 @@ Horarios disponibles:
 ¿Tienen disponibilidad para estas fechas?
 
 Cliente: {customer_name} ({customer_phone})"""
-        
-        # Generate WhatsApp link
-        whatsapp_link = generate_whatsapp_link(contact["whatsapp"], whatsapp_message)
-        
-        # Email subject
-        subject = f"🏠 Nueva solicitud de alojamiento: {accommodation_name}"
-        
-        # Email body (HTML)
-        html_body = f"""
+            
+            # Generate WhatsApp link
+            whatsapp_link = generate_whatsapp_link(contact["whatsapp"], whatsapp_message)
+            
+            # Email subject
+            subject = f"🏠 Nueva solicitud de alojamiento: {accommodation_name}"
+            
+            # Email body (HTML) - Simplified to match working emails
+            html_body = f"""
 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
     <h2 style="color: #2563eb;">🏠 Nueva Solicitud de Alojamiento</h2>
     
@@ -2658,30 +2659,25 @@ Cliente: {customer_name} ({customer_phone})"""
     </div>
 </div>
 """
-        
-        # Send email
-        if not getattr(self.settings, "email_enabled", False):
-            logger.info("Email notifications disabled; skipping accommodation availability email.")
-            return
-        
-        if not RESEND_AVAILABLE:
-            logger.warning("Resend library not installed; cannot send accommodation email.")
-            return
-        
-        if not self.notification_email_recipients:
-            logger.warning("No notification emails configured. Skipping accommodation email.")
-            return
-        
-        resend_key = getattr(self.settings, "resend_api_key", "")
-        if not resend_key:
-            logger.warning("RESEND_API_KEY not configured; cannot send accommodation email.")
-            return
-        
-        try:
+            
+            # Use the same method as other working emails
+            if not RESEND_AVAILABLE:
+                logger.warning("Resend library not installed; cannot send accommodation email.")
+                return
+            
+            if not self.notification_email_recipients:
+                logger.warning("No notification emails configured. Skipping accommodation email.")
+                return
+            
+            resend_key = getattr(self.settings, "resend_api_key", "")
+            if not resend_key:
+                logger.warning("RESEND_API_KEY not configured; cannot send accommodation email.")
+                return
+            
             # Configure Resend API key
             resend.api_key = resend_key
             
-            # Send email via Resend API
+            # Send email via Resend API using same format as working emails
             result = resend.Emails.send({
                 "from": self.email_sender,
                 "to": self.notification_email_recipients,
@@ -2690,6 +2686,9 @@ Cliente: {customer_name} ({customer_phone})"""
             })
             
             logger.info(f"✅ Accommodation availability email sent: {accommodation_name} (ID: {result.get('id', 'N/A')})")
+            logger.info(f"   📧 Sent to: {self.notification_email_recipients}")
+            logger.info(f"   📞 Contact: {contact['name']} - {contact['whatsapp']}")
+            
         except Exception as e:
             logger.error(f"❌ Error sending accommodation availability email: {e}")
             import traceback
