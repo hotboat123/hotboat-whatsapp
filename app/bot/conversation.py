@@ -3011,22 +3011,31 @@ Escribe el número que prefieras 🚤"""
                 
                 else:
                     # This is a simple accommodation booking - add to cart instead of notifying
+                    logger.info(f"💰 Calculating price for accommodation: property={flow['property']}, room_type={flow['room_type']}")
                     
                     # Determine price based on property and room type
                     if flow["property"] == "open_sky":
                         if "Hidromasaje" in flow["room_type"]:
                             price = 120000
+                            logger.info(f"   Price set to $120,000 (Open Sky Hidromasaje)")
                         else:
                             price = 100000
+                            logger.info(f"   Price set to $100,000 (Open Sky Tina de Baño)")
                     else:  # relikura
                         if "Hostal" in flow["room_type"]:
                             price = 20000
+                            logger.info(f"   Price set to $20,000 (Relikura Hostal)")
                         elif "6 personas" in flow["room_type"]:
                             price = 100000
+                            logger.info(f"   Price set to $100,000 (Relikura 6 personas)")
                         elif "4 personas" in flow["room_type"]:
                             price = 80000
+                            logger.info(f"   Price set to $80,000 (Relikura 4 personas)")
                         else:  # 2 personas
                             price = 60000
+                            logger.info(f"   Price set to $60,000 (Relikura 2 personas)")
+                    
+                    logger.info(f"✅ Final accommodation price: ${price:,}")
                     
                     # Create accommodation cart item
                     accommodation_item = CartItem(
@@ -3041,9 +3050,13 @@ Escribe el número que prefieras 🚤"""
                         }
                     )
                     
+                    logger.info(f"📦 CartItem created: name={accommodation_item.name}, price={accommodation_item.price}, type={accommodation_item.item_type}")
+                    
                     # Add to cart
                     await self.cart_manager.add_item(phone_number, contact_name, accommodation_item)
                     cart = await self.cart_manager.get_cart(phone_number)
+                    
+                    logger.info(f"🛒 Cart after adding accommodation: {len(cart)} items, total=${self.cart_manager.calculate_total(cart):,}")
                     
                     # Send email notification with WhatsApp link to check availability
                     asyncio.create_task(
