@@ -302,6 +302,35 @@ class CartManager:
         
         return total
     
+    def _calculate_nights(self, checkin: str, checkout: str) -> int:
+        """Calculate number of nights between two dates"""
+        try:
+            # Parse dates in format like "13 marzo", "18 marzo"
+            from datetime import datetime
+            import locale
+            
+            # Try to parse with Spanish month names
+            months_es = {
+                'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4,
+                'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8,
+                'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+            }
+            
+            # Parse checkin
+            day_in, month_in = checkin.lower().split()
+            checkin_date = datetime(2026, months_es.get(month_in, 1), int(day_in))
+            
+            # Parse checkout
+            day_out, month_out = checkout.lower().split()
+            checkout_date = datetime(2026, months_es.get(month_out, 1), int(day_out))
+            
+            # Calculate nights
+            nights = (checkout_date - checkin_date).days
+            return max(1, nights)  # At least 1 night
+        except Exception as e:
+            logger.warning(f"Error calculating nights from {checkin} to {checkout}: {e}")
+            return 1  # Default to 1 night if parsing fails
+    
     def format_cart_message(self, items: List[CartItem]) -> str:
         """Format cart as a readable message"""
         if not items:
@@ -335,12 +364,36 @@ class CartManager:
                     message += f"   Precio: ${price:,}\n\n"
                 total += price
             elif item.item_type == "accommodation":
-                price = item.price * item.quantity
-                message += f"🏠 *{item.name}*\n"
-                message += f"   Check-in: {item.metadata.get('checkin_date', 'N/A')}\n"
-                message += f"   Check-out: {item.metadata.get('checkout_date', 'N/A')}\n"
-                message += f"   Huéspedes: {item.metadata.get('guests', 'N/A')}\n"
-                message += f"   Precio: ${price:,}\n\n"
+                # Calculate nights
+                checkin = item.metadata.get('checkin_date', '')
+                checkout = item.metadata.get('checkout_date', '')
+                nights = self._calculate_nights(checkin, checkout) if checkin and checkout else 1
+                guests = item.metadata.get('guests', 1)
+                
+                # Check if it's Hostal (price is per person per night)
+                is_hostal = "Hostal" in item.name
+                
+                if is_hostal:
+                    # Hostal: price per person per night
+                    price = item.price * guests * nights
+                    message += f"🏠 *{item.name}*\n"
+                    message += f"   Check-in: {checkin}\n"
+                    message += f"   Check-out: {checkout}\n"
+                    message += f"   Huéspedes: {guests}\n"
+                    message += f"   Noches: {nights}\n"
+                    message += f"   ${item.price:,} x {guests} personas x {nights} noches\n"
+                    message += f"   Precio: ${price:,}\n\n"
+                else:
+                    # Domos/Cabañas: price per night (not per person)
+                    price = item.price * nights
+                    message += f"🏠 *{item.name}*\n"
+                    message += f"   Check-in: {checkin}\n"
+                    message += f"   Check-out: {checkout}\n"
+                    message += f"   Huéspedes: {guests}\n"
+                    message += f"   Noches: {nights}\n"
+                    message += f"   ${item.price:,} x {nights} noches\n"
+                    message += f"   Precio: ${price:,}\n\n"
+                
                 total += price
             elif item.item_type == "extra":
                 price = item.price * item.quantity
