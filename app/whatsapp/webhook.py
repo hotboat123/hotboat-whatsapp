@@ -237,7 +237,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 # Store text response for database
                 response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "package_pdf":
-                # Send package images instead of PDF
+                # Send package images (one or more per pack)
                 logger.info(f"Sending package images: {response.get('pdf_name')}")
                 
                 # First send the text introduction
@@ -245,9 +245,9 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 
                 # Then send all images from the pack folder
                 from app.utils.media_handler import get_pack_images
-                # Convert pdf_name to folder name (e.g., "pack_1_noche.pdf" -> "pack_1_noche")
-                pdf_name = response.get("pdf_name", "pack_1_noche.pdf")
-                pack_name = pdf_name.replace(".pdf", "")
+                # Convert image name to folder name (e.g., "pack_romantico.jpg" -> "pack_romantico")
+                image_name = response.get("pdf_name", "pack_romantico.jpg")
+                pack_name = image_name.replace(".jpg", "").replace(".pdf", "")
                 image_paths = get_pack_images(pack_name)
                 
                 if image_paths:

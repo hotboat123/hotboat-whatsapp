@@ -3325,7 +3325,7 @@ Escribe el número que prefieras 🚤"""
                 logger.info("User selected complete packages")
                 del conversation["metadata"]["awaiting_packages_submenu"]
                 conversation["metadata"]["complete_packages_flow"] = {
-                    "step": "selecting_nights"
+                    "step": "selecting_type"
                 }
                 return get_text("complete_packages_menu", language)
             
@@ -3369,44 +3369,160 @@ Escribe el número que prefieras 🚤"""
             return "Lo siento, hubo un error. Por favor intenta de nuevo escribiendo 'menu'."
     
     async def _handle_complete_packages_flow(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
-        """Handle complete packages (1, 2, or 3 nights) flow"""
+        """Handle complete packages (romantic, family, friends) flow"""
         try:
             flow = conversation["metadata"]["complete_packages_flow"]
             step = flow.get("step")
             language = conversation.get("metadata", {}).get("language", "es")
             message_clean = message.strip().lower()
+            message_normalized = unicodedata.normalize('NFD', message_clean)
+            message_normalized = ''.join(c for c in message_normalized if unicodedata.category(c) != 'Mn')
             
-            if step == "selecting_nights":
-                # User selects 1, 2, or 3 nights
-                if "1" in message_clean:
-                    nights = 1
-                    pdf_name = "pack_1_noche.pdf"
-                elif "2" in message_clean:
-                    nights = 2
-                    pdf_name = "pack_2_noches.pdf"
-                elif "3" in message_clean:
-                    nights = 3
-                    pdf_name = "pack_3_noches.pdf"
+            if step == "selecting_type":
+                # User selects pack type: romantico, familiar, or amigos
+                if "romantico" in message_normalized or "romantic" in message_normalized:
+                    pack_type = "romantico"
+                    pack_name_es = "Romántico"
+                elif "familiar" in message_normalized or "family" in message_normalized:
+                    pack_type = "familiar"
+                    pack_name_es = "Familiar"
+                elif "amigos" in message_normalized or "friends" in message_normalized or "amigo" in message_normalized:
+                    pack_type = "amigos"
+                    pack_name_es = "Amigos"
                 else:
                     return get_text("complete_packages_menu", language)
                 
+                # Store pack type
+                flow["pack_type"] = pack_type
+                flow["step"] = "selecting_version"
+                
+                # Ask if they want basic or premium
+                if language == "es":
+                    return f"""✅ *Pack {pack_name_es} Seleccionado*
+
+Tenemos 2 versiones:
+
+🎒 *Básico* - Experiencia completa de 1 noche
+💎 *Premium* - Todo incluido con actividades extra (2 o 3 noches)
+
+*¿Cuál prefieres?*
+Escribe *Básico* o *Premium* 💫
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤"""
+                else:
+                    return f"""✅ *{pack_name_es} Package Selected*
+
+We have 2 versions:
+
+🎒 *Basic* - Complete 1-night experience
+💎 *Premium* - All-inclusive with extra activities (2 or 3 nights)
+
+*Which do you prefer?*
+Type *Basic* or *Premium* 💫
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤"""
+            
+            elif step == "selecting_version":
+                # User selects basic or premium
+                pack_type = flow["pack_type"]
+                
+                if "basico" in message_normalized or "basic" in message_normalized:
+                    # Basic pack - send image and notify Capitán Tomás
+                    pdf_name = f"pack_{pack_type}.jpg"
+                    
+                    # Notify Capitán Tomás
+                    pack_name_display = pack_type.capitalize()
+                    await self._notify_capitan_tomas(
+                        contact_name,
+                        phone_number,
+                        [],
+                        reason="package_request",
+                        extra_info=f"Pack {pack_name_display} Básico"
+                    )
+                    
+                    # Clear flow
+                    del conversation["metadata"]["complete_packages_flow"]
+                    
+                    # Return response to send image
+                    response_text = f"""✅ *Pack {pack_name_display} Básico Seleccionado*
+
+Te enviaré la imagen con todos los detalles del pack ⬇️
+
+El *Capitán Tomás* revisará tu solicitud y te contactará para coordinar fechas y pago 👨‍✈️⚓
+
+💡 *Mientras tanto*, escribe *"Menu"* para explorar más del *Menú HotBoat* 🚤"""
+                    
+                    return {
+                        "type": "package_pdf",
+                        "pdf_name": pdf_name,
+                        "text": response_text
+                    }
+                
+                elif "premium" in message_normalized:
+                    # Premium pack - ask for number of nights (2 or 3)
+                    flow["step"] = "selecting_nights"
+                    
+                    if language == "es":
+                        return """💎 *Pack Premium Seleccionado*
+
+Los packs premium incluyen actividades extra y arriendo de vehículo.
+
+*¿Cuántas noches prefieres?*
+Escribe *2* o *3* 🌙
+
+2️⃣ noches = Más económico
+3️⃣ noches = Experiencia completa
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤"""
+                    else:
+                        return """💎 *Premium Package Selected*
+
+Premium packages include extra activities and vehicle rental.
+
+*How many nights do you prefer?*
+Type *2* or *3* 🌙
+
+2️⃣ nights = More affordable
+3️⃣ nights = Complete experience
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤"""
+                else:
+                    # Invalid input
+                    return get_text("complete_packages_menu", language)
+            
+            elif step == "selecting_nights":
+                # User selects 2 or 3 nights for premium pack
+                pack_type = flow["pack_type"]
+                
+                if "2" in message_clean:
+                    nights = 2
+                    pdf_name = f"pack_{pack_type}_premium.jpg"
+                elif "3" in message_clean:
+                    nights = 3
+                    pdf_name = f"pack_{pack_type}_premium.jpg"
+                else:
+                    if language == "es":
+                        return """Por favor escribe *2* o *3* para las noches que prefieres 🌙"""
+                    else:
+                        return """Please type *2* or *3* for the nights you prefer 🌙"""
+                
                 # Notify Capitán Tomás
-                pack_summary = f"Pack {nights} noche{'s' if nights > 1 else ''}"
+                pack_name_display = pack_type.capitalize()
                 await self._notify_capitan_tomas(
                     contact_name,
                     phone_number,
                     [],
                     reason="package_request",
-                    extra_info=pack_summary
+                    extra_info=f"Pack {pack_name_display} Premium - {nights} noches"
                 )
                 
                 # Clear flow
                 del conversation["metadata"]["complete_packages_flow"]
                 
-                # Return response to send PDF
-                response_text = f"""✅ *Pack de {nights} {'Noche' if nights == 1 else 'Noches'} Seleccionado*
+                # Return response to send image
+                response_text = f"""✅ *Pack {pack_name_display} Premium ({nights} Noches) Seleccionado*
 
-Te enviaré el PDF con todos los detalles del pack ⬇️
+Te enviaré la imagen con todos los detalles del pack ⬇️
 
 El *Capitán Tomás* revisará tu solicitud y te contactará para coordinar fechas y pago 👨‍✈️⚓
 

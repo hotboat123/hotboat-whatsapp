@@ -1248,61 +1248,67 @@ O *Capitão Tomás* revisará sua solicitação e entrará em contato para confi
     "complete_packages_menu": {
         "es": """🎁 *Packs Completos - Todo Incluido*
 
-Elige tu pack ideal con alojamiento y actividades:
+Elige tu pack ideal según tu tipo de viaje:
 
-📦 *Pack 1 Noche*
-🏠 Alojamiento + 🚤 HotBoat
+💕 *Pack Romántico*
+Escapada para 2 con Open Sky, HotBoat y velero
 
-📦 *Pack 2 Noches*
-🏠 Alojamiento + 🚤 HotBoat + 🚣 Rafting
+👨‍👩‍👧‍👦 *Pack Familiar*
+Aventura para 4 con Relikura, HotBoat, rafting y cabalgata
 
-📦 *Pack 3 Noches*
-🏠 Alojamiento + 🚤 HotBoat + 🚣 Rafting + 🐴 Cabalgata
+👥 *Pack Amigos*
+Experiencia grupal para 6 con Relikura, HotBoat y rafting
 
-📸 Te enviaré imágenes con todos los detalles de cada pack.
+📸 Te enviaré la imagen con todos los detalles del pack que elijas.
 
-*¿Cuántas noches te gustaría?*
-Escribe *1*, *2*, o *3* 🎒
+*¿Qué tipo de pack prefieres?*
+Escribe *Romántico*, *Familiar*, o *Amigos* 🎒
+
+💡 *Tip:* Cada pack tiene versión básica y premium. Te preguntaré después 😉
 
 💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
         
         "en": """🎁 *Complete Packages - All Inclusive*
 
-Choose your ideal package with accommodation and activities:
+Choose your ideal package according to your trip type:
 
-📦 *1 Night Package*
-🏠 Accommodation + 🚤 HotBoat
+💕 *Romantic Package*
+Getaway for 2 with Open Sky, HotBoat and sailboat
 
-📦 *2 Nights Package*
-🏠 Accommodation + 🚤 HotBoat + 🚣 Rafting
+👨‍👩‍👧‍👦 *Family Package*
+Adventure for 4 with Relikura, HotBoat, rafting and horseback riding
 
-📦 *3 Nights Package*
-🏠 Accommodation + 🚤 HotBoat + 🚣 Rafting + 🐴 Horseback Riding
+👥 *Friends Package*
+Group experience for 6 with Relikura, HotBoat and rafting
 
-📸 I'll send you images with all the details of each package.
+📸 I'll send you the image with all the details of your chosen package.
 
-*How many nights would you like?*
-Type *1*, *2*, or *3* 🎒
+*What type of package do you prefer?*
+Type *Romantic*, *Family*, or *Friends* 🎒
+
+💡 *Tip:* Each package has basic and premium versions. I'll ask you later 😉
 
 💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤""",
         
         "pt": """🎁 *Pacotes Completos - Tudo Incluído*
 
-Escolha seu pacote ideal com acomodação e atividades:
+Escolha seu pacote ideal de acordo com seu tipo de viagem:
 
-📦 *Pacote 1 Noite*
-🏠 Acomodação + 🚤 HotBoat
+💕 *Pacote Romântico*
+Escapada para 2 com Open Sky, HotBoat e veleiro
 
-📦 *Pacote 2 Noites*
-🏠 Acomodação + 🚤 HotBoat + 🚣 Rafting
+👨‍👩‍👧‍👦 *Pacote Familiar*
+Aventura para 4 com Relikura, HotBoat, rafting e cavalgada
 
-📦 *Pacote 3 Noites*
-🏠 Acomodação + 🚤 HotBoat + 🚣 Rafting + 🐴 Cavalgada
+👥 *Pacote Amigos*
+Experiência em grupo para 6 com Relikura, HotBoat e rafting
 
-📸 Enviarei imagens com todos os detalhes de cada pacote.
+📸 Enviarei a imagem com todos os detalhes do pacote escolhido.
 
-*Quantas noites você gostaria?*
-Digite *1*, *2*, ou *3* 🎒
+*Que tipo de pacote você prefere?*
+Digite *Romântico*, *Familiar*, ou *Amigos* 🎒
+
+💡 *Dica:* Cada pacote tem versão básica e premium. Perguntarei depois 😉
 
 💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
     },
