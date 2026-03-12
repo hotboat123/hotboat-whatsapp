@@ -1343,23 +1343,12 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         # Clear cart
         if any(cmd in message_lower for cmd in ["vaciar", "limpiar", "borrar carrito", "eliminar todo"]):
             await self.cart_manager.clear_cart(phone_number)
-            return """🛒 *Carrito vaciado*, grumete ⚓
+            language = metadata.get("language", "es")
+            return f"""🛒 *Carrito vaciado*, grumete ⚓
 
-¿Listo para zarpar de nuevo? Elige una opción:
+¿Listo para zarpar de nuevo?
 
-1️⃣ *Disponibilidad y horarios*
-
-2️⃣ *Precios por persona*
-
-3️⃣ *Características del HotBoat*
-
-4️⃣ *Extras y promociones*
-
-5️⃣ *Ubicación y reseñas*
-
-6️⃣ *Hablar con el Capitán Tomás*
-
-¿Qué número eliges? 🚤"""
+{self._get_main_menu_message(language)}"""
 
         # Remove Reserva FLEX via text command
         if "quitar flex" in message_lower or "sacar flex" in message_lower or "remover flex" in message_lower:
@@ -1672,18 +1661,12 @@ Escribe el número que prefieras 🚤"""
             elif option == '4':
                 # Option 4: Vaciar el carrito
                 await self.cart_manager.clear_cart(phone_number)
-                return """🛒 *Carrito vaciado*, grumete ⚓
+                language = metadata.get("language", "es")
+                return f"""🛒 *Carrito vaciado*, grumete ⚓
 
-¿Listo para zarpar de nuevo? Elige una opción:
+¿Listo para zarpar de nuevo?
 
-1️⃣ *Disponibilidad y horarios*
-2️⃣ *Precios por persona*
-3️⃣ *Características del HotBoat*
-4️⃣ *Extras y promociones*
-5️⃣ *Ubicación y reseñas*
-6️⃣ *Hablar con el Capitán Tomás*
-
-¿Qué número eliges? 🚤"""
+{self._get_main_menu_message(language)}"""
         
         else:
             # Sin Reserva FLEX, opciones normales (1-3)
@@ -1695,18 +1678,12 @@ Escribe el número que prefieras 🚤"""
             elif option == '3':
                 # Option 3: Vaciar el carrito
                 await self.cart_manager.clear_cart(phone_number)
-                return """🛒 *Carrito vaciado*, grumete ⚓
+                language = metadata.get("language", "es")
+                return f"""🛒 *Carrito vaciado*, grumete ⚓
 
-¿Listo para zarpar de nuevo? Elige una opción:
+¿Listo para zarpar de nuevo?
 
-1️⃣ *Disponibilidad y horarios*
-2️⃣ *Precios por persona*
-3️⃣ *Características del HotBoat*
-4️⃣ *Extras y promociones*
-5️⃣ *Ubicación y reseñas*
-6️⃣ *Hablar con el Capitán Tomás*
-
-¿Qué número eliges? 🚤"""
+{self._get_main_menu_message(language)}"""
             
             # Option 2: Proceder con el pago (aplica para ambos casos)
         
