@@ -3327,7 +3327,19 @@ Escribe el número que prefieras 🚤"""
                 conversation["metadata"]["complete_packages_flow"] = {
                     "step": "selecting_type"
                 }
-                return get_text("complete_packages_menu", language)
+                # Send image with packs summary
+                from app.utils.media_handler import PACKS_IMAGES_DIR
+                import os
+                resumen_path = os.path.join(PACKS_IMAGES_DIR, "resumen-packs.jpg")
+                if os.path.exists(resumen_path):
+                    return {
+                        "type": "image_with_text",
+                        "image_path": resumen_path,
+                        "text": get_text("complete_packages_menu", language),
+                        "caption": "📦 Packs Completos HotBoat"
+                    }
+                else:
+                    return get_text("complete_packages_menu", language)
             
             # Option 2: Only Accommodations
             elif "2" in message_clean or ("solo" in message_clean and "aloj" in message_clean) or ("only" in message_clean and "accom" in message_clean):
@@ -3379,14 +3391,14 @@ Escribe el número que prefieras 🚤"""
             message_normalized = ''.join(c for c in message_normalized if unicodedata.category(c) != 'Mn')
             
             if step == "selecting_type":
-                # User selects pack type: romantico, familiar, or amigos
-                if "romantico" in message_normalized or "romantic" in message_normalized:
+                # User selects pack type: 1/romantico, 2/familiar, or 3/amigos
+                if "romantico" in message_normalized or "romantic" in message_normalized or message_clean == "1":
                     pack_type = "romantico"
                     pack_name_es = "Romántico"
-                elif "familiar" in message_normalized or "family" in message_normalized:
+                elif "familiar" in message_normalized or "family" in message_normalized or message_clean == "2":
                     pack_type = "familiar"
                     pack_name_es = "Familiar"
-                elif "amigos" in message_normalized or "friends" in message_normalized or "amigo" in message_normalized:
+                elif "amigos" in message_normalized or "friends" in message_normalized or "amigo" in message_normalized or message_clean == "3":
                     pack_type = "amigos"
                     pack_name_es = "Amigos"
                 else:

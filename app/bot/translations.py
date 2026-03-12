@@ -1250,19 +1250,19 @@ O *Capitão Tomás* revisará sua solicitação e entrará em contato para confi
 
 Elige tu pack ideal según tu tipo de viaje:
 
-💕 *Pack Romántico*
+1️⃣ 💕 *Pack Romántico*
 Escapada para 2 con Open Sky, HotBoat y velero
 
-👨‍👩‍👧‍👦 *Pack Familiar*
+2️⃣ 👨‍👩‍👧‍👦 *Pack Familiar*
 Aventura para 4 con Relikura, HotBoat, rafting y cabalgata
 
-👥 *Pack Amigos*
+3️⃣ 👥 *Pack Amigos*
 Experiencia grupal para 6 con Relikura, HotBoat y rafting
 
 📸 Te enviaré la imagen con todos los detalles del pack que elijas.
 
-*¿Qué tipo de pack prefieres?*
-Escribe *Romántico*, *Familiar*, o *Amigos* 🎒
+*¿Qué pack prefieres?*
+Escribe *1*, *2*, *3* o el nombre (*Romántico*, *Familiar*, *Amigos*) 🎒
 
 💡 *Tip:* Cada pack tiene versión básica y premium. Te preguntaré después 😉
 
@@ -1272,19 +1272,19 @@ Escribe *Romántico*, *Familiar*, o *Amigos* 🎒
 
 Choose your ideal package according to your trip type:
 
-💕 *Romantic Package*
+1️⃣ 💕 *Romantic Package*
 Getaway for 2 with Open Sky, HotBoat and sailboat
 
-👨‍👩‍👧‍👦 *Family Package*
+2️⃣ 👨‍👩‍👧‍👦 *Family Package*
 Adventure for 4 with Relikura, HotBoat, rafting and horseback riding
 
-👥 *Friends Package*
+3️⃣ 👥 *Friends Package*
 Group experience for 6 with Relikura, HotBoat and rafting
 
 📸 I'll send you the image with all the details of your chosen package.
 
-*What type of package do you prefer?*
-Type *Romantic*, *Family*, or *Friends* 🎒
+*What package do you prefer?*
+Type *1*, *2*, *3* or the name (*Romantic*, *Family*, *Friends*) 🎒
 
 💡 *Tip:* Each package has basic and premium versions. I'll ask you later 😉
 
@@ -1294,19 +1294,19 @@ Type *Romantic*, *Family*, or *Friends* 🎒
 
 Escolha seu pacote ideal de acordo com seu tipo de viagem:
 
-💕 *Pacote Romântico*
+1️⃣ 💕 *Pacote Romântico*
 Escapada para 2 com Open Sky, HotBoat e veleiro
 
-👨‍👩‍👧‍👦 *Pacote Familiar*
+2️⃣ 👨‍👩‍👧‍👦 *Pacote Familiar*
 Aventura para 4 com Relikura, HotBoat, rafting e cavalgada
 
-👥 *Pacote Amigos*
+3️⃣ 👥 *Pacote Amigos*
 Experiência em grupo para 6 com Relikura, HotBoat e rafting
 
 📸 Enviarei a imagem com todos os detalhes do pacote escolhido.
 
-*Que tipo de pacote você prefere?*
-Digite *Romântico*, *Familiar*, ou *Amigos* 🎒
+*Que pacote você prefere?*
+Digite *1*, *2*, *3* ou o nome (*Romântico*, *Familiar*, *Amigos*) 🎒
 
 💡 *Dica:* Cada pacote tem versão básica e premium. Perguntarei depois 😉
 

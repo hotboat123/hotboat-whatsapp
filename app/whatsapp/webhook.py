@@ -2,6 +2,7 @@
 WhatsApp webhook handler
 """
 import logging
+import os
 from typing import Dict, Any, Optional
 
 from app.whatsapp.client import whatsapp_client
@@ -278,6 +279,37 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 
                 # Store text response for database
                 response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "image_with_text":
+                # Send single image with text (for packs summary)
+                logger.info("Sending image with text response")
+                
+                image_path = response.get("image_path")
+                text = response.get("text")
+                caption = response.get("caption")
+                
+                if image_path and os.path.exists(image_path):
+                    try:
+                        # Upload and send image
+                        logger.info(f"Uploading image: {image_path}")
+                        media_id = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                        
+                        if media_id:
+                            await whatsapp_client.send_image_message(
+                                to=from_number,
+                                media_id=media_id,
+                                caption=caption
+                            )
+                            logger.info("✅ Image sent successfully")
+                        else:
+                            logger.error("❌ Could not upload image")
+                    except Exception as e:
+                        logger.error(f"❌ Error sending image: {e}")
+                
+                # Then send the text
+                await whatsapp_client.send_text_message(from_number, text)
+                
+                # Store text response for database
+                response_text = text
             elif isinstance(response, dict) and response.get("type") == "accommodations":
                 # Send accommodations with images
                 logger.info("Sending accommodations response with images")
