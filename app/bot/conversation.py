@@ -2597,7 +2597,7 @@ Horarios disponibles:
             checkin_date: Check-in date
             checkout_date: Check-out date
         """
-        from app.config.accommodations_contacts import get_accommodation_contact, generate_whatsapp_link
+        from app.bot.accommodations_contacts import get_accommodation_contact, generate_whatsapp_link
         
         # Get accommodation contact
         contact = get_accommodation_contact(property_key)
