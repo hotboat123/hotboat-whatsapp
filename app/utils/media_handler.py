@@ -241,19 +241,24 @@ def get_pack_images(pack_name: str) -> List[str]:
     Get all images for a specific pack
     
     Args:
-        pack_name: Name of the pack folder (e.g., "pack_1_noche", "pack_2_noches", "pack_3_noches")
+        pack_name: Name of the pack folder (e.g., "pack_romantico", "pack_familiar_premium")
     
     Returns:
         List of image file paths sorted alphabetically
     """
     pack_dir = os.path.join(PACKS_IMAGES_DIR, pack_name)
     
+    # Create directory if it doesn't exist
     if not os.path.exists(pack_dir):
-        logger.warning(f"Pack images directory not found: {pack_dir}")
+        logger.warning(f"Pack images directory not found, creating: {pack_dir}")
+        os.makedirs(pack_dir, exist_ok=True)
         return []
     
     image_files = []
     for filename in sorted(os.listdir(pack_dir)):
+        # Skip .gitkeep files
+        if filename == '.gitkeep':
+            continue
         if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
             image_files.append(os.path.join(pack_dir, filename))
     
