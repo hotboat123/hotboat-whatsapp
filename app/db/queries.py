@@ -489,8 +489,10 @@ async def search_messages_in_all_conversations(search_term: str, limit: int = 50
 
 def _search_messages_impl(search_term: str, limit: int = 50) -> List[Dict]:
     """
-    Search for a term across ALL messages in the database.
-    Returns conversations that have at least one message matching the search.
+    Search for a term across:
+    - Message content (message_text, response_text)
+    - Lead/contact info (customer_name, notes) - for "buscador por nombre"
+    Returns conversations matching any of these.
     """
     if not search_term or len(search_term.strip()) < 2:
         return []
@@ -500,28 +502,68 @@ def _search_messages_impl(search_term: str, limit: int = 50) -> List[Dict]:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Simple query: find phone_numbers that have matching messages
+                # 1) Matches in MESSAGES
                 cur.execute("""
                     SELECT 
                         w.phone_number,
                         COUNT(*) as match_count,
-                        MAX(w.created_at) as last_match_at
+                        MAX(w.created_at) as last_match_at,
+                        'message' as source
                     FROM whatsapp_conversations w
                     WHERE (w.message_text IS NOT NULL AND w.message_text ILIKE %s)
                        OR (w.response_text IS NOT NULL AND w.response_text ILIKE %s)
                     GROUP BY w.phone_number
-                    ORDER BY match_count DESC, last_match_at DESC
-                    LIMIT %s
-                """, (term, term, limit))
+                """, (term, term))
+                msg_rows = {r[0]: (r[1], r[2], 'message') for r in cur.fetchall()}
                 
-                rows = cur.fetchall()
+                # 2) Matches in LEADS (customer_name, notes - e.g. Destinatario, Email in notes)
+                cur.execute("""
+                    SELECT phone_number, 1 as match_count, last_interaction_at, 'lead' as source
+                    FROM whatsapp_leads
+                    WHERE (customer_name IS NOT NULL AND customer_name ILIKE %s)
+                       OR (notes IS NOT NULL AND notes ILIKE %s)
+                """, (term, term))
+                lead_rows = {r[0]: (r[1], r[2], 'lead') for r in cur.fetchall()}
+                
+                # 3) Matches in conversation customer_name (from latest msg)
+                cur.execute("""
+                    SELECT DISTINCT ON (phone_number) phone_number, customer_name
+                    FROM whatsapp_conversations
+                    WHERE customer_name IS NOT NULL AND customer_name ILIKE %s
+                """, (term,))
+                conv_name_matches = [r[0] for r in cur.fetchall()]
+                
+                # Merge: combine msg + lead matches, dedupe by phone
+                seen = {}
+                for phone, (cnt, dt, src) in msg_rows.items():
+                    seen[phone] = (cnt, dt)
+                for phone, (cnt, dt, _) in lead_rows.items():
+                    if phone in seen:
+                        old_cnt, old_dt = seen[phone]
+                        seen[phone] = (old_cnt + cnt, old_dt or dt)
+                    else:
+                        seen[phone] = (cnt, dt)
+                for phone in conv_name_matches:
+                    if phone not in seen:
+                        cur.execute("SELECT MAX(created_at) FROM whatsapp_conversations WHERE phone_number = %s", (phone,))
+                        row = cur.fetchone()
+                        seen[phone] = (1, row[0] if row else None)
+                    else:
+                        old_cnt, old_dt = seen[phone]
+                        seen[phone] = (old_cnt + 1, old_dt)
+                
+                # Sort by match_count desc, then last_match desc; take limit
+                def _sort_key(item):
+                    _, (cnt, dt) = item
+                    try:
+                        ts = dt.timestamp() if dt else 0
+                    except (AttributeError, OSError):
+                        ts = 0
+                    return (-cnt, -ts)
+                sorted_items = sorted(seen.items(), key=_sort_key)[:limit]
+                
                 conversations = []
-                
-                for row in rows:
-                    phone_number = row[0]
-                    match_count = row[1]
-                    last_match_at = row[2]
-                    
+                for phone_number, (match_count, last_match_at) in sorted_items:
                     # Get customer_name and last message
                     cur.execute("""
                         SELECT customer_name, message_text, response_text, direction
