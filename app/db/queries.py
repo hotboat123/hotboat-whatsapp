@@ -477,7 +477,17 @@ async def search_conversations_by_phone(phone_query: str, limit: int = 20) -> Li
         return []
 
 
+def search_messages_in_all_conversations_sync(search_term: str, limit: int = 50) -> List[Dict]:
+    """Sync version for use in thread pool (blocking DB operations)."""
+    return _search_messages_impl(search_term, limit)
+
+
 async def search_messages_in_all_conversations(search_term: str, limit: int = 50) -> List[Dict]:
+    """Async wrapper - runs sync impl in thread pool via caller."""
+    return _search_messages_impl(search_term, limit)
+
+
+def _search_messages_impl(search_term: str, limit: int = 50) -> List[Dict]:
     """
     Search for a term across ALL messages in the database.
     Returns conversations that have at least one message matching the search.
@@ -490,60 +500,60 @@ async def search_messages_in_all_conversations(search_term: str, limit: int = 50
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # Simple query: find phone_numbers that have matching messages
                 cur.execute("""
-                    WITH matching_convos AS (
-                        SELECT phone_number, COUNT(*) as match_count, MAX(created_at) as last_match_at
-                        FROM whatsapp_conversations
-                        WHERE message_text ILIKE %s OR response_text ILIKE %s
-                        GROUP BY phone_number
-                        ORDER BY match_count DESC, last_match_at DESC
-                        LIMIT %s
-                    ),
-                    latest_msg AS (
-                        SELECT DISTINCT ON (phone_number) 
-                            phone_number, message_text, response_text, direction
-                        FROM whatsapp_conversations
-                        WHERE phone_number IN (SELECT phone_number FROM matching_convos)
-                        ORDER BY phone_number, created_at DESC
-                    )
                     SELECT 
-                        m.phone_number,
-                        m.match_count,
-                        m.last_match_at,
-                        COALESCE(l.customer_name, wl.customer_name, m.phone_number) as customer_name,
-                        lm.message_text,
-                        lm.response_text,
-                        lm.direction,
-                        COALESCE(l.unread_count, 0) as unread_count,
-                        COALESCE(l.priority, 0) as priority
-                    FROM matching_convos m
-                    LEFT JOIN (
-                        SELECT phone_number, MAX(customer_name) as customer_name
-                        FROM whatsapp_conversations
-                        GROUP BY phone_number
-                    ) wl ON m.phone_number = wl.phone_number
-                    LEFT JOIN latest_msg lm ON m.phone_number = lm.phone_number
-                    LEFT JOIN whatsapp_leads l ON m.phone_number = l.phone_number
-                    ORDER BY m.match_count DESC, m.last_match_at DESC
+                        w.phone_number,
+                        COUNT(*) as match_count,
+                        MAX(w.created_at) as last_match_at
+                    FROM whatsapp_conversations w
+                    WHERE (w.message_text IS NOT NULL AND w.message_text ILIKE %s)
+                       OR (w.response_text IS NOT NULL AND w.response_text ILIKE %s)
+                    GROUP BY w.phone_number
+                    ORDER BY match_count DESC, last_match_at DESC
+                    LIMIT %s
                 """, (term, term, limit))
                 
                 rows = cur.fetchall()
                 conversations = []
+                
                 for row in rows:
                     phone_number = row[0]
                     match_count = row[1]
                     last_match_at = row[2]
-                    customer_name = row[3] or phone_number
-                    msg_text = row[4] or ""
-                    resp_text = row[5] or ""
-                    direction = row[6] or "incoming"
-                    unread_count = row[7] if len(row) > 7 else 0
-                    priority = row[8] if len(row) > 8 else 0
                     
-                    if direction == "outgoing":
-                        last_message = (resp_text or msg_text or "")[:200]
+                    # Get customer_name and last message
+                    cur.execute("""
+                        SELECT customer_name, message_text, response_text, direction
+                        FROM whatsapp_conversations
+                        WHERE phone_number = %s
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """, (phone_number,))
+                    last_row = cur.fetchone()
+                    customer_name = phone_number
+                    last_message = ""
+                    if last_row:
+                        customer_name = last_row[0] or phone_number
+                        msg_t, resp_t, direction = last_row[1], last_row[2], last_row[3]
+                        if direction == "outgoing":
+                            last_message = (resp_t or msg_t or "")[:200]
+                        else:
+                            last_message = (msg_t or resp_t or "")[:200]
+                    
+                    # Get lead info
+                    cur.execute("""
+                        SELECT customer_name, COALESCE(unread_count, 0), COALESCE(priority, 0)
+                        FROM whatsapp_leads WHERE phone_number = %s
+                    """, (phone_number,))
+                    lead_row = cur.fetchone()
+                    if lead_row:
+                        customer_name = lead_row[0] or customer_name
+                        unread_count = lead_row[1]
+                        priority = lead_row[2]
                     else:
-                        last_message = (msg_text or resp_text or "")[:200]
+                        unread_count = 0
+                        priority = 0
                     
                     if last_match_at:
                         if last_match_at.tzinfo is None:
@@ -563,7 +573,7 @@ async def search_messages_in_all_conversations(search_term: str, limit: int = 50
                 return conversations
     
     except Exception as e:
-        logger.error(f"Error searching messages: {e}")
+        logger.error(f"Error searching messages: {e}", exc_info=True)
         return []
 
 

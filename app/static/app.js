@@ -1984,19 +1984,31 @@ function searchInContactInfo(query) {
 
 // Search in ALL messages - calls backend API (entire database)
 async function searchInAllMessages(query) {
-    showSearching('Buscando en todo el historial...');
+    showSearching('Buscando en todo el historial... (puede tardar unos segundos)');
     
     try {
         const response = await fetch(`${API_BASE}/api/conversations/search-messages?q=${encodeURIComponent(query)}`);
+        
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error('Search API error:', response.status, errText);
+            throw new Error(`Error ${response.status}: ${errText}`);
+        }
+        
         const data = await response.json();
         const results = data.conversations || [];
+        
+        if (data.error) {
+            console.error('Search API returned error:', data.error);
+        }
+        console.log('[Buscar mensajes] Encontradas', results.length, 'conversaciones para "' + query + '"');
         
         conversations = results;
         renderConversations();
         showSearchResults(results.length, results.length);
     } catch (error) {
         console.error('Error searching messages:', error);
-        showToast('Error al buscar en mensajes', 'error');
+        showToast('Error al buscar: ' + (error.message || 'Intenta de nuevo'), 'error');
         // Fallback to local search
         await searchInMessageContent(query);
     }
