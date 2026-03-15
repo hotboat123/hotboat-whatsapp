@@ -2073,10 +2073,23 @@ async function searchInMessageContent(query) {
 function countMessageMatches(messages, query) {
     if (!messages || !Array.isArray(messages)) return 0;
     
+    const normalizeForSearch = (str) => {
+        return (str || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, ''); // Remove accents
+    };
+    const queryNorm = normalizeForSearch(query);
+    
     let count = 0;
     messages.forEach(msg => {
-        const content = (msg.content || '').toLowerCase();
-        if (content.includes(query)) {
+        // API returns message_text, response_text; normalized uses content or message_text
+        const textToSearch = normalizeForSearch(
+            [msg.content, msg.message_text, msg.response_text, msg.text]
+                .filter(Boolean)
+                .join(' ')
+        );
+        if (textToSearch.includes(queryNorm)) {
             count++;
         }
     });
