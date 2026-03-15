@@ -278,15 +278,23 @@ async function loadConversations() {
             }
         });
 
-        conversations = Array.from(grouped.values()).sort(
+        const processed = Array.from(grouped.values()).sort(
             (a, b) => new Date(b.last_message_at) - new Date(a.last_message_at)
         );
 
-        // Update allConversations for search
-        allConversations = [...conversations];
+        // Update allConversations (used for search fallback and when search is cleared)
+        allConversations = [...processed];
 
-        renderConversations();
-        
+        // If user has search text, keep showing search results (like WhatsApp)
+        const searchInput = document.getElementById('searchConversations');
+        const hasSearch = searchInput && searchInput.value.trim().length > 0;
+        if (hasSearch) {
+            await filterConversations();
+        } else {
+            conversations = processed;
+            renderConversations();
+        }
+
         updateStatus('connected', 'Connected');
     } catch (error) {
         console.error('Error loading conversations:', error);
