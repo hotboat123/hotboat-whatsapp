@@ -1860,4 +1860,230 @@ async function sendReaction(messageId, emoji) {
 document.addEventListener('DOMContentLoaded', () => {
     attachReactionListeners();
     console.log('✅ Reaction listeners attached');
+    
+    // Initialize search
+    initializeSearch();
 });
+
+// ==================== SEARCH FUNCTIONALITY ====================
+
+let allConversations = []; // Store all conversations for search
+let searchCache = new Map(); // Cache for message searches
+
+// Initialize search functionality
+function initializeSearch() {
+    const searchInput = document.getElementById('searchConversations');
+    const searchInMessages = document.getElementById('searchInMessages');
+    
+    // Show search options when input is focused
+    searchInput.addEventListener('focus', () => {
+        const searchOptions = searchInput.parentElement.querySelector('.search-options');
+        if (searchOptions) {
+            searchOptions.style.display = 'block';
+        }
+    });
+    
+    // Store all conversations for filtering
+    allConversations = [...conversations];
+}
+
+// Main filter function
+async function filterConversations() {
+    const searchInput = document.getElementById('searchConversations');
+    const searchInMessages = document.getElementById('searchInMessages');
+    const query = searchInput.value.trim().toLowerCase();
+    
+    // If empty, show all conversations
+    if (!query) {
+        conversations = [...allConversations];
+        renderConversations();
+        return;
+    }
+    
+    // Check if searching in messages
+    const searchMessages = searchInMessages && searchInMessages.checked;
+    
+    if (searchMessages) {
+        // Search in message content (slower, more comprehensive)
+        await searchInMessageContent(query);
+    } else {
+        // Quick search in contact info only
+        searchInContactInfo(query);
+    }
+}
+
+// Quick search: Filter by contact name or phone number
+function searchInContactInfo(query) {
+    conversations = allConversations.filter(conv => {
+        const name = (conv.customer_name || '').toLowerCase();
+        const phone = (conv.phone_number || '').toLowerCase();
+        const lastMessage = (conv.last_message || '').toLowerCase();
+        
+        return name.includes(query) || 
+               phone.includes(query) || 
+               lastMessage.includes(query);
+    });
+    
+    renderConversations();
+    
+    // Show result count
+    showSearchResults(conversations.length, allConversations.length);
+}
+
+// Advanced search: Search within message history
+async function searchInMessageContent(query) {
+    const results = [];
+    const searchPromises = [];
+    
+    // Show loading indicator
+    showSearching();
+    
+    try {
+        // Search through each conversation
+        for (const conv of allConversations) {
+            // Check contact info first (instant)
+            const name = (conv.customer_name || '').toLowerCase();
+            const phone = (conv.phone_number || '').toLowerCase();
+            
+            if (name.includes(query) || phone.includes(query)) {
+                results.push({
+                    ...conv,
+                    matchType: 'contact',
+                    matchCount: 1
+                });
+                continue;
+            }
+            
+            // Check if we have cached messages for this conversation
+            const cacheKey = conv.phone_number;
+            let messages = searchCache.get(cacheKey);
+            
+            // If not cached or cache is old, fetch from API
+            if (!messages) {
+                searchPromises.push(
+                    fetchConversationData(conv.phone_number, { limit: 100 })
+                        .then(data => {
+                            messages = data.messages || [];
+                            searchCache.set(cacheKey, messages);
+                            return { conv, messages };
+                        })
+                        .catch(() => ({ conv, messages: [] }))
+                );
+            } else {
+                // Use cached messages
+                const matchCount = countMessageMatches(messages, query);
+                if (matchCount > 0) {
+                    results.push({
+                        ...conv,
+                        matchType: 'message',
+                        matchCount
+                    });
+                }
+            }
+        }
+        
+        // Wait for all API calls to complete
+        const fetchedResults = await Promise.all(searchPromises);
+        
+        // Process fetched messages
+        fetchedResults.forEach(({ conv, messages }) => {
+            const matchCount = countMessageMatches(messages, query);
+            if (matchCount > 0) {
+                results.push({
+                    ...conv,
+                    matchType: 'message',
+                    matchCount
+                });
+            }
+        });
+        
+        // Sort by relevance (match count, then date)
+        results.sort((a, b) => {
+            if (a.matchType === 'contact' && b.matchType !== 'contact') return -1;
+            if (a.matchType !== 'contact' && b.matchType === 'contact') return 1;
+            if (a.matchCount !== b.matchCount) return b.matchCount - a.matchCount;
+            return new Date(b.last_message_at || b.created_at) - new Date(a.last_message_at || a.created_at);
+        });
+        
+        conversations = results;
+        renderConversations();
+        showSearchResults(results.length, allConversations.length);
+        
+    } catch (error) {
+        console.error('Error searching messages:', error);
+        showToast('Error al buscar en mensajes', 'error');
+        // Fallback to contact search
+        searchInContactInfo(query);
+    }
+}
+
+// Count how many messages match the query
+function countMessageMatches(messages, query) {
+    if (!messages || !Array.isArray(messages)) return 0;
+    
+    let count = 0;
+    messages.forEach(msg => {
+        const content = (msg.content || '').toLowerCase();
+        if (content.includes(query)) {
+            count++;
+        }
+    });
+    return count;
+}
+
+// Show search results count
+function showSearchResults(found, total) {
+    const container = document.getElementById('conversationsList');
+    if (!container) return;
+    
+    // Remove existing result message
+    const existing = container.querySelector('.search-result-message');
+    if (existing) existing.remove();
+    
+    // Add result message
+    if (found === 0) {
+        container.insertAdjacentHTML('afterbegin', `
+            <div class="search-result-message" style="padding: 1rem; text-align: center; color: var(--text-secondary); background: var(--bg-light); margin-bottom: 0.5rem; border-radius: 8px;">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
+                <div>No se encontraron resultados</div>
+            </div>
+        `);
+    } else {
+        container.insertAdjacentHTML('afterbegin', `
+            <div class="search-result-message" style="padding: 0.75rem; text-align: center; color: var(--primary); background: var(--bg-light); margin-bottom: 0.5rem; border-radius: 8px; font-size: 0.9rem;">
+                ✓ ${found} de ${total} conversaciones
+            </div>
+        `);
+    }
+}
+
+// Show searching indicator
+function showSearching() {
+    const container = document.getElementById('conversationsList');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div style="padding: 3rem; text-align: center; color: var(--text-secondary);">
+            <div style="font-size: 2rem; margin-bottom: 1rem;">🔍</div>
+            <div>Buscando en mensajes...</div>
+        </div>
+    `;
+}
+
+// Clear search and restore all conversations
+function clearSearch() {
+    const searchInput = document.getElementById('searchConversations');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    conversations = [...allConversations];
+    renderConversations();
+}
+
+// Update allConversations when conversations are loaded
+const originalLoadConversations = loadConversations;
+async function loadConversations() {
+    await originalLoadConversations();
+    allConversations = [...conversations];
+}
+
