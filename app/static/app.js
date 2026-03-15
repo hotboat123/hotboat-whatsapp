@@ -282,6 +282,9 @@ async function loadConversations() {
             (a, b) => new Date(b.last_message_at) - new Date(a.last_message_at)
         );
 
+        // Update allConversations for search
+        allConversations = [...conversations];
+
         renderConversations();
         
         updateStatus('connected', 'Connected');
@@ -2078,12 +2081,5 @@ function clearSearch() {
     }
     conversations = [...allConversations];
     renderConversations();
-}
-
-// Update allConversations when conversations are loaded
-const originalLoadConversations = loadConversations;
-async function loadConversations() {
-    await originalLoadConversations();
-    allConversations = [...conversations];
 }
 
