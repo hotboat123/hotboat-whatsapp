@@ -1872,6 +1872,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 let allConversations = []; // Store all conversations for search
 let searchCache = new Map(); // Cache for message searches
+let filterDebounceTimer = null;
+
+// Debounced filter - prevents excessive API calls while typing
+function debouncedFilterConversations() {
+    if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+    filterDebounceTimer = setTimeout(() => filterConversations(), 300);
+}
 
 // Initialize search functionality
 function initializeSearch() {
@@ -1894,7 +1901,7 @@ function initializeSearch() {
 async function filterConversations() {
     const searchInput = document.getElementById('searchConversations');
     const searchInMessages = document.getElementById('searchInMessages');
-    const query = searchInput.value.trim().toLowerCase();
+    const query = searchInput.value.trim();
     
     // If empty, show all conversations
     if (!query) {
@@ -1903,19 +1910,61 @@ async function filterConversations() {
         return;
     }
     
+    const queryLower = query.toLowerCase();
+    
     // Check if searching in messages
     const searchMessages = searchInMessages && searchInMessages.checked;
     
-    if (searchMessages) {
+    // Check if query looks like a phone number (3+ digits)
+    const phoneOnly = query.replace(/\D/g, '');
+    const isPhoneSearch = phoneOnly.length >= 3;
+    
+    if (isPhoneSearch) {
+        // Search by phone number - use API to find in entire database
+        await searchByPhoneNumber(phoneOnly, queryLower, searchMessages);
+    } else if (searchMessages) {
         // Search in message content (slower, more comprehensive)
-        await searchInMessageContent(query);
+        await searchInMessageContent(queryLower);
     } else {
-        // Quick search in contact info only
-        searchInContactInfo(query);
+        // Quick search in contact info only (local)
+        searchInContactInfo(queryLower);
     }
 }
 
-// Quick search: Filter by contact name or phone number
+// Search by phone number - calls API to search entire database
+async function searchByPhoneNumber(phoneDigits, queryLower, searchInMessages) {
+    showSearching('Buscando por número...');
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/search?q=${encodeURIComponent(phoneDigits)}`);
+        const data = await response.json();
+        const apiResults = data.conversations || [];
+        
+        if (searchInMessages && apiResults.length > 0) {
+            // Also search in message content for these conversations
+            const merged = [];
+            for (const conv of apiResults) {
+                const convData = await fetchConversationData(conv.phone_number, { limit: 100 });
+                const matchCount = countMessageMatches(convData.messages || [], queryLower);
+                merged.push({ ...conv, matchType: 'phone', matchCount: matchCount + 1 });
+            }
+            merged.sort((a, b) => (b.matchCount || 0) - (a.matchCount || 0));
+            conversations = merged;
+        } else {
+            conversations = apiResults;
+        }
+        
+        renderConversations();
+        showSearchResults(conversations.length, conversations.length);
+    } catch (error) {
+        console.error('Error searching by phone:', error);
+        showToast('Error al buscar por número', 'error');
+        // Fallback to local search
+        searchInContactInfo(queryLower);
+    }
+}
+
+// Quick search: Filter by contact name or phone number (local only)
 function searchInContactInfo(query) {
     conversations = allConversations.filter(conv => {
         const name = (conv.customer_name || '').toLowerCase();
@@ -1939,7 +1988,7 @@ async function searchInMessageContent(query) {
     const searchPromises = [];
     
     // Show loading indicator
-    showSearching();
+    showSearching('Buscando en mensajes...');
     
     try {
         // Search through each conversation
@@ -2052,23 +2101,26 @@ function showSearchResults(found, total) {
             </div>
         `);
     } else {
+        const msg = (found === total || typeof total !== 'number') 
+            ? `✓ ${found} conversación${found !== 1 ? 'es' : ''} encontrada${found !== 1 ? 's' : ''}`
+            : `✓ ${found} de ${total} conversaciones`;
         container.insertAdjacentHTML('afterbegin', `
             <div class="search-result-message" style="padding: 0.75rem; text-align: center; color: var(--primary); background: var(--bg-light); margin-bottom: 0.5rem; border-radius: 8px; font-size: 0.9rem;">
-                ✓ ${found} de ${total} conversaciones
+                ${msg}
             </div>
         `);
     }
 }
 
 // Show searching indicator
-function showSearching() {
+function showSearching(message = 'Buscando...') {
     const container = document.getElementById('conversationsList');
     if (!container) return;
     
     container.innerHTML = `
         <div style="padding: 3rem; text-align: center; color: var(--text-secondary);">
             <div style="font-size: 2rem; margin-bottom: 1rem;">🔍</div>
-            <div>Buscando en mensajes...</div>
+            <div>${message}</div>
         </div>
     `;
 }

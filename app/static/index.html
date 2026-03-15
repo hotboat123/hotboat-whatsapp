@@ -47,10 +47,10 @@
                 </div>
                 
                 <div class="search-box">
-                    <input type="text" id="searchConversations" placeholder="🔍 Buscar por nombre, número o mensaje..." onkeyup="filterConversations()">
+                    <input type="text" id="searchConversations" placeholder="🔍 Buscar por nombre, número o mensaje..." oninput="debouncedFilterConversations()">
                     <div class="search-options" style="display: none; padding: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">
                         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                            <input type="checkbox" id="searchInMessages" onchange="filterConversations()">
+                            <input type="checkbox" id="searchInMessages" onchange="debouncedFilterConversations()">
                             <span>Buscar dentro de mensajes</span>
                         </label>
                     </div>

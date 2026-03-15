@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
 from app.bot.conversation import ConversationManager
-from app.db.queries import get_recent_conversations, get_appointments_between_dates, save_conversation
+from app.db.queries import get_recent_conversations, get_appointments_between_dates, save_conversation, search_conversations_by_phone
 from app.db.leads import (
     get_or_create_lead, 
     update_lead_status, 
@@ -637,6 +637,24 @@ async def get_conversations_list(limit: int = 50):
         }
     except Exception as e:
         logger.error(f"Error getting conversations: {e}")
+        return {
+            "conversations": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+
+@app.get("/api/conversations/search")
+async def search_conversations(q: str = Query(..., min_length=3)):
+    """Search conversations by phone number (partial match). Finds conversations even if not in recent list."""
+    try:
+        results = await search_conversations_by_phone(q, limit=20)
+        return {
+            "conversations": results,
+            "total": len(results)
+        }
+    except Exception as e:
+        logger.error(f"Error searching conversations: {e}")
         return {
             "conversations": [],
             "total": 0,

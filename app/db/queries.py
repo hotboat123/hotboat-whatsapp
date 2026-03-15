@@ -389,6 +389,95 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
         return []
 
 
+async def search_conversations_by_phone(phone_query: str, limit: int = 20) -> List[Dict]:
+    """
+    Search conversations by phone number (partial match).
+    Useful when the conversation is not in the recent list.
+    
+    Args:
+        phone_query: Partial phone number to search (e.g., "5697757730")
+        limit: Maximum results to return
+    
+    Returns:
+        List of matching conversations
+    """
+    if not phone_query or len(phone_query.strip()) < 3:
+        return []
+    
+    query = phone_query.strip().replace(" ", "").replace("+", "")
+    if not query.isdigit():
+        return []
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        latest.phone_number,
+                        latest.customer_name,
+                        latest.created_at,
+                        latest.message_text,
+                        latest.response_text,
+                        latest.direction,
+                        COALESCE(l.unread_count, 0) as unread_count,
+                        COALESCE(l.priority, 0) as priority
+                    FROM (
+                        SELECT DISTINCT ON (phone_number)
+                            phone_number,
+                            customer_name,
+                            created_at,
+                            message_text,
+                            response_text,
+                            direction
+                        FROM whatsapp_conversations
+                        WHERE phone_number LIKE %s
+                        ORDER BY phone_number, created_at DESC
+                    ) latest
+                    LEFT JOIN whatsapp_leads l ON latest.phone_number = l.phone_number
+                    ORDER BY latest.created_at DESC
+                    LIMIT %s
+                """, (f"%{query}%", limit))
+                
+                results = cur.fetchall()
+                conversations = []
+                for row in results:
+                    phone_number = row[0]
+                    customer_name = row[1] if row[1] else phone_number
+                    created_at = row[2]
+                    message_text = row[3] or ""
+                    response_text = row[4] or ""
+                    direction = row[5] if row[5] else 'incoming'
+                    unread_count = row[6] if len(row) > 6 else 0
+                    priority = row[7] if len(row) > 7 else 0
+                    
+                    if direction == 'outgoing':
+                        last_message = response_text or message_text
+                    else:
+                        last_message = message_text or response_text
+                    
+                    if created_at:
+                        if created_at.tzinfo is None:
+                            created_at = created_at.replace(tzinfo=ZoneInfo("UTC"))
+                        created_at = created_at.astimezone(CHILE_TZ)
+                    
+                    conversations.append({
+                        "phone_number": phone_number,
+                        "customer_name": customer_name,
+                        "last_message_at": created_at.isoformat() if created_at else None,
+                        "last_message": last_message,
+                        "direction": direction,
+                        "unread_count": unread_count,
+                        "priority": priority
+                    })
+                
+                return conversations
+    
+    except Exception as e:
+        logger.error(f"Error searching conversations: {e}")
+        return []
+
+
+
 
 
 
