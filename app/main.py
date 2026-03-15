@@ -627,7 +627,7 @@ async def import_conversations(data: ConversationImport):
 # Kia-Ai API Endpoints
 
 @app.get("/api/conversations")
-async def get_conversations_list(limit: int = 50):
+async def get_conversations_list(limit: int = Query(50, ge=1, le=1000)):
     """Get list of all conversations with latest messages"""
     try:
         conversations = await get_recent_conversations(limit=limit)

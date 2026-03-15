@@ -8,6 +8,10 @@ const MAX_REFRESH_LIMIT = 500;
 const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
 let currentSearchTab = 'chats'; // 'chats' or 'messages'
 let allMessagesForSearch = []; // Cache for message search
+let conversationsLimit = 50; // Increments by 50 on each "Cargar más" (50 -> 100 -> 150 -> 200...)
+let conversationsHasMore = true; // True if API returned full page (may have more)
+let isLoadingMoreConversations = false;
+const CONVERSATIONS_LOAD_MORE_STEP = 50;
 
 function setViewportHeightVar() {
     const vh = window.innerHeight * 0.01;
@@ -223,10 +227,11 @@ function updateCharCount(inputId, counterId) {
 }
 
 // Load Conversations
-async function loadConversations() {
-    console.log('🔄 Loading conversations with unread badges...');
+async function loadConversations(limit = null) {
+    const useLimit = limit !== null ? limit : conversationsLimit;
+    console.log('🔄 Loading conversations (limit:', useLimit, ')...');
     try {
-        const response = await fetch(`${API_BASE}/api/conversations`);
+        const response = await fetch(`${API_BASE}/api/conversations?limit=${useLimit}`);
         if (!response.ok) throw new Error('Failed to load conversations');
         
         const data = await response.json();
@@ -292,6 +297,7 @@ async function loadConversations() {
             await filterConversations();
         } else {
             conversations = processed;
+            conversationsHasMore = rawConversations.length >= useLimit;
             renderConversations();
         }
 
@@ -357,7 +363,34 @@ function renderConversations() {
             </div>
         </div>
     `;
-    }).join('');
+    }).join('') + (
+        // "Cargar más" button: only when NOT searching and may have more
+        (() => {
+            const searchInput = document.getElementById('searchConversations');
+            const hasSearch = searchInput && searchInput.value.trim().length > 0;
+            if (hasSearch || !conversationsHasMore) return '';
+            return `
+                <div class="load-more-conversations" style="padding: 1rem; text-align: center;">
+                    <button type="button" class="btn-secondary" onclick="loadMoreConversations()" style="width: 100%;" ${isLoadingMoreConversations ? 'disabled' : ''}>
+                        ${isLoadingMoreConversations ? 'Cargando...' : `Ver más conversaciones (${conversations.length} mostradas)`}
+                    </button>
+                </div>
+            `;
+        })()
+    );
+}
+
+// Load more conversations (50 more each click: 100, 150, 200...)
+async function loadMoreConversations() {
+    if (isLoadingMoreConversations) return;
+    isLoadingMoreConversations = true;
+    conversationsLimit += CONVERSATIONS_LOAD_MORE_STEP;
+    try {
+        await loadConversations(conversationsLimit);
+    } finally {
+        isLoadingMoreConversations = false;
+        renderConversations();
+    }
 }
 
 // Select Conversation
