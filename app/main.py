@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
 from app.bot.conversation import ConversationManager
-from app.db.queries import get_recent_conversations, get_appointments_between_dates, save_conversation, search_conversations_by_phone
+from app.db.queries import get_recent_conversations, get_appointments_between_dates, save_conversation, search_conversations_by_phone, search_messages_in_all_conversations
 from app.db.leads import (
     get_or_create_lead, 
     update_lead_status, 
@@ -655,6 +655,24 @@ async def search_conversations(q: str = Query(..., min_length=3)):
         }
     except Exception as e:
         logger.error(f"Error searching conversations: {e}")
+        return {
+            "conversations": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+
+@app.get("/api/conversations/search-messages")
+async def search_messages(q: str = Query(..., min_length=2)):
+    """Search for text across ALL messages in the database. Returns conversations that contain the search term."""
+    try:
+        results = await search_messages_in_all_conversations(q, limit=50)
+        return {
+            "conversations": results,
+            "total": len(results)
+        }
+    except Exception as e:
+        logger.error(f"Error searching messages: {e}")
         return {
             "conversations": [],
             "total": 0,

@@ -1923,8 +1923,8 @@ async function filterConversations() {
         // Search by phone number - use API to find in entire database
         await searchByPhoneNumber(phoneOnly, queryLower, searchMessages);
     } else if (searchMessages) {
-        // Search in message content (slower, more comprehensive)
-        await searchInMessageContent(queryLower);
+        // Search in ALL messages - use backend API (searches entire database)
+        await searchInAllMessages(queryLower);
     } else {
         // Quick search in contact info only (local)
         searchInContactInfo(queryLower);
@@ -1982,7 +1982,27 @@ function searchInContactInfo(query) {
     showSearchResults(conversations.length, allConversations.length);
 }
 
-// Advanced search: Search within message history
+// Search in ALL messages - calls backend API (entire database)
+async function searchInAllMessages(query) {
+    showSearching('Buscando en todo el historial...');
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/search-messages?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        const results = data.conversations || [];
+        
+        conversations = results;
+        renderConversations();
+        showSearchResults(results.length, results.length);
+    } catch (error) {
+        console.error('Error searching messages:', error);
+        showToast('Error al buscar en mensajes', 'error');
+        // Fallback to local search
+        await searchInMessageContent(query);
+    }
+}
+
+// Search in message content (legacy - local only, used as fallback)
 async function searchInMessageContent(query) {
     const results = [];
     const searchPromises = [];
