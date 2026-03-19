@@ -52,6 +52,8 @@ class PushNotifier:
                 logger.warning("No push tokens registered. Skipping push notification.")
                 return False
             
+            logger.info(f"📤 Sending push to {len(tokens)} device(s): {title[:50]}...")
+            
             # Prepare notification messages
             messages = []
             for token in tokens:

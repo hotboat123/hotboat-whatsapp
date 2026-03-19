@@ -403,6 +403,18 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             
             logger.info(f"🔘 Interactive message: button={button_reply}, list={list_reply}")
             
+            # Send push for interactive (button/list) responses
+            reply_text = (button_reply.get("title") or list_reply.get("title") or "Respuesta interactiva")
+            try:
+                from app.notifications import push_notifier
+                await push_notifier.send_new_message_notification(
+                    contact_name=contact_name,
+                    phone_number=from_number,
+                    message_preview=reply_text
+                )
+            except Exception as push_error:
+                logger.warning(f"Could not send push for interactive: {push_error}")
+            
             # TODO: Handle interactive responses
             await whatsapp_client.send_text_message(
                 from_number,
@@ -444,6 +456,18 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 display_url = media_url
             
             text_body = caption if caption else "[Imagen sin texto]"
+            
+            # Send push notification for incoming images (like text messages)
+            try:
+                from app.notifications import push_notifier
+                preview = caption[:80] if caption else "📷 Imagen"
+                await push_notifier.send_new_message_notification(
+                    contact_name=contact_name,
+                    phone_number=from_number,
+                    message_preview=preview
+                )
+            except Exception as push_error:
+                logger.warning(f"Could not send push notification for image: {push_error}")
             
             # ALWAYS send email notification for incoming images (even if bot is disabled)
             try:
@@ -650,6 +674,17 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 display_url = media_url
             
             text_body = "[Audio recibido]"
+            
+            # Send push notification for incoming audio (like text messages)
+            try:
+                from app.notifications import push_notifier
+                await push_notifier.send_new_message_notification(
+                    contact_name=contact_name,
+                    phone_number=from_number,
+                    message_preview="🎤 Audio"
+                )
+            except Exception as push_error:
+                logger.warning(f"Could not send push notification for audio: {push_error}")
             
             # ALWAYS send email notification for incoming audios (even if bot is disabled)
             try:
