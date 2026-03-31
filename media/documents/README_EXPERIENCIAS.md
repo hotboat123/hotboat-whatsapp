@@ -47,7 +47,12 @@ Este PDF debe contener información detallada sobre:
 1. Crea tu PDF con la información de experiencias y actividades
 2. Nómbralo exactamente como: `experiencias.pdf`
 3. Colócalo en este directorio: `media/documents/`
-4. El bot lo enviará automáticamente cuando el usuario seleccione "Experiencias y Actividades" del menú
+4. El bot lo enviará automáticamente cuando el usuario seleccione **6 — Otras Experiencias Pucón** (antes de las imágenes de detalle).
+
+## Imágenes (rafting, cabalgata, navegación)
+
+Las fotos por experiencia y el resumen visual van en **`media/images/experiencias/`** (subcarpetas `rafting/`, `cabalgata/`, `navegacion/`, etc.).  
+Ver `media/images/experiencias/README.md` en el repositorio.
 
 ## Formato Recomendado del PDF
 

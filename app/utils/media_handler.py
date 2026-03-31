@@ -20,9 +20,15 @@ ALOJAMIENTOS_IMAGES_DIR = os.path.join(IMAGES_DIR, "alojamientos")
 EXPERIENCIAS_IMAGES_DIR = os.path.join(IMAGES_DIR, "experiencias")
 PACKS_IMAGES_DIR = os.path.join(IMAGES_DIR, "packs")
 
+# Subcarpetas por tipo de experiencia (mismo patrón que packs)
+EXPERIENCIAS_SUBDIRS = ("rafting", "cabalgata", "navegacion", "velerismo")
+
 # Create directories if they don't exist
-for directory in [MEDIA_DIR, RECEIVED_DIR, UPLOADED_DIR, ACCOMMODATION_DIR, AUDIO_DIR, DOCUMENTS_DIR, 
-                  IMAGES_DIR, ALOJAMIENTOS_IMAGES_DIR, EXPERIENCIAS_IMAGES_DIR, PACKS_IMAGES_DIR]:
+_dirs_to_create = [MEDIA_DIR, RECEIVED_DIR, UPLOADED_DIR, ACCOMMODATION_DIR, AUDIO_DIR, DOCUMENTS_DIR,
+                   IMAGES_DIR, ALOJAMIENTOS_IMAGES_DIR, EXPERIENCIAS_IMAGES_DIR, PACKS_IMAGES_DIR]
+for sub in EXPERIENCIAS_SUBDIRS:
+    _dirs_to_create.append(os.path.join(EXPERIENCIAS_IMAGES_DIR, sub))
+for directory in _dirs_to_create:
     os.makedirs(directory, exist_ok=True)
 
 
@@ -196,24 +202,107 @@ def get_experiences_pdf_path() -> Optional[str]:
     return None
 
 
+def guess_image_mime(file_path: str) -> str:
+    """MIME correcto para WhatsApp (JPEG forzado rompe PNG/WebP)."""
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in (".png",):
+        return "image/png"
+    if ext in (".webp",):
+        return "image/webp"
+    if ext in (".jpg", ".jpeg"):
+        return "image/jpeg"
+    return "image/jpeg"
+
+
+def _list_images_in_dir(directory: str) -> List[str]:
+    if not os.path.isdir(directory):
+        return []
+    out = []
+    for filename in sorted(os.listdir(directory)):
+        if filename == ".gitkeep":
+            continue
+        if filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+            out.append(os.path.join(directory, filename))
+    return out
+
+
 def get_experiences_images() -> List[str]:
+    """Compatibilidad: solo rutas, sin captions (orden igual que delivery_items)."""
+    return [p for p, _ in get_experiences_delivery_items()]
+
+
+def get_experiences_delivery_items() -> List[tuple]:
     """
-    Get all images from the experiences folder
-    
+    Imágenes para enviar por WhatsApp al elegir "Otras experiencias Pucón".
+
+    Orden:
+    1) Resumen en la raíz: resumen-experiencias.* o 01_resumen_experiencias.*
+    2) rafting/ — primera imagen con caption
+    3) cabalgata/
+    4) navegacion/ y velerismo/ (rutas únicas)
+
     Returns:
-        List of image file paths sorted alphabetically
+        Lista de (ruta_absoluta, caption_o_None)
     """
+    items: List[tuple] = []
+
     if not os.path.exists(EXPERIENCIAS_IMAGES_DIR):
         logger.warning(f"Experiences images directory not found: {EXPERIENCIAS_IMAGES_DIR}")
         return []
-    
-    image_files = []
+
+    resumen_bases = ("resumen-experiencias", "01_resumen_experiencias", "resumen_experiencias")
+    seen_paths: set = set()
+
+    for base in resumen_bases:
+        found = False
+        for ext in (".jpg", ".jpeg", ".png", ".webp"):
+            p = os.path.join(EXPERIENCIAS_IMAGES_DIR, f"{base}{ext}")
+            if os.path.isfile(p):
+                items.append((p, "📋 Resumen — Rafting, Cabalgata y Navegación"))
+                seen_paths.add(p)
+                found = True
+                break
+        if found:
+            break
+
+    section_captions = {
+        "rafting": "🚣 Rafting",
+        "cabalgata": "🐴 Cabalgata",
+        "navegacion": "⛵ Navegación / Velerismo",
+        "velerismo": "⛵ Navegación / Velerismo",
+    }
+
+    for sub in ("rafting", "cabalgata", "navegacion", "velerismo"):
+        subdir = os.path.join(EXPERIENCIAS_IMAGES_DIR, sub)
+        paths = _list_images_in_dir(subdir)
+        cap = section_captions.get(sub)
+        for i, path in enumerate(paths):
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            items.append((path, cap if i == 0 else None))
+
+    # Legacy: imágenes sueltas en la raíz (sin contar resumen ya en seen_paths)
+    legacy_root: List[str] = []
     for filename in sorted(os.listdir(EXPERIENCIAS_IMAGES_DIR)):
-        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
-            image_files.append(os.path.join(EXPERIENCIAS_IMAGES_DIR, filename))
-    
-    logger.info(f"Found {len(image_files)} experience images")
-    return image_files
+        if filename == ".gitkeep":
+            continue
+        if not filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+            continue
+        path = os.path.join(EXPERIENCIAS_IMAGES_DIR, filename)
+        if not os.path.isfile(path) or path in seen_paths:
+            continue
+        stem = os.path.splitext(filename)[0].lower()
+        if stem in resumen_bases or stem.startswith("resumen-experiencias"):
+            continue
+        legacy_root.append(path)
+
+    for i, path in enumerate(legacy_root):
+        seen_paths.add(path)
+        items.append((path, "📋 Experiencias Pucón" if i == 0 else None))
+
+    logger.info(f"Experiences delivery: {len(items)} image(s) queued")
+    return items
 
 
 def get_alojamientos_images() -> List[str]:

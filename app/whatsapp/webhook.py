@@ -199,43 +199,56 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 # Store text response for database
                 response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "experiences_pdf":
-                # Send experiences images instead of PDF
-                logger.info("Sending experiences response with images")
+                logger.info("Sending experiences response (PDF opcional + imágenes)")
                 
-                # First send the text introduction
                 await whatsapp_client.send_text_message(from_number, response["text"])
                 
-                # Then send all images from experiences folder
-                from app.utils.media_handler import get_experiences_images
-                image_paths = get_experiences_images()
+                from app.utils.media_handler import (
+                    get_experiences_delivery_items,
+                    get_experiences_pdf_path,
+                    guess_image_mime,
+                )
                 
-                if image_paths:
-                    for idx, image_path in enumerate(image_paths, 1):
+                pdf_path = get_experiences_pdf_path()
+                if pdf_path:
+                    try:
+                        media_id_pdf = await whatsapp_client.upload_media(pdf_path, mime_type="application/pdf")
+                        if media_id_pdf:
+                            await whatsapp_client.send_document_message(
+                                to=from_number,
+                                media_id=media_id_pdf,
+                                filename="Experiencias_Pucon_HotBoat.pdf",
+                                caption="📄 Resumen PDF — Rafting, Cabalgata y Navegación",
+                            )
+                            logger.info("✅ Experiences PDF sent")
+                    except Exception as e:
+                        logger.error(f"❌ Error sending experiences PDF: {e}")
+                
+                delivery = get_experiences_delivery_items()
+                if delivery:
+                    for idx, (image_path, caption) in enumerate(delivery, 1):
                         try:
-                            logger.info(f"Uploading experience image {idx}/{len(image_paths)}: {image_path}")
-                            media_id = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
-                            
+                            mime = guess_image_mime(image_path)
+                            logger.info(f"Uploading experience image {idx}/{len(delivery)}: {image_path} ({mime})")
+                            media_id = await whatsapp_client.upload_media(image_path, mime_type=mime)
                             if media_id:
-                                # Only add caption to the first image
-                                caption = "📋 Experiencias y actividades en Pucón" if idx == 1 else None
                                 await whatsapp_client.send_image_message(
                                     to=from_number,
                                     media_id=media_id,
-                                    caption=caption
+                                    caption=caption,
                                 )
-                                logger.info(f"✅ Experience image {idx} sent successfully")
+                                logger.info(f"✅ Experience image {idx} sent")
                             else:
                                 logger.error(f"❌ Could not upload experience image {idx}")
                         except Exception as e:
                             logger.error(f"❌ Error sending experience image {idx}: {e}")
-                else:
-                    logger.warning("❌ No experience images found")
+                elif not pdf_path:
+                    logger.warning("❌ No experience images or PDF")
                     await whatsapp_client.send_text_message(
                         from_number,
                         "⚠️ Lo siento, las imágenes no están disponibles en este momento. Por favor escribe 'experiencias' y te envío la información por texto."
                     )
                 
-                # Store text response for database
                 response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "package_pdf":
                 # Send package images (one or more per pack)

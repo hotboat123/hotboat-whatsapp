@@ -20,3 +20,9 @@
 !documents/*.pdf
 !documents/*.md
 !accommodations/*.md
+
+# Experiencias: estructura y README (las imágenes las subes en deploy / volumen)
+!images/
+!images/experiencias/
+!images/experiencias/**/*.md
+!images/experiencias/**/.gitkeep
