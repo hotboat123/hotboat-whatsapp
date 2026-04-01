@@ -163,6 +163,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .login-card button{width:100%;background:var(--gold);color:#000;border:none;
   border-radius:8px;padding:.7rem;font-weight:700;cursor:pointer;font-size:.9rem}
 
+/* Toggle switch */
+.toggle-wrap{position:relative;display:inline-block;width:48px;height:26px;cursor:pointer}
+.toggle-wrap input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:var(--border);border-radius:26px;transition:.3s}
+.toggle-slider:before{content:'';position:absolute;width:20px;height:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s}
+.toggle-wrap input:checked + .toggle-slider{background:var(--gold)}
+.toggle-wrap input:checked + .toggle-slider:before{transform:translateX(22px)}
+/* Vacation day */
+.cal-day.vacation{background:rgba(231,76,60,.18);border-color:rgba(231,76,60,.4)}
+.cal-day.vacation .cal-day-num{color:var(--red)}
 /* Payment rows */
 .pago-row{display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem}
 .pago-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);
@@ -221,6 +231,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div>
     <div class="nav-item" onclick="showSection('stats')" id="nav-stats">
       <span class="ni">📊</span> Estadisticas
+    </div>
+    <div class="nav-item" onclick="showSection('settings')" id="nav-settings">
+      <span class="ni">⚙️</span> Configuracion
     </div>
   </div>
   <div class="sb-footer">
@@ -314,6 +327,46 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
     </div>
 
+    <!-- SETTINGS -->
+    <div id="section-settings" class="section">
+      <!-- Urgency toggle -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">⚡ Modo Genera Urgencia</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Cuando esta activado, los clientes solo ven <strong>maximo 2 horarios por dia</strong>.<br>
+          Sin reservas: muestra los horarios mas cercanos a las 10:00 y 18:00.<br>
+          Con reservas: muestra los horarios ±3h de cada reserva existente.
+        </p>
+        <div style="display:flex;align-items:center;gap:1rem">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="urgency-toggle" onchange="setUrgency(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+          <span id="urgency-label" style="font-size:.9rem;color:var(--muted)">Desactivado</span>
+        </div>
+      </div>
+
+      <!-- Vacation days -->
+      <div class="chart-wrap">
+        <div class="chart-title">🏖️ Dias de Vacaciones / Cierre</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem">
+          Los dias marcados como vacaciones no aparecen disponibles en la pagina web de reservas.
+        </p>
+        <!-- Vacation calendar -->
+        <div class="cal-nav" style="margin-bottom:.5rem">
+          <h2 id="vac-cal-title" style="font-size:.95rem"></h2>
+          <button onclick="vacCalPrev()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">‹</button>
+          <button onclick="vacCalNext()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">›</button>
+        </div>
+        <div class="cal-grid" id="vac-cal-grid" style="gap:2px"></div>
+        <div style="display:flex;gap:1rem;margin-top:.8rem;font-size:.75rem;color:var(--muted)">
+          <span><span style="background:var(--red);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Vacaciones</span>
+          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Hoy</span>
+        </div>
+        <div id="vac-list" style="margin-top:1rem"></div>
+      </div>
+    </div>
+
   </div>
 </div><!-- /main -->
 
@@ -358,12 +411,13 @@ function showSection(name){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('section-'+name).classList.add('active');
   document.getElementById('nav-'+name).classList.add('active');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas',settings:'Configuracion'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
   if(name==='clientes') loadClients();
   if(name==='stats') loadStats();
+  if(name==='settings'){ loadSettings(); loadVacationDays(); }
 }
 function toggleSidebar(){
   document.getElementById('sidebar').classList.toggle('open');
@@ -770,6 +824,95 @@ function badge(s){
   const col=statusColor(s);
   return `<span class="badge" style="background:${col}22;color:${col}">${s||'sin estado'}</span>`;
 }
+// ── Settings & Vacation ───────────────────────────────────────────────────────
+let vacYear = new Date().getFullYear(), vacMonth = new Date().getMonth();
+let vacationDates = new Set();
+
+async function loadSettings(){
+  try{
+    const d = await api('/api/admin/settings');
+    const cb = document.getElementById('urgency-toggle');
+    if(cb){ cb.checked = d.urgency_mode; updateUrgencyLabel(d.urgency_mode); }
+  }catch(e){ logger.error?.(e); }
+}
+
+async function setUrgency(val){
+  try{
+    await api('/api/admin/settings',{method:'PUT',body:JSON.stringify({urgency_mode:val})});
+    updateUrgencyLabel(val);
+    showToast(val ? '⚡ Modo urgencia ACTIVADO' : 'Modo urgencia desactivado');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function updateUrgencyLabel(on){
+  const el = document.getElementById('urgency-label');
+  if(el){ el.textContent = on ? '✅ Activado' : 'Desactivado'; el.style.color = on ? 'var(--green)' : 'var(--muted)'; }
+}
+
+async function loadVacationDays(){
+  try{
+    const d = await api('/api/admin/vacation-days');
+    vacationDates = new Set(d.vacation_days.map(v=>v.date));
+    renderVacCal();
+    renderVacList(d.vacation_days);
+  }catch(e){}
+}
+
+function vacCalPrev(){ vacMonth--; if(vacMonth<0){vacMonth=11;vacYear--;} renderVacCal(); }
+function vacCalNext(){ vacMonth++; if(vacMonth>11){vacMonth=0;vacYear++;} renderVacCal(); }
+
+function renderVacCal(){
+  const grid = document.getElementById('vac-cal-grid');
+  const title = document.getElementById('vac-cal-title');
+  if(!grid) return;
+  title.textContent = `${MONTHS[vacMonth]} ${vacYear}`;
+  const firstDay = new Date(vacYear,vacMonth,1).getDay();
+  const daysInMonth = new Date(vacYear,vacMonth+1,0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
+  for(let i=0;i<firstDay;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${vacYear}-${String(vacMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt=new Date(vacYear,vacMonth,d);
+    const isToday=dt.getTime()===today.getTime();
+    const isVac=vacationDates.has(dateStr);
+    html+=`<div class="cal-day${isVac?' vacation':''}${isToday?' today':''}" onclick="toggleVacDay('${dateStr}',${isVac})" title="${isVac?'Click para quitar vacaciones':'Click para marcar vacaciones'}">
+      <div class="cal-day-num">${d}</div>
+      ${isVac?`<div style="font-size:.6rem;color:var(--red)">🏖️</div>`:''}
+    </div>`;
+  }
+  grid.innerHTML=html;
+}
+
+async function toggleVacDay(dateStr, isVac){
+  try{
+    if(isVac){
+      await api(`/api/admin/vacation-days/${dateStr}`,{method:'DELETE'});
+      vacationDates.delete(dateStr);
+      showToast(`Dia ${dateStr} disponible nuevamente`);
+    } else {
+      await api('/api/admin/vacation-days',{method:'POST',body:JSON.stringify({date:dateStr,reason:'Vacaciones'})});
+      vacationDates.add(dateStr);
+      showToast(`Dia ${dateStr} marcado como vacaciones 🏖️`);
+    }
+    renderVacCal();
+    await loadVacationDays();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function renderVacList(vacDays){
+  const el = document.getElementById('vac-list');
+  if(!el) return;
+  if(!vacDays.length){ el.innerHTML='<p style="color:var(--muted);font-size:.82rem">No hay dias de vacaciones marcados.</p>'; return; }
+  el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem">
+    ${vacDays.map(v=>`
+      <div style="background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.3);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
+        🏖️ ${v.date}
+        <button onclick="toggleVacDay('${v.date}',true)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem">✕</button>
+      </div>`).join('')}
+  </div>`;
+}
+
 // ── Payment rows ──────────────────────────────────────────────────────────────
 const METODOS = ['transferencia','mercadopago','transbank','efectivo','cheque','otro'];
 let _pagos = [];   // working copy of pagos array for current modal

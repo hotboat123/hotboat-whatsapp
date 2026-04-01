@@ -16,6 +16,11 @@ admin_router = APIRouter()
 CHILE_TZ = ZoneInfo("America/Santiago")
 TABLE = "all_appointments"
 
+from app.booking.operator_settings import (
+    get_vacation_days, add_vacation_day, remove_vacation_day,
+    get_setting, set_setting, is_urgency_mode,
+)
+
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -316,6 +321,68 @@ async def list_clients(
         return {"clients": clients}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Vacation days ─────────────────────────────────────────────────────────────
+
+@admin_router.get("/api/admin/vacation-days")
+async def list_vacation_days(
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    x_admin_key: str = Header(""),
+):
+    _check_auth(x_admin_key)
+    from datetime import date as _date
+    fd = _date.fromisoformat(desde) if desde else None
+    td = _date.fromisoformat(hasta) if hasta else None
+    return {"vacation_days": get_vacation_days(fd, td)}
+
+
+class VacationDayRequest(BaseModel):
+    date: str
+    reason: Optional[str] = ""
+
+
+@admin_router.post("/api/admin/vacation-days")
+async def add_vacation(body: VacationDayRequest, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from datetime import date as _date
+    d = _date.fromisoformat(body.date)
+    ok = add_vacation_day(d, body.reason or "")
+    if not ok:
+        raise HTTPException(status_code=500, detail="Error adding vacation day")
+    return {"ok": True, "date": body.date}
+
+
+@admin_router.delete("/api/admin/vacation-days/{fecha}")
+async def delete_vacation(fecha: str, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from datetime import date as _date
+    d = _date.fromisoformat(fecha)
+    ok = remove_vacation_day(d)
+    return {"ok": ok, "date": fecha}
+
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+
+@admin_router.get("/api/admin/settings")
+async def get_all_settings(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    return {
+        "urgency_mode": is_urgency_mode(),
+    }
+
+
+class SettingsRequest(BaseModel):
+    urgency_mode: Optional[bool] = None
+
+
+@admin_router.put("/api/admin/settings")
+async def update_settings(body: SettingsRequest, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    if body.urgency_mode is not None:
+        set_setting("urgency_mode", "true" if body.urgency_mode else "false")
+    return {"ok": True, "urgency_mode": is_urgency_mode()}
 
 
 # ── Incremental sync ──────────────────────────────────────────────────────────

@@ -62,18 +62,65 @@ async def booking_pending(booking_ref: str = Query(None)):
 @router.get("/api/booking/availability")
 async def get_availability(days: int = Query(21, ge=1, le=60)):
     try:
+        from app.booking.operator_settings import (
+            get_vacation_days, is_urgency_mode, apply_urgency_filter
+        )
+        from app.db.connection import get_connection
+
         checker = AvailabilityChecker()
         now = datetime.now(CHILE_TZ)
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=days)
         slots = await checker.get_available_slots(start, end)
+
+        # Load vacation days for the range
+        vacation_dates = {
+            v["date"] for v in get_vacation_days(start.date(), end.date())
+        }
+
+        # Group slots by date, skipping vacation days
         grouped: dict = {}
         for s in slots:
             dk = str(s["date"])
+            if dk in vacation_dates:
+                continue
             if dk not in grouped:
                 grouped[dk] = []
             grouped[dk].append(s["time"])
-        return {"availability": grouped, "operating_hours": AVAILABILITY_CONFIG.operating_hours}
+
+        # Apply urgency filter if enabled
+        if is_urgency_mode():
+            # Get already-booked slots per day from hotboat_appointments
+            booked_by_day: dict = {}
+            try:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT booking_date::text, booking_time::text
+                            FROM hotboat_appointments
+                            WHERE booking_date >= %s AND booking_date <= %s
+                              AND status NOT IN ('cancelled','rejected','solicitud')
+                        """, (start.date(), end.date()))
+                        for row in cur.fetchall():
+                            d, t = row[0], row[1][:5]  # HH:MM
+                            if d not in booked_by_day:
+                                booked_by_day[d] = []
+                            booked_by_day[d].append(t)
+            except Exception as e:
+                logger.warning(f"Urgency: could not fetch booked slots: {e}")
+
+            urgency_grouped = {}
+            for dk, times in grouped.items():
+                booked = booked_by_day.get(dk, [])
+                urgency_grouped[dk] = apply_urgency_filter(times, booked)
+            grouped = {k: v for k, v in urgency_grouped.items() if v}
+
+        return {
+            "availability": grouped,
+            "operating_hours": AVAILABILITY_CONFIG.operating_hours,
+            "urgency_mode": is_urgency_mode(),
+            "vacation_days": list(vacation_dates),
+        }
     except Exception as e:
         logger.error(f"Availability error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
