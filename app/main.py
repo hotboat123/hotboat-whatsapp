@@ -8,6 +8,7 @@ import logging
 import httpx
 
 from app.booking.router import router as booking_router
+from app.booking.admin_router import admin_router
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
@@ -77,6 +78,7 @@ if os.path.exists(media_dir):
 # Initialize conversation manager
 conversation_manager = ConversationManager()
 app.include_router(booking_router)
+app.include_router(admin_router)
 
 
 @app.get("/", response_class=HTMLResponse)
