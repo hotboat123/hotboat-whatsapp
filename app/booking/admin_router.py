@@ -79,6 +79,7 @@ async def list_reservas(
                            categoria_clientes, tipo_clientes,
                            status, tiene_cruce, extras_json, observaciones,
                            payment_id, payment_status,
+                           COALESCE(pagos, '[]'::jsonb) AS pagos,
                            created_at, updated_at
                     FROM {TABLE}
                     {where_sql}
@@ -110,7 +111,7 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"SELECT * FROM {TABLE} WHERE id=%s", (rid,))
+                cur.execute(f"SELECT *, COALESCE(pagos,'[]'::jsonb) AS pagos FROM {TABLE} WHERE id=%s", (rid,))
                 row = cur.fetchone()
                 if not row:
                     raise HTTPException(status_code=404, detail="Not found")
@@ -152,6 +153,7 @@ class UpdateReservaRequest(BaseModel):
     costo_operativo_total: Optional[float] = None
     tiene_cruce: Optional[bool] = None
     extras_json: Optional[dict] = None
+    pagos: Optional[list] = None
 
 
 @admin_router.put("/api/admin/reservas/{rid}")
@@ -164,9 +166,11 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
         from psycopg2.extras import Json as PgJson
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Convert dict fields for JSONB
+                # Convert dict/list fields for JSONB
                 if "extras_json" in updates:
                     updates["extras_json"] = PgJson(updates["extras_json"])
+                if "pagos" in updates:
+                    updates["pagos"] = PgJson(updates["pagos"])
 
                 set_parts = [f"{k}=%s" for k in updates]
                 set_parts.append("updated_at=NOW()")

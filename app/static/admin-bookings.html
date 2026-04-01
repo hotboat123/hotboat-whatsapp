@@ -163,6 +163,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .login-card button{width:100%;background:var(--gold);color:#000;border:none;
   border-radius:8px;padding:.7rem;font-weight:700;cursor:pointer;font-size:.9rem}
 
+/* Payment rows */
+.pago-row{display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem}
+.pago-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:.45rem .7rem;outline:none;font-size:.83rem}
+.pago-row input:focus{border-color:var(--gold)}
+.pago-row .p-amount{width:120px;flex-shrink:0}
+.pago-row .p-method{flex:1}
+.pago-row .p-date{width:130px;flex-shrink:0}
+.pago-row .p-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;padding:.2rem .4rem;border-radius:6px;flex-shrink:0}
+.pago-row .p-del:hover{background:rgba(231,76,60,.1)}
 /* Misc */
 .section{display:none}.section.active{display:block}
 .chip{display:inline-block;background:rgba(255,255,255,.07);border-radius:20px;
@@ -470,7 +480,10 @@ async function loadLista(){
         <td><strong>${r.nombre_cliente||'-'}</strong></td>
         <td>${r.telefono||'-'}</td>
         <td>${r.num_personas||'-'}</td>
-        <td style="color:var(--gold);font-weight:600">${fmtMoney(r.ingreso_total)}</td>
+        <td style="color:var(--gold);font-weight:600">
+          ${fmtMoney(r.ingreso_total)}
+          ${pagoBadge(r.pagos,r.ingreso_total)}
+        </td>
         <td>${badge(r.status)}</td>
         <td><span class="chip">${r.source||'-'}</span></td>
       </tr>`).join(''):`<tr><td colspan="8" class="no-data">Sin resultados</td></tr>`;
@@ -659,6 +672,17 @@ async function openModal(id){
         <textarea id="e-observaciones" rows="3" placeholder="Notas internas sobre esta reserva...">${r.observaciones||''}</textarea>
       </div>
       ${r.extras_json&&Object.keys(r.extras_json).length?`<div class="form-group"><label>Extras</label><textarea rows="2" id="e-extras_json">${JSON.stringify(r.extras_json,null,2)}</textarea></div>`:''}
+      <script>initPagos(${JSON.stringify(r.pagos||[])});</script>
+      <div style="margin-top:1rem">
+        <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
+          Pagos recibidos
+          <span id="pagos-total" style="color:var(--gold);font-weight:700;margin-left:.5rem"></span>
+        </label>
+        <div id="pagos-list"></div>
+        <button type="button" onclick="addPago()" style="background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.4rem .8rem;font-size:.8rem;cursor:pointer;width:100%;margin-top:.4rem;transition:border-color .2s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+          + Agregar pago
+        </button>
+      </div>
       <div id="modal-save-err" style="color:var(--red);font-size:.8rem;display:none;margin-top:.5rem"></div>
       <div class="modal-actions">
         <button class="btn-del" onclick="closeModal()">Cerrar</button>
@@ -688,6 +712,8 @@ async function saveModal(id){
   // Try to parse extras_json if present
   const extEl=document.getElementById('e-extras_json');
   if(extEl){ try{ body.extras_json=JSON.parse(extEl.value); }catch(e){} }
+  // Include current pagos (filter out empty rows)
+  body.pagos = _pagos.filter(p=>p.amount||p.method);
   // remove nulls/zero-string
   Object.keys(body).forEach(k=>{ if(body[k]===''||body[k]===null) delete body[k]; });
   try{
@@ -723,6 +749,14 @@ async function doSync(){
 function fmtMoney(n){ if(!n&&n!==0) return '-'; return '$'+Math.round(+n).toLocaleString('es-CL'); }
 function sourceColor(s){ if(!s) return '#7070a0'; if(s==='sheets') return '#7070a0'; if(s==='booknetic') return '#4a9eff'; if(s==='hotboat_web') return '#f5c842'; return '#9b59b6'; }
 function sourceLabel(s){ return {sheets:'Historial',booknetic:'Booknetic',hotboat_web:'Web HotBoat',manual:'Manual'}[s]||s; }
+function pagoBadge(pagos,total){
+  if(!pagos||!pagos.length) return '';
+  const paid=pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  if(!paid) return '';
+  const pct=Math.min(100,Math.round(paid/(+total||1)*100));
+  const col = pct>=100?'var(--green)':pct>=50?'var(--orange)':'var(--red)';
+  return `<span style="font-size:.7rem;color:${col};margin-left:.4rem">● ${pct}%</span>`;
+}
 function statusColor(s){
   if(!s) return '#7070a0';
   s=s.toLowerCase();
@@ -736,6 +770,48 @@ function badge(s){
   const col=statusColor(s);
   return `<span class="badge" style="background:${col}22;color:${col}">${s||'sin estado'}</span>`;
 }
+// ── Payment rows ──────────────────────────────────────────────────────────────
+const METODOS = ['transferencia','mercadopago','transbank','efectivo','cheque','otro'];
+let _pagos = [];   // working copy of pagos array for current modal
+
+function renderPagos(){
+  const list = document.getElementById('pagos-list');
+  const totEl = document.getElementById('pagos-total');
+  if(!list) return;
+  const total = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  if(totEl) totEl.textContent = total>0 ? fmtMoney(total) : '';
+  list.innerHTML = _pagos.map((p,i)=>`
+    <div class="pago-row">
+      <input class="p-amount" type="number" value="${p.amount||''}" placeholder="Monto $"
+        oninput="_pagos[${i}].amount=+this.value;renderPagosTotal()">
+      <select class="p-method" onchange="_pagos[${i}].method=this.value"
+        style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none;flex:1">
+        ${METODOS.map(m=>`<option value="${m}"${p.method===m?' selected':''}>${m}</option>`).join('')}
+      </select>
+      <input class="p-date" type="date" value="${p.date||''}"
+        oninput="_pagos[${i}].date=this.value">
+      <button class="p-del" onclick="_pagos.splice(${i},1);renderPagos()" title="Eliminar">✕</button>
+    </div>`).join('');
+}
+
+function renderPagosTotal(){
+  const totEl = document.getElementById('pagos-total');
+  if(!totEl) return;
+  const total = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  totEl.textContent = total>0 ? fmtMoney(total) : '';
+}
+
+function addPago(){
+  const today = new Date().toISOString().substring(0,10);
+  _pagos.push({amount:'',method:'transferencia',date:today});
+  renderPagos();
+}
+
+function initPagos(pagosArr){
+  _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p})) : [];
+  renderPagos();
+}
+
 function showToast(msg){
   let t=document.getElementById('_toast');
   if(!t){ t=document.createElement('div'); t.id='_toast';
