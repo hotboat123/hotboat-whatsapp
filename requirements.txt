@@ -27,6 +27,9 @@ tzlocal==5.2
 # Email
 resend>=0.8.0
 
+# Booking Platform - Payment
+mercadopago>=2.2.0
+
 
 
 

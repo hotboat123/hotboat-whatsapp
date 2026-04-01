@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HotBoat Chile - Reserva Online</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style id="booking-css">
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0a1628;--deep:#0d2040;--blue:#1a3a6e;
+  --coral:#ff5c35;--gold:#f0a500;
+  --text:#f0f4ff;--muted:#8899bb;
+  --card:#132240;--border:#1e3a6e;
+  --r:14px;
+}
+body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min-height:100vh}
+#hdr{
+  background:linear-gradient(135deg,var(--deep) 0%,var(--blue) 100%);
+  text-align:center;padding:2rem 1rem 1.5rem;
+  border-bottom:2px solid var(--coral);
+}
+.logo-wrap{display:flex;align-items:center;justify-content:center;gap:.5rem}
+.fire{font-size:2.5rem}
+.brand{font-family:'Bebas Neue',sans-serif;font-size:3rem;color:var(--text);letter-spacing:.1em}
+.sub{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--coral)}
+.tagline{margin-top:.5rem;color:var(--muted);font-size:.95rem;font-weight:300}
+#main-content{max-width:680px;margin:0 auto;padding:1.5rem 1rem 4rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.5rem;margin-bottom:1.2rem}
+.card-title{font-family:'Bebas Neue',sans-serif;font-size:1.6rem;color:var(--coral);letter-spacing:.05em;margin-bottom:1rem}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+@media(max-width:400px){.menu-grid{grid-template-columns:1fr}}
+.menu-btn{
+  background:var(--deep);border:1px solid var(--border);color:var(--text);
+  border-radius:var(--r);padding:1rem;cursor:pointer;text-align:left;
+  display:flex;flex-direction:column;gap:.3rem;transition:all .2s;
+}
+.menu-btn:hover,.menu-btn.active{border-color:var(--coral);background:rgba(255,92,53,.1)}
+.menu-btn .icon{font-size:1.5rem}
+.menu-btn .label{font-weight:600;font-size:.9rem}
+.menu-btn .desc{font-size:.75rem;color:var(--muted)}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+  background:var(--coral);color:#fff;border:none;border-radius:var(--r);
+  padding:.85rem 1.8rem;font-size:1rem;font-weight:700;cursor:pointer;
+  width:100%;transition:background .2s;
+}
+.btn:hover{background:#e04520}
+.btn-secondary{background:var(--deep);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--blue)}
+.steps{display:flex;align-items:center;justify-content:center;gap:.3rem;margin-bottom:1.5rem}
+.step-dot{
+  width:32px;height:32px;border-radius:50%;border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;
+  color:var(--muted);transition:all .3s;
+}
+.step-dot.done{background:var(--coral);border-color:var(--coral);color:#fff}
+.step-dot.active{border-color:var(--coral);color:var(--coral)}
+.step-line{flex:1;height:2px;background:var(--border);max-width:50px}
+.step-line.done{background:var(--coral)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:.5rem}
+.cal-hdr{text-align:center;font-size:.7rem;font-weight:600;color:var(--muted);padding:.3rem 0}
+.cal-day{
+  text-align:center;padding:.5rem .2rem;border-radius:8px;cursor:pointer;font-size:.85rem;
+  border:1px solid transparent;transition:all .2s;
+}
+.cal-day.avail{background:rgba(240,165,0,.1);border-color:var(--gold);color:var(--gold)}
+.cal-day.avail:hover,.cal-day.selected{background:var(--gold);color:#000;font-weight:700}
+.cal-day.past,.cal-day.empty{color:var(--border);cursor:default;pointer-events:none}
+.time-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:.5rem}
+.time-btn{
+  background:var(--deep);border:1.5px solid var(--border);color:var(--text);
+  border-radius:8px;padding:.65rem;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .2s;
+}
+.time-btn:hover,.time-btn.selected{background:var(--coral);border-color:var(--coral);color:#fff}
+.counter{display:flex;align-items:center;gap:1rem;justify-content:center;margin:.5rem 0}
+.counter-btn{
+  width:40px;height:40px;border-radius:50%;background:var(--deep);border:1.5px solid var(--border);
+  color:var(--text);font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;
+}
+.counter-btn:hover{border-color:var(--coral);color:var(--coral)}
+.counter-val{font-size:2rem;font-weight:700;min-width:50px;text-align:center}
+.price-tag{
+  background:rgba(255,92,53,.1);border:1px solid rgba(255,92,53,.3);
+  border-radius:var(--r);padding:.75rem 1rem;text-align:center;margin:.5rem 0;
+}
+.price-big{font-size:1.5rem;font-weight:700;color:var(--coral)}
+.price-sub{font-size:.8rem;color:var(--muted)}
+.extra-list{display:flex;flex-direction:column;gap:.6rem;margin:.5rem 0}
+.extra-item{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--deep);border:1px solid var(--border);border-radius:10px;padding:.7rem 1rem;cursor:pointer;
+  transition:all .2s;
+}
+.extra-item.selected{border-color:var(--coral);background:rgba(255,92,53,.1)}
+.extra-name{font-size:.9rem;font-weight:600}
+.extra-price{font-size:.8rem;color:var(--gold);font-weight:700}
+input[type=text],input[type=email],input[type=tel],textarea{
+  width:100%;background:var(--deep);border:1.5px solid var(--border);color:var(--text);
+  border-radius:10px;padding:.7rem 1rem;font-size:.95rem;font-family:inherit;
+  outline:none;transition:border .2s;
+}
+input:focus,textarea:focus{border-color:var(--coral)}
+label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem;font-weight:600}
+.form-group{margin-bottom:.9rem}
+.summary-row{display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);font-size:.9rem}
+.summary-row.total{font-size:1.1rem;font-weight:700;color:var(--coral);border-bottom:none;padding-top:.8rem}
+.toast{
+  position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);
+  background:#1a3a6e;color:#fff;padding:.8rem 1.5rem;border-radius:30px;
+  font-size:.9rem;z-index:999;border:1px solid var(--coral);
+}
+.toast.hidden{display:none}
+.success-icon{font-size:4rem;text-align:center;margin:1rem 0}
+.info-box{background:rgba(255,92,53,.08);border:1px solid rgba(255,92,53,.25);border-radius:var(--r);padding:1rem;margin:.5rem 0;font-size:.9rem;line-height:1.6}
+.cal-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem}
+.cal-nav button{background:none;border:none;color:var(--text);font-size:1.3rem;cursor:pointer;padding:.2rem .5rem}
+</style>
+</head>
+<body>
+<div id="app">
+<header id="hdr">
+  <div class="logo-wrap">
+    <span class="fire">🔥</span>
+    <span class="brand">HOTBOAT</span>
+    <span class="sub">CHILE</span>
+  </div>
+  <p class="tagline">Reserva tu experiencia unica en el lago Villarrica</p>
+</header>
+<main id="main-content"></main>
+<div id="toast" class="toast hidden"></div>
+</div>
+<script id="booking-js">
+const $ = id => document.getElementById(id);
+const mc = document.getElementById('main-content');
+
+const S = {
+  step: 'menu',
+  prices: {},
+  availability: {},
+  calYear: new Date().getFullYear(),
+  calMonth: new Date().getMonth(),
+  selectedDate: null,
+  selectedTime: null,
+  numPeople: 2,
+  extras: {},
+  hasFlex: false,
+  customerName: '',
+  customerPhone: '',
+  customerEmail: '',
+  bookingRef: null,
+  paymentUrl: null,
+  totalPrice: 0,
+};
+
+const DAYS = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+const EXTRAS_CATALOG = [
+  {id:'tabla_g',name:'Tabla de Picoteo Grande (4 pers)',price:25000,icon:'🧺'},
+  {id:'tabla_p',name:'Tabla de Picoteo Pequeña (2 pers)',price:20000,icon:'🧺'},
+  {id:'modo_rom',name:'Modo Romantico',price:25000,icon:'🌹'},
+  {id:'video_15',name:'Video Cinematografico 15s',price:30000,icon:'🎥'},
+  {id:'transp',name:'Transporte desde Pucon',price:50000,icon:'🚗'},
+  {id:'toalla_p',name:'Toalla Poncho',price:10000,icon:'🏖️'},
+];
+
+function showToast(msg, ms=3000){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  setTimeout(()=>t.classList.add('hidden'), ms);
+}
+
+async function loadPricesAndAvail(){
+  try{
+    const [pr, av] = await Promise.all([
+      fetch('/api/booking/prices').then(r=>r.json()),
+      fetch('/api/booking/availability?days=60').then(r=>r.json()),
+    ]);
+    S.prices = pr.prices || {};
+    S.availability = av.availability || {};
+  }catch(e){ showToast('Error cargando disponibilidad'); }
+}
+
+function stepsHtml(active){
+  const steps = ['fecha','personas','datos','pago'];
+  const labels = ['Fecha','Personas','Datos','Pago'];
+  let h = '<div class="steps">';
+  steps.forEach((s,i)=>{
+    const idx = steps.indexOf(active);
+    const cls = i < idx ? 'done' : i===idx ? 'active' : '';
+    h += `<div class="step-dot ${cls}">${i < idx ? '✓' : i+1}</div>`;
+    if(i < steps.length-1){
+      h += `<div class="step-line ${i < idx ? 'done' : ''}"></div>`;
+    }
+  });
+  h += '</div>';
+  return h;
+}
+
+function renderMenu(){
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">Bienvenido a HotBoat</div>
+    <div class="info-box">
+      🚤 Paseo en bote caliente por el lago Villarrica · 2 horas · Motor electrico
+    </div>
+    <br>
+    <div class="menu-grid">
+      <button class="menu-btn" onclick="goReservar()">
+        <span class="icon">📅</span>
+        <span class="label">Reservar ahora</span>
+        <span class="desc">Ver disponibilidad y fechas</span>
+      </button>
+      <button class="menu-btn" onclick="showPrices()">
+        <span class="icon">💰</span>
+        <span class="label">Ver precios</span>
+        <span class="desc">Tarifas por persona</span>
+      </button>
+      <button class="menu-btn" onclick="showFeatures()">
+        <span class="icon">⚡</span>
+        <span class="label">Caracteristicas</span>
+        <span class="desc">Que incluye la experiencia</span>
+      </button>
+      <button class="menu-btn" onclick="showExtras()">
+        <span class="icon">🎁</span>
+        <span class="label">Extras y packs</span>
+        <span class="desc">Mejora tu experiencia</span>
+      </button>
+    </div>
+  </div>`;
+}
+
+function showPrices(){
+  const rows = Object.entries(S.prices).map(([n,p])=>`
+    <div class="summary-row">
+      <span>👥 ${n} persona${n>1?'s':''}</span>
+      <span><strong>$${p.toLocaleString('es-CL')}</strong>/pers · Total $${(p*n).toLocaleString('es-CL')}</span>
+    </div>`).join('');
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">💰 Precios HotBoat</div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">Paseo 2 horas · Lago Villarrica · Motor electrico</p>
+    ${rows}
+    <p style="color:var(--muted);font-size:.75rem;margin-top:.5rem">*Ninos pagan desde los 6 anos</p>
+  </div>
+  <button class="btn" onclick="goReservar()">Reservar ahora 🚤</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
+}
+
+function showFeatures(){
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">⚡ Caracteristicas HotBoat</div>
+    <div class="info-box" style="line-height:2">
+      ⚡ Motor electrico silencioso y sustentable<br>
+      ⏱️ Duracion 2 horas en el lago Villarrica<br>
+      🔥 Tu eliges la temperatura del agua<br>
+      🛥️ Facil de navegar, lo manejas tu mismo<br>
+      🎶 Parlante bluetooth + bolsas impermeables<br>
+      🎥 Video cinematografico disponible<br>
+      🍹 Bebestibles a bordo (cooler incluido)<br>
+      🧺 Opcion tablas de picoteo a bordo<br>
+      🧼 Limpio antes de cada uso
+    </div>
+  </div>
+  <button class="btn" onclick="goReservar()">Reservar ahora 🚤</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
+}
+
+function showExtras(){
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">🎁 Extras disponibles</div>
+    ${EXTRAS_CATALOG.map(e=>`
+    <div class="extra-item" style="margin-bottom:.4rem">
+      <span>${e.icon} ${e.name}</span>
+      <span class="extra-price">+$${e.price.toLocaleString('es-CL')}</span>
+    </div>`).join('')}
+    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">Los extras se agregan al momento de reservar</p>
+  </div>
+  <button class="btn" onclick="goReservar()">Reservar con extras 🚤</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
+}
+
+function goReservar(){
+  S.step = 'fecha';
+  renderCal();
+}
+
+function renderCal(){
+  const yr = S.calYear, mo = S.calMonth;
+  const firstDay = new Date(yr, mo, 1).getDay();
+  const daysInMonth = new Date(yr, mo+1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  let cells = '';
+  DAYS.forEach(d=>{ cells += `<div class="cal-hdr">${d}</div>`; });
+  for(let i=0;i<firstDay;i++) cells += `<div class="cal-day empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dt = new Date(yr,mo,d);
+    const key = `${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isPast = dt < today;
+    const isAvail = !isPast && S.availability[key] && S.availability[key].length > 0;
+    const isSel = S.selectedDate === key;
+    let cls = isPast ? 'past' : isAvail ? (isSel ? 'avail selected':'avail') : 'past';
+    const click = isAvail ? `onclick="selectDate('${key}')"` : '';
+    cells += `<div class="cal-day ${cls}" ${click}>${d}</div>`;
+  }
+
+  mc.innerHTML = `
+  ${stepsHtml('fecha')}
+  <div class="card">
+    <div class="card-title">📅 Elige tu fecha</div>
+    <div class="cal-nav">
+      <button onclick="prevMonth()">&#8249;</button>
+      <strong>${MONTHS[mo]} ${yr}</strong>
+      <button onclick="nextMonth()">&#8250;</button>
+    </div>
+    <div class="cal-grid">${cells}</div>
+    <p style="margin-top:.8rem;font-size:.8rem;color:var(--muted)">
+      🟡 Dias disponibles &nbsp; Toca para seleccionar
+    </p>
+  </div>
+  <button class="btn btn-secondary" onclick="renderMenu()">Volver</button>`;
+}
+
+function prevMonth(){
+  if(S.calMonth===0){S.calMonth=11;S.calYear--;}else S.calMonth--;
+  renderCal();
+}
+function nextMonth(){
+  if(S.calMonth===11){S.calMonth=0;S.calYear++;}else S.calMonth++;
+  renderCal();
+}
+
+function selectDate(key){
+  S.selectedDate = key;
+  S.selectedTime = null;
+  renderTimeSelect();
+}
+
+function renderTimeSelect(){
+  const times = S.availability[S.selectedDate] || [];
+  const btns = times.map(t=>`
+    <button class="time-btn ${S.selectedTime===t?'selected':''}" onclick="selectTime('${t}')">${t}</button>
+  `).join('');
+  const [yr,mo,dy] = S.selectedDate.split('-');
+  const d = new Date(yr,mo-1,dy);
+  const dayStr = DAYS[d.getDay()]+' '+dy+'/'+mo+'/'+yr;
+
+  mc.innerHTML = `
+  ${stepsHtml('fecha')}
+  <div class="card">
+    <div class="card-title">🕐 Elige tu horario</div>
+    <p style="color:var(--muted);margin-bottom:.8rem">📅 ${dayStr}</p>
+    <div class="time-grid">${btns}</div>
+  </div>
+  <button class="btn btn-secondary" onclick="renderCal()">Cambiar fecha</button>`;
+}
+
+function selectTime(t){
+  S.selectedTime = t;
+  renderPeopleSelect();
+}
+
+function renderPeopleSelect(){
+  function update(){
+    const pp = S.prices[S.numPeople] || 69990;
+    const total = pp * S.numPeople;
+    $('pp-val').textContent = S.numPeople;
+    $('pp-price').textContent = `$${pp.toLocaleString('es-CL')}/persona · Total $${total.toLocaleString('es-CL')}`;
+  }
+  mc.innerHTML = `
+  ${stepsHtml('personas')}
+  <div class="card">
+    <div class="card-title">👥 Cuantas personas?</div>
+    <p style="color:var(--muted);margin-bottom:1rem">Min 2 · Max 7 personas</p>
+    <div class="counter">
+      <button class="counter-btn" onclick="changePeople(-1)">−</button>
+      <div class="counter-val" id="pp-val">${S.numPeople}</div>
+      <button class="counter-btn" onclick="changePeople(1)">+</button>
+    </div>
+    <div class="price-tag">
+      <div class="price-big" id="pp-price"></div>
+      <div class="price-sub">Incluye 2 horas en el lago</div>
+    </div>
+  </div>
+  <button class="btn" onclick="goExtras()">Siguiente: Extras →</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderTimeSelect()">Volver</button>`;
+  update();
+}
+
+function changePeople(d){
+  S.numPeople = Math.max(2,Math.min(7,S.numPeople+d));
+  renderPeopleSelect();
+}
+
+function goExtras(){
+  S.step = 'extras';
+  renderExtras();
+}
+
+function renderExtras(){
+  const items = EXTRAS_CATALOG.map(e=>`
+    <div class="extra-item ${S.extras[e.id]?'selected':''}" onclick="toggleExtra('${e.id}')">
+      <div><div class="extra-name">${e.icon} ${e.name}</div></div>
+      <div class="extra-price">+$${e.price.toLocaleString('es-CL')}</div>
+    </div>`).join('');
+  const flexCls = S.hasFlex ? 'selected' : '';
+  mc.innerHTML = `
+  ${stepsHtml('personas')}
+  <div class="card">
+    <div class="card-title">🎁 Extras opcionales</div>
+    <div class="extra-list">${items}</div>
+    <div class="extra-item ${flexCls}" style="margin-top:.5rem" onclick="toggleFlex()">
+      <div><div class="extra-name">🔒 Reserva FLEX</div>
+        <div style="font-size:.75rem;color:var(--muted)">Cancela hasta 48h antes · +10% del valor</div>
+      </div>
+      <div class="extra-price">+10%</div>
+    </div>
+  </div>
+  <button class="btn" onclick="renderForm()">Siguiente: Datos →</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderPeopleSelect()">Volver</button>`;
+}
+
+function toggleExtra(id){
+  S.extras[id] = !S.extras[id];
+  renderExtras();
+}
+function toggleFlex(){
+  S.hasFlex = !S.hasFlex;
+  renderExtras();
+}
+
+function renderForm(){
+  const pp = S.prices[S.numPeople] || 69990;
+  const sub = pp * S.numPeople;
+  let extTotal = 0;
+  const extRows = EXTRAS_CATALOG.filter(e=>S.extras[e.id]).map(e=>{
+    extTotal += e.price;
+    return `<div class="summary-row"><span>${e.icon} ${e.name}</span><span>$${e.price.toLocaleString('es-CL')}</span></div>`;
+  }).join('');
+  const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
+  const total = sub + extTotal + flex;
+  const [yr,mo,dy] = S.selectedDate.split('-');
+
+  mc.innerHTML = `
+  ${stepsHtml('datos')}
+  <div class="card">
+    <div class="card-title">📋 Resumen de reserva</div>
+    <div class="summary-row"><span>📅 Fecha</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
+    <div class="summary-row"><span>👥 Personas</span><span>${S.numPeople}</span></div>
+    <div class="summary-row"><span>💰 Tarifa base</span><span>$${sub.toLocaleString('es-CL')}</span></div>
+    ${extRows}
+    ${flex ? `<div class="summary-row"><span>🔒 FLEX</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
+    <div class="summary-row total"><span>TOTAL</span><span>$${total.toLocaleString('es-CL')}</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">👤 Tus datos</div>
+    <div class="form-group"><label>Nombre completo *</label>
+      <input type="text" id="f-name" placeholder="Tu nombre" value="${S.customerName}">
+    </div>
+    <div class="form-group"><label>Telefono / WhatsApp *</label>
+      <input type="tel" id="f-phone" placeholder="+56 9 xxxx xxxx" value="${S.customerPhone}">
+    </div>
+    <div class="form-group"><label>Email (opcional)</label>
+      <input type="email" id="f-email" placeholder="tu@email.com" value="${S.customerEmail}">
+    </div>
+  </div>
+  <button class="btn" onclick="submitBooking()">Ir a pagar 💳</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderExtras()">Volver</button>`;
+}
+
+async function submitBooking(){
+  S.customerName = $('f-name').value.trim();
+  S.customerPhone = $('f-phone').value.trim();
+  S.customerEmail = $('f-email').value.trim();
+  if(!S.customerName || !S.customerPhone){
+    showToast('Por favor ingresa nombre y telefono');
+    return;
+  }
+  const pp = S.prices[S.numPeople] || 69990;
+  const sub = pp * S.numPeople;
+  const extrasArr = EXTRAS_CATALOG.filter(e=>S.extras[e.id]).map(e=>({name:e.name,price:e.price,quantity:1}));
+  const extTotal = extrasArr.reduce((a,e)=>a+e.price,0);
+  const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
+  const total = sub + extTotal + flex;
+
+  mc.innerHTML = `<div class="card" style="text-align:center">
+    <div style="font-size:2rem;margin:1rem">⏳</div>
+    <p>Creando tu reserva...</p>
+  </div>`;
+
+  try{
+    const r = await fetch('/api/booking/create',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        customer_name: S.customerName,
+        customer_phone: S.customerPhone,
+        customer_email: S.customerEmail || null,
+        booking_date: S.selectedDate,
+        booking_time: S.selectedTime,
+        num_people: S.numPeople,
+        extras: extrasArr,
+        has_flex: S.hasFlex,
+      })
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.detail || 'Error');
+    S.bookingRef = data.booking_ref;
+    S.paymentUrl = data.payment_url;
+    S.totalPrice = total;
+    renderPayment();
+  }catch(e){
+    mc.innerHTML = `<div class="card"><p style="color:red">Error: ${e.message}</p></div>`;
+  }
+}
+
+function renderPayment(){
+  const [yr,mo,dy] = S.selectedDate.split('-');
+  mc.innerHTML = `
+  ${stepsHtml('pago')}
+  <div class="card" style="text-align:center">
+    <div class="card-title">💳 Pagar reserva</div>
+    <p style="color:var(--muted);margin-bottom:.8rem">Ref: <strong>${S.bookingRef}</strong></p>
+    <div class="price-tag" style="margin:1rem 0">
+      <div class="price-big">$${S.totalPrice.toLocaleString('es-CL')}</div>
+      <div class="price-sub">${S.numPeople} personas · ${dy}/${mo}/${yr} ${S.selectedTime}</div>
+    </div>
+    ${S.paymentUrl ? `
+      <a href="${S.paymentUrl}" class="btn" style="text-decoration:none;margin-top:.5rem">
+        Pagar con MercadoPago 💳
+      </a>
+      <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">
+        Pago seguro · Debito, credito, Webpay y mas
+      </p>` : `
+      <div class="info-box">
+        ✅ Reserva creada! Nos contactaremos a tu WhatsApp para coordinar el pago.
+      </div>`}
+  </div>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al inicio</button>`;
+}
+
+function checkReturnFromPayment(){
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get('booking_ref');
+  const status = params.get('collection_status') || params.get('payment_status');
+  if(ref && status==='approved'){
+    mc.innerHTML = `
+    <div class="card" style="text-align:center">
+      <div class="success-icon">🎉</div>
+      <div class="card-title">Reserva Confirmada!</div>
+      <p style="color:var(--muted);margin:.5rem 0">Ref: <strong>${ref}</strong></p>
+      <div class="info-box" style="margin-top:1rem">
+        Te enviaremos los detalles por WhatsApp. Nos vemos en el lago! 🚤🔥
+      </div>
+    </div>
+    <button class="btn" style="margin-top:1rem" onclick="renderMenu()">Nueva reserva</button>`;
+    return true;
+  }
+  if(ref && (status==='failure'||status==='rejected')){
+    mc.innerHTML = `
+    <div class="card" style="text-align:center">
+      <div class="success-icon">❌</div>
+      <div class="card-title">Pago no completado</div>
+      <div class="info-box" style="margin-top:1rem">
+        Tu reserva (${ref}) fue guardada. Puedes intentar el pago nuevamente o contactarnos.
+      </div>
+    </div>
+    <button class="btn" style="margin-top:1rem" onclick="renderMenu()">Volver</button>`;
+    return true;
+  }
+  return false;
+}
+
+async function init(){
+  if(!checkReturnFromPayment()){
+    mc.innerHTML = `<div class="card" style="text-align:center"><p>Cargando...</p></div>`;
+    await loadPricesAndAvail();
+    renderMenu();
+  }
+}
+
+init();
+</script>
+</body>
+</html>
