@@ -114,6 +114,11 @@ async def create_booking_endpoint(request: CreateBookingRequest):
             "notes": request.notes,
         }
         result = create_booking(data)
+        # Auto-sync into all_appointments
+        try:
+            _sync_hotboat_to_all(result["booking_ref"], data, result["status"])
+        except Exception as se:
+            logger.warning(f"all_appointments sync skip: {se}")
         payment_url = None
         try:
             payment_url = await _create_mp_preference(result["booking_ref"], request, total)
@@ -227,6 +232,38 @@ async def create_solicitud(request: SolicitudRequest):
     except Exception as e:
         logger.error(f"Error creating solicitud: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):
+    """Insert a new hotboat booking into all_appointments immediately."""
+    from app.db.connection import get_connection
+    from psycopg2.extras import Json as PgJson
+    import re
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM all_appointments WHERE source='hotboat_web' AND source_id=%s", (booking_ref,))
+            if cur.fetchone():
+                return
+            fecha = data.get("booking_date")
+            hora = data.get("booking_time")
+            num_p = data.get("num_people")
+            cur.execute("""
+                INSERT INTO all_appointments
+                (source, source_id, appointment_id, fecha, hora,
+                 nombre_cliente, email, telefono,
+                 servicio, num_personas,
+                 ingreso_reserva, ingreso_extras, ingreso_total,
+                 costo_operativo_fijo, costo_operativo_total,
+                 status, extras_json, observaciones, created_at, updated_at)
+                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18000,18000,%s,%s,%s,NOW(),NOW())
+            """, (
+                booking_ref, booking_ref, fecha, hora,
+                data.get("customer_name"), data.get("customer_email"), data.get("customer_phone"),
+                f"HotBoat Web ({num_p}p)", str(num_p),
+                float(data.get("subtotal", 0)), float(data.get("extras_total", 0)), float(data.get("total_price", 0)),
+                status, PgJson(data.get("extras") or []), data.get("notes")
+            ))
+            conn.commit()
 
 
 async def _notify_solicitud(req: SolicitudRequest, ref: str):

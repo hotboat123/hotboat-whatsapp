@@ -253,6 +253,12 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <option value="cancelled">Cancelada</option>
           <option value="solicitud">Solicitud</option>
         </select>
+        <select id="f-source" onchange="loadLista()">
+          <option value="all">Todas las fuentes</option>
+          <option value="sheets">Historial (sheets)</option>
+          <option value="booknetic">Booknetic</option>
+          <option value="hotboat_web">Web HotBoat</option>
+        </select>
         <button class="btn-ghost" onclick="clearFilters()">Limpiar</button>
       </div>
       <div class="tbl-wrap">
@@ -444,11 +450,13 @@ async function loadLista(){
   const desde=document.getElementById('f-desde').value;
   const hasta=document.getElementById('f-hasta').value;
   const status=document.getElementById('f-status').value;
+  const source=document.getElementById('f-source').value;
   let url=`/api/admin/reservas?limit=500`;
   if(search) url+=`&search=${encodeURIComponent(search)}`;
   if(desde) url+=`&desde=${desde}`;
   if(hasta) url+=`&hasta=${hasta}`;
   if(status&&status!=='all') url+=`&status=${status}`;
+  if(source&&source!=='all') url+=`&source=${source}`;
   const tbody=document.getElementById('lista-tbody');
   tbody.innerHTML=`<tr><td colspan="8" class="loading-msg">Cargando...</td></tr>`;
   try{
@@ -485,6 +493,7 @@ function sortRows(rows){
 function clearFilters(){
   ['f-search','f-desde','f-hasta'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-status').value='all';
+  document.getElementById('f-source').value='all';
   loadLista();
 }
 
@@ -583,8 +592,9 @@ async function openModal(id){
     document.getElementById('modal-title').textContent=`${r.nombre_cliente||'Reserva'} · ${r.fecha}`;
     document.getElementById('modal-body').innerHTML=`
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
-        ${badge(r.status)} <span class="chip">${r.source||'-'}</span>
-        <span class="chip">ID: ${r.appointment_id||r.id}</span>
+        ${badge(r.status)}
+        <span class="chip" style="background:${sourceColor(r.source)}22;color:${sourceColor(r.source)}">${sourceLabel(r.source)}</span>
+        <span class="chip">ID: ${r.appointment_id||r.source_id||r.id}</span>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Fecha</label><input value="${r.fecha||''}" disabled></div>
@@ -644,7 +654,11 @@ async function openModal(id){
       </div>
       <div class="form-group" style="margin-bottom:.8rem"><label>Categoria cliente</label>
         <input id="e-categoria_clientes" value="${r.categoria_clientes||''}"></div>
-      ${r.extras_json&&Object.keys(r.extras_json).length?`<div class="form-group"><label>Extras</label><textarea disabled rows="2">${JSON.stringify(r.extras_json,null,2)}</textarea></div>`:''}
+      <div class="form-group" style="margin-bottom:.8rem">
+        <label>Observaciones del admin</label>
+        <textarea id="e-observaciones" rows="3" placeholder="Notas internas sobre esta reserva...">${r.observaciones||''}</textarea>
+      </div>
+      ${r.extras_json&&Object.keys(r.extras_json).length?`<div class="form-group"><label>Extras</label><textarea rows="2" id="e-extras_json">${JSON.stringify(r.extras_json,null,2)}</textarea></div>`:''}
       <div id="modal-save-err" style="color:var(--red);font-size:.8rem;display:none;margin-top:.5rem"></div>
       <div class="modal-actions">
         <button class="btn-del" onclick="closeModal()">Cerrar</button>
@@ -663,13 +677,17 @@ async function saveModal(id){
   const g=id=>document.getElementById(id)?.value;
   const body={
     nombre_cliente:g('e-nombre'), telefono:g('e-telefono'), email:g('e-email'),
-    status:g('e-status'), ciudad_origen:g('e-ciudad_origen'),
+    status:g('e-status'), observaciones:g('e-observaciones'),
+    ciudad_origen:g('e-ciudad_origen'),
     como_supieron:g('e-como_supieron'), clima_del_dia:g('e-clima_del_dia'),
     categoria_clientes:g('e-categoria_clientes'), tipo_clientes:g('e-tipo_clientes'),
     ingreso_reserva:+g('e-ingreso_reserva'), ingreso_extras:+g('e-ingreso_extras'),
     ingreso_total:+g('e-ingreso_total'), costo_operativo_fijo:+g('e-costo_operativo_fijo'),
     tiene_cruce:g('e-tiene_cruce')==='true',
   };
+  // Try to parse extras_json if present
+  const extEl=document.getElementById('e-extras_json');
+  if(extEl){ try{ body.extras_json=JSON.parse(extEl.value); }catch(e){} }
   // remove nulls/zero-string
   Object.keys(body).forEach(k=>{ if(body[k]===''||body[k]===null) delete body[k]; });
   try{
@@ -690,8 +708,9 @@ async function doSync(){
   btn.classList.add('loading'); btn.textContent='Sincronizando...';
   try{
     const d=await api('/api/admin/sync',{method:'POST'});
-    document.getElementById('sync-status').textContent=`Sync OK · +${d.inserted} nuevas · ${d.status_synced} actualizadas`;
-    showToast(`Sincronizado: +${d.inserted} nuevas, ${d.status_synced} estados actualizados`);
+    const total = (d.inserted_booknetic||0)+(d.inserted_hotboat||0);
+    document.getElementById('sync-status').textContent=`Sync OK · +${total} nuevas · ${d.status_updated||0} estados`;
+    showToast(`Sincronizado: +${d.inserted_booknetic||0} booknetic, +${d.inserted_hotboat||0} web, ${d.status_updated||0} estados`);
     await reloadAll();
   }catch(e){
     showToast('Error sync: '+e.message);
@@ -702,6 +721,8 @@ async function doSync(){
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtMoney(n){ if(!n&&n!==0) return '-'; return '$'+Math.round(+n).toLocaleString('es-CL'); }
+function sourceColor(s){ if(!s) return '#7070a0'; if(s==='sheets') return '#7070a0'; if(s==='booknetic') return '#4a9eff'; if(s==='hotboat_web') return '#f5c842'; return '#9b59b6'; }
+function sourceLabel(s){ return {sheets:'Historial',booknetic:'Booknetic',hotboat_web:'Web HotBoat',manual:'Manual'}[s]||s; }
 function statusColor(s){
   if(!s) return '#7070a0';
   s=s.toLowerCase();
