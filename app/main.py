@@ -68,6 +68,12 @@ if os.path.exists(static_dir):
 else:
     logger.warning("⚠️ Static directory not found – Kia-Ai UI will not be served.")
 
+# Serve media files (images, PDFs, docs) for booking platform
+media_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media")
+if os.path.exists(media_dir):
+    app.mount("/media", StaticFiles(directory=media_dir), name="media")
+    logger.info("✅ Media directory mounted at /media")
+
 # Initialize conversation manager
 conversation_manager = ConversationManager()
 app.include_router(booking_router)

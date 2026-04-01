@@ -59,6 +59,11 @@ body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min
 .step-dot.active{border-color:var(--coral);color:var(--coral)}
 .step-line{flex:1;height:2px;background:var(--border);max-width:50px}
 .step-line.done{background:var(--coral)}
+.media-toggle{background:none;border:1.5px solid var(--border);color:var(--muted);border-radius:8px;padding:.45rem .9rem;font-size:.8rem;cursor:pointer;width:100%;margin:.5rem 0;transition:border-color .2s}
+.media-toggle:hover{border-color:var(--gold);color:var(--gold)}
+.media-img{width:100%;border-radius:12px;margin-top:.5rem;display:block;max-height:320px;object-fit:cover}
+.media-pdf{display:flex;align-items:center;gap:.5rem;background:var(--deep);border:1.5px solid var(--border);border-radius:8px;padding:.55rem .9rem;font-size:.8rem;color:var(--muted);text-decoration:none;margin:.4rem 0;transition:border-color .2s}
+.media-pdf:hover{border-color:var(--gold);color:var(--gold)}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:.5rem}
 .cal-hdr{text-align:center;font-size:.7rem;font-weight:600;color:var(--muted);padding:.3rem 0}
 .cal-day{
@@ -172,6 +177,35 @@ function showToast(msg, ms=3000){
   t.textContent = msg;
   t.classList.remove('hidden');
   setTimeout(()=>t.classList.add('hidden'), ms);
+}
+
+function toggleMedia(btnId, containerId, src, isImg){
+  const btn = document.getElementById(btnId);
+  const box = document.getElementById(containerId);
+  if(box.children.length){
+    box.innerHTML = '';
+    btn.textContent = isImg ? '📸 Ver foto' : '📄 Ver PDF / documento';
+    return;
+  }
+  if(isImg){
+    const img = document.createElement('img');
+    img.src = src; img.className = 'media-img'; img.loading = 'lazy';
+    img.alt = 'Imagen'; box.appendChild(img);
+  } else {
+    const a = document.createElement('a');
+    a.href = src; a.target = '_blank'; a.className = 'media-pdf';
+    a.innerHTML = '📄 Abrir PDF completo →'; box.appendChild(a);
+  }
+  btn.textContent = isImg ? '🙈 Ocultar foto' : '🙈 Ocultar';
+}
+
+// Helper to build a media block (img + optional pdf link)
+function mediaBlock(id, imgSrc, pdfSrc){
+  const imgBtn = imgSrc ? `
+    <button id="mb-btn-${id}" class="media-toggle" onclick="toggleMedia('mb-btn-${id}','mb-box-${id}','${imgSrc}',true)">📸 Ver foto</button>
+    <div id="mb-box-${id}"></div>` : '';
+  const pdfLink = pdfSrc ? `<a href="${pdfSrc}" target="_blank" class="media-pdf">📄 Ver / descargar PDF completo →</a>` : '';
+  return imgBtn + pdfLink;
 }
 
 async function loadPricesAndAvail(){
@@ -349,6 +383,7 @@ function showRafting(){
         <span style="color:var(--muted);font-size:.8rem">3-4 horas · Mas adrenalina 🌊🌊</span>
       </div>
     </div>
+    ${mediaBlock('rafting','/media/images/experiencias/rafting/Rafting.jpg','/media/documents/experiencias.pdf')}
   </div>
   <button class="btn" onclick="showSolicitudForm('Rafting','rafting')">Solicitar Rafting</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
@@ -369,6 +404,7 @@ function showCabalgata(){
       🏔️ Vistas al volcan y lagunas<br>
       👨‍🏫 Guia experto incluido
     </div>
+    ${mediaBlock('cabalgata','/media/images/experiencias/cabalgata/CAbalgatas.jpg','/media/documents/experiencias.pdf')}
   </div>
   <button class="btn" onclick="showSolicitudForm('Cabalgata','cabalgata')">Solicitar Cabalgata</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
@@ -391,6 +427,7 @@ function showVelerismo(){
     <div class="card-title">⛵ Navegacion a Vela</div>
     <p style="color:var(--muted);margin-bottom:.8rem">Lago Villarrica</p>
     ${rows}
+    ${mediaBlock('velero','/media/images/experiencias/velerismo/Velerismo.jpg','/media/documents/experiencias.pdf')}
   </div>
   <button class="btn" onclick="showSolicitudForm('Navegacion a Vela','velerismo')">Solicitar Navegacion</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
@@ -494,6 +531,7 @@ function showAlojamiento(id){
       ${a.features.map(f=>`✓ ${f}`).join('<br>')}
     </div>
     <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">${a.desc}</p>
+    ${mediaBlock('alj-'+id,'/media/images/alojamientos/01-intro.jpg','/media/documents/alojamientos.pdf')}
   </div>
   <button class="btn" onclick="showSolicitudForm('${a.name}','alojamiento:${a.id}')">Solicitar Reserva</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showAlojamientos()">Ver mas opciones</button>`;
@@ -520,9 +558,25 @@ function showPacks(){
   <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
 }
 
+const PACK_IMGS = {
+  romantico: {
+    basico: '/media/images/packs/pack_romantico/01-pack-romantico.jpg',
+    premium: '/media/images/packs/pack_romantico_premium/01-pack-romantico-premium.jpg',
+  },
+  familiar: {
+    basico: '/media/images/packs/pack_familiar/01-pack-familiar.jpg',
+    premium: '/media/images/packs/pack_familiar_premium/01-pack-familiar-premium.jpg',
+  },
+  amigos: {
+    basico: '/media/images/packs/pack_amigos/01-pack-amigos.jpg',
+    premium: '/media/images/packs/pack_amigos_premium/01-pack-amigos-premium.jpg',
+  },
+};
+
 function showPackDetail(id){
   const p = PACKS.find(x=>x.id===id);
   if(!p) return showPacks();
+  const imgs = PACK_IMGS[id]||{};
   mc.innerHTML = `
   <div class="card">
     <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${p.icon}</div>
@@ -535,6 +589,9 @@ function showPackDetail(id){
       <div class="price-big">${p.desde}</div>
       <div class="price-sub">Precio segun fechas y version (Basico / Premium)</div>
     </div>
+    ${imgs.basico ? `<button id="mb-btn-pk-${id}-b" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${id}-b','mb-box-pk-${id}-b','${imgs.basico}',true)">📸 Ver Pack Basico</button><div id="mb-box-pk-${id}-b"></div>` : ''}
+    ${imgs.premium ? `<button id="mb-btn-pk-${id}-p" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${id}-p','mb-box-pk-${id}-p','${imgs.premium}',true)">📸 Ver Pack Premium</button><div id="mb-box-pk-${id}-p"></div>` : ''}
+    <a href="/media/images/packs/resumen-packs.jpg" target="_blank" class="media-pdf">📸 Ver resumen de todos los packs →</a>
     <div class="info-box" style="margin-top:.8rem;font-size:.8rem;line-height:1.7">
       📋 Completa el formulario con tus fechas. El Capitan Tomas te contactara por WhatsApp para confirmar.
     </div>
