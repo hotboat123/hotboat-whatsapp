@@ -206,29 +206,41 @@ function renderMenu(){
   <div class="card">
     <div class="card-title">Bienvenido a HotBoat</div>
     <div class="info-box">
-      🚤 Paseo en bote caliente por el lago Villarrica · 2 horas · Motor electrico
+      🚤 Paseo en bote caliente · Lago Villarrica · 2 horas · Motor electrico
     </div>
     <br>
     <div class="menu-grid">
       <button class="menu-btn" onclick="goReservar()">
-        <span class="icon">📅</span>
-        <span class="label">Reservar ahora</span>
+        <span class="icon">📅</span><span class="label">Reservar HotBoat</span>
         <span class="desc">Ver disponibilidad y fechas</span>
       </button>
       <button class="menu-btn" onclick="showPrices()">
-        <span class="icon">💰</span>
-        <span class="label">Ver precios</span>
+        <span class="icon">💰</span><span class="label">Precios</span>
         <span class="desc">Tarifas por persona</span>
       </button>
       <button class="menu-btn" onclick="showFeatures()">
-        <span class="icon">⚡</span>
-        <span class="label">Caracteristicas</span>
+        <span class="icon">⚡</span><span class="label">Caracteristicas</span>
         <span class="desc">Que incluye la experiencia</span>
       </button>
-      <button class="menu-btn" onclick="showExtras()">
-        <span class="icon">🎁</span>
-        <span class="label">Extras y packs</span>
-        <span class="desc">Mejora tu experiencia</span>
+      <button class="menu-btn" onclick="showUbicacion()">
+        <span class="icon">📍</span><span class="label">Ubicacion</span>
+        <span class="desc">Como llegar · Mapa</span>
+      </button>
+      <button class="menu-btn" onclick="showExperiencias()">
+        <span class="icon">🚣</span><span class="label">Otras Experiencias</span>
+        <span class="desc">Rafting · Cabalgata · Velero</span>
+      </button>
+      <button class="menu-btn" onclick="showAlojamientos()">
+        <span class="icon">🏠</span><span class="label">Alojamientos</span>
+        <span class="desc">Domos · Cabanas · Hostal</span>
+      </button>
+      <button class="menu-btn" onclick="showPacks()">
+        <span class="icon">🎁</span><span class="label">Packs Completos</span>
+        <span class="desc">Romantico · Familiar · Amigos</span>
+      </button>
+      <button class="menu-btn" onclick="showArmaPack()">
+        <span class="icon">🛒</span><span class="label">Arma tu Pack</span>
+        <span class="desc">Elige tus actividades</span>
       </button>
     </div>
   </div>`;
@@ -271,6 +283,119 @@ function showFeatures(){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
 }
 
+function showUbicacion(){
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">📍 Como llegar</div>
+    <div class="info-box" style="line-height:2">
+      📍 Entre Pucon y Curarrehue · La Araucania<br>
+      🚗 Acceso 100% pavimentado<br><br>
+      ⏱️ <strong>Desde Pucon:</strong> 25 min<br>
+      ⏱️ <strong>Desde Villarrica:</strong> 50 min<br>
+      ⏱️ <strong>Desde Temuco:</strong> 2 horas
+    </div>
+    <br>
+    <a href="https://maps.app.goo.gl/jVYVHRzekkmFRjEH7" target="_blank" class="btn" style="text-decoration:none">
+      Ver en Google Maps 🗺️
+    </a>
+    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem;text-align:center">
+      ⭐⭐⭐⭐⭐ +100 resenas de navegantes
+    </p>
+  </div>
+  <button class="btn" onclick="goReservar()" style="margin-top:.5rem">Reservar ahora 🚤</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
+}
+
+function showExperiencias(){
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">🏔️ Otras Experiencias</div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Aventuras en Pucon y alrededores</p>
+    <div style="display:flex;flex-direction:column;gap:.75rem">
+      <button class="menu-btn" onclick="showRafting()" style="flex-direction:row;align-items:center;gap:.75rem">
+        <span style="font-size:2rem">🚣</span>
+        <div><div class="label">Rafting</div>
+          <div class="desc">Rio Trancura · Desde $30.000/persona</div></div>
+      </button>
+      <button class="menu-btn" onclick="showCabalgata()" style="flex-direction:row;align-items:center;gap:.75rem">
+        <span style="font-size:2rem">🐴</span>
+        <div><div class="label">Cabalgata</div>
+          <div class="desc">Parque Ojos del Caburguá · $50.000/persona</div></div>
+      </button>
+      <button class="menu-btn" onclick="showVelerismo()" style="flex-direction:row;align-items:center;gap:.75rem">
+        <span style="font-size:2rem">⛵</span>
+        <div><div class="label">Navegacion a Vela</div>
+          <div class="desc">Lago Villarrica · Desde $120.000</div></div>
+      </button>
+    </div>
+  </div>
+  <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
+}
+
+function showRafting(){
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">🚣 Rafting</div>
+    <p style="color:var(--muted);margin-bottom:.8rem">Rio Trancura · Pucon</p>
+    <div style="display:flex;flex-direction:column;gap:.6rem">
+      <div class="price-tag" style="text-align:left">
+        <strong>Rafting Bajo</strong> · Nivel principiante<br>
+        <span class="price-big">$30.000</span><span class="price-sub">/persona</span><br>
+        <span style="color:var(--muted);font-size:.8rem">2-3 horas · Ideal para familias 🌊</span>
+      </div>
+      <div class="price-tag" style="text-align:left">
+        <strong>Rafting Alto</strong> · Nivel avanzado<br>
+        <span class="price-big">$40.000</span><span class="price-sub">/persona</span><br>
+        <span style="color:var(--muted);font-size:.8rem">3-4 horas · Mas adrenalina 🌊🌊</span>
+      </div>
+    </div>
+  </div>
+  <button class="btn" onclick="showSolicitudForm('Rafting','rafting')">Solicitar Rafting</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
+}
+
+function showCabalgata(){
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">🐴 Cabalgata</div>
+    <p style="color:var(--muted);margin-bottom:.8rem">Parque Ojos del Caburguá</p>
+    <div class="price-tag" style="text-align:left">
+      <strong>Cabalgata Parque Ojos del Caburguá</strong><br>
+      <span class="price-big">$50.000</span><span class="price-sub">/persona</span><br>
+      <span style="color:var(--muted);font-size:.8rem">3-4 horas · Guia + equipo completo + snack 🌲</span>
+    </div>
+    <div class="info-box" style="margin-top:.8rem;font-size:.85rem;line-height:1.8">
+      🌿 Naturaleza a caballo en entorno magico<br>
+      🏔️ Vistas al volcan y lagunas<br>
+      👨‍🏫 Guia experto incluido
+    </div>
+  </div>
+  <button class="btn" onclick="showSolicitudForm('Cabalgata','cabalgata')">Solicitar Cabalgata</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
+}
+
+function showVelerismo(){
+  const opts = [
+    {label:'Travesia 30 min · 2p',price:'$300.000'},{label:'Travesia 30 min · 4p',price:'$340.000'},
+    {label:'Travesia 30 min · 6p',price:'$360.000'},{label:'Travesia 30 min · 8p',price:'$380.000'},
+    {label:'Travesia 30 min · 10p',price:'$400.000'},
+    {label:'Yave Akimbo 1.5hr · 2p',price:'$120.000'},{label:'Yave Akimbo 1.5hr · 3p',price:'$130.000'},
+    {label:'Yave Akimbo 1.5hr · 4p',price:'$140.000'},{label:'Yave Akimbo 1.5hr · 5p',price:'$150.000'},
+    {label:'Yave Akimbo 1.5hr · 6p',price:'$160.000'},
+  ];
+  const rows = opts.map(o=>`
+    <div class="summary-row"><span>${o.label}</span><span style="color:var(--gold);font-weight:700">${o.price}</span></div>`
+  ).join('');
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">⛵ Navegacion a Vela</div>
+    <p style="color:var(--muted);margin-bottom:.8rem">Lago Villarrica</p>
+    ${rows}
+  </div>
+  <button class="btn" onclick="showSolicitudForm('Navegacion a Vela','velerismo')">Solicitar Navegacion</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
+}
+
 function showExtras(){
   mc.innerHTML = `
   <div class="card">
@@ -286,13 +411,242 @@ function showExtras(){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
 }
 
+const ALOJAMIENTOS = [
+  {id:'opensky_tina',name:'Open Sky - Domo con Tina de Bano',icon:'🌌',
+   desc:'Domo transparente · vista a las estrellas · perfecto para parejas',
+   price:'$100.000',unit:'/noche',cap:2,
+   features:['Domo transparente','Tina de bano interior','Vista a las estrellas','Experiencia romantica']},
+  {id:'opensky_hidro',name:'Open Sky - Domo con Hidromasaje',icon:'🌟',
+   desc:'Domo transparente con hidromasaje interior · experiencia premium',
+   price:'$120.000',unit:'/noche',cap:2,
+   features:['Domo transparente','Hidromasaje interior','Vista a las estrellas','Experiencia premium']},
+  {id:'relikura_2',name:'Raices de Relikura - Cabana 2p',icon:'🌿',
+   desc:'Cabana junto al rio · tinaja · para parejas',
+   price:'$60.000',unit:'/noche',cap:2,
+   features:['Junto al rio','Tinaja exterior','Entorno natural','Ideal parejas']},
+  {id:'relikura_4',name:'Raices de Relikura - Cabana 4p',icon:'🏡',
+   desc:'Cabana espaciosa junto al rio · para familias',
+   price:'$80.000',unit:'/noche',cap:4,
+   features:['Junto al rio','Tinaja exterior','Entorno natural','Ideal familias']},
+  {id:'relikura_6',name:'Raices de Relikura - Cabana 6p',icon:'👨‍👩‍👧‍👦',
+   desc:'Cabana grande junto al rio · para grupos',
+   price:'$100.000',unit:'/noche',cap:6,
+   features:['Junto al rio','Tinaja exterior','Entorno natural','Ideal grupos']},
+  {id:'hostal',name:'Raices de Relikura - Hostal',icon:'🎒',
+   desc:'Hostal economico junto al rio · con tinaja',
+   price:'$20.000',unit:'/persona/noche',cap:1,
+   features:['Economico','Tinaja compartida','Entorno natural','Actividades']},
+];
+
+const PACKS = [
+  {id:'romantico',icon:'💕',name:'Pack Romantico',personas:'2 personas',
+   desc:'Escapada romantica con todo incluido',
+   includes:['Open Sky Domo (1-2 noches)','Paseo en HotBoat (2p)','Navegacion a velero','Modo Romantico a bordo'],
+   desde:'Desde $400.000'},
+  {id:'familiar',icon:'👨‍👩‍👧‍👦',name:'Pack Familiar',personas:'4 personas',
+   desc:'Aventura familiar en la naturaleza',
+   includes:['Cabana Relikura 4p (1-2 noches)','Paseo en HotBoat (4p)','Rafting Bajo','Cabalgata'],
+   desde:'Desde $650.000'},
+  {id:'amigos',icon:'👥',name:'Pack Amigos',personas:'6 personas',
+   desc:'Experiencia grupal de aventura',
+   includes:['Cabana Relikura 6p (1-2 noches)','Paseo en HotBoat (6p)','Rafting Alto','Extras a bordo'],
+   desde:'Desde $700.000'},
+];
+
+const ACTIVIDADES = [
+  {id:'hotboat',icon:'🚤',name:'HotBoat',desc:'Paseo 2 horas'},
+  {id:'rafting',icon:'🚣',name:'Rafting',desc:'Bajo o Alto'},
+  {id:'volcan',icon:'🌋',name:'Subida al Volcan',desc:'Trek inolvidable'},
+  {id:'cabalgata',icon:'🐴',name:'Cabalgata',desc:'Ojos del Caburguá'},
+  {id:'velero',icon:'⛵',name:'Navegacion a Vela',desc:'Lago Villarrica'},
+  {id:'auto',icon:'🚗',name:'Arriendo Vehiculo',desc:'$50.000/dia'},
+];
+
+function showAlojamientos(){
+  const cards = ALOJAMIENTOS.map(a=>`
+    <button class="menu-btn" onclick="showAlojamiento('${a.id}')" style="flex-direction:row;align-items:flex-start;gap:.75rem">
+      <span style="font-size:2rem;flex-shrink:0">${a.icon}</span>
+      <div style="text-align:left">
+        <div class="label">${a.name}</div>
+        <div class="desc">${a.desc}</div>
+        <div style="color:var(--gold);font-size:.85rem;font-weight:700;margin-top:.2rem">${a.price}${a.unit}</div>
+      </div>
+    </button>`).join('');
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">🏠 Alojamientos</div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Open Sky & Raices de Relikura · Entre Pucon y Curarrehue</p>
+    <div style="display:flex;flex-direction:column;gap:.6rem">${cards}</div>
+  </div>
+  <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
+}
+
+function showAlojamiento(id){
+  const a = ALOJAMIENTOS.find(x=>x.id===id);
+  if(!a) return showAlojamientos();
+  mc.innerHTML = `
+  <div class="card">
+    <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${a.icon}</div>
+    <div class="card-title">${a.name}</div>
+    <div class="price-tag"><div class="price-big">${a.price}</div>
+      <div class="price-sub">${a.unit} · ${a.cap} pers. max</div></div>
+    <div class="info-box" style="margin-top:.8rem;line-height:2">
+      ${a.features.map(f=>`✓ ${f}`).join('<br>')}
+    </div>
+    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">${a.desc}</p>
+  </div>
+  <button class="btn" onclick="showSolicitudForm('${a.name}','alojamiento:${a.id}')">Solicitar Reserva</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showAlojamientos()">Ver mas opciones</button>`;
+}
+
+function showPacks(){
+  const cards = PACKS.map(p=>`
+    <div class="card" style="margin-bottom:0">
+      <div style="font-size:2rem;margin-bottom:.3rem">${p.icon}</div>
+      <div style="font-size:1.1rem;font-weight:700;margin-bottom:.2rem">${p.name}</div>
+      <div style="color:var(--muted);font-size:.8rem;margin-bottom:.6rem">${p.personas} · ${p.desc}</div>
+      <div style="font-size:.85rem;line-height:1.8;margin-bottom:.6rem">
+        ${p.includes.map(i=>`✓ ${i}`).join('<br>')}
+      </div>
+      <div style="color:var(--gold);font-weight:700;font-size:.95rem;margin-bottom:.6rem">${p.desde}</div>
+      <button class="btn" style="padding:.6rem" onclick="showPackDetail('${p.id}')">Ver detalles</button>
+    </div>`).join('');
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">🎁 Packs Completos</div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Todo incluido · Coordinado por el Capitan Tomas</p>
+    <div style="display:flex;flex-direction:column;gap:.75rem">${cards}</div>
+  </div>
+  <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
+}
+
+function showPackDetail(id){
+  const p = PACKS.find(x=>x.id===id);
+  if(!p) return showPacks();
+  mc.innerHTML = `
+  <div class="card">
+    <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${p.icon}</div>
+    <div class="card-title">${p.name}</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">${p.personas} · ${p.desc}</div>
+    <div class="info-box" style="line-height:2">
+      ${p.includes.map(i=>`✓ ${i}`).join('<br>')}
+    </div>
+    <div class="price-tag" style="margin-top:.8rem">
+      <div class="price-big">${p.desde}</div>
+      <div class="price-sub">Precio segun fechas y version (Basico / Premium)</div>
+    </div>
+    <div class="info-box" style="margin-top:.8rem;font-size:.8rem;line-height:1.7">
+      📋 Completa el formulario con tus fechas. El Capitan Tomas te contactara por WhatsApp para confirmar.
+    </div>
+  </div>
+  <button class="btn" onclick="showSolicitudForm('${p.name}','pack:${p.id}')">Solicitar este Pack</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showPacks()">Ver otros packs</button>`;
+}
+
+function showArmaPack(){
+  if(!S.armaActividades) S.armaActividades = {};
+  const acts = ACTIVIDADES.map(a=>`
+    <div class="extra-item ${S.armaActividades[a.id]?'selected':''}" onclick="toggleActividad('${a.id}')">
+      <div><div class="extra-name">${a.icon} ${a.name}</div>
+        <div style="font-size:.75rem;color:var(--muted)">${a.desc}</div></div>
+      <span style="font-size:1.2rem">${S.armaActividades[a.id]?'✓':''}</span>
+    </div>`).join('');
+  const aljs = ALOJAMIENTOS.map(a=>`
+    <option value="${a.id}" ${S.armaAlojamiento===a.id?'selected':''}>${a.name} · ${a.price}${a.unit}</option>`).join('');
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">🛒 Arma tu Pack</div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">Elige las actividades que quieras</p>
+    <div class="extra-list">${acts}</div>
+    <br>
+    <label>Alojamiento (opcional)</label>
+    <select id="alj-sel" onchange="S.armaAlojamiento=this.value"
+      style="width:100%;background:var(--deep);border:1.5px solid var(--border);color:var(--text);border-radius:10px;padding:.7rem;font-family:inherit;font-size:.9rem;outline:none">
+      <option value="">Sin alojamiento</option>${aljs}
+    </select>
+  </div>
+  <button class="btn" onclick="submitArmaPack()">Siguiente: Mis datos →</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver</button>`;
+}
+
+function toggleActividad(id){
+  if(!S.armaActividades) S.armaActividades = {};
+  S.armaActividades[id] = !S.armaActividades[id];
+  showArmaPack();
+}
+
+function submitArmaPack(){
+  const sel = Object.entries(S.armaActividades||{}).filter(([,v])=>v).map(([k])=>k);
+  if(sel.length===0){ showToast('Elige al menos una actividad'); return; }
+  const actNames = sel.map(id=>ACTIVIDADES.find(a=>a.id===id)?.name||id).join(' + ');
+  const aljName = S.armaAlojamiento ? ALOJAMIENTOS.find(a=>a.id===S.armaAlojamiento)?.name||'' : '';
+  const ctx = 'armaPack:'+sel.join('+')+'|alj:'+(S.armaAlojamiento||'none');
+  showSolicitudForm('Pack: '+actNames, ctx, 'Actividades: '+actNames+(aljName?'\nAlojamiento: '+aljName:''));
+}
+
+function showSolicitudForm(title, ctx, prefill){
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">📋 ${title}</div>
+    <div class="info-box" style="margin-bottom:1rem;font-size:.85rem">
+      Completa tus datos y el Capitan Tomas te contactara por WhatsApp 👨‍✈️
+    </div>
+    ${prefill?`<div class="info-box" style="margin-bottom:.8rem;font-size:.82rem;white-space:pre-line">${prefill}</div>`:''}
+    <div class="form-group"><label>Nombre completo *</label>
+      <input type="text" id="sq-name" placeholder="Tu nombre"></div>
+    <div class="form-group"><label>WhatsApp / Telefono *</label>
+      <input type="tel" id="sq-phone" placeholder="+56 9 xxxx xxxx"></div>
+    <div class="form-group"><label>Email (opcional)</label>
+      <input type="email" id="sq-email" placeholder="tu@email.com"></div>
+    <div class="form-group"><label>Fechas preferidas</label>
+      <input type="text" id="sq-dates" placeholder="Ej: 15 al 17 de enero 2026"></div>
+    <div class="form-group"><label>Cuantas personas</label>
+      <input type="text" id="sq-people" placeholder="Ej: 2 adultos, 1 nino"></div>
+    <div class="form-group"><label>Mensaje adicional</label>
+      <textarea id="sq-notes" rows="3" placeholder="Consultas o preferencias..."></textarea></div>
+    <input type="hidden" id="sq-ctx" value="${ctx||''}">
+    <input type="hidden" id="sq-title" value="${title||''}">
+  </div>
+  <button class="btn" onclick="enviarSolicitud()">Enviar Solicitud 📩</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
+}
+
+async function enviarSolicitud(){
+  const name = $('sq-name').value.trim();
+  const phone = $('sq-phone').value.trim();
+  if(!name||!phone){ showToast('Ingresa nombre y telefono'); return; }
+  const body = {
+    customer_name:name, customer_phone:phone,
+    customer_email:$('sq-email').value.trim()||null,
+    dates_preference:$('sq-dates').value.trim(),
+    people:$('sq-people').value.trim(),
+    notes:$('sq-notes').value.trim(),
+    service_type:$('sq-ctx').value,
+    title:$('sq-title').value,
+  };
+  try{
+    const r = await fetch('/api/booking/solicitud',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail||'Error');
+    mc.innerHTML = `
+    <div class="card" style="text-align:center">
+      <div class="success-icon">✅</div>
+      <div class="card-title">Solicitud Enviada!</div>
+      <div class="info-box" style="margin-top:1rem">
+        El Capitan Tomas revisara tu solicitud y te contactara pronto por WhatsApp al <strong>${phone}</strong> 📱
+      </div>
+    </div>
+    <button class="btn" style="margin-top:1rem" onclick="renderMenu()">Volver al inicio</button>`;
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
 function goReservar(){
   S.step = 'fecha';
   renderCal();
 }
 
 function renderCal(){
-  const yr = S.calYear, mo = S.calMonth;
+  const yr=S.calYear, mo=S.calMonth;
   const firstDay = new Date(yr, mo, 1).getDay();
   const daysInMonth = new Date(yr, mo+1, 0).getDate();
   const today = new Date(); today.setHours(0,0,0,0);

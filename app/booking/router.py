@@ -5,11 +5,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
 from app.booking.models import CreateBookingRequest
 from app.booking.db import (
     create_booking, update_booking_payment,
-    get_booking_by_ref, get_all_bookings, PRICES
+    get_booking_by_ref, get_all_bookings, PRICES,
+    generate_booking_ref,
 )
 from app.bot.availability import AvailabilityChecker
 from app.availability.availability_config import AVAILABILITY_CONFIG
@@ -175,3 +177,81 @@ async def list_bookings(limit: int = Query(100, ge=1, le=500)):
         return {"bookings": get_all_bookings(limit)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class SolicitudRequest(BaseModel):
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[str] = None
+    dates_preference: Optional[str] = None
+    people: Optional[str] = None
+    notes: Optional[str] = None
+    service_type: str = "general"
+    title: str = "Solicitud"
+
+
+@router.post("/api/booking/solicitud")
+async def create_solicitud(request: SolicitudRequest):
+    """Create a service request (experience, accommodation, pack) — notifies admin."""
+    try:
+        from app.db.connection import get_connection
+        notes_full = (
+            f"Servicio: {request.title}\n"
+            f"Tipo: {request.service_type}\n"
+            f"Fechas: {request.dates_preference or '-'}\n"
+            f"Personas: {request.people or '-'}\n"
+            f"Notas: {request.notes or '-'}"
+        )
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO hotboat_appointments"
+                    " (booking_ref,customer_name,customer_phone,customer_email,"
+                    "  booking_date,booking_time,num_people,"
+                    "  price_per_person,subtotal,total_price,status,source,notes)"
+                    " VALUES (%s,%s,%s,%s,CURRENT_DATE,'00:00',1,0,0,0,'solicitud','web',%s)"
+                    " RETURNING booking_ref",
+                    (
+                        generate_booking_ref(),
+                        request.customer_name, request.customer_phone,
+                        request.customer_email, notes_full
+                    )
+                )
+                ref = cur.fetchone()[0]
+                conn.commit()
+        try:
+            await _notify_solicitud(request, ref)
+        except Exception as ne:
+            logger.warning(f"Solicitud notification failed: {ne}")
+        return {"status": "ok", "booking_ref": ref}
+    except Exception as e:
+        logger.error(f"Error creating solicitud: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _notify_solicitud(req: SolicitudRequest, ref: str):
+    import os, httpx as _httpx
+    token = os.getenv("WHATSAPP_API_TOKEN", "")
+    phone_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+    admin = os.getenv("ADMIN_PHONE", "56974950762")
+    if not token or not phone_id:
+        return
+    msg = (
+        f"📋 *Nueva Solicitud Web* ({ref})\n\n"
+        f"*Servicio:* {req.title}\n"
+        f"*Cliente:* {req.customer_name}\n"
+        f"*Telefono:* {req.customer_phone}\n"
+        f"*Fechas:* {req.dates_preference or '-'}\n"
+        f"*Personas:* {req.people or '-'}\n"
+        f"*Notas:* {req.notes or '-'}"
+    )
+    async with _httpx.AsyncClient() as client:
+        await client.post(
+            f"https://graph.facebook.com/v17.0/{phone_id}/messages",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"messaging_product": "whatsapp", "to": admin,
+                  "type": "text", "text": {"body": msg}},
+            timeout=10
+        )
+
+
