@@ -59,6 +59,85 @@ async def booking_pending(booking_ref: str = Query(None)):
     return _booking_html()
 
 
+@router.get("/api/booking/dynamic-price")
+async def get_dynamic_price(
+    date: str = Query(..., description="YYYY-MM-DD"),
+    persons: int = Query(2, ge=1, le=8),
+):
+    """Return dynamic price multiplier and adjusted prices for a given booking date."""
+    try:
+        from app.booking.operator_settings import get_dp_config, calculate_dynamic_multiplier
+        from app.booking.db import PRICES
+        from datetime import date as _date
+
+        booking_date = _date.fromisoformat(date)
+        today = datetime.now(CHILE_TZ).date()
+        days_advance = max(0, (booking_date - today).days)
+
+        # Count confirmed bookings on that day from hotboat_appointments
+        bookings_on_day = 0
+        try:
+            from app.db.connection import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT COUNT(*) FROM hotboat_appointments
+                           WHERE booking_date = %s
+                             AND status NOT IN ('cancelled','rejected','solicitud')""",
+                        (booking_date,),
+                    )
+                    bookings_on_day = cur.fetchone()[0]
+        except Exception as e:
+            logger.warning(f"dynamic-price: could not count bookings: {e}")
+
+        cfg = get_dp_config()
+        multiplier = calculate_dynamic_multiplier(
+            booking_date, bookings_on_day, days_advance, cfg
+        )
+
+        # Round adjusted prices to nearest 1000 CLP
+        adjusted: dict = {}
+        for n, base in PRICES.items():
+            adj = round(base * multiplier / 1000) * 1000
+            adjusted[str(n)] = {"base": base, "adjusted": adj, "total": adj * n}
+
+        # Determine which factor labels are active (for UI tooltip)
+        active_factors = []
+        if cfg.get("enabled"):
+            for rule in sorted(cfg.get("fill_rate", []), key=lambda r: r["min_bookings"], reverse=True):
+                if bookings_on_day >= rule["min_bookings"]:
+                    pct = round((rule["multiplier"] - 1) * 100)
+                    sign = "+" if pct >= 0 else ""
+                    active_factors.append(f"Demanda del día: {sign}{pct}%")
+                    break
+            for rule in sorted(cfg.get("advance_booking", []), key=lambda r: r["min_days"], reverse=True):
+                if days_advance >= rule["min_days"]:
+                    pct = round((rule["multiplier"] - 1) * 100)
+                    sign = "+" if pct >= 0 else ""
+                    active_factors.append(f"Anticipación ({rule.get('label','')}): {sign}{pct}%")
+                    break
+            weekday = booking_date.weekday()
+            wk_mult = float(cfg.get("weekday", {}).get(str(weekday), 1.0))
+            if wk_mult != 1.0:
+                pct = round((wk_mult - 1) * 100)
+                sign = "+" if pct >= 0 else ""
+                DAY_NAMES = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+                active_factors.append(f"{DAY_NAMES[weekday]}: {sign}{pct}%")
+
+        return {
+            "date": date,
+            "dp_enabled": cfg.get("enabled", False),
+            "days_advance": days_advance,
+            "bookings_on_day": bookings_on_day,
+            "multiplier": multiplier,
+            "prices": adjusted,
+            "active_factors": active_factors,
+        }
+    except Exception as e:
+        logger.error(f"dynamic-price error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/booking/availability")
 async def get_availability(days: int = Query(21, ge=1, le=60)):
     try:

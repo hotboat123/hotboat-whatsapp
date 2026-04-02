@@ -329,30 +329,130 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
     <!-- SETTINGS -->
     <div id="section-settings" class="section">
-      <!-- Urgency toggle -->
+
+      <!-- ── Urgency Mode ─────────────────────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">⚡ Modo Genera Urgencia</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
-          Cuando esta activado, los clientes solo ven <strong>maximo 2 horarios por dia</strong>.<br>
-          Sin reservas: muestra los horarios mas cercanos a las 10:00 y 18:00.<br>
-          Con reservas: muestra los horarios ±3h de cada reserva existente.
+          Muestra <strong>maximo 2 horarios por dia</strong> para crear sensacion de escasez.<br>
+          Sin reservas: muestra los horarios semilla. Con reservas: muestra los horarios ± diferencia de horas.
         </p>
-        <div style="display:flex;align-items:center;gap:1rem">
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem">
           <label class="toggle-wrap">
             <input type="checkbox" id="urgency-toggle" onchange="setUrgency(this.checked)">
             <span class="toggle-slider"></span>
           </label>
           <span id="urgency-label" style="font-size:.9rem;color:var(--muted)">Desactivado</span>
         </div>
+
+        <!-- Urgency config -->
+        <div style="border-top:1px solid var(--border);padding-top:1rem;display:flex;flex-direction:column;gap:1rem">
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">Horarios semilla (Prioridad 1)</label>
+            <div id="seed-chips" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem"></div>
+            <div style="display:flex;gap:.5rem;align-items:center">
+              <input type="time" id="new-seed-input" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.85rem">
+              <button onclick="addSeedTime()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer;font-weight:600">+ Agregar</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:.8rem">
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">Diferencia entre slots (horas)</label>
+            <input type="number" id="gap-hours-input" min="1" max="12" step="0.5" value="3"
+              style="width:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.9rem;text-align:center">
+          </div>
+          <div>
+            <button onclick="saveUrgencyConfig()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Guardar configuracion</button>
+          </div>
+        </div>
       </div>
 
-      <!-- Vacation days -->
+      <!-- ── Dynamic Pricing ──────────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">💰 Precios Dinamicos</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          El precio base se multiplica automaticamente segun 3 factores:<br>
+          <strong>Ocupacion del dia</strong> · <strong>Dias de anticipacion</strong> · <strong>Dia de semana</strong>.<br>
+          El cliente ve el precio ajustado al elegir su fecha.
+        </p>
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="dp-toggle" onchange="setDpEnabled(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+          <span id="dp-label" style="font-size:.9rem;color:var(--muted)">Desactivado</span>
+          <span id="dp-preview" style="font-size:.8rem;color:var(--muted);margin-left:auto"></span>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:1rem;display:flex;flex-direction:column;gap:1.4rem">
+
+          <!-- Fill rate table -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.6rem">📊 Por ocupacion del dia</label>
+            <div style="font-size:.75rem;color:var(--muted);margin-bottom:.4rem">Si ya hay N o mas reservas ese dia, aplicar este multiplicador.</div>
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem" id="dp-fill-table">
+              <thead><tr style="color:var(--muted);font-size:.75rem">
+                <th style="text-align:left;padding:.3rem .4rem">Reservas (min)</th>
+                <th style="text-align:left;padding:.3rem .4rem">Multiplicador</th>
+                <th style="text-align:left;padding:.3rem .4rem">Efecto</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="dp-fill-body"></tbody>
+            </table>
+            <button onclick="addFillRule()" style="margin-top:.4rem;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">+ Agregar regla</button>
+          </div>
+
+          <!-- Advance booking table -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.6rem">⏰ Por dias de anticipacion</label>
+            <div style="font-size:.75rem;color:var(--muted);margin-bottom:.4rem">Segun cuantos dias antes reserva el cliente. Se aplica la primera regla que coincida (de mayor a menor).</div>
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem" id="dp-adv-table">
+              <thead><tr style="color:var(--muted);font-size:.75rem">
+                <th style="text-align:left;padding:.3rem .4rem">Dias minimos</th>
+                <th style="text-align:left;padding:.3rem .4rem">Multiplicador</th>
+                <th style="text-align:left;padding:.3rem .4rem">Etiqueta</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="dp-adv-body"></tbody>
+            </table>
+            <button onclick="addAdvRule()" style="margin-top:.4rem;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">+ Agregar regla</button>
+          </div>
+
+          <!-- Day of week -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.6rem">📅 Por dia de semana</label>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem" id="dp-weekday-grid"></div>
+          </div>
+
+          <!-- Min/max clamp -->
+          <div style="display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap">
+            <div>
+              <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.3rem">Multiplicador minimo</label>
+              <div style="display:flex;align-items:center;gap:.4rem">
+                <input type="number" id="dp-min-mult" step="0.05" min="0.5" max="1.0" style="width:70px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .5rem;font-size:.9rem;text-align:center">
+                <span id="dp-min-pct" style="font-size:.78rem;color:var(--muted)"></span>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.3rem">Multiplicador maximo</label>
+              <div style="display:flex;align-items:center;gap:.4rem">
+                <input type="number" id="dp-max-mult" step="0.05" min="1.0" max="3.0" style="width:70px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .5rem;font-size:.9rem;text-align:center">
+                <span id="dp-max-pct" style="font-size:.78rem;color:var(--muted)"></span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <button onclick="saveDpConfig()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Guardar precios dinamicos</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Vacation days ────────────────────────────────────────────── -->
       <div class="chart-wrap">
         <div class="chart-title">🏖️ Dias de Vacaciones / Cierre</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem">
-          Los dias marcados como vacaciones no aparecen disponibles en la pagina web de reservas.
+          Los dias marcados no aparecen disponibles en la pagina web de reservas.
         </p>
-        <!-- Vacation calendar -->
         <div class="cal-nav" style="margin-bottom:.5rem">
           <h2 id="vac-cal-title" style="font-size:.95rem"></h2>
           <button onclick="vacCalPrev()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">‹</button>
@@ -829,12 +929,19 @@ function badge(s){
 let vacYear = new Date().getFullYear(), vacMonth = new Date().getMonth();
 let vacationDates = new Set();
 
+// Working copies for settings editors
+let _urgencyCfg = {seed_times:['10:00','18:00'], gap_hours:3};
+let _dpCfg = null;
+const DAY_NAMES_SHORT = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
 async function loadSettings(){
   try{
     const d = await api('/api/admin/settings');
     const cb = document.getElementById('urgency-toggle');
     if(cb){ cb.checked = d.urgency_mode; updateUrgencyLabel(d.urgency_mode); }
-  }catch(e){ logger.error?.(e); }
+    if(d.urgency_config){ _urgencyCfg = d.urgency_config; renderUrgencyConfig(); }
+    if(d.dynamic_pricing){ _dpCfg = d.dynamic_pricing; renderDpConfig(); }
+  }catch(e){ console.error(e); }
 }
 
 async function setUrgency(val){
@@ -898,6 +1005,143 @@ async function toggleVacDay(dateStr, isVac){
     }
     renderVacCal();
     await loadVacationDays();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Urgency config UI ─────────────────────────────────────────────────────────
+
+function renderUrgencyConfig(){
+  const seeds = _urgencyCfg.seed_times || [];
+  const wrap = document.getElementById('seed-chips');
+  if(!wrap) return;
+  wrap.innerHTML = seeds.map((t,i)=>`
+    <div style="display:flex;align-items:center;gap:.3rem;background:rgba(255,200,0,.12);border:1px solid rgba(255,200,0,.3);border-radius:20px;padding:.25rem .6rem;font-size:.82rem">
+      ${t}
+      <button onclick="_urgencyCfg.seed_times.splice(${i},1);renderUrgencyConfig()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;line-height:1;padding:0">✕</button>
+    </div>`).join('');
+  const gapEl = document.getElementById('gap-hours-input');
+  if(gapEl) gapEl.value = _urgencyCfg.gap_hours || 3;
+}
+
+function addSeedTime(){
+  const inp = document.getElementById('new-seed-input');
+  if(!inp||!inp.value) return;
+  if(!_urgencyCfg.seed_times.includes(inp.value)){
+    _urgencyCfg.seed_times.push(inp.value);
+    _urgencyCfg.seed_times.sort();
+  }
+  inp.value='';
+  renderUrgencyConfig();
+}
+
+async function saveUrgencyConfig(){
+  const gapEl = document.getElementById('gap-hours-input');
+  if(gapEl) _urgencyCfg.gap_hours = parseFloat(gapEl.value)||3;
+  try{
+    await api('/api/admin/urgency-config',{method:'PUT',body:JSON.stringify({
+      seed_times: _urgencyCfg.seed_times,
+      gap_hours: _urgencyCfg.gap_hours,
+    })});
+    showToast('Configuracion de urgencia guardada ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Dynamic pricing UI ────────────────────────────────────────────────────────
+
+function pctLabel(mult){
+  const p = Math.round((parseFloat(mult)-1)*100);
+  if(p===0) return '<span style="color:var(--muted)">sin cambio</span>';
+  const col = p>0?'var(--red)':'var(--green)';
+  return `<span style="color:${col}">${p>0?'+':''}${p}%</span>`;
+}
+
+function renderDpConfig(){
+  if(!_dpCfg) return;
+  const dpToggle = document.getElementById('dp-toggle');
+  if(dpToggle){ dpToggle.checked = !!_dpCfg.enabled; updateDpLabel(!!_dpCfg.enabled); }
+
+  // Fill rate rows
+  const fillBody = document.getElementById('dp-fill-body');
+  if(fillBody){
+    const rules = _dpCfg.fill_rate || [];
+    fillBody.innerHTML = rules.map((r,i)=>`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.35rem .4rem"><input type="number" min="1" max="10" value="${r.min_bookings}" style="width:60px;${tblInputStyle()}" oninput="_dpCfg.fill_rate[${i}].min_bookings=+this.value"></td>
+      <td style="padding:.35rem .4rem"><input type="number" min="0.5" max="3" step="0.01" value="${r.multiplier}" style="width:70px;${tblInputStyle()}" oninput="_dpCfg.fill_rate[${i}].multiplier=+this.value;this.closest('tr').querySelector('.pct').innerHTML=pctLabel(this.value)"></td>
+      <td style="padding:.35rem .4rem" class="pct">${pctLabel(r.multiplier)}</td>
+      <td style="padding:.35rem .4rem"><button onclick="_dpCfg.fill_rate.splice(${i},1);renderDpConfig()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem">✕</button></td>
+    </tr>`).join('');
+  }
+
+  // Advance booking rows
+  const advBody = document.getElementById('dp-adv-body');
+  if(advBody){
+    const rules = _dpCfg.advance_booking || [];
+    advBody.innerHTML = rules.map((r,i)=>`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.35rem .4rem"><input type="number" min="0" max="365" value="${r.min_days}" style="width:60px;${tblInputStyle()}" oninput="_dpCfg.advance_booking[${i}].min_days=+this.value"></td>
+      <td style="padding:.35rem .4rem"><input type="number" min="0.5" max="3" step="0.01" value="${r.multiplier}" style="width:70px;${tblInputStyle()}" oninput="_dpCfg.advance_booking[${i}].multiplier=+this.value;this.closest('tr').querySelector('.pct').innerHTML=pctLabel(this.value)"></td>
+      <td style="padding:.35rem .4rem"><input value="${r.label||''}" placeholder="ej: Última hora" style="width:140px;${tblInputStyle()}" oninput="_dpCfg.advance_booking[${i}].label=this.value"></td>
+      <td style="padding:.35rem .4rem"><button onclick="_dpCfg.advance_booking.splice(${i},1);renderDpConfig()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem">✕</button></td>
+    </tr>`).join('');
+  }
+
+  // Day of week grid
+  const wkGrid = document.getElementById('dp-weekday-grid');
+  if(wkGrid){
+    const wk = _dpCfg.weekday || {};
+    wkGrid.innerHTML = DAY_NAMES_SHORT.map((name,i)=>{
+      const val = parseFloat(wk[String(i)]||1);
+      const pct = Math.round((val-1)*100);
+      const col = pct>0?'var(--red)':pct<0?'var(--green)':'var(--muted)';
+      return `<div style="text-align:center">
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:.25rem">${name}</div>
+        <input type="number" min="0.5" max="3" step="0.01" value="${val}"
+          style="width:100%;${tblInputStyle()};text-align:center"
+          oninput="_dpCfg.weekday['${i}']=+this.value;this.nextElementSibling.textContent=(Math.round((+this.value-1)*100)||0)+'%';this.nextElementSibling.style.color=(+this.value>1)?'var(--red)':(+this.value<1?'var(--green)':'var(--muted)')">
+        <div style="font-size:.7rem;color:${col};margin-top:.15rem">${pct===0?'—':(pct>0?'+':'')+pct+'%'}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Min/max
+  const minEl = document.getElementById('dp-min-mult');
+  const maxEl = document.getElementById('dp-max-mult');
+  if(minEl){ minEl.value=_dpCfg.min_mult||0.80; document.getElementById('dp-min-pct').textContent=pctLabelText(_dpCfg.min_mult||0.80); }
+  if(maxEl){ maxEl.value=_dpCfg.max_mult||1.60; document.getElementById('dp-max-pct').textContent=pctLabelText(_dpCfg.max_mult||1.60); }
+}
+
+function tblInputStyle(){ return 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .4rem;font-size:.82rem'; }
+function pctLabelText(mult){ const p=Math.round((parseFloat(mult)-1)*100); return p===0?'sin cambio':(p>0?'+':'')+p+'%'; }
+
+function addFillRule(){ _dpCfg.fill_rate.push({min_bookings:1,multiplier:1.10,label:''}); renderDpConfig(); }
+function addAdvRule(){ _dpCfg.advance_booking.push({min_days:0,multiplier:1.00,label:'nuevo'}); renderDpConfig(); }
+
+async function setDpEnabled(val){
+  if(!_dpCfg) return;
+  _dpCfg.enabled = val;
+  updateDpLabel(val);
+}
+
+function updateDpLabel(on){
+  const el = document.getElementById('dp-label');
+  if(el){ el.textContent = on ? '✅ Activado' : 'Desactivado'; el.style.color = on ? 'var(--green)' : 'var(--muted)'; }
+}
+
+async function saveDpConfig(){
+  if(!_dpCfg) return;
+  const minEl = document.getElementById('dp-min-mult');
+  const maxEl = document.getElementById('dp-max-mult');
+  if(minEl) _dpCfg.min_mult = parseFloat(minEl.value)||0.80;
+  if(maxEl) _dpCfg.max_mult = parseFloat(maxEl.value)||1.60;
+
+  // Sync weekday from grid inputs
+  document.querySelectorAll('#dp-weekday-grid input[type=number]').forEach((inp,i)=>{
+    _dpCfg.weekday[String(i)] = parseFloat(inp.value)||1.0;
+  });
+
+  try{
+    await api('/api/admin/dynamic-pricing',{method:'PUT',body:JSON.stringify(_dpCfg)});
+    showToast('Precios dinamicos guardados ✅');
+    renderDpConfig();
   }catch(e){ showToast('Error: '+e.message); }
 }
 

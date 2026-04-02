@@ -5,7 +5,7 @@ import re
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query, Header
+from fastapi import APIRouter, HTTPException, Query, Header, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -368,8 +368,11 @@ async def delete_vacation(fecha: str, x_admin_key: str = Header("")):
 @admin_router.get("/api/admin/settings")
 async def get_all_settings(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
+    from app.booking.operator_settings import get_urgency_config, get_dp_config
     return {
         "urgency_mode": is_urgency_mode(),
+        "urgency_config": get_urgency_config(),
+        "dynamic_pricing": get_dp_config(),
     }
 
 
@@ -383,6 +386,51 @@ async def update_settings(body: SettingsRequest, x_admin_key: str = Header("")):
     if body.urgency_mode is not None:
         set_setting("urgency_mode", "true" if body.urgency_mode else "false")
     return {"ok": True, "urgency_mode": is_urgency_mode()}
+
+
+# ── Urgency config ─────────────────────────────────────────────────────────────
+
+@admin_router.get("/api/admin/urgency-config")
+async def get_urgency_cfg(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import get_urgency_config
+    return get_urgency_config()
+
+
+class UrgencyConfigRequest(BaseModel):
+    seed_times: Optional[list] = None
+    gap_hours: Optional[float] = None
+
+
+@admin_router.put("/api/admin/urgency-config")
+async def update_urgency_cfg(body: UrgencyConfigRequest, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import get_urgency_config, set_urgency_config
+    cfg = get_urgency_config()
+    if body.seed_times is not None:
+        cfg["seed_times"] = [t for t in body.seed_times if t]
+    if body.gap_hours is not None:
+        cfg["gap_hours"] = max(0.5, float(body.gap_hours))
+    set_urgency_config(cfg)
+    return {"ok": True, "config": cfg}
+
+
+# ── Dynamic pricing config ─────────────────────────────────────────────────────
+
+@admin_router.get("/api/admin/dynamic-pricing")
+async def get_dp(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import get_dp_config
+    return get_dp_config()
+
+
+@admin_router.put("/api/admin/dynamic-pricing")
+async def update_dp(request: Request, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import set_dp_config
+    body = await request.json()
+    set_dp_config(body)
+    return {"ok": True}
 
 
 # ── Incremental sync ──────────────────────────────────────────────────────────

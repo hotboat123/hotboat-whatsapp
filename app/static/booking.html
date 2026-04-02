@@ -157,6 +157,9 @@ const S = {
   customerEmail: '',
   bookingRef: null,
   paymentUrl: null,
+  dpMultiplier: 1.0,
+  dpEnabled: false,
+  dpFactors: [],
   totalPrice: 0,
 };
 
@@ -751,6 +754,12 @@ function nextMonth(){
 function selectDate(key){
   S.selectedDate = key;
   S.selectedTime = null;
+  // Fetch dynamic price in background (non-blocking)
+  fetch(`/api/booking/dynamic-price?date=${key}&persons=${S.numPeople}`)
+    .then(r=>r.ok?r.json():null)
+    .then(d=>{
+      if(d){ S.dpMultiplier=d.multiplier||1.0; S.dpEnabled=d.dp_enabled||false; S.dpFactors=d.active_factors||[]; }
+    }).catch(()=>{});
   renderTimeSelect();
 }
 
@@ -780,10 +789,28 @@ function selectTime(t){
 
 function renderPeopleSelect(){
   function update(){
-    const pp = S.prices[S.numPeople] || 69990;
+    const basepp = S.prices[S.numPeople] || 69990;
+    const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
+    const pp = Math.round(basepp * mult / 1000) * 1000;
     const total = pp * S.numPeople;
     $('pp-val').textContent = S.numPeople;
     $('pp-price').textContent = `$${pp.toLocaleString('es-CL')}/persona · Total $${total.toLocaleString('es-CL')}`;
+    const badge = document.getElementById('dp-badge');
+    if(badge){
+      if(S.dpEnabled && mult !== 1.0){
+        const pct = Math.round((mult-1)*100);
+        const sign = pct>0?'+':'';
+        const col = pct>0?'#e74c3c':'#2ecc71';
+        badge.innerHTML = `<span style="background:${col}22;color:${col};border:1px solid ${col}44;border-radius:20px;padding:.2rem .6rem;font-size:.72rem;font-weight:600">${sign}${pct}% precio dinamico</span>`;
+        if(S.dpFactors&&S.dpFactors.length) badge.title = S.dpFactors.join(' · ');
+      } else {
+        badge.innerHTML = '';
+      }
+      if(mult<1.0){
+        const oldPrice = document.getElementById('pp-price-old');
+        if(oldPrice) oldPrice.textContent = `Precio normal: $${basepp.toLocaleString('es-CL')}/pers`;
+      }
+    }
   }
   mc.innerHTML = `
   ${stepsHtml('personas')}
@@ -797,6 +824,7 @@ function renderPeopleSelect(){
     </div>
     <div class="price-tag">
       <div class="price-big" id="pp-price"></div>
+      <div id="dp-badge" style="margin-top:.3rem"></div>
       <div class="price-sub">Incluye 2 horas en el lago</div>
     </div>
   </div>
@@ -848,7 +876,9 @@ function toggleFlex(){
 }
 
 function renderForm(){
-  const pp = S.prices[S.numPeople] || 69990;
+  const basepp = S.prices[S.numPeople] || 69990;
+  const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
+  const pp = Math.round(basepp * mult / 1000) * 1000;
   const sub = pp * S.numPeople;
   let extTotal = 0;
   const extRows = EXTRAS_CATALOG.filter(e=>S.extras[e.id]).map(e=>{
@@ -865,7 +895,7 @@ function renderForm(){
     <div class="card-title">📋 Resumen de reserva</div>
     <div class="summary-row"><span>📅 Fecha</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
     <div class="summary-row"><span>👥 Personas</span><span>${S.numPeople}</span></div>
-    <div class="summary-row"><span>💰 Tarifa base</span><span>$${sub.toLocaleString('es-CL')}</span></div>
+    <div class="summary-row"><span>💰 Tarifa base</span><span>$${sub.toLocaleString('es-CL')}${(()=>{if(S.dpEnabled&&mult!==1.0){const c=mult>1?'#e74c3c':'#2ecc71';const p=Math.round((mult-1)*100);const s=p>0?'+':'';return ` <span style="font-size:.72rem;color:${c}">(${s}${p}%)</span>`;}return '';})()}</span></div>
     ${extRows}
     ${flex ? `<div class="summary-row"><span>🔒 FLEX</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
     <div class="summary-row total"><span>TOTAL</span><span>$${total.toLocaleString('es-CL')}</span></div>
