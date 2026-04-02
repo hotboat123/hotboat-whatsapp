@@ -726,7 +726,6 @@ async function openModal(id){
         <textarea id="e-observaciones" rows="3" placeholder="Notas internas sobre esta reserva...">${r.observaciones||''}</textarea>
       </div>
       ${r.extras_json&&Object.keys(r.extras_json).length?`<div class="form-group"><label>Extras</label><textarea rows="2" id="e-extras_json">${JSON.stringify(r.extras_json,null,2)}</textarea></div>`:''}
-      <script>initPagos(${JSON.stringify(r.pagos||[])});</script>
       <div style="margin-top:1rem">
         <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
           Pagos recibidos
@@ -742,6 +741,8 @@ async function openModal(id){
         <button class="btn-del" onclick="closeModal()">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
+    // Call initPagos AFTER setting innerHTML (avoid </script> inside template literal)
+    initPagos(r.pagos||[]);
   }catch(e){
     document.getElementById('modal-body').innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
   }
