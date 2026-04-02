@@ -741,7 +741,7 @@ async function openModal(id){
         <button class="btn-del" onclick="closeModal()">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
-    // Call initPagos AFTER setting innerHTML (avoid </script> inside template literal)
+    // Call initPagos AFTER setting innerHTML (avoids broken script tag inside template literal)
     initPagos(r.pagos||[]);
   }catch(e){
     document.getElementById('modal-body').innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
