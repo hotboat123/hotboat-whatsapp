@@ -467,7 +467,7 @@ class ConversationManager:
                 response = {
                     "type": "sequence",
                     "messages": [
-                        "Sí, los niños lo pasan increíble 🎉",
+                        "Sí!, los niños lo pasan increíble 🎉",
                         "Pagan desde los 6 años, a los menores no los consideres en el número de personas de la reserva 👍",
                     ],
                     "delay": 1.5
