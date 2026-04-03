@@ -386,7 +386,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 # Store text response for database
                 response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "sequence":
-                # Send a sequence of messages with a small delay between each
+                # Send each message separately with a delay, saving each one to DB individually
                 import asyncio
                 messages = response.get("messages", [])
                 delay = response.get("delay", 1.5)
@@ -394,7 +394,20 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     if i > 0:
                         await asyncio.sleep(delay)
                     await whatsapp_client.send_text_message(from_number, msg)
-                response_text = " | ".join(messages)
+                    try:
+                        await save_conversation(
+                            phone_number=from_number,
+                            customer_name=contact_name,
+                            message_text=text_body if i == 0 else "",
+                            response_text=msg,
+                            message_type="text",
+                            message_id=message_id if i == 0 else None,
+                            direction="incoming"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not save sequence message {i}: {e}")
+                await increment_unread_count(from_number)
+                response_text = None  # Already saved above, skip the default save block
             elif response:
                 # Regular text response
                 await whatsapp_client.send_text_message(from_number, response)
@@ -636,7 +649,20 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     if i > 0:
                         await asyncio.sleep(delay)
                     await whatsapp_client.send_text_message(from_number, msg)
-                response_text = " | ".join(messages)
+                    try:
+                        await save_conversation(
+                            phone_number=from_number,
+                            customer_name=contact_name,
+                            message_text=text_body if i == 0 else "",
+                            response_text=msg,
+                            message_type="image" if i == 0 else "text",
+                            message_id=message_id if i == 0 else None,
+                            direction="incoming"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not save sequence message {i}: {e}")
+                await increment_unread_count(from_number)
+                response_text = None
             elif response:
                 await whatsapp_client.send_text_message(from_number, response)
                 response_text = response
@@ -858,7 +884,20 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     if i > 0:
                         await asyncio.sleep(delay)
                     await whatsapp_client.send_text_message(from_number, msg)
-                response_text = " | ".join(messages)
+                    try:
+                        await save_conversation(
+                            phone_number=from_number,
+                            customer_name=contact_name,
+                            message_text=text_body if i == 0 else "",
+                            response_text=msg,
+                            message_type="audio" if i == 0 else "text",
+                            message_id=message_id if i == 0 else None,
+                            direction="incoming"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not save sequence message {i}: {e}")
+                await increment_unread_count(from_number)
+                response_text = None
             elif response:
                 await whatsapp_client.send_text_message(from_number, response)
                 response_text = response
