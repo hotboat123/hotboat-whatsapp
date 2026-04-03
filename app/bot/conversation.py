@@ -2188,7 +2188,37 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 self._reset_reservation_flow(conversation)
                 return confirm_message
             return f"{self.cart_manager.format_cart_message(cart)}\n\n{self._cart_needs_reservation_message(conversation)}"
-        
+
+        # If user sends a standalone menu digit (1-8), escape the date flow and act as menu
+        menu_num = self.faq_handler.is_menu_number(message_clean)
+        if menu_num is not None:
+            logger.info(f"Standalone menu digit '{message_clean}' detected during date flow - treating as menu option {menu_num}")
+            self._reset_reservation_flow(conversation)
+            language = conversation.get("metadata", {}).get("language", "es")
+            if menu_num == 1:
+                return self._ask_for_reservation_date(conversation, language)
+            elif menu_num == 2:
+                return self.faq_handler.get_response("precio", language)
+            elif menu_num == 3:
+                return self.faq_handler.get_response("caracteristicas", language)
+            elif menu_num == 4:
+                conversation["metadata"]["awaiting_extra_selection"] = True
+                return self.faq_handler.get_response("extras", language)
+            elif menu_num == 5:
+                return self.faq_handler.get_response("ubicación", language)
+            elif menu_num == 6:
+                conversation["metadata"]["awaiting_experience_menu"] = True
+                return {
+                    "type": "experiences_pdf",
+                    "text": get_text("experiences_menu", language)
+                }
+            elif menu_num == 7:
+                conversation["metadata"]["awaiting_packages_submenu"] = True
+                return get_text("accommodations_and_packages_menu", language)
+            elif menu_num == 8:
+                await self._notify_capitan_tomas(contact_name, phone_number, [], reason="call_request")
+                return self.faq_handler.get_response("llamar a tomas", language)
+
         parsed_date = self._parse_reservation_date(message_lower)
         if not parsed_date:
             return """Necesito la fecha exacta para continuar ⚓
