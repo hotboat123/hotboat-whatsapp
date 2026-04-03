@@ -1825,6 +1825,7 @@ async function sendQuickReply(menuOption) {
     }
     
     const menuNames = {
+        0: 'Saludo Tomás',
         1: 'Disponibilidad',
         2: 'Precios',
         3: 'Características',

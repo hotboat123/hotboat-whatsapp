@@ -388,8 +388,43 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         # Determine response based on menu option
         response_text = ""
         menu_option = request.menu_option
-        
-        if menu_option == 1:
+
+        if menu_option == 0:
+            # Saludo de Tomás — secuencia de 4 mensajes con pequeño delay entre cada uno
+            import asyncio
+            first_name = customer_name.split()[0] if customer_name else customer_name
+            sequence = [
+                f"Hola {first_name}! 👋",
+                "Cómo estas?",
+                "soy Tomás de Hotboat, soy humano 🙂",
+                "Cualquier duda aquí estamos para ayudar 🙌",
+            ]
+            for i, msg in enumerate(sequence):
+                if i > 0:
+                    await asyncio.sleep(1.5)
+                await whatsapp_client.send_text_message(to=phone_number, message=msg)
+                await save_conversation(
+                    phone_number=phone_number,
+                    customer_name=customer_name,
+                    message_text="",
+                    response_text=msg,
+                    message_type="text",
+                    direction="outgoing"
+                )
+                conversation["messages"].append({
+                    "role": "assistant",
+                    "content": msg,
+                    "timestamp": datetime.now(CHILE_TZ).isoformat()
+                })
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "menu_option": menu_option,
+                "message_sent": f"Secuencia de {len(sequence)} mensajes enviada",
+                "whatsapp_response": {}
+            }
+        elif menu_option == 1:
             # Disponibilidad y horarios
             response_text = conv_manager._ask_for_reservation_date(conversation, language)
         elif menu_option == 2:
@@ -406,7 +441,7 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             # Ubicación y reseñas
             response_text = faq_handler.get_response("ubicación", language)
         else:
-            raise HTTPException(status_code=400, detail="Invalid menu option (must be 1-5)")
+            raise HTTPException(status_code=400, detail="Invalid menu option (must be 0-5)")
         
         # Send message via WhatsApp
         result = await whatsapp_client.send_text_message(
