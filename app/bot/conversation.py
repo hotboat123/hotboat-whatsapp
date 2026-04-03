@@ -461,6 +461,17 @@ class ConversationManager:
                 logger.info("Gratitude detected - sending friendly reply")
                 language = metadata.get("language", "es")
                 response = get_text("thanks_response", language)
+            # PRIORITY 0.65: Kids / niños question — always answer regardless of active flow
+            elif "niño" in message_text.lower() or "niña" in message_text.lower() or "nino" in message_text.lower() or "nina" in message_text.lower() or "menor" in message_text.lower() or "menores" in message_text.lower() or "niños" in message_text.lower() or "niñas" in message_text.lower():
+                logger.info("Kids question detected - sending children info sequence")
+                response = {
+                    "type": "sequence",
+                    "messages": [
+                        "Sí, los niños lo pasan increíble 🎉",
+                        "Pagan desde los 6 años, a los menores no los consideres en el número de personas de la reserva 👍",
+                    ],
+                    "delay": 1.5
+                }
             # PRIORITY 0.7: Check if user wants to return to main menu
             elif self._is_menu_request(message_text):
                 logger.info("User requested main menu - clearing all flows")

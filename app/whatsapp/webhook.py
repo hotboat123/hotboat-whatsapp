@@ -385,6 +385,16 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 
                 # Store text response for database
                 response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "sequence":
+                # Send a sequence of messages with a small delay between each
+                import asyncio
+                messages = response.get("messages", [])
+                delay = response.get("delay", 1.5)
+                for i, msg in enumerate(messages):
+                    if i > 0:
+                        await asyncio.sleep(delay)
+                    await whatsapp_client.send_text_message(from_number, msg)
+                response_text = " | ".join(messages)
             elif response:
                 # Regular text response
                 await whatsapp_client.send_text_message(from_number, response)
@@ -619,6 +629,14 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         await asyncio.sleep(0.5)
                 
                 response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "sequence":
+                messages = response.get("messages", [])
+                delay = response.get("delay", 1.5)
+                for i, msg in enumerate(messages):
+                    if i > 0:
+                        await asyncio.sleep(delay)
+                    await whatsapp_client.send_text_message(from_number, msg)
+                response_text = " | ".join(messages)
             elif response:
                 await whatsapp_client.send_text_message(from_number, response)
                 response_text = response
@@ -833,6 +851,14 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         await asyncio.sleep(0.5)
                 
                 response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "sequence":
+                messages = response.get("messages", [])
+                delay = response.get("delay", 1.5)
+                for i, msg in enumerate(messages):
+                    if i > 0:
+                        await asyncio.sleep(delay)
+                    await whatsapp_client.send_text_message(from_number, msg)
+                response_text = " | ".join(messages)
             elif response:
                 await whatsapp_client.send_text_message(from_number, response)
                 response_text = response
