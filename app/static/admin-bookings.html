@@ -1290,7 +1290,6 @@ function initPagos(pagosArr){
 
 // ── Descuentos ────────────────────────────────────────────────────────────────
 const TIPOS_DESC = ['pack','cupon','otro'];
-let _descuentos = [];
 
 function initDescuentos(arr){
   _descuentos = Array.isArray(arr) ? arr.map(d=>({...d})) : [];
