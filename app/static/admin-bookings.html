@@ -1019,16 +1019,84 @@ async function openModal(id){
       </div>
       <div class="form-row">
         <div class="form-group"><label>Ciudad origen</label>
-          <input id="e-ciudad_origen" value="${r.ciudad_origen||''}"></div>
+          ${(()=>{
+            const CIUDADES=['Santiago','Concepción','Temuco','Valdivia','Pucón','Otro'];
+            const cur = r.ciudad_origen||'';
+            const isOtro = cur && !CIUDADES.slice(0,-1).includes(cur);
+            const selVal = isOtro ? 'Otro' : cur;
+            return `<select id="e-ciudad_origen_sel" onchange="
+              const v=this.value;
+              const inp=document.getElementById('e-ciudad_origen_txt');
+              inp.style.display=v==='Otro'?'block':'none';
+              document.getElementById('e-ciudad_origen').value=v==='Otro'?inp.value:v;">
+              <option value="">— seleccionar —</option>
+              ${CIUDADES.map(c=>`<option value="${c}"${selVal===c?' selected':''}>${c}</option>`).join('')}
+            </select>
+            <input id="e-ciudad_origen_txt" placeholder="Especificar ciudad..."
+              value="${isOtro?cur:''}"
+              oninput="document.getElementById('e-ciudad_origen').value=this.value"
+              style="margin-top:.4rem;display:${isOtro?'block':'none'}">
+            <input type="hidden" id="e-ciudad_origen" value="${cur}">`;
+          })()}
+        </div>
         <div class="form-group"><label>Como supieron</label>
-          <input id="e-como_supieron" value="${r.como_supieron||''}"></div>
+          ${(()=>{
+            const CANALES=['Instagram','Google','TikTok','Boca a boca','Otro'];
+            const cur = r.como_supieron||'';
+            const isOtro = cur && !CANALES.slice(0,-1).includes(cur);
+            const selVal = isOtro ? 'Otro' : cur;
+            return `<select id="e-como_supieron_sel" onchange="
+              const v=this.value;
+              const inp=document.getElementById('e-como_supieron_txt');
+              inp.style.display=v==='Otro'?'block':'none';
+              document.getElementById('e-como_supieron').value=v==='Otro'?inp.value:v;">
+              <option value="">— seleccionar —</option>
+              ${CANALES.map(c=>`<option value="${c}"${selVal===c?' selected':''}>${c}</option>`).join('')}
+            </select>
+            <input id="e-como_supieron_txt" placeholder="Especificar..."
+              value="${isOtro?cur:''}"
+              oninput="document.getElementById('e-como_supieron').value=this.value"
+              style="margin-top:.4rem;display:${isOtro?'block':'none'}">
+            <input type="hidden" id="e-como_supieron" value="${cur}">`;
+          })()}
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:.8rem">
+        <label>Clima del día <span style="color:var(--muted);font-size:.72rem;font-weight:400">(selecciona varios)</span></label>
+        ${(()=>{
+          const CLIMAS=['Sol','Lluvia','Nublado','Nieve','Mucho viento','Noche','Amanecer','Atardecer','Otro'];
+          const saved = (r.clima_del_dia||'').split(',').map(s=>s.trim()).filter(Boolean);
+          const hasOtroVal = saved.find(s=>!CLIMAS.slice(0,-1).includes(s));
+          const otroTxt = hasOtroVal || '';
+          const normalSaved = saved.filter(s=>CLIMAS.includes(s));
+          if(hasOtroVal && !normalSaved.includes('Otro')) normalSaved.push('Otro');
+          return `<div style="display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.4rem">
+            ${CLIMAS.map(c=>`<label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;cursor:pointer;font-weight:400">
+              <input type="checkbox" value="${c}" ${normalSaved.includes(c)?'checked':''}
+                onchange="syncClimaHidden()" style="accent-color:var(--gold)">
+              ${c}
+            </label>`).join('')}
+          </div>
+          <input id="e-clima_otro_txt" placeholder="Especificar otro clima..."
+            value="${otroTxt}"
+            oninput="syncClimaHidden()"
+            style="display:${normalSaved.includes('Otro')?'block':'none'};margin-top:.3rem">
+          <input type="hidden" id="e-clima_del_dia" value="${r.clima_del_dia||''}">`;
+        })()}
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Clima del dia</label>
-          <select id="e-clima_del_dia">
-            ${['','Soleado','Nublado','Lluvia','Viento','Parcial'].map(c=>`<option${r.clima_del_dia===c?' selected':''}>${c}</option>`).join('')}
-          </select>
-        </div>
+        <div class="form-group"><label>Nº Adultos</label>
+          <input type="number" min="0" id="e-num_adultos" value="${r.num_adultos||''}"></div>
+        <div class="form-group"><label>Nº Niños</label>
+          <input type="number" min="0" id="e-num_ninos" value="${r.num_ninos||''}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Nombres adultos</label>
+          <input id="e-nombre_adultos" placeholder="Ej: Juan, María..." value="${r.nombre_adultos||''}"></div>
+        <div class="form-group"><label>Nombres niños</label>
+          <input id="e-nombre_ninos" placeholder="Ej: Sofía (8), Lucas (5)..." value="${r.nombre_ninos||''}"></div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label>Tipo cliente</label>
           ${(()=>{
             const TIPOS=['Trabajador','Empresario','Otro'];
@@ -1170,6 +1238,10 @@ async function saveModal(id){
     ciudad_origen:g('e-ciudad_origen'),
     como_supieron:g('e-como_supieron'), clima_del_dia:g('e-clima_del_dia'),
     categoria_clientes:g('e-categoria_clientes'), tipo_clientes:g('e-tipo_clientes'),
+    num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
+    num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,
+    nombre_adultos: g('e-nombre_adultos')||null,
+    nombre_ninos:   g('e-nombre_ninos')||null,
     ingreso_reserva:ingresoReserva,
     ingreso_extras:extrasTotal,
     ingreso_total:ingresoReserva+extrasTotal-descTotal,
@@ -1849,6 +1921,29 @@ function addDescuento(){
 }
 
 // Recalculate costo_operativo_total when fijo or variable changes
+function syncClimaHidden(){
+  const boxes = document.querySelectorAll('#modal-body input[type="checkbox"]');
+  const vals = [];
+  boxes.forEach(cb=>{
+    if(!cb.checked) return;
+    if(cb.value==='Otro'){
+      const txt = document.getElementById('e-clima_otro_txt');
+      const otroInp = document.getElementById('e-clima_del_dia_otro_toggle');
+      if(txt) txt.style.display='block';
+      const v = txt ? txt.value.trim() : '';
+      if(v) vals.push(v); else vals.push('Otro');
+    } else {
+      vals.push(cb.value);
+    }
+  });
+  // Hide Otro text if unchecked
+  const otroCb = [...boxes].find(cb=>cb.value==='Otro');
+  const otroTxt = document.getElementById('e-clima_otro_txt');
+  if(otroTxt) otroTxt.style.display = otroCb?.checked ? 'block':'none';
+  const hidden = document.getElementById('e-clima_del_dia');
+  if(hidden) hidden.value = vals.join(', ');
+}
+
 function syncCostoTotal(){
   const fijo = +document.getElementById('e-costo_operativo_fijo')?.value||0;
   const varEl = document.getElementById('e-costo_operativo_variable');

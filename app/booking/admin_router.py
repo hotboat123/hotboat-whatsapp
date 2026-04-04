@@ -78,6 +78,7 @@ async def list_reservas(
                     SELECT id, source, source_id, appointment_id,
                            fecha, hora, nombre_cliente, email, telefono,
                            servicio, num_personas, num_adultos, num_ninos,
+                           nombre_adultos, nombre_ninos,
                            ingreso_reserva, ingreso_extras, ingreso_total,
                            costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
                            ciudad_origen, como_supieron, clima_del_dia,
@@ -151,6 +152,8 @@ class UpdateReservaRequest(BaseModel):
     tipo_clientes: Optional[str] = None
     num_adultos: Optional[int] = None
     num_ninos: Optional[int] = None
+    nombre_adultos: Optional[str] = None
+    nombre_ninos: Optional[str] = None
     ingreso_reserva: Optional[float] = None
     ingreso_extras: Optional[float] = None
     ingreso_total: Optional[float] = None
