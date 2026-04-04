@@ -218,6 +218,69 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Create reservation ────────────────────────────────────────────────────────
+
+@admin_router.post("/api/admin/reservas")
+async def create_reserva(x_admin_key: str = Header(""), request: Request = None):
+    _check_auth(x_admin_key)
+    try:
+        from psycopg.types.json import Jsonb as PgJson
+        body = await request.json()
+        fecha = body.get("fecha")
+        hora = body.get("hora")
+        nombre = (body.get("nombre_cliente") or "").strip()
+        if not fecha or not nombre:
+            raise HTTPException(status_code=400, detail="fecha y nombre_cliente son obligatorios")
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    INSERT INTO {TABLE}
+                    (source, fecha, hora, nombre_cliente, telefono, email,
+                     servicio, num_personas, ingreso_reserva, ingreso_extras, ingreso_total,
+                     costo_operativo_fijo, status, extras_json, descuentos, pagos, created_at, updated_at)
+                    VALUES ('manual', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '{{}}', '[]', '[]', NOW(), NOW())
+                    RETURNING id
+                """, (fecha, hora or None, nombre,
+                      body.get("telefono") or None, body.get("email") or None,
+                      body.get("servicio") or "HotBoat Trip",
+                      body.get("num_personas") or None,
+                      float(body.get("ingreso_reserva") or 0),
+                      float(body.get("ingreso_extras") or 0),
+                      float(body.get("ingreso_total") or body.get("ingreso_reserva") or 0),
+                      float(body.get("costo_operativo_fijo") or 18000),
+                      body.get("status") or "confirmed"))
+                new_id = cur.fetchone()[0]
+                conn.commit()
+        return {"ok": True, "id": new_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating reserva: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Delete reservation ────────────────────────────────────────────────────────
+
+@admin_router.delete("/api/admin/reservas/{rid}")
+async def delete_reserva(rid: int, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT nombre_cliente, fecha FROM {TABLE} WHERE id=%s", (rid,))
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Not found")
+                cur.execute(f"DELETE FROM {TABLE} WHERE id=%s", (rid,))
+                conn.commit()
+        return {"ok": True, "deleted": rid}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting reserva {rid}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Stats ──────────────────────────────────────────────────────────────────────
 
 @admin_router.get("/api/admin/stats")
@@ -488,19 +551,41 @@ async def sync_tables(x_admin_key: str = Header("")):
                      ing_res, ing_ext, ing_total, costo_fijo, costo_var, costo_total,
                      ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
                      status, extras, created) = row
-                    cur.execute(f"SELECT id FROM {TABLE} WHERE source='sheets' AND source_id=%s", (str(rid),))
+                    # Check existing: first by sheets source_id, then by appointment_id (any source)
+                    existing = None
+                    cur.execute(f"SELECT id, source FROM {TABLE} WHERE source='sheets' AND source_id=%s", (str(rid),))
                     existing = cur.fetchone()
+                    if not existing and appt_id:
+                        cur.execute(f"SELECT id, source FROM {TABLE} WHERE appointment_id=%s LIMIT 1", (str(appt_id),))
+                        existing = cur.fetchone()
+
                     if existing:
+                        # Update rich fields regardless of source
                         cur.execute(f"""
                             UPDATE {TABLE}
-                            SET extras_json=%s, ingreso_extras=%s, ingreso_total=%s,
-                                num_adultos=%s, num_ninos=%s, ciudad_origen=%s,
-                                como_supieron=%s, clima_del_dia=%s, categoria_clientes=%s,
-                                tipo_clientes=%s, tiene_cruce=%s, status=%s, updated_at=NOW()
+                            SET extras_json=COALESCE(%s, extras_json),
+                                ingreso_extras=COALESCE(%s, ingreso_extras),
+                                ingreso_total=COALESCE(%s, ingreso_total),
+                                num_adultos=COALESCE(%s, num_adultos),
+                                num_ninos=COALESCE(%s, num_ninos),
+                                ciudad_origen=COALESCE(%s, ciudad_origen),
+                                como_supieron=COALESCE(%s, como_supieron),
+                                clima_del_dia=COALESCE(%s, clima_del_dia),
+                                categoria_clientes=COALESCE(%s, categoria_clientes),
+                                tipo_clientes=COALESCE(%s, tipo_clientes),
+                                tiene_cruce=COALESCE(%s, tiene_cruce),
+                                costo_operativo_variable=COALESCE(%s, costo_operativo_variable),
+                                costo_operativo_total=COALESCE(%s, costo_operativo_total),
+                                updated_at=NOW()
                             WHERE id=%s
-                        """, (PgJson(extras or {}), float(ing_ext or 0), float(ing_total or 0),
+                        """, (PgJson(extras) if extras else None,
+                              float(ing_ext) if ing_ext else None,
+                              float(ing_total) if ing_total else None,
                               num_adultos, num_ninos, ciudad, como_sup, clima, categoria,
-                              tipo_cli, tiene_cruce, status, existing[0]))
+                              tipo_cli, tiene_cruce,
+                              float(costo_var) if costo_var else None,
+                              float(costo_total) if costo_total else None,
+                              existing[0]))
                         updated_reservas += 1
                     else:
                         cur.execute(f"""

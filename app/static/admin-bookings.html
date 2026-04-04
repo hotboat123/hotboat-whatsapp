@@ -301,6 +301,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <input type="number" id="year-sel" value="2026" min="2024" max="2030"
       style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;width:80px;font-size:.85rem;outline:none"
       onchange="reloadAll()">
+    <button class="sync-btn" onclick="openNewReservaModal()" style="background:var(--green);margin-right:.3rem">+ Nueva reserva</button>
     <button class="sync-btn" onclick="doSync()" id="sync-btn">🔄 Sincronizar</button>
   </div>
 
@@ -662,7 +663,7 @@ function renderCal(){
       return `<div class="cal-pill" style="background:${col}22;color:${col}" onclick="event.stopPropagation();openModal(${r.id})">${r.nombre_cliente||'Sin nombre'}</div>`;
     }).join('');
     const more = rsvs.length>3?`<div style="font-size:.6rem;color:var(--muted)">+${rsvs.length-3} más</div>`:'';
-    html+=`<div class="cal-day${isToday?' today':''}" onclick="showDayReservas('${dateStr}')">
+    html+=`<div class="cal-day${isToday?' today':''}" onclick="${rsvs.length?`showDayReservas('${dateStr}')`:`openNewReservaModal('${dateStr}')`}">
       <div class="cal-day-num">${d}${rsvs.length?` <span style="color:var(--gold);font-size:.6rem">(${rsvs.length})</span>`:''}</div>
       ${pills}${more}
     </div>`;
@@ -954,7 +955,8 @@ async function openModal(id){
       </div>
       <div id="modal-save-err" style="color:var(--red);font-size:.8rem;display:none;margin-top:.5rem"></div>
       <div class="modal-actions">
-        <button class="btn-del" onclick="closeModal()">Cerrar</button>
+        <button class="btn-del" onclick="deleteReserva(${id},'${(r.nombre_cliente||'esta reserva').replace(/'/g,"\\'")}')">🗑 Eliminar</button>
+        <button class="btn-del" onclick="closeModal()" style="margin-left:auto">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
     // Call these AFTER setting innerHTML
@@ -1333,6 +1335,97 @@ function addPago(){
 function initPagos(pagosArr){
   _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p})) : [];
   renderPagos();
+}
+
+// ── Create / Delete reservas ──────────────────────────────────────────────────
+
+function openNewReservaModal(prefillDate){
+  document.getElementById('modal-title').textContent = 'Nueva reserva';
+  const today = new Date().toISOString().substring(0,10);
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Fecha *</label>
+        <input type="date" id="nr-fecha" value="${prefillDate||today}"></div>
+      <div class="form-group"><label>Hora</label>
+        <input type="time" id="nr-hora" value="10:00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Nombre cliente *</label>
+        <input id="nr-nombre" placeholder="Nombre completo"></div>
+      <div class="form-group"><label>Teléfono</label>
+        <input id="nr-telefono" placeholder="+569..."></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Email</label>
+        <input id="nr-email" placeholder="email@..."></div>
+      <div class="form-group"><label>Personas</label>
+        <input type="number" id="nr-personas" min="1" value="2"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Servicio</label>
+        <input id="nr-servicio" value="HotBoat Trip"></div>
+      <div class="form-group"><label>Estado</label>
+        <select id="nr-status" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem .8rem;font-size:.85rem;outline:none">
+          <option value="confirmed">Confirmada</option>
+          <option value="pending">Pendiente</option>
+          <option value="solicitud">Solicitud</option>
+          <option value="cancelled">Cancelada</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Ingreso reserva ($)</label>
+        <input type="number" id="nr-ingreso" min="0" value="0" oninput="document.getElementById('nr-total').value=this.value"></div>
+      <div class="form-group"><label>Total ($)</label>
+        <input type="number" id="nr-total" min="0" value="0" style="color:var(--gold);font-weight:700"></div>
+    </div>
+    <div id="nr-err" style="color:var(--red);font-size:.8rem;display:none;margin-bottom:.5rem"></div>
+    <div class="modal-actions">
+      <button class="btn-del" onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="submitNewReserva()">Crear reserva</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('nr-nombre')?.focus(), 100);
+}
+
+async function submitNewReserva(){
+  const gv = id => document.getElementById(id)?.value || '';
+  const fecha = gv('nr-fecha');
+  const nombre = gv('nr-nombre').trim();
+  const errEl = document.getElementById('nr-err');
+  if(!fecha || !nombre){
+    if(errEl){ errEl.textContent='Fecha y nombre son obligatorios'; errEl.style.display=''; }
+    return;
+  }
+  try{
+    const d = await api('/api/admin/reservas', {method:'POST', body: JSON.stringify({
+      fecha, hora: gv('nr-hora')||null,
+      nombre_cliente: nombre, telefono: gv('nr-telefono')||null,
+      email: gv('nr-email')||null,
+      servicio: gv('nr-servicio')||'HotBoat Trip',
+      num_personas: +gv('nr-personas')||null,
+      ingreso_reserva: +gv('nr-ingreso')||0,
+      ingreso_total: +gv('nr-total')||0,
+      status: gv('nr-status')||'confirmed',
+    })});
+    showToast(`Reserva creada (ID ${d.id}) ✓`);
+    closeModal();
+    await reloadAll();
+    openModal(d.id);   // open the new reservation for editing
+  }catch(e){
+    if(errEl){ errEl.textContent='Error: '+e.message; errEl.style.display=''; }
+  }
+}
+
+async function deleteReserva(id, nombre){
+  if(!confirm(`¿Eliminar la reserva de "${nombre}"?\nEsta acción no se puede deshacer.`)) return;
+  try{
+    await api(`/api/admin/reservas/${id}`, {method:'DELETE'});
+    showToast(`Reserva de "${nombre}" eliminada`);
+    closeModal();
+    await reloadAll();
+    loadLista();
+  }catch(e){ showToast('Error: '+e.message); }
 }
 
 // ── Precios Extras tab ────────────────────────────────────────────────────────

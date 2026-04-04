@@ -100,19 +100,40 @@ async def _run_auto_sync():
                          ing_res, ing_ext, ing_total, costo_fijo, costo_var, costo_total,
                          ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
                          status, extras, created) = row
+                        # Check existing: sheets source_id first, then any source by appointment_id
+                        existing = None
                         cur.execute(f"SELECT id FROM {TABLE} WHERE source='sheets' AND source_id=%s", (str(rid),))
                         existing = cur.fetchone()
+                        if not existing and appt_id:
+                            cur.execute(f"SELECT id FROM {TABLE} WHERE appointment_id=%s LIMIT 1", (str(appt_id),))
+                            existing = cur.fetchone()
+
                         if existing:
                             cur.execute(f"""
                                 UPDATE {TABLE}
-                                SET extras_json=%s, ingreso_extras=%s, ingreso_total=%s,
-                                    num_adultos=%s, num_ninos=%s, ciudad_origen=%s,
-                                    como_supieron=%s, clima_del_dia=%s, categoria_clientes=%s,
-                                    tipo_clientes=%s, tiene_cruce=%s, status=%s, updated_at=NOW()
+                                SET extras_json=COALESCE(%s, extras_json),
+                                    ingreso_extras=COALESCE(%s, ingreso_extras),
+                                    ingreso_total=COALESCE(%s, ingreso_total),
+                                    num_adultos=COALESCE(%s, num_adultos),
+                                    num_ninos=COALESCE(%s, num_ninos),
+                                    ciudad_origen=COALESCE(%s, ciudad_origen),
+                                    como_supieron=COALESCE(%s, como_supieron),
+                                    clima_del_dia=COALESCE(%s, clima_del_dia),
+                                    categoria_clientes=COALESCE(%s, categoria_clientes),
+                                    tipo_clientes=COALESCE(%s, tipo_clientes),
+                                    tiene_cruce=COALESCE(%s, tiene_cruce),
+                                    costo_operativo_variable=COALESCE(%s, costo_operativo_variable),
+                                    costo_operativo_total=COALESCE(%s, costo_operativo_total),
+                                    updated_at=NOW()
                                 WHERE id=%s
-                            """, (PgJson(extras or {}), float(ing_ext or 0), float(ing_total or 0),
+                            """, (PgJson(extras) if extras else None,
+                                  float(ing_ext) if ing_ext else None,
+                                  float(ing_total) if ing_total else None,
                                   num_adultos, num_ninos, ciudad, como_sup, clima, categoria,
-                                  tipo_cli, tiene_cruce, status, existing[0]))
+                                  tipo_cli, tiene_cruce,
+                                  float(costo_var) if costo_var else None,
+                                  float(costo_total) if costo_total else None,
+                                  existing[0]))
                             updated_reservas += 1
                         else:
                             cur.execute(f"""
