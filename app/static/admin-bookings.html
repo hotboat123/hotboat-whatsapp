@@ -670,7 +670,7 @@ function renderCal(){
     const dt=new Date(calYear,calMonth,d);
     const isToday = dt.getTime()===today.getTime();
     const rsvs=byDate[dateStr]||[];
-    const pills = rsvs.slice(0,3).map(r=>{
+    const pills = rsvs.slice().sort((a,b)=>(a.hora||'').localeCompare(b.hora||'')).slice(0,3).map(r=>{
       const col = statusColor(r.status);
       const firstName = (r.nombre_cliente||'Sin nombre').trim().split(/\s+/)[0];
       const hora = r.hora ? r.hora.substring(0,5) : '';
