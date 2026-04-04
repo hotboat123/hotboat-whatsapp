@@ -108,6 +108,27 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .cal-pill-sub{display:flex;align-items:center;gap:.25rem;font-size:.58rem;opacity:.85;margin-top:.05rem;flex-wrap:nowrap;overflow:hidden}
 .cal-pill-icons{letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:clip}
 
+/* Client history cards */
+.ch-header{display:flex;flex-direction:column;gap:.2rem;margin-bottom:1.2rem;padding-bottom:.9rem;border-bottom:1px solid var(--border)}
+.ch-name{font-size:1.15rem;font-weight:700}
+.ch-meta{font-size:.8rem;color:var(--muted)}
+.ch-kpis{display:flex;gap:1rem;margin-top:.5rem;flex-wrap:wrap}
+.ch-kpi{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:.35rem .7rem;text-align:center}
+.ch-kpi .v{font-weight:700;font-size:.95rem;color:var(--gold)}
+.ch-kpi .l{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.rsv-card{border:1px solid var(--border);border-radius:10px;margin-bottom:.8rem;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.rsv-card:hover{border-color:var(--gold)}
+.rsv-card-hdr{display:flex;align-items:center;gap:.5rem;padding:.6rem .85rem;background:rgba(255,255,255,.03);flex-wrap:wrap}
+.rsv-card-hdr .rdate{font-weight:700;font-size:.88rem}
+.rsv-card-hdr .rtime{font-size:.82rem;color:var(--muted)}
+.rsv-card-body{padding:.7rem .85rem;display:grid;grid-template-columns:1fr 1fr;gap:.35rem .8rem;font-size:.8rem}
+.rsv-row{display:flex;align-items:flex-start;gap:.3rem;color:var(--muted);line-height:1.4}
+.rsv-row strong{color:var(--text);font-weight:500}
+.rsv-row-full{grid-column:1/-1;display:flex;align-items:flex-start;gap:.3rem;color:var(--muted);line-height:1.4}
+.rsv-row-full strong{color:var(--text);font-weight:500}
+.rsv-tag-row{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.3rem;margin:.1rem 0}
+.rsv-tag{background:rgba(255,255,255,.06);border-radius:4px;padding:.1rem .45rem;font-size:.75rem}
+
 /* Modal */
 #overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;
   align-items:center;justify-content:center;padding:1rem}
@@ -792,23 +813,85 @@ async function loadClients(){
   }
 }
 function openClientModal(tel){
-  const rsvs=allReservas.filter(r=>r.telefono===tel);
+  const rsvs = allReservas.filter(r=>r.telefono===tel)
+    .slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   if(!rsvs.length) return;
-  const c=rsvs[0];
-  const rows=rsvs.map(r=>`
-    <tr onclick="openModal(${r.id})" style="cursor:pointer">
-      <td>${r.fecha}</td><td>${r.hora||'-'}</td>
-      <td>${fmtMoney(r.ingreso_total)}</td><td>${badge(r.status)}</td>
-    </tr>`).join('');
-  document.getElementById('modal-title').textContent=c.nombre_cliente||c.telefono;
+  const c = rsvs[0];
+
+  const totalGastado = rsvs.reduce((s,r)=>s+(+r.ingreso_total||0),0);
+  const totalPersonas = rsvs.reduce((s,r)=>s+(+r.num_personas||0),0);
+
+  const cards = rsvs.map(r=>{
+    const hora = r.hora ? r.hora.substring(0,5) : '-';
+
+    // Extras
+    const extrasHtml = (()=>{
+      const ej = r.extras_json;
+      if(!ej || typeof ej!=='object' || !Object.keys(ej).length) return '';
+      const tags = Object.entries(ej).map(([k,v])=>{
+        const qty = typeof v==='object'&&v!==null ? (+v.qty||1) : (+v||1);
+        const cat = EXTRAS_CATALOG.find(e=>e.key===k);
+        const icon = cat ? (cat.icon||defaultExtraIcon(k)) : defaultExtraIcon(k);
+        const name = cat ? cat.name : k.replace(/_/g,' ');
+        return `<span class="rsv-tag">${icon} ${name}${qty>1?' x'+qty:''}</span>`;
+      }).join('');
+      return `<div class="rsv-tag-row">${tags}</div>`;
+    })();
+
+    // Descuentos
+    const descHtml = (()=>{
+      const ds = r.descuentos;
+      if(!Array.isArray(ds)||!ds.length) return '';
+      const tags = ds.map(d=>`<span class="rsv-tag" style="color:var(--orange)">🏷 ${d.tipo||''} ${fmtMoney(d.amount)}${d.observacion?' · '+d.observacion:''}</span>`).join('');
+      return `<div class="rsv-tag-row">${tags}</div>`;
+    })();
+
+    // Pagos
+    const pagosHtml = (()=>{
+      const ps = r.pagos;
+      if(!Array.isArray(ps)||!ps.length) return '';
+      const tags = ps.map(p=>`<span class="rsv-tag" style="color:#4caf50">💳 ${p.method||p.tipo||''} ${fmtMoney(p.amount)}</span>`).join('');
+      return `<div class="rsv-tag-row">${tags}</div>`;
+    })();
+
+    const row = (icon,label,val) => val
+      ? `<div class="rsv-row"><span>${icon}</span><span><strong>${label}</strong> ${val}</span></div>` : '';
+
+    return `<div class="rsv-card" onclick="openModal(${r.id})">
+      <div class="rsv-card-hdr">
+        <span class="rdate">📅 ${r.fecha||'-'}</span>
+        <span class="rtime">⏰ ${hora}</span>
+        ${badge(r.status)}
+        <span style="margin-left:auto;font-weight:700;color:var(--gold)">${fmtMoney(r.ingreso_total)}</span>
+      </div>
+      <div class="rsv-card-body">
+        ${row('👥','Personas:',r.num_personas||'')}
+        ${row('🌤','Clima:',r.clima_del_dia||'')}
+        ${row('📍','Ciudad:',r.ciudad_origen||'')}
+        ${row('💬','Cómo supieron:',r.como_supieron||'')}
+        ${extrasHtml}
+        ${descHtml}
+        ${pagosHtml}
+        ${r.observaciones?`<div class="rsv-row-full">📝 <strong>Obs:</strong> ${r.observaciones}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const waBtn = document.getElementById('wa-contact-btn');
+  if(waBtn) waBtn.style.display='none';
+
+  document.getElementById('modal-title').textContent = c.nombre_cliente||c.telefono;
   document.getElementById('modal-body').innerHTML=`
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">
-      📱 ${c.telefono||'-'} · 📧 ${c.email||'-'}
-    </p>
-    <table style="width:100%;border-collapse:collapse">
-      <thead><tr>${['Fecha','Hora','Total','Estado'].map(h=>`<th style="text-align:left;padding:.5rem;font-size:.75rem;color:var(--muted)">${h}</th>`).join('')}</tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+    <div class="ch-header">
+      <div class="ch-meta">📱 ${c.telefono||'-'}${c.email?' · 📧 '+c.email:''}</div>
+      <div class="ch-kpis">
+        <div class="ch-kpi"><div class="v">${rsvs.length}</div><div class="l">Reservas</div></div>
+        <div class="ch-kpi"><div class="v">${fmtMoney(totalGastado)}</div><div class="l">Total gastado</div></div>
+        <div class="ch-kpi"><div class="v">${totalPersonas}</div><div class="l">Personas total</div></div>
+        <div class="ch-kpi"><div class="v">${rsvs[rsvs.length-1]?.fecha||'-'}</div><div class="l">Primera reserva</div></div>
+      </div>
+    </div>
+    <div>${cards}</div>`;
   document.getElementById('overlay').classList.add('show');
 }
 
