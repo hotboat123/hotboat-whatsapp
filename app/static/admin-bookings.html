@@ -974,7 +974,7 @@ async function openModal(id){
       if(phone){
         const firstName = (r.nombre_cliente||'').trim().split(/\s+/)[0];
         const hora = (r.hora||'').substring(0,5);  // "HH:MM"
-        const msg = `Hola ${firstName}! Cómo estas? Hoy tienes reserva a las ${hora}. Cualquier duda aquí estamos para ayudar, nos vemos!`;
+        const msg = `Hola ${firstName}! Cómo estas? Tomás de HotBoat por Aquí😊. Hoy tienes reserva a las ${hora}. Cualquier duda aquí estamos para ayudar, nos vemos!`;
         waBtn.href = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
         waBtn.style.display = '';
       } else {
