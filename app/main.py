@@ -4,6 +4,8 @@ FastAPI main application - Updated 2026-03-08
 from fastapi import FastAPI, Request, Response, HTTPException, Query, UploadFile, Form
 from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
+import asyncio
 import logging
 import httpx
 
@@ -43,11 +45,132 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # Get settings
 settings = get_settings()
 
+# ── Auto-sync background task ──────────────────────────────────────────────────
+SYNC_INTERVAL_MINUTES = 30
+
+async def _run_auto_sync():
+    """Run all_appointments sync every SYNC_INTERVAL_MINUTES minutes."""
+    from app.db.connection import get_connection
+    from app.booking.admin_router import TABLE
+    import re
+
+    await asyncio.sleep(60)  # Wait 1 min after startup before first sync
+    while True:
+        try:
+            logger.info(f"🔄 Auto-sync: sincronizando all_appointments...")
+            from psycopg.types.json import Jsonb as PgJson
+
+            def normalize_phone(ph):
+                if not ph: return None
+                ph = re.sub(r"[^\d+]", "", str(ph))
+                if ph.startswith("+"): return ph
+                if len(ph) == 9: return f"+56{ph}"
+                if len(ph) == 11 and ph.startswith("56"): return f"+{ph}"
+                return ph
+
+            inserted_book = 0
+            inserted_hb = 0
+            status_updated = 0
+
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(f"SELECT MAX(fecha) FROM {TABLE} WHERE source='sheets'")
+                    cutoff = cur.fetchone()[0]
+                    if not cutoff:
+                        logger.warning("Auto-sync: no sheets cutoff found, skipping")
+                        await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
+                        continue
+
+                    # Sync booknetic
+                    cur.execute("""
+                        SELECT id, customer_name, customer_email, starts_at, status, raw, created_at
+                        FROM booknetic_appointments WHERE starts_at::date > %s
+                    """, (cutoff,))
+                    for row in cur.fetchall():
+                        bid, nombre, email, starts_at, status, raw, created = row
+                        raw = raw or {}
+                        cur.execute(f"SELECT id, status FROM {TABLE} WHERE source='booknetic' AND source_id=%s", (str(bid),))
+                        existing = cur.fetchone()
+                        if existing:
+                            if status and status != existing[1]:
+                                cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s", (status, existing[0]))
+                                status_updated += 1
+                        else:
+                            phone = normalize_phone(raw.get("phone") or raw.get("customer_phone") or raw.get("cf_phone"))
+                            fecha = starts_at.date() if hasattr(starts_at, 'date') else starts_at
+                            hora = starts_at.strftime("%H:%M") if hasattr(starts_at, 'strftime') else "10:00"
+                            num_p = raw.get("num_people") or raw.get("persons") or 2
+                            total = float(raw.get("total_price") or raw.get("total") or 0)
+                            cur.execute(f"""
+                                INSERT INTO {TABLE}
+                                (source,source_id,booking_ref,fecha,hora,nombre_cliente,email,telefono,servicio,num_personas,ingreso_total,status,created_at)
+                                VALUES ('booknetic',%s,%s,%s,%s,%s,%s,%s,'HotBoat Booknetic',%s,%s,%s,NOW())
+                                ON CONFLICT DO NOTHING
+                            """, (str(bid), f"BK-{bid}", fecha, hora, nombre, email, phone, str(num_p), total, status or "confirmed"))
+                            inserted_book += 1
+
+                    # Sync hotboat_web
+                    cur.execute("""
+                        SELECT booking_ref, customer_name, customer_email, customer_phone,
+                               booking_date, booking_time, num_people,
+                               subtotal, extras_total, total_price, extras, status,
+                               payment_id, payment_status, notes, created_at
+                        FROM hotboat_appointments
+                        WHERE booking_date > %s AND status != 'solicitud'
+                    """, (cutoff,))
+                    for row in cur.fetchall():
+                        (ref, nombre, email, phone, fecha, hora, num_p,
+                         sub, ext, total, extras, status, pay_id, pay_st, notes, created) = row
+                        cur.execute(f"SELECT id, status FROM {TABLE} WHERE source='hotboat_web' AND source_id=%s", (ref,))
+                        existing = cur.fetchone()
+                        if existing:
+                            if status and status != existing[1]:
+                                cur.execute(f"UPDATE {TABLE} SET status=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
+                                            (status, pay_st, existing[0]))
+                                status_updated += 1
+                        else:
+                            cur.execute(f"""
+                                INSERT INTO {TABLE}
+                                (source,source_id,booking_ref,fecha,hora,nombre_cliente,email,telefono,
+                                 servicio,num_personas,ingreso_base,ingreso_extras,ingreso_total,
+                                 status,extras_json,observaciones,payment_id,payment_status,created_at)
+                                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                                ON CONFLICT DO NOTHING
+                            """, (ref, ref, fecha, hora, nombre, email, normalize_phone(phone),
+                                  f"HotBoat Web ({num_p}p)", str(num_p),
+                                  float(sub or 0), float(ext or 0), float(total or 0),
+                                  status, PgJson(extras or {}), notes, pay_id, pay_st))
+                            inserted_hb += 1
+
+                    conn.commit()
+
+            logger.info(f"✅ Auto-sync OK: +{inserted_book} booknetic, +{inserted_hb} web, {status_updated} estados actualizados")
+        except Exception as e:
+            logger.error(f"❌ Auto-sync error: {e}")
+
+        await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start background tasks on startup, cancel on shutdown."""
+    sync_task = asyncio.create_task(_run_auto_sync())
+    logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
+    yield
+    sync_task.cancel()
+    try:
+        await sync_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("🛑 Auto-sync detenido")
+
+
 # Create FastAPI app
 app = FastAPI(
     title="HotBoat WhatsApp Bot",
     description="Bot de WhatsApp para Hot Boat Chile",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Add middleware to prevent caching of static files
