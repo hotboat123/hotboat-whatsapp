@@ -554,8 +554,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 <!-- MODAL -->
 <div id="overlay" onclick="closeModal(event)">
 <div class="modal" id="modal-box">
-  <button class="modal-close" onclick="closeModal()">✕</button>
-  <h2 id="modal-title">Reserva</h2>
+  <div style="display:flex;align-items:flex-start;gap:.6rem;margin-bottom:1rem">
+    <h2 id="modal-title" style="flex:1;margin-bottom:0">Reserva</h2>
+    <a id="wa-contact-btn" href="#" target="_blank" rel="noopener"
+      style="display:none;background:#25d366;color:#fff;border:none;border-radius:8px;
+             padding:.38rem .85rem;font-size:.82rem;font-weight:700;text-decoration:none;
+             white-space:nowrap;line-height:1.5;flex-shrink:0">
+      💬 Contactar
+    </a>
+    <button class="modal-close" onclick="closeModal()" style="position:static;top:auto;right:auto">✕</button>
+  </div>
   <div id="modal-body"></div>
 </div>
 </div>
@@ -959,6 +967,21 @@ async function openModal(id){
         <button class="btn-del" onclick="closeModal()" style="margin-left:auto">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
+    // WhatsApp contact button
+    const waBtn = document.getElementById('wa-contact-btn');
+    if(waBtn){
+      const phone = (r.telefono||'').replace(/[^\d]/g,'');
+      if(phone){
+        const firstName = (r.nombre_cliente||'').trim().split(/\s+/)[0];
+        const hora = (r.hora||'').substring(0,5);  // "HH:MM"
+        const msg = `Hola ${firstName}! Cómo estas? Hoy tienes reserva a las ${hora}. Cualquier duda aquí estamos para ayudar, nos vemos!`;
+        waBtn.href = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+        waBtn.style.display = '';
+      } else {
+        waBtn.style.display = 'none';
+      }
+    }
+
     // Call these AFTER setting innerHTML
     initPagos(r.pagos||[]);
     initDescuentos(r.descuentos||[]);
@@ -971,6 +994,8 @@ function closeModal(e){
   if(e&&e.target!==document.getElementById('overlay')) return;
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('modal-body').innerHTML='';
+  const waBtn = document.getElementById('wa-contact-btn');
+  if(waBtn) waBtn.style.display='none';
 }
 async function saveModal(id){
   const g=id=>document.getElementById(id)?.value;
