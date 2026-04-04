@@ -363,7 +363,7 @@ async def create_solicitud(request: SolicitudRequest):
 def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):
     """Insert a new hotboat booking into all_appointments immediately."""
     from app.db.connection import get_connection
-    from psycopg2.extras import Json as PgJson
+    from psycopg.types.json import Jsonb as PgJson
     import re
     with get_connection() as conn:
         with conn.cursor() as cur:

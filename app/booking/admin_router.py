@@ -168,7 +168,7 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
     try:
-        from psycopg2.extras import Json as PgJson
+        from psycopg.types.json import Jsonb as PgJson
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # Convert dict/list fields for JSONB
@@ -441,7 +441,7 @@ async def update_dp(request: Request, x_admin_key: str = Header("")):
 async def sync_tables(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     try:
-        from psycopg2.extras import Json as PgJson
+        from psycopg.types.json import Jsonb as PgJson
 
         def normalize_phone(ph):
             if not ph: return None
