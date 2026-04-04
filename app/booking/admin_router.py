@@ -735,14 +735,15 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                            id,
                            raw->>'Extra' AS name,
                            raw->>'Precio' AS precio,
-                           raw->>'costo' AS costo
+                           raw->>'costo' AS costo,
+                           COALESCE(raw->>'icon', '') AS icon
                     FROM "Precios Extras"
                     WHERE raw->>'Extra' IS NOT NULL
                     ORDER BY raw->>'Extra', updated_at DESC
                 """)
                 extras = []
                 seen_keys: set = set()
-                for row_id, name, precio, costo in cur.fetchall():
+                for row_id, name, precio, costo, icon in cur.fetchall():
                     key = _slugify_extra(name)
                     if key in seen_keys:
                         continue
@@ -753,6 +754,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                         "name": name,
                         "price": _parse_clp(precio),
                         "cost": _parse_clp(costo) if costo else 0,
+                        "icon": icon or "",
                     })
         extras.sort(key=lambda x: x["name"])
         return {"extras": extras}
@@ -769,6 +771,7 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         name = body.get("name", "").strip()
         price = int(body.get("price") or 0)
         cost = int(body.get("cost") or 0)
+        icon = body.get("icon", "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
         margen = f"{round(price / cost * 100)}%" if cost else ""
@@ -782,10 +785,11 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                         || jsonb_build_object('Precio', %s::text)
                         || jsonb_build_object('costo', %s::text)
                         || jsonb_build_object('margen', %s::text)
-                        || jsonb_build_object('Utilidad', %s::text),
+                        || jsonb_build_object('Utilidad', %s::text)
+                        || jsonb_build_object('icon', %s::text),
                         updated_at = NOW()
                     WHERE id = %s
-                """, (name, str(price), str(cost), margen, str(utilidad), extra_id))
+                """, (name, str(price), str(cost), margen, str(utilidad), icon, extra_id))
                 conn.commit()
         return {"ok": True}
     except HTTPException:

@@ -102,8 +102,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .cal-day.today{border-color:var(--gold)}
 .cal-day-num{font-size:.72rem;color:var(--muted);margin-bottom:.2rem}
 .cal-day.today .cal-day-num{color:var(--gold);font-weight:700}
-.cal-pill{font-size:.62rem;padding:.15rem .35rem;border-radius:4px;margin:.1rem 0;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.cal-pill{font-size:.62rem;padding:.18rem .38rem;border-radius:5px;margin:.12rem 0;
+  cursor:pointer;line-height:1.35;overflow:hidden}
+.cal-pill-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.cal-pill-sub{display:flex;align-items:center;gap:.25rem;font-size:.58rem;opacity:.85;margin-top:.05rem;flex-wrap:nowrap;overflow:hidden}
+.cal-pill-icons{letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:clip}
 
 /* Modal */
 #overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;
@@ -393,6 +396,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <table class="ec-table">
           <thead>
             <tr>
+              <th>Ícono</th>
               <th>Nombre extra</th>
               <th style="text-align:right">Precio venta</th>
               <th style="text-align:right">Costo</th>
@@ -401,7 +405,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th></th>
             </tr>
           </thead>
-          <tbody id="ec-tbody"><tr><td colspan="6" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="ec-tbody"><tr><td colspan="7" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -667,8 +671,16 @@ function renderCal(){
     const isToday = dt.getTime()===today.getTime();
     const rsvs=byDate[dateStr]||[];
     const pills = rsvs.slice(0,3).map(r=>{
-      const col=statusColor(r.status);
-      return `<div class="cal-pill" style="background:${col}22;color:${col}" onclick="event.stopPropagation();openModal(${r.id})">${r.nombre_cliente||'Sin nombre'}</div>`;
+      const col = statusColor(r.status);
+      const firstName = (r.nombre_cliente||'Sin nombre').trim().split(/\s+/)[0];
+      const hora = r.hora ? r.hora.substring(0,5) : '';
+      const personas = r.num_personas ? `👥${r.num_personas}` : '';
+      const icons = extrasIcons(r.extras_json);
+      return `<div class="cal-pill" style="background:${col}22;color:${col};border-left:2px solid ${col}"
+        onclick="event.stopPropagation();openModal(${r.id})">
+        <div class="cal-pill-name">${firstName}${hora?' · '+hora:''}</div>
+        ${(personas||icons)?`<div class="cal-pill-sub">${personas?`<span>${personas}</span>`:''}${icons?`<span class="cal-pill-icons">${icons}</span>`:''}</div>`:''}
+      </div>`;
     }).join('');
     const more = rsvs.length>3?`<div style="font-size:.6rem;color:var(--muted)">+${rsvs.length-3} más</div>`:'';
     html+=`<div class="cal-day${isToday?' today':''}" onclick="${rsvs.length?`showDayReservas('${dateStr}')`:`openNewReservaModal('${dateStr}')`}">
@@ -1065,6 +1077,41 @@ async function doSync(){
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtMoney(n){ if(!n&&n!==0) return '-'; return '$'+Math.round(+n).toLocaleString('es-CL'); }
 function sourceColor(s){ if(!s) return '#7070a0'; if(s==='sheets') return '#7070a0'; if(s==='booknetic') return '#4a9eff'; if(s==='hotboat_web') return '#f5c842'; return '#9b59b6'; }
+
+// Default emoji icon for an extra based on its slugified key
+function defaultExtraIcon(key){
+  const k = (key||'').toLowerCase();
+  if(k.includes('foto'))            return '📸';
+  if(k.includes('gopro')||k.includes('video')||k.includes('camara')||k.includes('cam_')) return '🎥';
+  if(k.includes('buceo')||k.includes('dive')) return '🤿';
+  if(k.includes('snorkel'))         return '🤿';
+  if(k.includes('kayak'))           return '🛶';
+  if(k.includes('sup')||k.includes('tabla')) return '🏄';
+  if(k.includes('traslado')||k.includes('transfer')) return '🚐';
+  if(k.includes('pizza')||k.includes('sanguchito')) return '🍕';
+  if(k.includes('espumante')||k.includes('champagne')||k.includes('botella')||k.includes('vino')) return '🍾';
+  if(k.includes('cocktail')||k.includes('trago')||k.includes('pisco')) return '🍹';
+  if(k.includes('cerveza'))         return '🍺';
+  if(k.includes('alojamiento')||k.includes('cabana')||k.includes('hospedaje')) return '🏠';
+  if(k.includes('pack'))            return '📦';
+  if(k.includes('musica')||k.includes('dj')) return '🎵';
+  if(k.includes('decoracion')||k.includes('deco')) return '🎊';
+  if(k.includes('seguro'))          return '🛡️';
+  if(k.includes('guia'))            return '🧭';
+  if(k.includes('nino')||k.includes('menor')) return '👦';
+  return '⭐';
+}
+
+// Return emoji icons for a reservation's extras_json, using EXTRAS_CATALOG for saved icons
+function extrasIcons(extrasJson){
+  if(!extrasJson || typeof extrasJson !== 'object') return '';
+  return Object.keys(extrasJson)
+    .filter(k=> { const v=extrasJson[k]; return v && (+v.qty||+v.cantidad||1) > 0; })
+    .map(k=>{
+      const cat = EXTRAS_CATALOG.find(e=>e.key===k);
+      return cat ? (cat.icon || defaultExtraIcon(k)) : defaultExtraIcon(k);
+    }).join('');
+}
 function sourceLabel(s){ return {sheets:'Historial',booknetic:'Booknetic',hotboat_web:'Web HotBoat',manual:'Manual'}[s]||s; }
 function pagoBadge(pagos,total){
   if(!pagos||!pagos.length) return '';
@@ -1484,7 +1531,13 @@ function renderExtrasCat(list){
     const util = (e.price||0)-(e.cost||0);
     const margen = e.cost ? Math.round((e.price/e.cost-1)*100) : null;
     const utilCls = util>0?'pos':util<0?'neg':'';
+    const icon = e.icon || defaultExtraIcon(e.key||'');
     return `<tr id="ec-row-${e.id}">
+      <td style="text-align:center">
+        <input class="ec-input" value="${escHtml(icon)}" data-field="icon"
+          oninput="ecMarkDirty('${e.id}')"
+          style="width:3rem;text-align:center;font-size:1.1rem;padding:.2rem">
+      </td>
       <td>
         <input class="ec-input ec-name-input" value="${escHtml(e.name)}"
           oninput="ecMarkDirty('${e.id}')" data-field="name" style="min-width:180px">
@@ -1547,7 +1600,7 @@ async function saveExtra(id){
     if(btn){ btn.textContent='✓ Guardado'; btn.classList.add('saved'); btn.style.background='var(--green)'; btn.style.color='#fff'; btn.disabled=false; }
     // Update local cache
     const idx = _extrasCatData.findIndex(e=>e.id===id);
-    if(idx>=0){ _extrasCatData[idx].name=d.name; _extrasCatData[idx].price=d.price; _extrasCatData[idx].cost=d.cost; }
+    if(idx>=0){ _extrasCatData[idx].name=d.name; _extrasCatData[idx].price=d.price; _extrasCatData[idx].cost=d.cost; _extrasCatData[idx].icon=d.icon||''; }
     EXTRAS_CATALOG = _extrasCatData;
     showToast(`"${d.name}" guardado ✓`);
     setTimeout(()=>{ if(btn){ btn.textContent='Guardar'; btn.classList.remove('saved'); btn.style.background=''; btn.style.color=''; } }, 2500);
