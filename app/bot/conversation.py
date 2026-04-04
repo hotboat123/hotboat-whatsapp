@@ -441,7 +441,7 @@ class ConversationManager:
                 return {"type": "manual_override"}
             
             if is_first:
-                self._schedule_conversation_summary_email(from_number, conversation)
+                pass  # Summary email on first contact disabled
             
             requested_language = get_language_code_from_text(message_text)
             if requested_language:
