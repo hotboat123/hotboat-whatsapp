@@ -1030,10 +1030,48 @@ async function openModal(id){
           </select>
         </div>
         <div class="form-group"><label>Tipo cliente</label>
-          <input id="e-tipo_clientes" value="${r.tipo_clientes||''}"></div>
+          ${(()=>{
+            const TIPOS=['Trabajador','Empresario','Otro'];
+            const cur = r.tipo_clientes||'';
+            const isOtro = cur && !TIPOS.slice(0,-1).includes(cur);
+            const selVal = isOtro ? 'Otro' : cur;
+            return `<select id="e-tipo_clientes_sel" onchange="
+              const v=this.value;
+              const inp=document.getElementById('e-tipo_clientes_txt');
+              inp.style.display=v==='Otro'?'block':'none';
+              if(v!=='Otro') document.getElementById('e-tipo_clientes').value=v; else document.getElementById('e-tipo_clientes').value=inp.value;">
+              <option value="">— seleccionar —</option>
+              ${TIPOS.map(t=>`<option value="${t}"${selVal===t?' selected':''}>${t}</option>`).join('')}
+            </select>
+            <input id="e-tipo_clientes_txt" placeholder="Especificar tipo..."
+              value="${isOtro?cur:''}"
+              oninput="document.getElementById('e-tipo_clientes').value=this.value"
+              style="margin-top:.4rem;display:${isOtro?'block':'none'}">
+            <input type="hidden" id="e-tipo_clientes" value="${cur}">`;
+          })()}
+        </div>
       </div>
       <div class="form-group" style="margin-bottom:.8rem"><label>Categoria cliente</label>
-        <input id="e-categoria_clientes" value="${r.categoria_clientes||''}"></div>
+        ${(()=>{
+          const CATS=['Familia','Pareja','Grupo de Parejas','Grupo de amigas','Grupo de Amigos','Pareja de amigos','Otro'];
+          const cur = r.categoria_clientes||'';
+          const isOtro = cur && !CATS.slice(0,-1).includes(cur);
+          const selVal = isOtro ? 'Otro' : cur;
+          return `<select id="e-categoria_clientes_sel" onchange="
+            const v=this.value;
+            const inp=document.getElementById('e-categoria_clientes_txt');
+            inp.style.display=v==='Otro'?'block':'none';
+            if(v!=='Otro') document.getElementById('e-categoria_clientes').value=v; else document.getElementById('e-categoria_clientes').value=inp.value;">
+            <option value="">— seleccionar —</option>
+            ${CATS.map(c=>`<option value="${c}"${selVal===c?' selected':''}>${c}</option>`).join('')}
+          </select>
+          <input id="e-categoria_clientes_txt" placeholder="Especificar categoría..."
+            value="${isOtro?cur:''}"
+            oninput="document.getElementById('e-categoria_clientes').value=this.value"
+            style="margin-top:.4rem;display:${isOtro?'block':'none'}">
+          <input type="hidden" id="e-categoria_clientes" value="${cur}">`;
+        })()}
+      </div>
       <div class="form-group" style="margin-bottom:.8rem">
         <label>Observaciones del admin</label>
         <textarea id="e-observaciones" rows="3" placeholder="Notas internas sobre esta reserva...">${r.observaciones||''}</textarea>
