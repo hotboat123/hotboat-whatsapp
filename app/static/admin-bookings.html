@@ -215,6 +215,24 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .extras-total-row{display:flex;justify-content:flex-end;gap:.5rem;align-items:center;
   padding-top:.4rem;font-size:.82rem;font-weight:600}
 .extras-total-row span{color:var(--gold)}
+/* Extras catalog table */
+.ec-table{width:100%;border-collapse:collapse}
+.ec-table th{background:var(--surface);padding:.55rem .9rem;text-align:left;
+  font-size:.73rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.ec-table td{padding:.5rem .9rem;border-top:1px solid var(--border);font-size:.83rem;vertical-align:middle}
+.ec-table tr:hover td{background:rgba(255,255,255,.02)}
+.ec-input{background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none;width:100%;text-align:right}
+.ec-input:focus{border-color:var(--gold)}
+.ec-name-input{text-align:left}
+.ec-util{font-weight:600}
+.ec-util.pos{color:var(--green)}.ec-util.neg{color:var(--red)}
+.ec-save-btn{background:var(--gold);color:#000;border:none;border-radius:7px;
+  padding:.3rem .75rem;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.ec-save-btn:hover{opacity:.85}
+.ec-save-btn.saved{background:var(--green);color:#fff}
+.ec-del-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:.2rem .4rem;border-radius:5px}
+.ec-del-btn:hover{color:var(--red);background:rgba(231,76,60,.1)}
 /* Misc */
 .section{display:none}.section.active{display:block}
 .chip{display:inline-block;background:rgba(255,255,255,.07);border-radius:20px;
@@ -263,6 +281,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div>
     <div class="nav-item" onclick="showSection('stats')" id="nav-stats">
       <span class="ni">📊</span> Estadisticas
+    </div>
+    <div class="nav-item" onclick="showSection('extras-cat')" id="nav-extras-cat">
+      <span class="ni">🏷️</span> Precios Extras
     </div>
     <div class="nav-item" onclick="showSection('settings')" id="nav-settings">
       <span class="ni">⚙️</span> Configuracion
@@ -356,6 +377,31 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
         <div class="chart-wrap" id="status-chart"></div>
         <div class="chart-wrap" id="source-chart"></div>
+      </div>
+    </div>
+
+    <!-- PRECIOS EXTRAS -->
+    <div id="section-extras-cat" class="section">
+      <div style="display:flex;gap:.6rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+        <input type="text" id="ec-search" placeholder="Buscar extra..." oninput="filterExtrasCat()"
+          style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.5rem .8rem;font-size:.82rem;outline:none;flex:1;min-width:160px">
+        <button class="btn-primary" onclick="openNewExtraModal()" style="white-space:nowrap">+ Nuevo extra</button>
+        <span id="ec-count" style="color:var(--muted);font-size:.78rem"></span>
+      </div>
+      <div class="tbl-wrap">
+        <table class="ec-table">
+          <thead>
+            <tr>
+              <th>Nombre extra</th>
+              <th style="text-align:right">Precio venta</th>
+              <th style="text-align:right">Costo</th>
+              <th style="text-align:right">Utilidad</th>
+              <th style="text-align:right">Margen</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ec-tbody"><tr><td colspan="6" class="loading-msg">Cargando...</td></tr></tbody>
+        </table>
       </div>
     </div>
 
@@ -547,12 +593,13 @@ function showSection(name){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('section-'+name).classList.add('active');
   document.getElementById('nav-'+name).classList.add('active');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas',settings:'Configuracion'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',settings:'Configuracion'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
   if(name==='clientes') loadClients();
   if(name==='stats') loadStats();
+  if(name==='extras-cat') loadExtrasCat();
   if(name==='settings'){ loadSettings(); loadVacationDays(); }
 }
 function toggleSidebar(){
@@ -1287,6 +1334,175 @@ function initPagos(pagosArr){
   _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p})) : [];
   renderPagos();
 }
+
+// ── Precios Extras tab ────────────────────────────────────────────────────────
+
+let _extrasCatData = [];   // full list loaded from API
+
+async function loadExtrasCat(){
+  const tbody = document.getElementById('ec-tbody');
+  if(!tbody) return;
+  tbody.innerHTML='<tr><td colspan="6" class="loading-msg">Cargando...</td></tr>';
+  try{
+    const d = await api('/api/admin/precios-extras');
+    EXTRAS_CATALOG = d.extras||[];   // also refresh catalog for modal dropdowns
+    _extrasCatData = d.extras||[];
+    renderExtrasCat(_extrasCatData);
+  }catch(e){
+    tbody.innerHTML=`<tr><td colspan="6" class="no-data">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderExtrasCat(list){
+  const tbody = document.getElementById('ec-tbody');
+  const countEl = document.getElementById('ec-count');
+  if(!tbody) return;
+  if(countEl) countEl.textContent = `${list.length} extras`;
+  if(!list.length){
+    tbody.innerHTML='<tr><td colspan="6" class="no-data">Sin extras</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(e=>{
+    const util = (e.price||0)-(e.cost||0);
+    const margen = e.cost ? Math.round((e.price/e.cost-1)*100) : null;
+    const utilCls = util>0?'pos':util<0?'neg':'';
+    return `<tr id="ec-row-${e.id}">
+      <td>
+        <input class="ec-input ec-name-input" value="${escHtml(e.name)}"
+          oninput="ecMarkDirty('${e.id}')" data-field="name" style="min-width:180px">
+      </td>
+      <td>
+        <input class="ec-input" type="number" min="0" value="${e.price||0}"
+          oninput="ecMarkDirty('${e.id}');ecUpdateRow('${e.id}')" data-field="price">
+      </td>
+      <td>
+        <input class="ec-input" type="number" min="0" value="${e.cost||0}"
+          oninput="ecMarkDirty('${e.id}');ecUpdateRow('${e.id}')" data-field="cost">
+      </td>
+      <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
+      <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
+      <td style="display:flex;gap:.4rem;align-items:center;padding:.5rem .4rem">
+        <button class="ec-save-btn" id="ec-btn-${e.id}" onclick="saveExtra('${e.id}')">Guardar</button>
+        <button class="ec-del-btn" onclick="deleteExtra('${e.id}','${escHtml(e.name)}')" title="Eliminar">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterExtrasCat(){
+  const q = document.getElementById('ec-search')?.value.toLowerCase()||'';
+  renderExtrasCat(q ? _extrasCatData.filter(e=>e.name.toLowerCase().includes(q)) : _extrasCatData);
+}
+
+function ecGetRow(id){
+  const row = document.getElementById(`ec-row-${id}`);
+  if(!row) return null;
+  const inputs = row.querySelectorAll('.ec-input');
+  const data = {};
+  inputs.forEach(inp=>{ data[inp.dataset.field] = inp.type==='number' ? +inp.value : inp.value; });
+  return data;
+}
+
+function ecMarkDirty(id){
+  const btn = document.getElementById(`ec-btn-${id}`);
+  if(btn){ btn.textContent='Guardar'; btn.classList.remove('saved'); btn.style.background=''; }
+}
+
+function ecUpdateRow(id){
+  const d = ecGetRow(id);
+  if(!d) return;
+  const util = (d.price||0)-(d.cost||0);
+  const margen = d.cost ? Math.round((d.price/d.cost-1)*100) : null;
+  const utilEl = document.getElementById(`ec-util-${id}`);
+  const margenEl = document.getElementById(`ec-margen-${id}`);
+  if(utilEl){ utilEl.textContent=fmtMoney(util); utilEl.className='ec-util '+(util>0?'pos':util<0?'neg':''); }
+  if(margenEl) margenEl.textContent = margen!=null?margen+'%':'—';
+}
+
+async function saveExtra(id){
+  const d = ecGetRow(id);
+  if(!d||!d.name) return;
+  const btn = document.getElementById(`ec-btn-${id}`);
+  if(btn){ btn.textContent='...'; btn.disabled=true; }
+  try{
+    await api(`/api/admin/precios-extras/${id}`,{method:'PUT',body:JSON.stringify(d)});
+    if(btn){ btn.textContent='✓ Guardado'; btn.classList.add('saved'); btn.style.background='var(--green)'; btn.style.color='#fff'; btn.disabled=false; }
+    // Update local cache
+    const idx = _extrasCatData.findIndex(e=>e.id===id);
+    if(idx>=0){ _extrasCatData[idx].name=d.name; _extrasCatData[idx].price=d.price; _extrasCatData[idx].cost=d.cost; }
+    EXTRAS_CATALOG = _extrasCatData;
+    showToast(`"${d.name}" guardado ✓`);
+    setTimeout(()=>{ if(btn){ btn.textContent='Guardar'; btn.classList.remove('saved'); btn.style.background=''; btn.style.color=''; } }, 2500);
+  }catch(e){
+    showToast('Error: '+e.message);
+    if(btn){ btn.textContent='Guardar'; btn.disabled=false; }
+  }
+}
+
+async function deleteExtra(id, name){
+  if(!confirm(`¿Eliminar "${name}"?`)) return;
+  try{
+    await api(`/api/admin/precios-extras/${id}`,{method:'DELETE'});
+    _extrasCatData = _extrasCatData.filter(e=>e.id!==id);
+    EXTRAS_CATALOG = _extrasCatData;
+    filterExtrasCat();
+    showToast(`"${name}" eliminado`);
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function openNewExtraModal(){
+  document.getElementById('modal-title').textContent='Nuevo extra';
+  document.getElementById('modal-body').innerHTML=`
+    <div class="form-row">
+      <div class="form-group"><label>Nombre del extra</label>
+        <input id="ne-name" placeholder="Ej: Tabla 3 personas" style="grid-column:1/-1"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Precio venta ($)</label>
+        <input id="ne-price" type="number" min="0" value="0" oninput="neCalc()"></div>
+      <div class="form-group"><label>Costo ($)</label>
+        <input id="ne-cost" type="number" min="0" value="0" oninput="neCalc()"></div>
+    </div>
+    <div style="background:var(--surface);border-radius:8px;padding:.7rem 1rem;margin-bottom:.8rem;font-size:.83rem;display:flex;gap:1.5rem">
+      <span>Utilidad: <strong id="ne-util" style="color:var(--green)">$0</strong></span>
+      <span>Margen: <strong id="ne-margen" style="color:var(--muted)">—</strong></span>
+    </div>
+    <div id="ne-err" style="color:var(--red);font-size:.8rem;display:none;margin-bottom:.5rem"></div>
+    <div class="modal-actions">
+      <button class="btn-del" onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="createExtra()">Crear extra</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function neCalc(){
+  const p=+document.getElementById('ne-price')?.value||0;
+  const c=+document.getElementById('ne-cost')?.value||0;
+  const util=p-c;
+  const margen=c?Math.round((p/c-1)*100):null;
+  const uEl=document.getElementById('ne-util');
+  const mEl=document.getElementById('ne-margen');
+  if(uEl){ uEl.textContent=fmtMoney(util); uEl.style.color=util>=0?'var(--green)':'var(--red)'; }
+  if(mEl) mEl.textContent=margen!=null?margen+'%':'—';
+}
+
+async function createExtra(){
+  const name=(document.getElementById('ne-name')?.value||'').trim();
+  const price=+document.getElementById('ne-price')?.value||0;
+  const cost=+document.getElementById('ne-cost')?.value||0;
+  const errEl=document.getElementById('ne-err');
+  if(!name){ if(errEl){errEl.textContent='El nombre es obligatorio';errEl.style.display='';} return; }
+  try{
+    const d=await api('/api/admin/precios-extras',{method:'POST',body:JSON.stringify({name,price,cost})});
+    showToast(`"${name}" creado ✓`);
+    closeModal();
+    loadExtrasCat();
+  }catch(e){
+    if(errEl){errEl.textContent='Error: '+e.message;errEl.style.display='';}
+  }
+}
+
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
 // ── Descuentos ────────────────────────────────────────────────────────────────
 const TIPOS_DESC = ['pack','cupon','otro'];

@@ -626,49 +626,131 @@ async def sync_tables(x_admin_key: str = Header("")):
 
 # ── Precios Extras catalog ─────────────────────────────────────────────────────
 
+import unicodedata as _unicodedata
+
+def _slugify_extra(s: str) -> str:
+    s = _unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+def _parse_clp(s) -> int:
+    if not s:
+        return 0
+    return int(re.sub(r"[^0-9]", "", str(s)) or 0)
+
+
 @admin_router.get("/api/admin/precios-extras")
 async def get_precios_extras(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
-    import unicodedata
-
-    def slugify(s: str) -> str:
-        s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
-        return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
-
-    def parse_clp(s) -> int:
-        if not s:
-            return 0
-        return int(re.sub(r"[^0-9]", "", str(s)) or 0)
-
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Deduplicate by name keeping the most recently updated row
+                # Deduplicate by name keeping the most recently updated row; include id
                 cur.execute("""
                     SELECT DISTINCT ON (raw->>'Extra')
+                           id,
                            raw->>'Extra' AS name,
                            raw->>'Precio' AS precio,
                            raw->>'costo' AS costo
                     FROM "Precios Extras"
                     WHERE raw->>'Extra' IS NOT NULL
-                      AND raw->>'Precio' IS NOT NULL
                     ORDER BY raw->>'Extra', updated_at DESC
                 """)
                 extras = []
                 seen_keys: set = set()
-                for name, precio, costo in cur.fetchall():
-                    key = slugify(name)
+                for row_id, name, precio, costo in cur.fetchall():
+                    key = _slugify_extra(name)
                     if key in seen_keys:
                         continue
                     seen_keys.add(key)
                     extras.append({
+                        "id": row_id,
                         "key": key,
                         "name": name,
-                        "price": parse_clp(precio),
-                        "cost": parse_clp(costo) if costo else 0,
+                        "price": _parse_clp(precio),
+                        "cost": _parse_clp(costo) if costo else 0,
                     })
         extras.sort(key=lambda x: x["name"])
         return {"extras": extras}
     except Exception as e:
         logger.error(f"Error fetching precios extras: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.put("/api/admin/precios-extras/{extra_id}")
+async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), request: Request = None):
+    _check_auth(x_admin_key)
+    try:
+        body = await request.json()
+        name = body.get("name", "").strip()
+        price = int(body.get("price") or 0)
+        cost = int(body.get("cost") or 0)
+        if not name:
+            raise HTTPException(status_code=400, detail="name is required")
+        margen = f"{round(price / cost * 100)}%" if cost else ""
+        utilidad = price - cost
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE "Precios Extras"
+                    SET raw = raw
+                        || jsonb_build_object('Extra', %s::text)
+                        || jsonb_build_object('Precio', %s::text)
+                        || jsonb_build_object('costo', %s::text)
+                        || jsonb_build_object('margen', %s::text)
+                        || jsonb_build_object('Utilidad', %s::text),
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, (name, str(price), str(cost), margen, str(utilidad), extra_id))
+                conn.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating extra {extra_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.post("/api/admin/precios-extras")
+async def create_precio_extra(x_admin_key: str = Header(""), request: Request = None):
+    _check_auth(x_admin_key)
+    try:
+        import hashlib, time
+        body = await request.json()
+        name = body.get("name", "").strip()
+        price = int(body.get("price") or 0)
+        cost = int(body.get("cost") or 0)
+        if not name:
+            raise HTTPException(status_code=400, detail="name is required")
+        margen = f"{round(price / cost * 100)}%" if cost else ""
+        utilidad = price - cost
+        new_id = hashlib.sha1(f"{name}{time.time()}".encode()).hexdigest()
+        raw = {"id": new_id, "Extra": name, "Precio": str(price),
+               "costo": str(cost), "margen": margen, "Utilidad": str(utilidad)}
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                from psycopg.types.json import Jsonb as PgJson
+                cur.execute(
+                    'INSERT INTO "Precios Extras" (id, raw, source, created_at, updated_at) VALUES (%s, %s, %s, NOW(), NOW())',
+                    (new_id, PgJson(raw), "admin")
+                )
+                conn.commit()
+        return {"ok": True, "id": new_id, "key": _slugify_extra(name)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating extra: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.delete("/api/admin/precios-extras/{extra_id}")
+async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('DELETE FROM "Precios Extras" WHERE id = %s', (extra_id,))
+                conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Error deleting extra {extra_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
