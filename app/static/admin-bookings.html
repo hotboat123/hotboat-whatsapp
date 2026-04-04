@@ -697,10 +697,14 @@ function renderCal(){
       const hora = r.hora ? r.hora.substring(0,5) : '';
       const personas = r.num_personas ? `👥${r.num_personas}` : '';
       const icons = extrasIcons(r.extras_json);
+      const paid = Array.isArray(r.pagos) ? r.pagos.reduce((s,p)=>s+(+p.amount||0),0) : 0;
+      const falt = (+r.ingreso_total||0) - paid;
+      const faltHtml = falt > 0
+        ? `<span style="color:#e74c3c;font-size:.56rem;font-weight:700">💸${Math.round(falt/1000)}k</span>` : '';
       return `<div class="cal-pill" style="background:${col}22;color:${col};border-left:2px solid ${col}"
         onclick="event.stopPropagation();openModal(${r.id})">
         <div class="cal-pill-name">${firstName}${hora?' · '+hora:''}</div>
-        ${(personas||icons)?`<div class="cal-pill-sub">${personas?`<span>${personas}</span>`:''}${icons?`<span class="cal-pill-icons">${icons}</span>`:''}</div>`:''}
+        ${(personas||icons||faltHtml)?`<div class="cal-pill-sub">${personas?`<span>${personas}</span>`:''}${icons?`<span class="cal-pill-icons">${icons}</span>`:''}${faltHtml}</div>`:''}
       </div>`;
     }).join('');
     const more = rsvs.length>3?`<div style="font-size:.6rem;color:var(--muted)">+${rsvs.length-3} más</div>`:'';
@@ -994,7 +998,7 @@ async function openModal(id){
       <div class="form-row">
         <div class="form-group"><label>Total ingresos</label>
           <input id="e-ingreso_total" value="${r.ingreso_total||0}" style="color:var(--gold);font-weight:700"
-            oninput="syncCostoTotal()"></div>
+            oninput="syncCostoTotal();syncPagoFaltante()"></div>
         <div class="form-group"><label>Costo fijo</label>
           <input id="e-costo_operativo_fijo" value="${r.costo_operativo_fijo||0}" oninput="syncCostoTotal()"></div>
       </div>
@@ -1170,6 +1174,10 @@ async function openModal(id){
         <button type="button" onclick="addPago()" style="background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.4rem .8rem;font-size:.8rem;cursor:pointer;width:100%;margin-top:.4rem;transition:border-color .2s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
           + Agregar pago
         </button>
+      </div>
+      <div id="pago-faltante-wrap" style="margin-top:.6rem;padding:.55rem .8rem;border-radius:8px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);display:none;align-items:center;justify-content:space-between">
+        <span style="font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">💸 Pago faltante</span>
+        <span id="pago-faltante-val" style="font-weight:700;color:#e74c3c;font-size:1rem"></span>
       </div>
       <div style="margin-top:1rem">
         <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
@@ -1606,8 +1614,24 @@ function renderPagos(){
 function renderPagosTotal(){
   const totEl = document.getElementById('pagos-total');
   if(!totEl) return;
-  const total = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
-  totEl.textContent = total>0 ? fmtMoney(total) : '';
+  const paid = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  totEl.textContent = paid>0 ? fmtMoney(paid) : '';
+  syncPagoFaltante();
+}
+
+function syncPagoFaltante(){
+  const wrap = document.getElementById('pago-faltante-wrap');
+  const valEl = document.getElementById('pago-faltante-val');
+  if(!wrap||!valEl) return;
+  const total = +(document.getElementById('e-ingreso_total')?.value||0);
+  const paid  = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  const falt  = total - paid;
+  if(falt > 0){
+    wrap.style.display = 'flex';
+    valEl.textContent  = fmtMoney(falt);
+  } else {
+    wrap.style.display = 'none';
+  }
 }
 
 function addPago(){
@@ -1619,6 +1643,7 @@ function addPago(){
 function initPagos(pagosArr){
   _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p})) : [];
   renderPagos();
+  syncPagoFaltante();
 }
 
 // ── Create / Delete reservas ──────────────────────────────────────────────────
@@ -2036,6 +2061,7 @@ function updateExtrasTotals(){
   if(totEl && resEl) totEl.value = (+resEl.value||0) + extrasTotal - descTotal;
   // Update variable cost and recalculate total cost
   if(varEl && costoTotal > 0){ varEl.value = costoTotal; syncCostoTotal(); }
+  syncPagoFaltante();
 }
 
 function removeExtraItem(i){
