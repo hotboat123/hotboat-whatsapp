@@ -2200,8 +2200,15 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 return confirm_message
             return f"{self.cart_manager.format_cart_message(cart)}\n\n{self._cart_needs_reservation_message(conversation)}"
 
-        # If user sends a standalone menu digit (1-8), escape the date flow and act as menu
-        menu_num = self.faq_handler.is_menu_number(message_clean)
+        # If user sends a STANDALONE menu digit (1-8), escape the date flow and act as menu.
+        # Strict exact-match only: "4" → menu option 4, but "4 de abril" / "4o" → keep as date.
+        _MENU_EMOJIS = {"1️⃣": 1, "2️⃣": 2, "3️⃣": 3, "4️⃣": 4, "5️⃣": 5, "6️⃣": 6, "7️⃣": 7, "8️⃣": 8}
+        if message_clean in _MENU_EMOJIS:
+            menu_num = _MENU_EMOJIS[message_clean]
+        elif message_clean in {"1", "2", "3", "4", "5", "6", "7", "8"}:
+            menu_num = int(message_clean)
+        else:
+            menu_num = None
         if menu_num is not None:
             logger.info(f"Standalone menu digit '{message_clean}' detected during date flow - treating as menu option {menu_num}")
             self._reset_reservation_flow(conversation)
