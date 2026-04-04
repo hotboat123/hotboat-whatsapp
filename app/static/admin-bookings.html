@@ -987,10 +987,14 @@ async function openModal(id){
         <div class="form-group"><label>Email</label>
           <input id="e-email" value="${r.email||''}"></div>
         <div class="form-group"><label>Personas</label>
-          <input value="${r.num_personas||''}" disabled></div>
+          <input type="number" min="1" id="e-num_personas" value="${r.num_personas||''}"
+            oninput="lookupBasePrice(this.value)"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Ingreso reserva</label>
+        <div class="form-group">
+          <label>Precio experiencia
+            <span id="e-precio-hint" style="color:var(--muted);font-size:.7rem;font-weight:400;margin-left:.4rem"></span>
+          </label>
           <input id="e-ingreso_reserva" value="${r.ingreso_reserva||0}"></div>
         <div class="form-group"><label>Ingreso extras</label>
           <input id="e-ingreso_extras" value="${r.ingreso_extras||0}"></div>
@@ -1214,6 +1218,7 @@ async function openModal(id){
     initPagos(r.pagos||[]);
     initDescuentos(r.descuentos||[]);
     initExtrasEditor(r.extras_json||{});
+    if(r.num_personas) lookupBasePrice(r.num_personas);
   }catch(e){
     document.getElementById('modal-body').innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
   }
@@ -1246,6 +1251,7 @@ async function saveModal(id){
     ciudad_origen:g('e-ciudad_origen'),
     como_supieron:g('e-como_supieron'), clima_del_dia:g('e-clima_del_dia'),
     categoria_clientes:g('e-categoria_clientes'), tipo_clientes:g('e-tipo_clientes'),
+    num_personas: g('e-num_personas') ? +g('e-num_personas') : null,
     num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
     num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,
     nombre_adultos: g('e-nombre_adultos')||null,
@@ -1967,6 +1973,40 @@ function syncClimaHidden(){
   if(otroTxt) otroTxt.style.display = otroCb?.checked ? 'block':'none';
   const hidden = document.getElementById('e-clima_del_dia');
   if(hidden) hidden.value = vals.join(', ');
+}
+
+function lookupBasePrice(nStr){
+  const n = +nStr;
+  if(!n || !EXTRAS_CATALOG.length) return;
+
+  // Try exact slug matches: hotboat_Np, hotboat_N_p, hotbot_N, etc.
+  const targets = [
+    `hotboat_${n}p`,
+    `hotboat_${n}_p`,
+    `hotboat_${n}`,
+    `hotbot_${n}p`,
+  ];
+  let match = EXTRAS_CATALOG.find(e => targets.includes(e.key));
+
+  // Fallback: any catalog entry whose name contains the number and 'hotboat'/'hotbot'
+  if(!match){
+    match = EXTRAS_CATALOG.find(e => {
+      const k = e.key.toLowerCase();
+      return (k.includes('hotboat')||k.includes('hotbot')) && k.includes(String(n));
+    });
+  }
+
+  const hint = document.getElementById('e-precio-hint');
+  const inp  = document.getElementById('e-ingreso_reserva');
+  if(match && inp){
+    inp.value = match.price;
+    if(hint) hint.textContent = `→ ${match.name} (${fmtMoney(match.price)})`;
+    // Recalculate totals
+    updateExtrasTotals();
+    syncPagoFaltante();
+  } else {
+    if(hint) hint.textContent = n ? `sin precio para ${n}p en catálogo` : '';
+  }
 }
 
 function syncCostoTotal(){

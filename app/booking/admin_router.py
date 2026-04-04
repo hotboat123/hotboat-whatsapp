@@ -150,6 +150,7 @@ class UpdateReservaRequest(BaseModel):
     clima_del_dia: Optional[str] = None
     categoria_clientes: Optional[str] = None
     tipo_clientes: Optional[str] = None
+    num_personas: Optional[int] = None
     num_adultos: Optional[int] = None
     num_ninos: Optional[int] = None
     nombre_adultos: Optional[str] = None
