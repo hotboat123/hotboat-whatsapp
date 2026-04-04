@@ -68,18 +68,87 @@ async def _run_auto_sync():
                 if len(ph) == 11 and ph.startswith("56"): return f"+{ph}"
                 return ph
 
+            inserted_reservas = 0
+            updated_reservas = 0
             inserted_book = 0
             inserted_hb = 0
             status_updated = 0
 
             with get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(f"SELECT MAX(fecha) FROM {TABLE} WHERE source='sheets'")
+                    cur.execute("SELECT MAX(fecha) FROM reservas_con_extras")
                     cutoff = cur.fetchone()[0]
                     if not cutoff:
-                        logger.warning("Auto-sync: no sheets cutoff found, skipping")
+                        logger.warning("Auto-sync: reservas_con_extras is empty, skipping")
                         await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
                         continue
+
+                    # Sync reservas_con_extras → all_appointments (upsert)
+                    cur.execute("""
+                        SELECT id, appointment_id, fecha, hora, nombre_cliente, email, telefono,
+                               servicio, num_personas, num_adultos, num_ninos,
+                               ingreso_reserva, ingreso_extras, ingreso_total,
+                               costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
+                               ciudad_origen, como_supieron, clima_del_dia, categoria_clientes,
+                               tipo_clientes, tiene_cruce, status, extras_json, created_at
+                        FROM reservas_con_extras
+                        ORDER BY fecha
+                    """)
+                    for row in cur.fetchall():
+                        (rid, appt_id, fecha, hora, nombre, email, telefono,
+                         servicio, num_p, num_adultos, num_ninos,
+                         ing_res, ing_ext, ing_total, costo_fijo, costo_var, costo_total,
+                         ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
+                         status, extras, created) = row
+                        cur.execute(f"SELECT id FROM {TABLE} WHERE source='sheets' AND source_id=%s", (str(rid),))
+                        existing = cur.fetchone()
+                        if existing:
+                            cur.execute(f"""
+                                UPDATE {TABLE}
+                                SET extras_json=%s, ingreso_extras=%s, ingreso_total=%s,
+                                    num_adultos=%s, num_ninos=%s, ciudad_origen=%s,
+                                    como_supieron=%s, clima_del_dia=%s, categoria_clientes=%s,
+                                    tipo_clientes=%s, tiene_cruce=%s, status=%s, updated_at=NOW()
+                                WHERE id=%s
+                            """, (PgJson(extras or {}), float(ing_ext or 0), float(ing_total or 0),
+                                  num_adultos, num_ninos, ciudad, como_sup, clima, categoria,
+                                  tipo_cli, tiene_cruce, status, existing[0]))
+                            updated_reservas += 1
+                        else:
+                            cur.execute(f"""
+                                INSERT INTO {TABLE}
+                                (source, source_id, appointment_id, fecha, hora,
+                                 nombre_cliente, email, telefono, servicio, num_personas,
+                                 num_adultos, num_ninos,
+                                 ingreso_reserva, ingreso_extras, ingreso_total,
+                                 costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
+                                 ciudad_origen, como_supieron, clima_del_dia,
+                                 categoria_clientes, tipo_clientes, tiene_cruce,
+                                 status, extras_json, created_at, updated_at)
+                                VALUES ('sheets',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                                ON CONFLICT DO NOTHING
+                            """, (str(rid), str(appt_id) if appt_id else None,
+                                  fecha, hora, nombre, email,
+                                  re.sub(r"[^\d+]", "", str(telefono)) if telefono else None,
+                                  servicio or "HotBoat", str(num_p) if num_p else None,
+                                  num_adultos, num_ninos,
+                                  float(ing_res or 0), float(ing_ext or 0), float(ing_total or 0),
+                                  float(costo_fijo or 0), float(costo_var or 0), float(costo_total or 0),
+                                  ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
+                                  status, PgJson(extras or {}), created))
+                            inserted_reservas += 1
+
+                    # Remove duplicates (old Reservas_Con_Extras_Sheets rows replaced by reservas_con_extras)
+                    cur.execute("""
+                        DELETE FROM all_appointments
+                        WHERE source = 'sheets' AND appointment_id IS NOT NULL
+                        AND id NOT IN (
+                            SELECT MAX(id) FROM all_appointments
+                            WHERE source = 'sheets' AND appointment_id IS NOT NULL
+                            GROUP BY appointment_id
+                        )
+                    """)
+                    dedup_deleted = cur.rowcount
 
                     # Sync booknetic
                     cur.execute("""
@@ -144,7 +213,7 @@ async def _run_auto_sync():
 
                     conn.commit()
 
-            logger.info(f"✅ Auto-sync OK: +{inserted_book} booknetic, +{inserted_hb} web, {status_updated} estados actualizados")
+            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), +{inserted_book} booknetic, +{inserted_hb} web, {status_updated} estados")
         except Exception as e:
             logger.error(f"❌ Auto-sync error: {e}")
 

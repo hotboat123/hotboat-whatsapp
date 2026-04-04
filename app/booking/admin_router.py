@@ -201,10 +201,9 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                                 "UPDATE hotboat_appointments SET status=%s, updated_at=NOW() WHERE booking_ref=%s",
                                 (updates["status"], src_id)
                             )
-                        # Also sync back to Reservas_Con_Extras_Sheets for historical records
                         elif src == "sheets" and src_id:
                             cur.execute(
-                                'UPDATE "Reservas_Con_Extras_Sheets" SET status=%s, updated_at=NOW() WHERE id=%s',
+                                "UPDATE reservas_con_extras SET status=%s, updated_at=NOW() WHERE id=%s",
                                 (updates["status"], int(src_id))
                             )
 
@@ -434,8 +433,8 @@ async def update_dp(request: Request, x_admin_key: str = Header("")):
 
 
 # ── Incremental sync ──────────────────────────────────────────────────────────
-# Pulls NEW records from booknetic + hotboat into all_appointments
-# Does NOT re-import historical data (fecha <= max_sheets_fecha)
+# Syncs reservas_con_extras → all_appointments (full upsert)
+# Then pulls NEW records from booknetic + hotboat into all_appointments
 
 @admin_router.post("/api/admin/sync")
 async def sync_tables(x_admin_key: str = Header("")):
@@ -456,15 +455,83 @@ async def sync_tables(x_admin_key: str = Header("")):
 
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Get cutoff date (max fecha in sheets source)
-                cur.execute(f"SELECT MAX(fecha) FROM {TABLE} WHERE source='sheets'")
+                # Get cutoff date from reservas_con_extras (authoritative source)
+                cur.execute("SELECT MAX(fecha) FROM reservas_con_extras")
                 cutoff = cur.fetchone()[0]
                 if not cutoff:
-                    raise HTTPException(status_code=500, detail="No sheets records found, run migration 013 first")
+                    raise HTTPException(status_code=500, detail="No records found in reservas_con_extras")
 
+                inserted_reservas = 0
+                updated_reservas = 0
                 inserted_book = 0
                 inserted_hb = 0
                 updated_status = 0
+
+                # Sync reservas_con_extras → all_appointments (upsert by source_id)
+                cur.execute("""
+                    SELECT id, appointment_id, fecha, hora, nombre_cliente, email, telefono,
+                           servicio, num_personas, num_adultos, num_ninos,
+                           ingreso_reserva, ingreso_extras, ingreso_total,
+                           costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
+                           ciudad_origen, como_supieron, clima_del_dia, categoria_clientes,
+                           tipo_clientes, tiene_cruce, status, extras_json, created_at
+                    FROM reservas_con_extras
+                    ORDER BY fecha
+                """)
+                for row in cur.fetchall():
+                    (rid, appt_id, fecha, hora, nombre, email, telefono,
+                     servicio, num_p, num_adultos, num_ninos,
+                     ing_res, ing_ext, ing_total, costo_fijo, costo_var, costo_total,
+                     ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
+                     status, extras, created) = row
+                    cur.execute(f"SELECT id FROM {TABLE} WHERE source='sheets' AND source_id=%s", (str(rid),))
+                    existing = cur.fetchone()
+                    if existing:
+                        cur.execute(f"""
+                            UPDATE {TABLE}
+                            SET extras_json=%s, ingreso_extras=%s, ingreso_total=%s,
+                                num_adultos=%s, num_ninos=%s, ciudad_origen=%s,
+                                como_supieron=%s, clima_del_dia=%s, categoria_clientes=%s,
+                                tipo_clientes=%s, tiene_cruce=%s, status=%s, updated_at=NOW()
+                            WHERE id=%s
+                        """, (PgJson(extras or {}), float(ing_ext or 0), float(ing_total or 0),
+                              num_adultos, num_ninos, ciudad, como_sup, clima, categoria,
+                              tipo_cli, tiene_cruce, status, existing[0]))
+                        updated_reservas += 1
+                    else:
+                        cur.execute(f"""
+                            INSERT INTO {TABLE}
+                            (source, source_id, appointment_id, fecha, hora,
+                             nombre_cliente, email, telefono, servicio, num_personas,
+                             num_adultos, num_ninos,
+                             ingreso_reserva, ingreso_extras, ingreso_total,
+                             costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
+                             ciudad_origen, como_supieron, clima_del_dia,
+                             categoria_clientes, tipo_clientes, tiene_cruce,
+                             status, extras_json, created_at, updated_at)
+                            VALUES ('sheets',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                            ON CONFLICT DO NOTHING
+                        """, (str(rid), str(appt_id) if appt_id else None,
+                              fecha, hora, nombre, email, normalize_phone(telefono),
+                              servicio or "HotBoat", str(num_p) if num_p else None,
+                              num_adultos, num_ninos,
+                              float(ing_res or 0), float(ing_ext or 0), float(ing_total or 0),
+                              float(costo_fijo or 0), float(costo_var or 0), float(costo_total or 0),
+                              ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
+                              status, PgJson(extras or {}), created))
+                        inserted_reservas += 1
+
+                # Remove duplicates (old Reservas_Con_Extras_Sheets rows replaced by reservas_con_extras)
+                cur.execute("""
+                    DELETE FROM all_appointments
+                    WHERE source = 'sheets' AND appointment_id IS NOT NULL
+                    AND id NOT IN (
+                        SELECT MAX(id) FROM all_appointments
+                        WHERE source = 'sheets' AND appointment_id IS NOT NULL
+                        GROUP BY appointment_id
+                    )
+                """)
+                dedup_deleted = cur.rowcount
 
                 # Sync new booknetic records
                 cur.execute("""
@@ -539,6 +606,9 @@ async def sync_tables(x_admin_key: str = Header("")):
 
         return {
             "ok": True,
+            "reservas_con_extras_inserted": inserted_reservas,
+            "reservas_con_extras_updated": updated_reservas,
+            "duplicates_removed": dedup_deleted,
             "inserted_booknetic": inserted_book,
             "inserted_hotboat": inserted_hb,
             "status_updated": updated_status,
@@ -547,4 +617,54 @@ async def sync_tables(x_admin_key: str = Header("")):
         raise
     except Exception as e:
         logger.error(f"Sync error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Precios Extras catalog ─────────────────────────────────────────────────────
+
+@admin_router.get("/api/admin/precios-extras")
+async def get_precios_extras(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    import unicodedata
+
+    def slugify(s: str) -> str:
+        s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
+        return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+    def parse_clp(s) -> int:
+        if not s:
+            return 0
+        return int(re.sub(r"[^0-9]", "", str(s)) or 0)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Deduplicate by name keeping the most recently updated row
+                cur.execute("""
+                    SELECT DISTINCT ON (raw->>'Extra')
+                           raw->>'Extra' AS name,
+                           raw->>'Precio' AS precio,
+                           raw->>'costo' AS costo
+                    FROM "Precios Extras"
+                    WHERE raw->>'Extra' IS NOT NULL
+                      AND raw->>'Precio' IS NOT NULL
+                    ORDER BY raw->>'Extra', updated_at DESC
+                """)
+                extras = []
+                seen_keys: set = set()
+                for name, precio, costo in cur.fetchall():
+                    key = slugify(name)
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    extras.append({
+                        "key": key,
+                        "name": name,
+                        "price": parse_clp(precio),
+                        "cost": parse_clp(costo) if costo else 0,
+                    })
+        extras.sort(key=lambda x: x["name"])
+        return {"extras": extras}
+    except Exception as e:
+        logger.error(f"Error fetching precios extras: {e}")
         raise HTTPException(status_code=500, detail=str(e))

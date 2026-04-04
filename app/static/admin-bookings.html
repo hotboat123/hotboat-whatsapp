@@ -183,6 +183,28 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .pago-row .p-date{width:130px;flex-shrink:0}
 .pago-row .p-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;padding:.2rem .4rem;border-radius:6px;flex-shrink:0}
 .pago-row .p-del:hover{background:rgba(231,76,60,.1)}
+/* Extras editor */
+.extras-row{display:grid;grid-template-columns:1fr 64px 90px 80px 28px;gap:.4rem;align-items:center;
+  border-bottom:1px solid var(--border);padding:.4rem 0}
+.extras-row:first-child{border-top:1px solid var(--border)}
+.extras-row .ex-name{font-size:.82rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.extras-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:6px;padding:.3rem .5rem;outline:none;font-size:.82rem;text-align:right;width:100%}
+.extras-row input:focus{border-color:var(--gold)}
+.extras-row .ex-sub{font-size:.82rem;color:var(--gold);text-align:right;font-weight:600}
+.extras-row .ex-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:.9rem;padding:.1rem .3rem;border-radius:4px}
+.extras-row .ex-del:hover{background:rgba(231,76,60,.1)}
+.extras-hdr{display:grid;grid-template-columns:1fr 64px 90px 80px 28px;gap:.4rem;
+  font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding-bottom:.3rem}
+.extras-add-row{display:flex;gap:.5rem;margin-top:.5rem;align-items:center}
+.extras-add-row select{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:.4rem .7rem;font-size:.82rem;outline:none}
+.extras-add-row select:focus{border-color:var(--gold)}
+.extras-add-row button{background:var(--gold);color:#000;border:none;border-radius:8px;
+  padding:.4rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap}
+.extras-total-row{display:flex;justify-content:flex-end;gap:.5rem;align-items:center;
+  padding-top:.4rem;font-size:.82rem;font-weight:600}
+.extras-total-row span{color:var(--gold)}
 /* Misc */
 .section{display:none}.section.active{display:block}
 .chip{display:inline-block;background:rgba(255,255,255,.07);border-radius:20px;
@@ -486,6 +508,8 @@ const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto',
 const DAYS_SHORT=['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
 let KEY='', allReservas=[], calYear=new Date().getFullYear(), calMonth=new Date().getMonth();
 let sortCol='fecha', sortDir=-1;
+let EXTRAS_CATALOG=[];   // loaded once after login
+let _extrasItems=[];     // working copy for current modal: [{key,name,qty,unit_price}]
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 function doLogin(){
@@ -498,6 +522,7 @@ function doLogin(){
       document.getElementById('login-screen').style.display='none';
       document.getElementById('dashboard').style.display='flex';
       document.getElementById('menu-btn').style.display='';
+      loadExtrasCatalog();
       reloadAll();
     } else {
       err.style.display='';
@@ -825,7 +850,23 @@ async function openModal(id){
         <label>Observaciones del admin</label>
         <textarea id="e-observaciones" rows="3" placeholder="Notas internas sobre esta reserva...">${r.observaciones||''}</textarea>
       </div>
-      ${r.extras_json&&Object.keys(r.extras_json).length?`<div class="form-group"><label>Extras</label><textarea rows="2" id="e-extras_json">${JSON.stringify(r.extras_json,null,2)}</textarea></div>`:''}
+      <div style="margin-bottom:.8rem">
+        <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.4rem">
+          Extras
+          <span id="extras-total-label" style="color:var(--gold);font-weight:700;margin-left:.5rem"></span>
+        </label>
+        <div class="extras-hdr">
+          <div>Extra</div><div style="text-align:right">Cant.</div>
+          <div style="text-align:right">P. unitario</div><div style="text-align:right">Subtotal</div><div></div>
+        </div>
+        <div id="extras-list"></div>
+        <div class="extras-add-row">
+          <select id="extras-catalog-sel">
+            <option value="">— Seleccionar del catálogo —</option>
+          </select>
+          <button type="button" onclick="addExtraFromSelect()">+ Agregar</button>
+        </div>
+      </div>
       <div style="margin-top:1rem">
         <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
           Pagos recibidos
@@ -841,8 +882,9 @@ async function openModal(id){
         <button class="btn-del" onclick="closeModal()">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
-    // Call initPagos AFTER setting innerHTML (avoids broken script tag inside template literal)
+    // Call initPagos and initExtrasEditor AFTER setting innerHTML
     initPagos(r.pagos||[]);
+    initExtrasEditor(r.extras_json||{});
   }catch(e){
     document.getElementById('modal-body').innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
   }
@@ -854,23 +896,32 @@ function closeModal(e){
 }
 async function saveModal(id){
   const g=id=>document.getElementById(id)?.value;
+  // Build extras_json from the editor and recalc totals
+  const extrasJson={};
+  let extrasTotal=0;
+  _extrasItems.forEach(item=>{
+    const qty=+item.qty||0;
+    const price=+item.unit_price||0;
+    if(qty>0){ extrasJson[item.key]=qty; extrasTotal+=qty*price; }
+  });
+  const ingresoReserva=+g('e-ingreso_reserva')||0;
   const body={
     nombre_cliente:g('e-nombre'), telefono:g('e-telefono'), email:g('e-email'),
     status:g('e-status'), observaciones:g('e-observaciones'),
     ciudad_origen:g('e-ciudad_origen'),
     como_supieron:g('e-como_supieron'), clima_del_dia:g('e-clima_del_dia'),
     categoria_clientes:g('e-categoria_clientes'), tipo_clientes:g('e-tipo_clientes'),
-    ingreso_reserva:+g('e-ingreso_reserva'), ingreso_extras:+g('e-ingreso_extras'),
-    ingreso_total:+g('e-ingreso_total'), costo_operativo_fijo:+g('e-costo_operativo_fijo'),
+    ingreso_reserva:ingresoReserva,
+    ingreso_extras:extrasTotal,
+    ingreso_total:ingresoReserva+extrasTotal,
+    costo_operativo_fijo:+g('e-costo_operativo_fijo'),
     tiene_cruce:g('e-tiene_cruce')==='true',
+    extras_json:extrasJson,
   };
-  // Try to parse extras_json if present
-  const extEl=document.getElementById('e-extras_json');
-  if(extEl){ try{ body.extras_json=JSON.parse(extEl.value); }catch(e){} }
   // Include current pagos (filter out empty rows)
   body.pagos = _pagos.filter(p=>p.amount||p.method);
-  // remove nulls/zero-string
-  Object.keys(body).forEach(k=>{ if(body[k]===''||body[k]===null) delete body[k]; });
+  // Remove nulls/empty strings but keep extras_json even when empty object
+  Object.keys(body).forEach(k=>{ if(k!=='extras_json'&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
     showToast('Guardado ✓');
@@ -1198,6 +1249,111 @@ function addPago(){
 function initPagos(pagosArr){
   _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p})) : [];
   renderPagos();
+}
+
+// ── Extras catalog & editor ────────────────────────────────────────────────────
+
+async function loadExtrasCatalog(){
+  try{
+    const d = await api('/api/admin/precios-extras');
+    EXTRAS_CATALOG = d.extras || [];
+  }catch(e){ console.warn('Could not load extras catalog:', e); }
+}
+
+function slugify(s){
+  return s.normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+}
+
+function initExtrasEditor(extrasJson){
+  // Build _extrasItems from existing extras_json, lookup catalog prices
+  _extrasItems = [];
+  const catalogByKey = {};
+  EXTRAS_CATALOG.forEach(e=>{ catalogByKey[e.key]=e; });
+  Object.entries(extrasJson||{}).forEach(([key, qty])=>{
+    const cat = catalogByKey[key];
+    _extrasItems.push({
+      key,
+      name: cat ? cat.name : key.replace(/_/g,' '),
+      qty: +qty||1,
+      unit_price: cat ? cat.price : 0,
+    });
+  });
+  renderExtrasEditor();
+  populateCatalogSelect();
+}
+
+function populateCatalogSelect(){
+  const sel = document.getElementById('extras-catalog-sel');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— Seleccionar del catálogo —</option>' +
+    EXTRAS_CATALOG.map(e=>`<option value="${e.key}" data-price="${e.price}">${e.name} — ${fmtMoney(e.price)}</option>`).join('');
+}
+
+function renderExtrasEditor(){
+  const list = document.getElementById('extras-list');
+  if(!list) return;
+  if(!_extrasItems.length){
+    list.innerHTML='<div style="color:var(--muted);font-size:.8rem;padding:.4rem 0">Sin extras agregados</div>';
+    updateExtrasTotals();
+    return;
+  }
+  list.innerHTML = _extrasItems.map((item,i)=>`
+    <div class="extras-row">
+      <div class="ex-name" title="${item.name}">${item.name}</div>
+      <input type="number" min="1" value="${item.qty}" title="Cantidad"
+        oninput="_extrasItems[${i}].qty=+this.value||1;updateExtrasTotals();updateExtraSubtotal(${i})">
+      <input type="number" min="0" value="${item.unit_price}" title="Precio unitario"
+        oninput="_extrasItems[${i}].unit_price=+this.value||0;updateExtrasTotals();updateExtraSubtotal(${i})">
+      <div class="ex-sub" id="ex-sub-${i}">${fmtMoney(item.qty*item.unit_price)}</div>
+      <button class="ex-del" onclick="removeExtraItem(${i})" title="Quitar">✕</button>
+    </div>`).join('');
+  updateExtrasTotals();
+}
+
+function updateExtraSubtotal(i){
+  const el = document.getElementById(`ex-sub-${i}`);
+  if(el) el.textContent = fmtMoney((_extrasItems[i]?.qty||0)*(_extrasItems[i]?.unit_price||0));
+}
+
+function updateExtrasTotals(){
+  const total = _extrasItems.reduce((s,item)=>s+(+item.qty||0)*(+item.unit_price||0),0);
+  const lbl = document.getElementById('extras-total-label');
+  if(lbl) lbl.textContent = total>0 ? fmtMoney(total) : '';
+  // Auto-update ingreso_extras and ingreso_total fields
+  const extEl = document.getElementById('e-ingreso_extras');
+  const totEl = document.getElementById('e-ingreso_total');
+  const resEl = document.getElementById('e-ingreso_reserva');
+  if(extEl){ extEl.value = total; }
+  if(totEl && resEl){ totEl.value = (+resEl.value||0) + total; }
+}
+
+function removeExtraItem(i){
+  _extrasItems.splice(i,1);
+  renderExtrasEditor();
+}
+
+function addExtraFromSelect(){
+  const sel = document.getElementById('extras-catalog-sel');
+  if(!sel||!sel.value) return;
+  const key = sel.value;
+  const opt = sel.options[sel.selectedIndex];
+  const price = +(opt.dataset.price||0);
+  const cat = EXTRAS_CATALOG.find(e=>e.key===key);
+  // Check if already in list
+  const existing = _extrasItems.find(e=>e.key===key);
+  if(existing){
+    existing.qty += 1;
+  } else {
+    _extrasItems.push({
+      key,
+      name: cat ? cat.name : key.replace(/_/g,' '),
+      qty: 1,
+      unit_price: price,
+    });
+  }
+  sel.value='';
+  renderExtrasEditor();
 }
 
 function showToast(msg){
