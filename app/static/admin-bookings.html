@@ -1736,13 +1736,17 @@ function initExtrasEditor(extrasJson){
   _extrasItems = [];
   const catalogByKey = {};
   EXTRAS_CATALOG.forEach(e=>{ catalogByKey[e.key]=e; });
-  Object.entries(extrasJson||{}).forEach(([key, qty])=>{
+  Object.entries(extrasJson||{}).forEach(([key, val])=>{
     const cat = catalogByKey[key];
+    // val puede ser número (qty) o objeto {qty, unit_price}
+    const qty = (typeof val === 'object' && val !== null) ? (+val.qty||1) : (+val||1);
+    const saved_price = (typeof val === 'object' && val !== null && val.unit_price) ? +val.unit_price : null;
     _extrasItems.push({
       key,
       name: cat ? cat.name : key.replace(/_/g,' '),
-      qty: +qty||1,
-      unit_price: cat ? cat.price : 0,
+      qty,
+      unit_price: saved_price ?? (cat ? cat.price : 0),
+      unit_cost:  cat ? (cat.cost||0) : 0,
     });
   });
   renderExtrasEditor();
@@ -1784,15 +1788,19 @@ function updateExtraSubtotal(i){
 
 function updateExtrasTotals(){
   const extrasTotal = _extrasItems.reduce((s,item)=>s+(+item.qty||0)*(+item.unit_price||0),0);
-  const descTotal = (_descuentos||[]).reduce((s,d)=>s+(+d.amount||0),0);
+  const costoTotal  = _extrasItems.reduce((s,item)=>s+(+item.qty||0)*(+item.unit_cost ||0),0);
+  const descTotal   = (_descuentos||[]).reduce((s,d)=>s+(+d.amount||0),0);
   const lbl = document.getElementById('extras-total-label');
   if(lbl) lbl.textContent = extrasTotal>0 ? fmtMoney(extrasTotal) : '';
   // Auto-update ingreso_extras and ingreso_total fields
-  const extEl = document.getElementById('e-ingreso_extras');
-  const totEl = document.getElementById('e-ingreso_total');
-  const resEl = document.getElementById('e-ingreso_reserva');
-  if(extEl){ extEl.value = extrasTotal; }
-  if(totEl && resEl){ totEl.value = (+resEl.value||0) + extrasTotal - descTotal; }
+  const extEl  = document.getElementById('e-ingreso_extras');
+  const totEl  = document.getElementById('e-ingreso_total');
+  const resEl  = document.getElementById('e-ingreso_reserva');
+  const varEl  = document.getElementById('e-costo_operativo_variable');
+  if(extEl) extEl.value = extrasTotal;
+  if(totEl && resEl) totEl.value = (+resEl.value||0) + extrasTotal - descTotal;
+  // Update variable cost and recalculate total cost
+  if(varEl && costoTotal > 0){ varEl.value = costoTotal; syncCostoTotal(); }
 }
 
 function removeExtraItem(i){
@@ -1817,6 +1825,7 @@ function addExtraFromSelect(){
       name: cat ? cat.name : key.replace(/_/g,' '),
       qty: 1,
       unit_price: price,
+      unit_cost: cat ? (cat.cost||0) : 0,
     });
   }
   sel.value='';
