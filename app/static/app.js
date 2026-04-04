@@ -1830,7 +1830,8 @@ async function sendQuickReply(menuOption) {
         2: 'Precios',
         3: 'Características',
         4: 'Extras',
-        5: 'Ubicación'
+        5: 'Ubicación',
+        9: 'Alojamientos'
     };
     
     try {

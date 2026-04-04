@@ -440,8 +440,51 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         elif menu_option == 5:
             # Ubicación y reseñas
             response_text = faq_handler.get_response("ubicación", language)
+        elif menu_option == 9:
+            # Solo alojamientos — equivale al flujo menú 7 → 2
+            import asyncio
+            from app.utils.media_handler import get_alojamientos_images
+            text_intro = get_text("accommodations_only_intro", language)
+            # Send text intro
+            await whatsapp_client.send_text_message(to=phone_number, message=text_intro)
+            await save_conversation(
+                phone_number=phone_number,
+                customer_name=customer_name,
+                message_text="",
+                response_text=text_intro,
+                message_type="text",
+                direction="outgoing"
+            )
+            conversation["messages"].append({
+                "role": "assistant",
+                "content": text_intro,
+                "timestamp": datetime.now(CHILE_TZ).isoformat()
+            })
+            # Send accommodation images
+            image_paths = get_alojamientos_images()
+            for idx, image_path in enumerate(image_paths, 1):
+                try:
+                    media_id_img = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                    if media_id_img:
+                        caption = "📄 Información completa de alojamientos" if idx == 1 else None
+                        await whatsapp_client.send_image_message(
+                            to=phone_number,
+                            media_id=media_id_img,
+                            caption=caption
+                        )
+                        await asyncio.sleep(0.5)
+                except Exception as img_err:
+                    logger.warning(f"Could not send alojamiento image {idx}: {img_err}")
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "menu_option": menu_option,
+                "message_sent": f"Alojamientos: texto + {len(image_paths)} imágenes enviadas",
+                "whatsapp_response": {}
+            }
         else:
-            raise HTTPException(status_code=400, detail="Invalid menu option (must be 0-5)")
+            raise HTTPException(status_code=400, detail="Invalid menu option (must be 0-5 or 9)")
         
         # Send message via WhatsApp
         result = await whatsapp_client.send_text_message(
