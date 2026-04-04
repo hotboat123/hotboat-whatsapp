@@ -812,10 +812,29 @@ async function loadClients(){
     grid.innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
   }
 }
-function openClientModal(tel){
-  const rsvs = allReservas.filter(r=>r.telefono===tel)
-    .slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
-  if(!rsvs.length) return;
+async function openClientModal(tel){
+  // Show loading state first
+  const waBtn = document.getElementById('wa-contact-btn');
+  if(waBtn) waBtn.style.display='none';
+  document.getElementById('modal-title').textContent = 'Cargando...';
+  document.getElementById('modal-body').innerHTML = '<div class="loading-msg">Cargando historial...</div>';
+  document.getElementById('overlay').classList.add('show');
+
+  // Fetch ALL reservations for this phone (no year filter)
+  let rsvs;
+  try{
+    const data = await api(`/api/admin/reservas?search=${encodeURIComponent(tel)}&limit=500`);
+    rsvs = (data.reservas || [])
+      .filter(r => r.telefono === tel)   // exact match to avoid partial collisions
+      .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  }catch(e){
+    document.getElementById('modal-body').innerHTML = `<div class="loading-msg">Error: ${e.message}</div>`;
+    return;
+  }
+  if(!rsvs.length){
+    document.getElementById('modal-body').innerHTML = '<div class="loading-msg">Sin reservas encontradas</div>';
+    return;
+  }
   const c = rsvs[0];
 
   const totalGastado = rsvs.reduce((s,r)=>s+(+r.ingreso_total||0),0);
