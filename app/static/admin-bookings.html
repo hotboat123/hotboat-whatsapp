@@ -971,7 +971,10 @@ async function openModal(id){
         <div class="form-group"><label>Hora</label><input value="${r.hora||''}" disabled></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Cliente</label>
+        <div class="form-group"><label>Cliente
+          ${r.telefono?`<button onclick="openClientModal('${r.telefono}')" title="Ver historial del cliente"
+            style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:.8rem;padding:0 .3rem;vertical-align:middle">👤 historial</button>`:''}
+        </label>
           <input id="e-nombre" value="${r.nombre_cliente||''}"></div>
         <div class="form-group"><label>Telefono</label>
           <input id="e-telefono" value="${r.telefono||''}"></div>
