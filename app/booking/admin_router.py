@@ -85,6 +85,7 @@ async def list_reservas(
                            status, tiene_cruce, extras_json, observaciones,
                            payment_id, payment_status,
                            COALESCE(pagos, '[]'::jsonb) AS pagos,
+                           COALESCE(descuentos, '[]'::jsonb) AS descuentos,
                            created_at, updated_at
                     FROM {TABLE}
                     {where_sql}
@@ -116,7 +117,7 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"SELECT *, COALESCE(pagos,'[]'::jsonb) AS pagos FROM {TABLE} WHERE id=%s", (rid,))
+                cur.execute(f"SELECT *, COALESCE(pagos,'[]'::jsonb) AS pagos, COALESCE(descuentos,'[]'::jsonb) AS descuentos FROM {TABLE} WHERE id=%s", (rid,))
                 row = cur.fetchone()
                 if not row:
                     raise HTTPException(status_code=404, detail="Not found")
@@ -159,6 +160,7 @@ class UpdateReservaRequest(BaseModel):
     tiene_cruce: Optional[bool] = None
     extras_json: Optional[dict] = None
     pagos: Optional[list] = None
+    descuentos: Optional[list] = None
 
 
 @admin_router.put("/api/admin/reservas/{rid}")
@@ -176,6 +178,8 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                     updates["extras_json"] = PgJson(updates["extras_json"])
                 if "pagos" in updates:
                     updates["pagos"] = PgJson(updates["pagos"])
+                if "descuentos" in updates:
+                    updates["descuentos"] = PgJson(updates["descuentos"])
 
                 set_parts = [f"{k}=%s" for k in updates]
                 set_parts.append("updated_at=NOW()")
