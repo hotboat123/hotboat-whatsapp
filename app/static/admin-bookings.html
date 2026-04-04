@@ -896,9 +896,6 @@ async function openClientModal(tel){
     </div>`;
   }).join('');
 
-  const waBtn = document.getElementById('wa-contact-btn');
-  if(waBtn) waBtn.style.display='none';
-
   document.getElementById('modal-title').textContent = c.nombre_cliente||c.telefono;
   document.getElementById('modal-body').innerHTML=`
     <div class="ch-header">
