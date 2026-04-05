@@ -247,9 +247,25 @@ async def create_booking_endpoint(request: CreateBookingRequest):
             logger.warning(f"all_appointments sync skip: {se}")
         payment_url = None
         try:
-            payment_url = await _create_mp_preference(result["booking_ref"], request, total)
+            from app.payment.woocommerce import create_order as woo_create_order
+            woo_order = await woo_create_order(
+                reservation_id=0,
+                nombre=request.customer_name,
+                telefono=request.customer_phone,
+                email=request.customer_email,
+                monto_reserva=subtotal + flex_amount,
+                monto_extras=extras_total,
+                fecha=request.booking_date,
+                num_personas=request.num_people,
+            )
+            payment_url = woo_order.get("payment_url")
         except Exception as pe:
-            logger.warning(f"MercadoPago skip: {pe}")
+            logger.warning(f"WooCommerce skip: {pe}")
+            # Fallback to MercadoPago if configured
+            try:
+                payment_url = await _create_mp_preference(result["booking_ref"], request, total)
+            except Exception as mpe:
+                logger.warning(f"MercadoPago skip: {mpe}")
         return {
             "booking_ref": result["booking_ref"],
             "status": result["status"],

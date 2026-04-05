@@ -2191,9 +2191,32 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                         confirm_message += f"   • {item.name}\n"
                     confirm_message += "\n"
                 confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
-                confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para confirmar y coordinar el pago* 👨‍✈️\n\n"
-                confirm_message += "Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
-                confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
+                # Try to generate WooCommerce payment link
+                payment_url = None
+                try:
+                    from app.payment.woocommerce import create_order
+                    fecha_res = reservation.metadata.get('date') if reservation else None
+                    order = await create_order(
+                        reservation_id=0,
+                        nombre=contact_name,
+                        telefono=phone_number,
+                        email=None,
+                        monto_reserva=total,
+                        monto_extras=0,
+                        fecha=fecha_res,
+                        num_personas=reservation.quantity if reservation else None,
+                    )
+                    payment_url = order.get("payment_url")
+                except Exception as _pe:
+                    logger.warning(f"WooCommerce payment link skip: {_pe}")
+
+                if payment_url:
+                    confirm_message += f"💳 *Paga tu reserva aquí:*\n{payment_url}\n\n"
+                    confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
+                else:
+                    confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para coordinar el pago* 👨‍✈️\n\n"
+                    confirm_message += "Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
+                    confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
                 await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
                 await self.cart_manager.clear_cart(phone_number)
                 self._reset_reservation_flow(conversation)
