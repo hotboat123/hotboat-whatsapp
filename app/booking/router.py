@@ -178,7 +178,7 @@ async def get_availability(days: int = Query(21, ge=1, le=60)):
                             SELECT booking_date::text, booking_time::text
                             FROM hotboat_appointments
                             WHERE booking_date >= %s AND booking_date <= %s
-                              AND status NOT IN ('cancelled','rejected','solicitud')
+                              AND status NOT IN ('cancelled','rejected','solicitud','pending_payment')
                         """, (start.date(), end.date()))
                         for row in cur.fetchall():
                             d, t = row[0], row[1][:5]  # HH:MM
@@ -240,34 +240,58 @@ async def create_booking_endpoint(request: CreateBookingRequest):
             "notes": request.notes,
         }
         result = create_booking(data)
-        # Auto-sync into all_appointments
-        try:
-            _sync_hotboat_to_all(result["booking_ref"], data, result["status"])
-        except Exception as se:
-            logger.warning(f"all_appointments sync skip: {se}")
+        booking_ref = result["booking_ref"]
+
+        # Determine amount to charge (support test_price override)
+        woo_monto_reserva = subtotal + flex_amount
+        woo_monto_extras  = extras_total
+        if request.test_price is not None and request.test_price > 0:
+            woo_monto_reserva = request.test_price
+            woo_monto_extras  = 0
+            logger.info(f"TEST MODE: overriding WooCommerce total to {request.test_price} CLP for {booking_ref}")
+
         payment_url = None
+        woo_order_id = None
         try:
             from app.payment.woocommerce import create_order as woo_create_order
             woo_order = await woo_create_order(
                 reservation_id=0,
+                booking_ref=booking_ref,
                 nombre=request.customer_name,
                 telefono=request.customer_phone,
                 email=request.customer_email,
-                monto_reserva=subtotal + flex_amount,
-                monto_extras=extras_total,
+                monto_reserva=woo_monto_reserva,
+                monto_extras=woo_monto_extras,
                 fecha=request.booking_date,
                 num_personas=request.num_people,
             )
-            payment_url = woo_order.get("payment_url")
+            payment_url  = woo_order.get("payment_url")
+            woo_order_id = woo_order.get("order_id")
         except Exception as pe:
             logger.warning(f"WooCommerce skip: {pe}")
-            # Fallback to MercadoPago if configured
             try:
-                payment_url = await _create_mp_preference(result["booking_ref"], request, total)
+                payment_url = await _create_mp_preference(booking_ref, request, total)
             except Exception as mpe:
                 logger.warning(f"MercadoPago skip: {mpe}")
+
+        # Store WooCommerce order ID so the webhook can find this booking
+        if woo_order_id:
+            try:
+                from app.db.connection import get_connection as _gc
+                with _gc() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
+                            (str(woo_order_id), booking_ref)
+                        )
+                        conn.commit()
+            except Exception as ue:
+                logger.warning(f"Could not save woo_order_id for {booking_ref}: {ue}")
+
+        # NOTE: we do NOT sync to all_appointments here.
+        # _sync_hotboat_to_all is called by the WooCommerce webhook once payment is confirmed.
         return {
-            "booking_ref": result["booking_ref"],
+            "booking_ref": booking_ref,
             "status": result["status"],
             "total_price": total,
             "payment_url": payment_url,

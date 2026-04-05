@@ -21,6 +21,7 @@ class CreateBookingRequest(BaseModel):
     has_flex: bool = False
     notes: Optional[str] = None
     source: str = "web"
+    test_price: Optional[int] = None  # Override total for testing (e.g. 100 CLP)
 
 
 class BookingResponse(BaseModel):

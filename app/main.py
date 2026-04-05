@@ -235,6 +235,23 @@ async def _run_auto_sync():
                     conn.commit()
 
             logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), +{inserted_book} booknetic, +{inserted_hb} web, {status_updated} estados")
+
+            # Clean up stale pending_payment web bookings (older than 45 min)
+            try:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            DELETE FROM hotboat_appointments
+                            WHERE status = 'pending_payment'
+                              AND created_at < NOW() - INTERVAL '45 minutes'
+                        """)
+                        deleted = cur.rowcount
+                        conn.commit()
+                if deleted:
+                    logger.info(f"🗑️ Auto-cleanup: {deleted} pending_payment booking(s) > 45 min eliminados")
+            except Exception as ce:
+                logger.warning(f"Cleanup pending_payment error: {ce}")
+
         except Exception as e:
             logger.error(f"❌ Auto-sync error: {e}")
 

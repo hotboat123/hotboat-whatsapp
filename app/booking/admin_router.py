@@ -960,7 +960,12 @@ async def woo_webhook(request: Request):
         if status not in ("processing", "completed"):
             return {"ok": True, "ignored": True, "status": status}
 
-        # Find reservation by payment_id
+        # Extract HotBoat metadata from the order
+        meta_map = {m["key"]: m["value"] for m in data.get("meta_data", [])}
+        booking_ref_wc = meta_map.get("hotboat_booking_ref", "")
+
+        # ── 1. Update all_appointments (admin-created reservations) ──────────
+        res_id = None
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -968,32 +973,76 @@ async def woo_webhook(request: Request):
                     (str(wc_id),)
                 )
                 row = cur.fetchone()
-                if not row:
-                    logger.warning(f"WC webhook: no reservation found for order {wc_id}")
-                    return {"ok": True, "ignored": True, "reason": "reservation not found"}
+                if row:
+                    res_id, nombre, pagos_raw = row
+                    pagos = list(pagos_raw) if pagos_raw else []
+                    already = any(p.get("wc_order_id") == wc_id for p in pagos)
+                    if not already:
+                        pagos.append({
+                            "amount":      total,
+                            "method":      "WooCommerce",
+                            "wc_order_id": wc_id,
+                            "date":        data.get("date_paid", "")[:10] if data.get("date_paid") else "",
+                            "status":      status,
+                        })
+                    cur.execute(
+                        f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
+                        (PgJson(pagos), status, res_id)
+                    )
+                    conn.commit()
 
-                res_id, nombre, pagos_raw = row
-                pagos = list(pagos_raw) if pagos_raw else []
+        # ── 2. Update hotboat_appointments (web booking flow) ────────────────
+        if booking_ref_wc:
+            try:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT id, customer_name, customer_phone, customer_email, "
+                            "booking_date, booking_time, num_people, subtotal, extras_total, "
+                            "total_price, has_flex, flex_amount, extras, notes "
+                            "FROM hotboat_appointments WHERE booking_ref=%s",
+                            (booking_ref_wc,)
+                        )
+                        ha_row = cur.fetchone()
+                        if ha_row:
+                            (ha_id, ha_name, ha_phone, ha_email,
+                             ha_date, ha_time, ha_people, ha_sub,
+                             ha_ext, ha_total, ha_flex, ha_flex_amt,
+                             ha_extras_json, ha_notes) = ha_row
 
-                # Add payment record if not already present
-                already = any(p.get("wc_order_id") == wc_id for p in pagos)
-                if not already:
-                    pagos.append({
-                        "amount":      total,
-                        "method":      "WooCommerce",
-                        "wc_order_id": wc_id,
-                        "date":        data.get("date_paid", "")[:10] if data.get("date_paid") else "",
-                        "status":      status,
-                    })
+                            cur.execute(
+                                "UPDATE hotboat_appointments "
+                                "SET status='confirmed', payment_order_id=%s, payment_status=%s, "
+                                "paid_at=NOW(), updated_at=NOW() WHERE booking_ref=%s",
+                                (str(wc_id), status, booking_ref_wc)
+                            )
+                            conn.commit()
 
-                cur.execute(
-                    f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
-                    (PgJson(pagos), status, res_id)
-                )
-                conn.commit()
+                            # Sync confirmed booking into all_appointments
+                            from app.booking.router import _sync_hotboat_to_all
+                            import json as _json
+                            booking_data = {
+                                "customer_name":  ha_name,
+                                "customer_phone": ha_phone,
+                                "customer_email": ha_email,
+                                "booking_date":   str(ha_date),
+                                "booking_time":   str(ha_time)[:5],
+                                "num_people":     ha_people,
+                                "subtotal":       float(ha_sub or 0),
+                                "extras_total":   float(ha_ext or 0),
+                                "total_price":    float(ha_total or 0),
+                                "has_flex":       ha_flex,
+                                "flex_amount":    float(ha_flex_amt or 0),
+                                "extras":         _json.loads(ha_extras_json) if isinstance(ha_extras_json, str) else (ha_extras_json or []),
+                                "notes":          ha_notes,
+                            }
+                            _sync_hotboat_to_all(booking_ref_wc, booking_data, "confirmed")
+                            logger.info(f"WC webhook: hotboat_appointments {booking_ref_wc} confirmed + synced")
+            except Exception as he:
+                logger.error(f"WC webhook: error updating hotboat_appointments {booking_ref_wc}: {he}")
 
-        logger.info(f"WC webhook: reservation {res_id} updated → status={status}, amount={total}")
-        return {"ok": True, "reservation_id": res_id, "status": status}
+        logger.info(f"WC webhook: order {wc_id} processed → status={status}, amount={total}")
+        return {"ok": True, "reservation_id": res_id, "booking_ref": booking_ref_wc, "status": status}
 
     except Exception as e:
         logger.error(f"WC webhook error: {e}")

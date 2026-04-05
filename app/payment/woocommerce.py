@@ -27,6 +27,7 @@ _AUTH = (WOO_CK, WOO_CS)
 async def create_order(
     *,
     reservation_id: int,
+    booking_ref: str | None = None,
     nombre: str,
     telefono: str | None,
     email: str | None,
@@ -78,6 +79,7 @@ async def create_order(
         "fee_lines": fee_lines,
         "meta_data": [
             {"key": "hotboat_reservation_id", "value": str(reservation_id)},
+            {"key": "hotboat_booking_ref",    "value": booking_ref or ""},
         ],
         "customer_note": f"Reserva #{reservation_id} – HotBoat Chile",
     }

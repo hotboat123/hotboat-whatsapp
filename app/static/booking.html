@@ -937,19 +937,24 @@ async function submitBooking(){
   </div>`;
 
   try{
+    // Support ?test_price=100 in URL for payment testing
+    const testPrice = new URLSearchParams(location.search).get('test_price');
+    const payload = {
+      customer_name: S.customerName,
+      customer_phone: S.customerPhone,
+      customer_email: S.customerEmail || null,
+      booking_date: S.selectedDate,
+      booking_time: S.selectedTime,
+      num_people: S.numPeople,
+      extras: extrasArr,
+      has_flex: S.hasFlex,
+    };
+    if(testPrice) payload.test_price = parseInt(testPrice);
+
     const r = await fetch('/api/booking/create',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        customer_name: S.customerName,
-        customer_phone: S.customerPhone,
-        customer_email: S.customerEmail || null,
-        booking_date: S.selectedDate,
-        booking_time: S.selectedTime,
-        num_people: S.numPeople,
-        extras: extrasArr,
-        has_flex: S.hasFlex,
-      })
+      body: JSON.stringify(payload)
     });
     const data = await r.json();
     if(!r.ok) throw new Error(data.detail || 'Error');
@@ -1024,6 +1029,16 @@ async function init(){
     mc.innerHTML = `<div class="card" style="text-align:center"><p>Cargando...</p></div>`;
     await loadPricesAndAvail();
     renderMenu();
+
+    // Show test mode banner
+    const tp = new URLSearchParams(location.search).get('test_price');
+    if(tp){
+      const banner = document.createElement('div');
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#f0a500;color:#0a1628;'+
+        'text-align:center;padding:.4rem;font-weight:700;font-size:.85rem;z-index:9999;';
+      banner.textContent = `🧪 MODO TEST — el pago se procesará por $${parseInt(tp).toLocaleString('es-CL')} CLP`;
+      document.body.prepend(banner);
+    }
   }
 }
 
