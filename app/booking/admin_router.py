@@ -938,13 +938,17 @@ async def woo_webhook(request: Request):
     if not verify_webhook_signature(body, sig):
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
+    # WooCommerce sends an empty-body ping when the webhook is first saved — return 200 OK
+    if not body or not body.strip():
+        return {"ok": True, "ignored": True, "reason": "ping"}
+
     try:
         import json
         from psycopg.types.json import Jsonb as PgJson
         data   = json.loads(body)
         status = data.get("status", "")
         wc_id  = data.get("id")
-        total  = float(data.get("total", 0))
+        total  = float(data.get("total", 0) or 0)
 
         if status not in ("processing", "completed"):
             return {"ok": True, "ignored": True, "status": status}
