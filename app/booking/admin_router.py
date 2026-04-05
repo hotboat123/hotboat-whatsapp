@@ -857,7 +857,7 @@ async def send_payment_link(rid: int, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     try:
         from app.payment.woocommerce import create_order
-        from app.whatsapp.client import send_whatsapp_message
+        from app.whatsapp.client import whatsapp_client
         from psycopg.types.json import Jsonb as PgJson
 
         with get_connection() as conn:
@@ -898,7 +898,7 @@ async def send_payment_link(rid: int, x_admin_key: str = Header("")):
         )
 
         phone_clean = telefono.replace("+", "").replace(" ", "")
-        await send_whatsapp_message(phone_clean, msg)
+        await whatsapp_client.send_text_message(to=phone_clean, message=msg)
 
         # Save the order_id in the reservation for tracking
         with get_connection() as conn:
