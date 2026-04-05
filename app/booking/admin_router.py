@@ -847,3 +847,143 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
     except Exception as e:
         logger.error(f"Error deleting extra {extra_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── WooCommerce: send payment link ────────────────────────────────────────────
+
+@admin_router.post("/api/admin/reservas/{rid}/send-payment-link")
+async def send_payment_link(rid: int, x_admin_key: str = Header("")):
+    """Create a WooCommerce order and send the payment link via WhatsApp."""
+    _check_auth(x_admin_key)
+    try:
+        from app.payment.woocommerce import create_order
+        from app.whatsapp.client import send_whatsapp_message
+        from psycopg.types.json import Jsonb as PgJson
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT nombre_cliente, telefono, email, ingreso_reserva, "
+                    f"ingreso_extras, ingreso_total, fecha, num_personas FROM {TABLE} WHERE id=%s",
+                    (rid,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Reserva no encontrada")
+                nombre, telefono, email, ing_res, ing_ext, ing_total, fecha, num_p = row
+
+        if not telefono:
+            raise HTTPException(status_code=400, detail="La reserva no tiene teléfono")
+
+        order = await create_order(
+            reservation_id=rid,
+            nombre=nombre or "Cliente",
+            telefono=telefono,
+            email=email,
+            monto_reserva=float(ing_res or 0),
+            monto_extras=float(ing_ext or 0),
+            fecha=str(fecha) if fecha else None,
+            num_personas=num_p,
+        )
+
+        # Build WhatsApp message
+        first_name = (nombre or "").strip().split()[0]
+        fecha_str  = str(fecha) if fecha else "tu reserva"
+        msg = (
+            f"Hola {first_name}! 🚤\n"
+            f"Tu reserva HotBoat para el {fecha_str} está lista.\n\n"
+            f"💳 Para confirmarla, realiza el pago aquí:\n"
+            f"{order['payment_url']}\n\n"
+            f"Cualquier duda estamos disponibles. ¡Nos vemos! 🙌"
+        )
+
+        phone_clean = telefono.replace("+", "").replace(" ", "")
+        await send_whatsapp_message(phone_clean, msg)
+
+        # Save the order_id in the reservation for tracking
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE {TABLE} SET payment_id=%s, payment_status='pending', updated_at=NOW() WHERE id=%s",
+                    (str(order["order_id"]), rid)
+                )
+                conn.commit()
+
+        logger.info(f"Payment link sent for reservation {rid} → WC order {order['order_id']}")
+        return {
+            "ok": True,
+            "order_id":    order["order_id"],
+            "payment_url": order["payment_url"],
+            "message_sent_to": telefono,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending payment link for {rid}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── WooCommerce: receive payment webhook ──────────────────────────────────────
+
+@admin_router.post("/api/woo-webhook")
+async def woo_webhook(request: Request):
+    """
+    Receives WooCommerce order.updated / order.completed webhooks.
+    Marks the reservation as paid when the order status becomes 'processing' or 'completed'.
+    """
+    body = await request.body()
+
+    sig = request.headers.get("x-wc-webhook-signature", "")
+    from app.payment.woocommerce import verify_webhook_signature
+    if not verify_webhook_signature(body, sig):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    try:
+        import json
+        from psycopg.types.json import Jsonb as PgJson
+        data   = json.loads(body)
+        status = data.get("status", "")
+        wc_id  = data.get("id")
+        total  = float(data.get("total", 0))
+
+        if status not in ("processing", "completed"):
+            return {"ok": True, "ignored": True, "status": status}
+
+        # Find reservation by payment_id
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT id, nombre_cliente, COALESCE(pagos,'[]'::jsonb) FROM {TABLE} WHERE payment_id=%s",
+                    (str(wc_id),)
+                )
+                row = cur.fetchone()
+                if not row:
+                    logger.warning(f"WC webhook: no reservation found for order {wc_id}")
+                    return {"ok": True, "ignored": True, "reason": "reservation not found"}
+
+                res_id, nombre, pagos_raw = row
+                pagos = list(pagos_raw) if pagos_raw else []
+
+                # Add payment record if not already present
+                already = any(p.get("wc_order_id") == wc_id for p in pagos)
+                if not already:
+                    pagos.append({
+                        "amount":      total,
+                        "method":      "WooCommerce",
+                        "wc_order_id": wc_id,
+                        "date":        data.get("date_paid", "")[:10] if data.get("date_paid") else "",
+                        "status":      status,
+                    })
+
+                cur.execute(
+                    f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
+                    (PgJson(pagos), status, res_id)
+                )
+                conn.commit()
+
+        logger.info(f"WC webhook: reservation {res_id} updated → status={status}, amount={total}")
+        return {"ok": True, "reservation_id": res_id, "status": status}
+
+    except Exception as e:
+        logger.error(f"WC webhook error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

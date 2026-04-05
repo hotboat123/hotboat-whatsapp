@@ -1196,6 +1196,10 @@ async function openModal(id){
       <div id="modal-save-err" style="color:var(--red);font-size:.8rem;display:none;margin-top:.5rem"></div>
       <div class="modal-actions">
         <button class="btn-del" onclick="deleteReserva(${id},'${(r.nombre_cliente||'esta reserva').replace(/'/g,"\\'")}')">🗑 Eliminar</button>
+        <button onclick="sendPaymentLink(${id})" title="Crear orden WooCommerce y enviar link de pago por WhatsApp"
+          style="background:rgba(37,211,102,.15);color:#25d366;border:1px solid rgba(37,211,102,.35);border-radius:8px;padding:.5rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">
+          💳 Solicitar Pago
+        </button>
         <button class="btn-del" onclick="closeModal()" style="margin-left:auto">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
@@ -2131,6 +2135,22 @@ function addExtraFromSelect(){
   }
   sel.value='';
   renderExtrasEditor();
+}
+
+async function sendPaymentLink(id){
+  if(!confirm('¿Enviar link de pago por WhatsApp al cliente?')) return;
+  try{
+    showToast('Creando orden y enviando link...');
+    const d = await api(`/api/admin/reservas/${id}/send-payment-link`, {method:'POST'});
+    showToast(`✓ Link enviado a ${d.message_sent_to}`);
+    // Show the payment URL so admin can also share manually
+    setTimeout(()=>{
+      const copy = confirm(`Link de pago:\n${d.payment_url}\n\n¿Copiar al portapapeles?`);
+      if(copy) navigator.clipboard?.writeText(d.payment_url);
+    }, 500);
+  }catch(e){
+    showToast('Error: '+e.message);
+  }
 }
 
 function showToast(msg){
