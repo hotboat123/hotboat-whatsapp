@@ -401,14 +401,21 @@ async def create_solicitud(request: SolicitudRequest):
 
 
 def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):
-    """Insert a new hotboat booking into all_appointments immediately."""
+    """Upsert a hotboat web booking into all_appointments."""
     from app.db.connection import get_connection
     from psycopg.types.json import Jsonb as PgJson
     import re
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM all_appointments WHERE source='hotboat_web' AND source_id=%s", (booking_ref,))
-            if cur.fetchone():
+            existing = cur.fetchone()
+            if existing:
+                # Update status (and total in case it changed) instead of silently returning
+                cur.execute(
+                    "UPDATE all_appointments SET status=%s, updated_at=NOW() WHERE id=%s",
+                    (status, existing[0])
+                )
+                conn.commit()
                 return
             fecha = data.get("booking_date")
             hora = data.get("booking_time")
