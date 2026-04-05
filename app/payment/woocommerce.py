@@ -49,15 +49,16 @@ async def create_order(
     total = monto_reserva + monto_extras
 
     # Build line items as fee_lines (no product catalog needed)
+    label = f"Anticipo 50% · HotBoat{f' {num_personas}p' if num_personas else ''}{f' · {fecha}' if fecha else ''}"
     fee_lines = [
         {
-            "name": f"Reserva HotBoat{f' – {num_personas} personas' if num_personas else ''}{f' ({fecha})' if fecha else ''}",
+            "name": label,
             "total": str(int(monto_reserva)),
         }
     ]
     if monto_extras > 0:
         fee_lines.append({
-            "name": "Extras",
+            "name": "Extras (anticipo 50%)",
             "total": str(int(monto_extras)),
         })
 

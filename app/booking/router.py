@@ -242,13 +242,15 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         result = create_booking(data)
         booking_ref = result["booking_ref"]
 
-        # Determine amount to charge (support test_price override)
-        woo_monto_reserva = subtotal + flex_amount
-        woo_monto_extras  = extras_total
+        # Determine amount to charge (50% deposit, support test_price override)
         if request.test_price is not None and request.test_price > 0:
             woo_monto_reserva = request.test_price
             woo_monto_extras  = 0
             logger.info(f"TEST MODE: overriding WooCommerce total to {request.test_price} CLP for {booking_ref}")
+        else:
+            # Charge 50% upfront as deposit via Webpay/Transbank
+            woo_monto_reserva = round((subtotal + flex_amount) * 0.5)
+            woo_monto_extras  = round(extras_total * 0.5)
 
         payment_url = None
         woo_order_id = None

@@ -964,6 +964,21 @@ async def woo_webhook(request: Request):
         meta_map = {m["key"]: m["value"] for m in data.get("meta_data", [])}
         booking_ref_wc = meta_map.get("hotboat_booking_ref", "")
 
+        paid_date = data.get("date_paid", "")[:10] if data.get("date_paid") else ""
+
+        def _add_pago(pagos: list, amount: float, method: str) -> list:
+            """Add a payment entry if not already present for this WC order."""
+            already = any(p.get("wc_order_id") == wc_id for p in pagos)
+            if not already:
+                pagos.append({
+                    "amount":      amount,
+                    "method":      method,
+                    "wc_order_id": wc_id,
+                    "date":        paid_date,
+                    "status":      status,
+                })
+            return pagos
+
         # ── 1. Update all_appointments (admin-created reservations) ──────────
         res_id = None
         with get_connection() as conn:
@@ -975,16 +990,7 @@ async def woo_webhook(request: Request):
                 row = cur.fetchone()
                 if row:
                     res_id, nombre, pagos_raw = row
-                    pagos = list(pagos_raw) if pagos_raw else []
-                    already = any(p.get("wc_order_id") == wc_id for p in pagos)
-                    if not already:
-                        pagos.append({
-                            "amount":      total,
-                            "method":      "WooCommerce",
-                            "wc_order_id": wc_id,
-                            "date":        data.get("date_paid", "")[:10] if data.get("date_paid") else "",
-                            "status":      status,
-                        })
+                    pagos = _add_pago(list(pagos_raw) if pagos_raw else [], total, "Transbank")
                     cur.execute(
                         f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
                         (PgJson(pagos), status, res_id)
@@ -1037,6 +1043,28 @@ async def woo_webhook(request: Request):
                                 "notes":          ha_notes,
                             }
                             _sync_hotboat_to_all(booking_ref_wc, booking_data, "confirmed")
+
+                            # Register payment in all_appointments.pagos
+                            with get_connection() as conn2:
+                                with conn2.cursor() as cur2:
+                                    cur2.execute(
+                                        f"SELECT id, COALESCE(pagos,'[]'::jsonb) FROM {TABLE} "
+                                        f"WHERE source='hotboat_web' AND source_id=%s",
+                                        (booking_ref_wc,)
+                                    )
+                                    all_row = cur2.fetchone()
+                                    if all_row:
+                                        all_id, pagos_raw2 = all_row
+                                        pagos2 = _add_pago(
+                                            list(pagos_raw2) if pagos_raw2 else [],
+                                            total, "Transbank"
+                                        )
+                                        cur2.execute(
+                                            f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
+                                            (PgJson(pagos2), status, all_id)
+                                        )
+                                        conn2.commit()
+
                             logger.info(f"WC webhook: hotboat_appointments {booking_ref_wc} confirmed + synced")
             except Exception as he:
                 logger.error(f"WC webhook: error updating hotboat_appointments {booking_ref_wc}: {he}")
