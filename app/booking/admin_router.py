@@ -82,7 +82,7 @@ async def list_reservas(
                            ingreso_reserva, ingreso_extras, ingreso_total,
                            costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
                            ciudad_origen, como_supieron, clima_del_dia,
-                           categoria_clientes, tipo_clientes,
+                           categoria_clientes, tipo_clientes, quien_atendio,
                            status, tiene_cruce, extras_json, observaciones,
                            payment_id, payment_status,
                            COALESCE(pagos, '[]'::jsonb) AS pagos,
@@ -150,6 +150,7 @@ class UpdateReservaRequest(BaseModel):
     clima_del_dia: Optional[str] = None
     categoria_clientes: Optional[str] = None
     tipo_clientes: Optional[str] = None
+    quien_atendio: Optional[str] = None
     num_personas: Optional[int] = None
     num_adultos: Optional[int] = None
     num_ninos: Optional[int] = None

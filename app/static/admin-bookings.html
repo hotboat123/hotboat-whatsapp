@@ -892,6 +892,7 @@ async function openClientModal(tel){
         ${row('🌤','Clima:',r.clima_del_dia||'')}
         ${row('📍','Ciudad:',r.ciudad_origen||'')}
         ${row('💬','Cómo supieron:',r.como_supieron||'')}
+        ${row('🙋','Atendió:',r.quien_atendio||'')}
         ${extrasHtml}
         ${descHtml}
         ${pagosHtml}
@@ -1149,6 +1150,28 @@ async function openModal(id){
         })()}
       </div>
       <div class="form-group" style="margin-bottom:.8rem">
+        <label>Quién los atendió</label>
+        ${(()=>{
+          const ATEND=['Nestor','Axel','Tomás','Panchini','Otro'];
+          const cur = r.quien_atendio||'';
+          const isOtro = cur && !ATEND.slice(0,-1).includes(cur);
+          const selVal = isOtro ? 'Otro' : cur;
+          return `<select id="e-quien_atendio_sel" onchange="
+            const v=this.value;
+            const inp=document.getElementById('e-quien_atendio_txt');
+            inp.style.display=v==='Otro'?'block':'none';
+            if(v!=='Otro') document.getElementById('e-quien_atendio').value=v; else document.getElementById('e-quien_atendio').value=inp.value;">
+            <option value="">— seleccionar —</option>
+            ${ATEND.map(t=>`<option value="${t}"${selVal===t?' selected':''}>${t}</option>`).join('')}
+          </select>
+          <input id="e-quien_atendio_txt" placeholder="Especificar quién atendió..."
+            value="${isOtro?cur:''}"
+            oninput="document.getElementById('e-quien_atendio').value=this.value"
+            style="margin-top:.4rem;display:${isOtro?'block':'none'}">
+          <input type="hidden" id="e-quien_atendio" value="${cur}">`;
+        })()}
+      </div>
+      <div class="form-group" style="margin-bottom:.8rem">
         <label>Observaciones del admin</label>
         <textarea id="e-observaciones" rows="3" placeholder="Notas internas sobre esta reserva...">${r.observaciones||''}</textarea>
       </div>
@@ -1255,6 +1278,7 @@ async function saveModal(id){
     ciudad_origen:g('e-ciudad_origen'),
     como_supieron:g('e-como_supieron'), clima_del_dia:g('e-clima_del_dia'),
     categoria_clientes:g('e-categoria_clientes'), tipo_clientes:g('e-tipo_clientes'),
+    quien_atendio:(g('e-quien_atendio')||'').trim(),
     num_personas: g('e-num_personas') ? +g('e-num_personas') : null,
     num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
     num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,
@@ -1273,7 +1297,7 @@ async function saveModal(id){
   body.pagos = _pagos.filter(p=>p.amount||p.method);
   body.descuentos = _descuentos.filter(d=>d.amount||d.type||d.note);
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos']);
+  const keepAlways = new Set(['extras_json','descuentos','quien_atendio']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
