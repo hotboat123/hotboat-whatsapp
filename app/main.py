@@ -328,6 +328,55 @@ async def root():
         }
 
 
+@app.get("/pagar", response_class=HTMLResponse)
+async def pago_page():
+    """Serve branded payment landing page"""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    path = os.path.join(static_dir, "pagar.html")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse("<h1>Página no encontrada</h1>", status_code=404)
+
+
+@app.get("/api/pago/order/{order_id}")
+async def pago_order_proxy(order_id: int):
+    """
+    Proxy that fetches order details from WooCommerce and returns
+    friendly data for the /pagar page.
+    """
+    try:
+        from app.payment.woocommerce import get_order, WOO_URL
+        data = await get_order(order_id)
+        # Extract HotBoat-specific meta
+        meta_map = {m["key"]: m["value"] for m in data.get("meta_data", [])}
+        fee_lines = data.get("fee_lines", [])
+        # Parse fecha / personas from fee_line name e.g.
+        # "Reserva HotBoat – 4 personas (2026-05-31)"
+        import re
+        fee_name = fee_lines[0]["name"] if fee_lines else ""
+        match_p = re.search(r'(\d+)\s*persona', fee_name)
+        match_f = re.search(r'\((\d{4}-\d{2}-\d{2})\)', fee_name)
+        extras_names = [fl["name"] for fl in fee_lines[1:]] if len(fee_lines) > 1 else []
+        return {
+            "order_id":   order_id,
+            "status":     data.get("status"),
+            "total":      data.get("total"),
+            "payment_url": data.get("payment_url") or
+                f"{WOO_URL}/checkout/order-pay/{order_id}/?pay_for_order=true&key={data.get('order_key','')}",
+            "billing":    data.get("billing", {}),
+            "meta": {
+                "fecha":    match_f.group(1) if match_f else meta_map.get("hotboat_fecha",""),
+                "personas": match_p.group(1) if match_p else "",
+                "extras":   ", ".join(extras_names) if extras_names else "",
+                "hora":     meta_map.get("hotboat_hora",""),
+            },
+        }
+    except Exception as e:
+        logger.warning(f"pago_order_proxy error for order {order_id}: {e}")
+        return {}
+
+
 @app.get("/health")
 async def health():
     """Detailed health check"""

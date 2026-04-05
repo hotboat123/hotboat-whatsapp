@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HotBoat Chile · Pagar Reserva</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0a1628;--deep:#0d2040;--blue:#1a3a6e;
+  --coral:#ff5c35;--gold:#f0a500;
+  --text:#f0f4ff;--muted:#8899bb;
+  --card:#132240;--border:#1e3a6e;
+  --green:#2ecc71;
+}
+body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem}
+
+.logo{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;color:var(--gold);
+  letter-spacing:.08em;text-align:center;margin-bottom:.2rem}
+.tagline{color:var(--muted);font-size:.85rem;text-align:center;margin-bottom:2rem;letter-spacing:.05em}
+.boat-emoji{font-size:2.5rem;display:block;text-align:center;margin-bottom:.5rem}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:20px;
+  width:100%;max-width:420px;padding:2rem;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+
+.rsv-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(240,165,0,.12);
+  color:var(--gold);border:1px solid rgba(240,165,0,.3);border-radius:30px;
+  padding:.3rem .9rem;font-size:.75rem;font-weight:700;letter-spacing:.05em;margin-bottom:1.2rem}
+
+.rsv-title{font-size:1.3rem;font-weight:800;margin-bottom:.2rem;line-height:1.3}
+.rsv-sub{color:var(--muted);font-size:.88rem;margin-bottom:1.5rem}
+
+.detail-row{display:flex;align-items:center;gap:.7rem;padding:.65rem 0;
+  border-bottom:1px solid rgba(255,255,255,.06);font-size:.88rem}
+.detail-row:last-of-type{border-bottom:none}
+.detail-icon{font-size:1.1rem;width:1.6rem;text-align:center;flex-shrink:0}
+.detail-label{color:var(--muted);flex:1}
+.detail-val{font-weight:600;text-align:right}
+
+.divider{height:1px;background:var(--border);margin:1.4rem 0}
+
+.total-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem}
+.total-label{font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.total-amount{font-size:1.8rem;font-weight:800;color:var(--gold)}
+
+.btn-pay{display:block;width:100%;padding:1rem;
+  background:linear-gradient(135deg,var(--coral),#ff3a1a);
+  color:#fff;border:none;border-radius:14px;font-size:1.05rem;font-weight:800;
+  cursor:pointer;text-align:center;text-decoration:none;letter-spacing:.03em;
+  transition:transform .15s,box-shadow .15s;box-shadow:0 4px 20px rgba(255,92,53,.4)}
+.btn-pay:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(255,92,53,.55)}
+.btn-pay:active{transform:translateY(0)}
+
+.security-note{display:flex;align-items:center;justify-content:center;gap:.4rem;
+  font-size:.72rem;color:var(--muted);margin-top:.9rem}
+.security-note span{font-size:.9rem}
+
+.loading{text-align:center;color:var(--muted);padding:2rem}
+.error-msg{background:rgba(255,92,53,.1);border:1px solid rgba(255,92,53,.3);
+  border-radius:12px;padding:1rem;color:#ff7c5c;font-size:.85rem;text-align:center;margin-top:1rem}
+</style>
+</head>
+<body>
+
+<span class="boat-emoji">🚤</span>
+<div class="logo">HotBoat Chile</div>
+<p class="tagline">LAGO VILLARRICA · PUCÓN</p>
+
+<div class="card" id="main-card">
+  <div class="loading" id="loading-state">Cargando tu reserva...</div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const orderId  = params.get('order_id');
+const key      = params.get('key');
+const wooUrl   = params.get('woo_url');   // direct WooCommerce payment URL (fallback)
+
+async function init(){
+  const card = document.getElementById('main-card');
+
+  if(!orderId && !wooUrl){
+    card.innerHTML = '<div class="error-msg">Link de pago inválido.</div>';
+    return;
+  }
+
+  let orderData = null;
+  if(orderId){
+    try{
+      const r = await fetch(`/api/pago/order/${orderId}`);
+      if(r.ok) orderData = await r.json();
+    }catch(e){ console.warn('Could not fetch order:', e); }
+  }
+
+  const payUrl = wooUrl || (orderData?.payment_url) ||
+    `https://hotboatchile.com/checkout/order-pay/${orderId}/?pay_for_order=true&key=${key||''}`;
+
+  const nombre    = orderData?.billing?.first_name || '';
+  const apellido  = orderData?.billing?.last_name  || '';
+  const fecha     = orderData?.meta?.fecha || '';
+  const personas  = orderData?.meta?.personas || '';
+  const total     = orderData?.total ? parseInt(orderData.total).toLocaleString('es-CL') : '—';
+  const extras    = orderData?.meta?.extras || '';
+  const hora      = orderData?.meta?.hora || '';
+
+  card.innerHTML = `
+    <div class="rsv-badge">🎟️ RESERVA CONFIRMADA</div>
+    <div class="rsv-title">¡Hola${nombre?' '+nombre:''}! Tu lugar está reservado 🎉</div>
+    <div class="rsv-sub">Solo falta completar el pago para asegurar tu experiencia.</div>
+
+    ${fecha?`<div class="detail-row"><span class="detail-icon">📅</span><span class="detail-label">Fecha</span><span class="detail-val">${fecha}</span></div>`:''}
+    ${hora?`<div class="detail-row"><span class="detail-icon">⏰</span><span class="detail-label">Hora</span><span class="detail-val">${hora}</span></div>`:''}
+    ${personas?`<div class="detail-row"><span class="detail-icon">👥</span><span class="detail-label">Personas</span><span class="detail-val">${personas}</span></div>`:''}
+    ${extras?`<div class="detail-row"><span class="detail-icon">✨</span><span class="detail-label">Extras</span><span class="detail-val">${extras}</span></div>`:''}
+
+    <div class="divider"></div>
+
+    <div class="total-row">
+      <span class="total-label">Total a pagar</span>
+      <span class="total-amount">$${total}</span>
+    </div>
+
+    <a href="${payUrl}" class="btn-pay">💳 Pagar ahora</a>
+
+    <div class="security-note">
+      <span>🔒</span> Pago seguro · Webpay Plus · Mercado Pago
+    </div>
+  `;
+}
+init();
+</script>
+</body>
+</html>

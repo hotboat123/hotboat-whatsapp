@@ -16,6 +16,8 @@ WOO_URL    = os.getenv("WOO_URL", "https://hotboatchile.com")
 WOO_CK     = os.getenv("WOO_CK", "")
 WOO_CS     = os.getenv("WOO_CS", "")
 WOO_SECRET = os.getenv("WOO_WEBHOOK_SECRET", "")
+# Public URL of our FastAPI server — used to build branded /pagar links
+APP_URL    = os.getenv("PUBLIC_BASE_URL", os.getenv("APP_URL", "https://hotboat-whatsapp-staging-tom.up.railway.app"))
 
 _API = f"{WOO_URL}/wp-json/wc/v3"
 _AUTH = (WOO_CK, WOO_CS)
@@ -85,15 +87,28 @@ async def create_order(
         data = resp.json()
 
     order_id    = data["id"]
-    payment_url = data.get("payment_url") or f"{WOO_URL}/checkout/order-pay/{order_id}/?pay_for_order=true&key={data.get('order_key','')}"
+    order_key   = data.get("order_key", "")
+    woo_payment_url = (
+        data.get("payment_url") or
+        f"{WOO_URL}/checkout/order-pay/{order_id}/?pay_for_order=true&key={order_key}"
+    )
 
-    logger.info(f"WooCommerce order {order_id} created for reservation {reservation_id} – {payment_url}")
+    # Build branded /pagar landing page URL that wraps the WooCommerce checkout
+    branded_url = (
+        f"{APP_URL}/pagar"
+        f"?order_id={order_id}"
+        f"&key={order_key}"
+        f"&woo_url={woo_payment_url}"
+    )
+
+    logger.info(f"WooCommerce order {order_id} created for reservation {reservation_id} – {branded_url}")
     return {
-        "order_id":    order_id,
-        "order_key":   data.get("order_key", ""),
-        "payment_url": payment_url,
-        "status":      data.get("status", "pending"),
-        "total":       total,
+        "order_id":       order_id,
+        "order_key":      order_key,
+        "payment_url":    branded_url,      # branded page sent to client
+        "woo_direct_url": woo_payment_url,  # raw WooCommerce URL (backup)
+        "status":         data.get("status", "pending"),
+        "total":          total,
     }
 
 
