@@ -91,7 +91,11 @@ async def create_order(
     order_key   = data.get("order_key", "")
     woo_payment_url = (
         data.get("payment_url") or
-        f"{WOO_URL}/checkout/order-pay/{order_id}/?pay_for_order=true&key={order_key}"
+        f"{WOO_URL}/es/checkout/order-pay/{order_id}/?pay_for_order=true&key={order_key}"
+    )
+    # Force Spanish (/es/) in payment URL regardless of what WooCommerce returns
+    woo_payment_url = woo_payment_url.replace(
+        f"{WOO_URL}/checkout/", f"{WOO_URL}/es/checkout/"
     )
 
     # Build branded /pagar landing page URL that wraps the WooCommerce checkout
