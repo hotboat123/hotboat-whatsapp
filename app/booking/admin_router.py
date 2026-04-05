@@ -627,11 +627,15 @@ async def sync_tables(x_admin_key: str = Header("")):
                 """)
                 dedup_deleted = cur.rowcount
 
-                # Sync new booknetic records
+                # Sync booknetic — do not use MAX(reservas_con_extras.fecha) as lower bound (it is often
+                # a future date and would skip all earlier appointments, e.g. April when June exists in DB)
                 cur.execute("""
                     SELECT id, customer_name, customer_email, starts_at, status, raw, created_at
-                    FROM booknetic_appointments WHERE starts_at::date > %s
-                """, (cutoff,))
+                    FROM booknetic_appointments
+                    WHERE starts_at IS NOT NULL
+                      AND starts_at::date >= (CURRENT_DATE - INTERVAL '3 years')
+                      AND starts_at::date <= (CURRENT_DATE + INTERVAL '3 years')
+                """)
                 for row in cur.fetchall():
                     bid, nombre, email, starts_at, status, raw, created = row
                     raw = raw or {}
@@ -663,15 +667,18 @@ async def sync_tables(x_admin_key: str = Header("")):
                           service, num_p, ingreso, ingreso, status, created))
                     inserted_book += 1
 
-                # Sync new hotboat_appointments
+                # Sync hotboat_appointments (no reservas MAX fecha cutoff — see booknetic comment above)
                 cur.execute("""
                     SELECT booking_ref, customer_name, customer_email, customer_phone,
                            booking_date, booking_time, num_people,
                            subtotal, extras_total, total_price, extras, status,
                            payment_id, payment_status, notes, created_at
                     FROM hotboat_appointments
-                    WHERE booking_date > %s AND status != 'solicitud'
-                """, (cutoff,))
+                    WHERE booking_date IS NOT NULL
+                      AND booking_date >= (CURRENT_DATE - INTERVAL '3 years')
+                      AND booking_date <= (CURRENT_DATE + INTERVAL '3 years')
+                      AND status != 'solicitud'
+                """)
                 for row in cur.fetchall():
                     (ref, nombre, email, phone, fecha, hora, num_p,
                      sub, ext, total, extras, status, pay_id, pay_st, notes, created) = row
