@@ -8,6 +8,7 @@ import os
 import hmac
 import hashlib
 import logging
+from urllib.parse import quote
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -94,11 +95,12 @@ async def create_order(
     )
 
     # Build branded /pagar landing page URL that wraps the WooCommerce checkout
+    # woo_payment_url contains ? and & so it must be percent-encoded as a param value
     branded_url = (
         f"{APP_URL}/pagar"
         f"?order_id={order_id}"
-        f"&key={order_key}"
-        f"&woo_url={woo_payment_url}"
+        f"&key={quote(order_key, safe='')}"
+        f"&woo_url={quote(woo_payment_url, safe='')}"
     )
 
     logger.info(f"WooCommerce order {order_id} created for reservation {reservation_id} – {branded_url}")
