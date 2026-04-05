@@ -183,12 +183,21 @@ async def _run_auto_sync():
                     for row in cur.fetchall():
                         bid, nombre, email, starts_at, status, raw, created = row
                         raw = raw or {}
-                        cur.execute(f"SELECT id, status FROM {TABLE} WHERE source='booknetic' AND source_id=%s", (str(bid),))
+                        sid = str(bid)
+                        cur.execute(
+                            f"""SELECT id, source, status FROM {TABLE}
+                                WHERE (source = 'booknetic' AND source_id = %s)
+                                   OR (appointment_id IS NOT NULL AND TRIM(appointment_id::text) = %s)
+                                LIMIT 1""",
+                            (sid, sid),
+                        )
                         existing = cur.fetchone()
                         if existing:
-                            if status and status != existing[1]:
-                                cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s", (status, existing[0]))
+                            ex_id, ex_src, ex_st = existing[0], existing[1], existing[2]
+                            if ex_src == "booknetic" and status and status != ex_st:
+                                cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s", (status, ex_id))
                                 status_updated += 1
+                            continue
                         else:
                             phone = normalize_phone(raw.get("phone") or raw.get("customer_phone") or raw.get("cf_phone"))
                             fecha = starts_at.date() if hasattr(starts_at, 'date') else starts_at

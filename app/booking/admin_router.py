@@ -639,15 +639,24 @@ async def sync_tables(x_admin_key: str = Header("")):
                 for row in cur.fetchall():
                     bid, nombre, email, starts_at, status, raw, created = row
                     raw = raw or {}
-                    # Check if already in all_appointments
-                    cur.execute(f"SELECT id, status FROM {TABLE} WHERE source='booknetic' AND source_id=%s", (str(bid),))
+                    sid = str(bid)
+                    # Already synced as booknetic, OR reservas_con_extras already created a sheets row with this appointment_id
+                    cur.execute(
+                        f"""SELECT id, source, status FROM {TABLE}
+                            WHERE (source = 'booknetic' AND source_id = %s)
+                               OR (appointment_id IS NOT NULL AND TRIM(appointment_id::text) = %s)
+                            LIMIT 1""",
+                        (sid, sid),
+                    )
                     existing = cur.fetchone()
                     if existing:
-                        # Update status if changed
-                        if status and status != existing[1]:
-                            cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s",
-                                        (status, existing[0]))
-                            updated_status += 1
+                        ex_id, ex_src, ex_st = existing[0], existing[1], existing[2]
+                        if ex_src == "booknetic":
+                            if status and status != ex_st:
+                                cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s",
+                                            (status, ex_id))
+                                updated_status += 1
+                        # sheets (or other) row already represents this Booknetic ID — do not insert a 2nd row
                         continue
                     # Insert new
                     phone = normalize_phone(raw.get("customer_phone_number"))
