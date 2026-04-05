@@ -28,7 +28,7 @@ class FAQHandler:
 🎥 Video cinematográfico de tu aventura disponible
 🍹 ¡Disfruta bebestibles a bordo del HotBoat! Se mantendrán fríos en el cooler.
 🧺 Opción de tablas de picoteo a bordo
-🧼 Se limpia antes de cada uso, siempre impecable
+🧼 Se limpia y se cambia el agua antes de cada uso, siempre impecable
 
 ¿Te gustaría reservar tu experiencia?""",
             

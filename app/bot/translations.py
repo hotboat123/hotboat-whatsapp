@@ -366,7 +366,7 @@ Digite o idioma que deseja usar:
 🎥 Video cinematográfico de tu aventura disponible
 🍹 ¡Disfruta bebestibles a bordo del HotBoat! Se mantendrán fríos en el cooler.
 🧺 Opción de tablas de picoteo a bordo
-🧼 Se limpia antes de cada uso, siempre impecable
+🧼 Se limpia y se cambia el agua antes de cada uso, siempre impecable
 
 ¿Te gustaría reservar tu experiencia?""",
         
@@ -380,7 +380,7 @@ Digite o idioma que deseja usar:
 🎥 Cinematic video of your adventure available
 🍹 Enjoy drinks on board the HotBoat! They'll stay cold in the cooler.
 🧺 Charcuterie board option on board
-🧼 Cleaned before each use, always immaculate
+🧼 Cleaned and the water is changed before each use, always immaculate
 
 Would you like to book your experience?""",
         
@@ -394,7 +394,7 @@ Would you like to book your experience?""",
 🎥 Vídeo cinematográfico da sua aventura disponível
 🍹 Desfrute de bebidas a bordo do HotBoat! Ficarão geladas no cooler.
 🧺 Opção de tábua de frios a bordo
-🧼 Limpo antes de cada uso, sempre impecável
+🧼 Limpo e a água é trocada antes de cada uso, sempre impecável
 
 Gostaria de reservar sua experiência?"""
     },
