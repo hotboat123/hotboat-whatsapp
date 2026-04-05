@@ -864,24 +864,34 @@ async def send_payment_link(rid: int, x_admin_key: str = Header("")):
             with conn.cursor() as cur:
                 cur.execute(
                     f"SELECT nombre_cliente, telefono, email, ingreso_reserva, "
-                    f"ingreso_extras, ingreso_total, fecha, num_personas FROM {TABLE} WHERE id=%s",
+                    f"ingreso_extras, ingreso_total, fecha, num_personas, "
+                    f"COALESCE(pagos, '[]'::jsonb) FROM {TABLE} WHERE id=%s",
                     (rid,)
                 )
                 row = cur.fetchone()
                 if not row:
                     raise HTTPException(status_code=404, detail="Reserva no encontrada")
-                nombre, telefono, email, ing_res, ing_ext, ing_total, fecha, num_p = row
+                nombre, telefono, email, ing_res, ing_ext, ing_total, fecha, num_p, pagos_raw = row
 
         if not telefono:
             raise HTTPException(status_code=400, detail="La reserva no tiene teléfono")
+
+        # Charge only the remaining balance (pago faltante), not the full total
+        ya_pagado = sum(float(p.get("amount", 0)) for p in (pagos_raw or []))
+        ing_total_f = float(ing_total or 0)
+        pago_faltante = max(0, ing_total_f - ya_pagado)
+
+        # If nothing is owed, error out
+        if pago_faltante <= 0:
+            raise HTTPException(status_code=400, detail="La reserva ya está pagada en su totalidad")
 
         order = await create_order(
             reservation_id=rid,
             nombre=nombre or "Cliente",
             telefono=telefono,
             email=email,
-            monto_reserva=float(ing_res or 0),
-            monto_extras=float(ing_ext or 0),
+            monto_reserva=pago_faltante,
+            monto_extras=0,
             fecha=str(fecha) if fecha else None,
             num_personas=num_p,
         )
@@ -889,10 +899,11 @@ async def send_payment_link(rid: int, x_admin_key: str = Header("")):
         # Build WhatsApp message
         first_name = (nombre or "").strip().split()[0]
         fecha_str  = str(fecha) if fecha else "tu reserva"
+        monto_str  = f"${int(pago_faltante):,}".replace(",", ".")
         msg = (
             f"Hola {first_name}! 🚤\n"
-            f"Tu reserva HotBoat para el {fecha_str} está lista.\n\n"
-            f"💳 Para confirmarla, realiza el pago aquí:\n"
+            f"Te recordamos tu reserva HotBoat para el {fecha_str}.\n\n"
+            f"💳 Pago pendiente: *{monto_str} CLP*\n"
             f"{order['payment_url']}\n\n"
             f"Cualquier duda estamos disponibles. ¡Nos vemos! 🙌"
         )
