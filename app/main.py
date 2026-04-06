@@ -684,13 +684,11 @@ class QuickReplyRequest(BaseModel):
 async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
     """Send automatic menu response to conversation"""
     try:
-        # Import here to avoid circular imports
-        from app.bot.conversation import ConversationManager
         from app.bot.faq import FAQHandler
         from app.bot.translations import get_text
         
-        # Initialize managers
-        conv_manager = ConversationManager()
+        # Use the GLOBAL conversation_manager so metadata persists for the webhook
+        conv_manager = conversation_manager
         faq_handler = FAQHandler()
         
         # Get lead info first (without updating name)
@@ -791,6 +789,18 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                         await asyncio.sleep(0.5)
                 except Exception as img_err:
                     logger.warning(f"Could not send alojamiento image {idx}: {img_err}")
+            # Set accommodation_flow so the bot continues the flow when user replies
+            conversation["metadata"]["accommodation_flow"] = {
+                "step": "choosing_property",
+                "property": None,
+                "room_type": None,
+                "guests": None,
+                "checkin_date": None,
+                "checkout_date": None,
+            }
+            # Clear any conflicting flows
+            for key in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
+                conversation["metadata"].pop(key, None)
             conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
             return {
                 "status": "success",
