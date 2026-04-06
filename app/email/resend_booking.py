@@ -1,6 +1,6 @@
 """Send transactional HTML email via Resend (booking confirmations)."""
 import logging
-from typing import Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
