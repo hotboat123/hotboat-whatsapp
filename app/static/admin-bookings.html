@@ -595,7 +595,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
 <script>
 const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const DAYS_SHORT=['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+// Lunes = primer columna, domingo = última (ISO / Chile)
+const DAYS_SHORT=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+function calLeadDaysMonFirst(jsGetDay){ return (jsGetDay + 6) % 7; }
 let KEY='', allReservas=[], calYear=new Date().getFullYear(), calMonth=new Date().getMonth();
 let sortCol='fecha', sortDir=-1;
 let EXTRAS_CATALOG=[];   // loaded once after login
@@ -669,7 +671,8 @@ function calNext(){ calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCal
 function renderCal(){
   document.getElementById('cal-title').textContent = `${MONTHS[calMonth]} ${calYear}`;
   const grid = document.getElementById('cal-grid');
-  const firstDay = new Date(calYear,calMonth,1).getDay();
+  const firstDayJs = new Date(calYear,calMonth,1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
   const daysInMonth = new Date(calYear,calMonth+1,0).getDate();
   const today = new Date(); today.setHours(0,0,0,0);
 
@@ -1437,11 +1440,12 @@ function renderVacCal(){
   const title = document.getElementById('vac-cal-title');
   if(!grid) return;
   title.textContent = `${MONTHS[vacMonth]} ${vacYear}`;
-  const firstDay = new Date(vacYear,vacMonth,1).getDay();
+  const firstDayJs = new Date(vacYear,vacMonth,1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
   const daysInMonth = new Date(vacYear,vacMonth+1,0).getDate();
   const today = new Date(); today.setHours(0,0,0,0);
   let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
-  for(let i=0;i<firstDay;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let i=0;i<leadDays;i++) html+=`<div class="cal-day empty"></div>`;
   for(let d=1;d<=daysInMonth;d++){
     const dateStr=`${vacYear}-${String(vacMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dt=new Date(vacYear,vacMonth,d);

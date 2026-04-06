@@ -163,7 +163,8 @@ const S = {
   totalPrice: 0,
 };
 
-const DAYS = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+const DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+function calLeadDaysMonFirst(jsGetDay){ return (jsGetDay + 6) % 7; }
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 const EXTRAS_CATALOG = [
@@ -707,13 +708,14 @@ function goReservar(){
 
 function renderCal(){
   const yr=S.calYear, mo=S.calMonth;
-  const firstDay = new Date(yr, mo, 1).getDay();
+  const firstDayJs = new Date(yr, mo, 1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
   const daysInMonth = new Date(yr, mo+1, 0).getDate();
   const today = new Date(); today.setHours(0,0,0,0);
 
   let cells = '';
   DAYS.forEach(d=>{ cells += `<div class="cal-hdr">${d}</div>`; });
-  for(let i=0;i<firstDay;i++) cells += `<div class="cal-day empty"></div>`;
+  for(let i=0;i<leadDays;i++) cells += `<div class="cal-day empty"></div>`;
   for(let d=1;d<=daysInMonth;d++){
     const dt = new Date(yr,mo,d);
     const key = `${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -770,7 +772,7 @@ function renderTimeSelect(){
   `).join('');
   const [yr,mo,dy] = S.selectedDate.split('-');
   const d = new Date(yr,mo-1,dy);
-  const dayStr = DAYS[d.getDay()]+' '+dy+'/'+mo+'/'+yr;
+  const dayStr = DAYS[(d.getDay()+6)%7]+' '+dy+'/'+mo+'/'+yr;
 
   mc.innerHTML = `
   ${stepsHtml('fecha')}
