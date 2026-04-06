@@ -1483,27 +1483,54 @@ function renderWorkflowCards(d){
   for(const [trigger, m] of Object.entries(meta)){
     const cfg = wf[trigger] || {};
     const enabled = !!cfg.enabled;
+    const isSoon = !!m.coming_soon;
+
+    // Extra fields HTML (e.g. days_after for booking_followup)
+    let extraFieldsHtml = '';
+    for(const ef of (m.extra_fields||[])){
+      const val = cfg[ef.key] !== undefined ? cfg[ef.key] : ef.default;
+      extraFieldsHtml += `
+        <div style="margin-bottom:.85rem;display:flex;align-items:center;gap:.8rem;flex-wrap:wrap">
+          <label style="font-size:.74rem;color:var(--muted);text-transform:uppercase;
+                         letter-spacing:.05em;white-space:nowrap">${ef.label}</label>
+          <input type="${ef.type||'text'}" id="wf-ef-${trigger}-${ef.key}"
+            value="${val}" ${ef.min!==undefined?'min="'+ef.min+'"':''} ${ef.max!==undefined?'max="'+ef.max+'"':''}
+            style="width:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);
+                   border-radius:8px;padding:.38rem .5rem;font-size:.9rem;text-align:center">
+          <span style="font-size:.74rem;color:var(--muted)">${trigger==='booking_followup'?'días después de la fecha de la reserva':''}</span>
+        </div>`;
+    }
+
+    // Manual run button for followup sweep
+    const runBtn = trigger === 'booking_followup' ? `
+      <button onclick="runFollowupSweep()"
+        style="background:var(--card);border:1px solid var(--border);color:var(--text);
+               border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer">⚙️ Ejecutar ahora</button>` : '';
+
     const card = document.createElement('div');
     card.className = 'chart-wrap';
     card.id = 'wf-card-' + trigger;
-    card.style.cssText = 'padding:0;overflow:hidden;';
+    card.style.cssText = 'padding:0;overflow:hidden;' + (isSoon ? 'opacity:.55;' : '');
     card.innerHTML = `
-      <div style="display:flex;align-items:center;gap:.8rem;padding:1rem 1.2rem;cursor:pointer;
-                  border-bottom:1px solid var(--border);user-select:none"
-           onclick="toggleWorkflowCard('${trigger}')">
+      <div style="display:flex;align-items:center;gap:.8rem;padding:1rem 1.2rem;
+                  cursor:${isSoon?'default':'pointer'};border-bottom:1px solid var(--border);user-select:none"
+           onclick="${isSoon?'':("toggleWorkflowCard('"+trigger+"')")}">
         <span style="font-size:1.1rem">${m.icon||'✉️'}</span>
         <div style="flex:1">
-          <div style="font-size:.9rem;font-weight:600;color:var(--text)">${m.label}</div>
+          <div style="font-size:.9rem;font-weight:600;color:var(--text)">${m.label}
+            ${isSoon?'<span style="font-size:.7rem;background:rgba(255,200,0,.15);color:var(--gold);border-radius:20px;padding:.1rem .45rem;margin-left:.4rem">próximamente</span>':''}
+          </div>
           <div style="font-size:.75rem;color:var(--muted);margin-top:.1rem">${m.description}</div>
         </div>
-        <label class="toggle-wrap" onclick="event.stopPropagation()">
+        ${!isSoon?`<label class="toggle-wrap" onclick="event.stopPropagation()">
           <input type="checkbox" id="wf-en-${trigger}" ${enabled?'checked':''}
             onchange="saveWorkflowEnabled('${trigger}',this.checked)">
           <span class="toggle-slider"></span>
         </label>
-        <span id="wf-arrow-${trigger}" style="color:var(--muted);font-size:.8rem;margin-left:.3rem;transition:transform .2s">▼</span>
+        <span id="wf-arrow-${trigger}" style="color:var(--muted);font-size:.8rem;margin-left:.3rem;transition:transform .2s">▼</span>`:''}
       </div>
-      <div id="wf-body-${trigger}" style="display:none;padding:1rem 1.2rem;border-top:1px solid var(--border)">
+      ${!isSoon?`<div id="wf-body-${trigger}" style="display:none;padding:1rem 1.2rem;border-top:1px solid var(--border)">
+        ${extraFieldsHtml}
         <div style="margin-bottom:.85rem">
           <label style="font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.35rem">Asunto</label>
           <input type="text" id="wf-sub-${trigger}" value="${(cfg.subject||'').replace(/"/g,'&quot;')}"
@@ -1513,7 +1540,7 @@ function renderWorkflowCards(d){
         </div>
         <div style="margin-bottom:.85rem">
           <label style="font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.35rem">Cuerpo HTML <span style="text-transform:none;font-size:.72rem">(vacío = plantilla por defecto)</span></label>
-          <textarea id="wf-html-${trigger}" rows="8"
+          <textarea id="wf-html-${trigger}" rows="7"
             placeholder="HTML personalizado. Usa variables {{booking_ref}}, {{customer_name}}…"
             style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
                    border-radius:8px;padding:.45rem .6rem;font-size:.78rem;
@@ -1530,8 +1557,9 @@ function renderWorkflowCards(d){
           <button onclick="sendWorkflowTest('${trigger}')"
             style="background:var(--card);border:1px solid var(--border);color:var(--text);
                    border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer">Enviar prueba</button>
+          ${runBtn}
         </div>
-      </div>`;
+      </div>`:''}`;
     list.appendChild(card);
   }
 }
@@ -1559,13 +1587,28 @@ async function saveWorkflowFull(trigger){
     const en = document.getElementById('wf-en-'+trigger);
     const sub = document.getElementById('wf-sub-'+trigger);
     const html = document.getElementById('wf-html-'+trigger);
-    await api('/api/admin/email-workflows/'+trigger,{method:'PUT',body:JSON.stringify({
+    const payload = {
       enabled: !!(en&&en.checked),
       subject: sub ? sub.value.trim() : '',
       body_html: html ? html.value : ''
-    })});
+    };
+    // Collect extra_fields
+    const meta = (_emailWorkflowsData&&_emailWorkflowsData.trigger_meta)||{};
+    for(const ef of (meta[trigger]||{}).extra_fields||[]){
+      const inp = document.getElementById('wf-ef-'+trigger+'-'+ef.key);
+      if(inp) payload[ef.key] = ef.type==='number' ? Number(inp.value) : inp.value;
+    }
+    await api('/api/admin/email-workflows/'+trigger,{method:'PUT',body:JSON.stringify(payload)});
     showToast('Workflow guardado ✓');
   }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function runFollowupSweep(){
+  try{
+    showToast('Ejecutando sweep…');
+    const r = await api('/api/admin/email-workflows/booking_followup/run',{method:'POST',body:JSON.stringify({})});
+    showToast(`Sweep completado: ${r.sent||0} enviados, ${r.checked||0} revisados`);
+  }catch(e){ showToast('Error sweep: '+(e.message||e)); }
 }
 
 async function sendWorkflowTest(trigger){

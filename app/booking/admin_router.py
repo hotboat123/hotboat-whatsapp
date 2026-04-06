@@ -558,6 +558,7 @@ class EmailWorkflowBody(BaseModel):
     enabled: Optional[bool] = None
     subject: Optional[str] = None
     body_html: Optional[str] = None
+    days_after: Optional[int] = None  # booking_followup
 
 
 @admin_router.put("/api/admin/email-workflows/{trigger}")
@@ -592,6 +593,16 @@ async def post_email_workflow_test(trigger: str, body: EmailWorkflowTestBody,
     result = send_test_email_for_trigger(trigger, to_addr)
     if not result.get("sent"):
         raise HTTPException(status_code=500, detail=result.get("reason") or "send failed")
+    return {"ok": True, **result}
+
+
+@admin_router.post("/api/admin/email-workflows/booking_followup/run")
+async def run_followup_sweep(x_admin_key: str = Header("")):
+    """Manually trigger the follow-up email sweep (same as the daily job)."""
+    _check_auth(x_admin_key)
+    import asyncio
+    from app.booking.booking_email import run_followup_email_sweep
+    result = await asyncio.to_thread(run_followup_email_sweep)
     return {"ok": True, **result}
 
 

@@ -274,18 +274,35 @@ async def _run_auto_sync():
         await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
 
 
+async def _run_followup_email_scheduler():
+    """Run once every hour; actual sending is idempotent (DB flag guards duplicates)."""
+    await asyncio.sleep(120)  # brief delay after startup
+    while True:
+        try:
+            from app.booking.booking_email import run_followup_email_sweep
+            result = await asyncio.to_thread(run_followup_email_sweep)
+            if result.get("sent", 0) or result.get("errors"):
+                logger.info("📧 Followup email sweep: %s", result)
+        except Exception as _fe:
+            logger.error("Followup email scheduler error: %s", _fe)
+        await asyncio.sleep(3600)  # re-check every hour
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
     sync_task = asyncio.create_task(_run_auto_sync())
+    followup_task = asyncio.create_task(_run_followup_email_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
+    logger.info("📧 Followup email scheduler iniciado (cada 1 h)")
     yield
-    sync_task.cancel()
-    try:
-        await sync_task
-    except asyncio.CancelledError:
-        pass
-    logger.info("🛑 Auto-sync detenido")
+    for task in (sync_task, followup_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    logger.info("🛑 Background tasks detenidos")
 
 
 # Create FastAPI app

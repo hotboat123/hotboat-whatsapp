@@ -4,7 +4,10 @@ import re
 from typing import Any, Dict, List, Optional
 
 from app.config import get_settings
-from app.booking.db import get_booking_by_ref, mark_confirmation_email_sent
+from app.booking.db import (
+    get_booking_by_ref, mark_confirmation_email_sent,
+    get_bookings_for_followup, mark_followup_email_sent,
+)
 from app.booking.operator_settings import get_email_workflow, TRIGGER_META
 from app.email.resend_booking import send_booking_html
 
@@ -176,11 +179,27 @@ def _default_html_booking_status_changed(ctx: Dict[str, str]) -> str:
     )
 
 
+def _default_html_booking_followup(ctx: Dict[str, str]) -> str:
+    return (
+        _header(ctx, "¡Gracias por navegar con nosotros!", "#0f4c35")
+        + f"""<tr><td style="padding:26px 26px 8px;color:#0f172a;font-size:15px;line-height:1.65;">
+  <p style="margin:0 0 12px;">Hola <strong>{ctx.get('customer_name','')}</strong>,</p>
+  <p style="margin:0 0 12px;">¡Fue un placer tenerte a bordo! Esperamos que hayas disfrutado
+     tu experiencia en el agua el pasado <strong>{ctx.get('booking_date','')}</strong>.</p>
+  <p style="margin:0 0 12px;">Si tienes un momento, nos ayudaría mucho que dejaras una reseña.
+     ¡Y estaremos encantados de verte de nuevo pronto! 🌊</p>
+</td></tr>
+<tr><td style="padding:0 26px 20px;">{_details_table(ctx)}</td></tr>"""
+        + _footer(ctx)
+    )
+
+
 _DEFAULT_TEMPLATES = {
     "booking_created":        _default_html_booking_created,
     "booking_confirmed":      _default_html_booking_confirmed,
     "booking_cancelled":      _default_html_booking_cancelled,
     "booking_status_changed": _default_html_booking_status_changed,
+    "booking_followup":       _default_html_booking_followup,
 }
 
 
@@ -333,6 +352,45 @@ def send_test_email_for_trigger(trigger: str, to_addr: str) -> Dict[str, Any]:
         return {"sent": False, "reason": "no_to"}
     ctx = _sample_ctx(to_addr)
     return _render_and_send(trigger, to_addr, ctx, subject_prefix="[Prueba] ")
+
+
+# ── Daily follow-up sweep ────────────────────────────────────────────────────
+
+def run_followup_email_sweep() -> dict:
+    """
+    Run once per day: find confirmed bookings where booking_date = today - days_after
+    that haven't received the follow-up email yet, and send it.
+    Returns {"checked": N, "sent": N, "errors": [...]}
+    """
+    out = {"checked": 0, "sent": 0, "errors": []}
+    cfg = get_email_workflow("booking_followup")
+    if not cfg.get("enabled"):
+        out["reason"] = "disabled"
+        return out
+
+    settings = get_settings()
+    if not (getattr(settings, "resend_api_key", "") or "").strip():
+        out["reason"] = "no_resend_key"
+        return out
+
+    days_after = int(cfg.get("days_after") or 5)
+    bookings = get_bookings_for_followup(days_after)
+    out["checked"] = len(bookings)
+
+    for b in bookings:
+        to_addr = (b.get("customer_email") or "").strip()
+        if not to_addr:
+            continue
+        ctx = _booking_ctx(b)
+        result = _render_and_send("booking_followup", to_addr, ctx)
+        if result.get("sent"):
+            mark_followup_email_sent(b["booking_ref"])
+            out["sent"] += 1
+        else:
+            out["errors"].append({"ref": b["booking_ref"], "reason": result.get("reason")})
+
+    logger.info("Followup sweep: days_after=%s checked=%s sent=%s", days_after, out["checked"], out["sent"])
+    return out
 
 
 # ── Legacy aliases (backwards compat) ─────────────────────────────────────────

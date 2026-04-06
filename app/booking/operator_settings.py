@@ -301,6 +301,35 @@ TRIGGER_META: dict = {
         "default_subject": "Actualización de tu reserva — {{booking_ref}}",
         "icon": "🔄",
     },
+    "booking_followup": {
+        "label": "Seguimiento post-reserva",
+        "description": (
+            "El servidor revisa cada día si corresponde enviar este correo. "
+            "Útil para pedir reseña, ofrecer descuento próximo viaje, etc."
+        ),
+        "default_subject": "¡Gracias por navegar con nosotros! — {{booking_ref}}",
+        "icon": "⭐",
+        "extra_fields": [
+            {
+                "key": "days_after",
+                "label": "Días después de la reserva",
+                "type": "number",
+                "default": 5,
+                "min": 1,
+                "max": 180,
+            }
+        ],
+    },
+    "customer_birthday": {
+        "label": "Cumpleaños del cliente",
+        "description": (
+            "⚠️ Próximamente — requiere recopilar la fecha de nacimiento del cliente "
+            "en el formulario de reserva."
+        ),
+        "default_subject": "¡Feliz cumpleaños de parte de HotBoat! 🎂",
+        "icon": "🎂",
+        "coming_soon": True,
+    },
 }
 
 # Triggers activos por defecto
@@ -308,7 +337,7 @@ _TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed"}
 
 
 def get_email_workflows() -> dict:
-    """Returns {trigger: {enabled, subject, body_html}} for all known triggers."""
+    """Returns {trigger: {enabled, subject, body_html, ...extras}} for all known triggers."""
     raw = _json_setting("email_workflows", {})
     # Migrate legacy email_booking config into booking_confirmed
     legacy = _json_setting("email_booking", {})
@@ -320,6 +349,9 @@ def get_email_workflows() -> dict:
             "subject": meta["default_subject"],
             "body_html": "",
         }
+        # Defaults for extra_fields (e.g. days_after)
+        for ef in meta.get("extra_fields", []):
+            defaults_for_trigger[ef["key"]] = ef["default"]
         if trigger == "booking_confirmed" and not saved and legacy:
             if "confirmation_enabled" in legacy:
                 defaults_for_trigger["enabled"] = bool(legacy["confirmation_enabled"])
@@ -343,6 +375,10 @@ def set_email_workflow(trigger: str, cfg: dict) -> bool:
     for k in ("enabled", "subject", "body_html"):
         if k in cfg:
             existing[k] = cfg[k]
+    # Extra fields specific to each trigger (e.g. days_after)
+    for ef in TRIGGER_META[trigger].get("extra_fields", []):
+        if ef["key"] in cfg:
+            existing[ef["key"]] = cfg[ef["key"]]
     all_raw[trigger] = existing
     return set_setting("email_workflows", json.dumps(all_raw))
 

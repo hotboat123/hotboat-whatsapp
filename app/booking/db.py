@@ -98,6 +98,53 @@ def mark_confirmation_email_sent(booking_ref: str) -> bool:
             return cur.rowcount > 0
 
 
+def get_bookings_for_followup(days_after: int) -> list:
+    """Return confirmed bookings whose booking_date = today - days_after
+    that have a customer email and haven't received the followup email yet."""
+    from datetime import date, timedelta
+    target_date = date.today() - timedelta(days=days_after)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, booking_ref, customer_name, customer_phone, customer_email, "
+                "       booking_date, booking_time, num_people, subtotal, extras_total, "
+                "       total_price, has_flex, flex_amount, extras, notes "
+                "FROM hotboat_appointments "
+                "WHERE booking_date = %s "
+                "  AND status = 'confirmed' "
+                "  AND customer_email IS NOT NULL "
+                "  AND customer_email <> '' "
+                "  AND followup_email_sent_at IS NULL",
+                (target_date,),
+            )
+            cols = [
+                "id", "booking_ref", "customer_name", "customer_phone", "customer_email",
+                "booking_date", "booking_time", "num_people", "subtotal", "extras_total",
+                "total_price", "has_flex", "flex_amount", "extras", "notes",
+            ]
+            rows = []
+            for row in cur.fetchall():
+                d = dict(zip(cols, row))
+                for k in ("booking_date", "booking_time"):
+                    if d.get(k):
+                        d[k] = str(d[k])
+                rows.append(d)
+            return rows
+
+
+def mark_followup_email_sent(booking_ref: str) -> bool:
+    """Set followup_email_sent_at once (idempotent)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE hotboat_appointments SET followup_email_sent_at=NOW(), updated_at=NOW() "
+                "WHERE booking_ref=%s AND followup_email_sent_at IS NULL",
+                (booking_ref,),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+
 def get_all_bookings(limit: int = 200) -> List[dict]:
     with get_connection() as conn:
         with conn.cursor() as cur:
