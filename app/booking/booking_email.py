@@ -307,20 +307,35 @@ def _render_and_send(trigger: str, to_addr: str, ctx: Dict[str, str],
         builder = _DEFAULT_TEMPLATES.get(trigger, _default_html_booking_confirmed)
         html = builder(ctx)
 
+    from_addr = _get_from_addr(settings)
+    logger.info("Sending email trigger=%s to=%s from=%s", trigger, to_addr, from_addr)
     try:
         send_booking_html(
             to=to_addr,
             subject=subject,
             html=html,
-            from_address=_get_from_addr(settings),
+            from_address=from_addr,
             api_key=api_key,
             bcc=_get_bcc(settings),
         )
         out["sent"] = True
         out["reason"] = "ok"
     except Exception as e:
-        logger.exception("Email trigger=%s to=%s failed: %s", trigger, to_addr, e)
-        out["reason"] = f"send_error:{e}"
+        # Log the full Resend error so it appears in Railway logs
+        error_detail = str(e)
+        try:
+            # ResendError usually has a response body with more info
+            if hasattr(e, "response"):
+                error_detail += f" | response: {e.response}"
+            if hasattr(e, "body"):
+                error_detail += f" | body: {e.body}"
+        except Exception:
+            pass
+        logger.error(
+            "Email send FAILED trigger=%s to=%s from=%s | %s",
+            trigger, to_addr, from_addr, error_detail,
+        )
+        out["reason"] = error_detail
     return out
 
 

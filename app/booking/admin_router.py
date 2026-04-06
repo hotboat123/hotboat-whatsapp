@@ -603,7 +603,9 @@ async def post_email_workflow_test(trigger: str, body: EmailWorkflowTestBody,
         raise HTTPException(status_code=400, detail="Indica un correo de prueba")
     result = send_test_email_for_trigger(trigger, to_addr)
     if not result.get("sent"):
-        raise HTTPException(status_code=500, detail=result.get("reason") or "send failed")
+        reason = result.get("reason") or "send failed"
+        logger.error("Test email failed trigger=%s to=%s: %s", trigger, to_addr, reason)
+        raise HTTPException(status_code=500, detail=reason)
     return {"ok": True, **result}
 
 
