@@ -1030,25 +1030,26 @@ async function openModal(id){
         </div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Ciudad origen</label>
+        <div class="form-group"><label>Ciudad origen <span style="color:var(--muted);font-size:.72rem;font-weight:400">(varias)</span></label>
           ${(()=>{
             const CIUDADES=['Santiago','Concepción','Temuco','Valdivia','Pucón','Otro'];
-            const cur = r.ciudad_origen||'';
-            const isOtro = cur && !CIUDADES.slice(0,-1).includes(cur);
-            const selVal = isOtro ? 'Otro' : cur;
-            return `<select id="e-ciudad_origen_sel" onchange="
-              const v=this.value;
-              const inp=document.getElementById('e-ciudad_origen_txt');
-              inp.style.display=v==='Otro'?'block':'none';
-              document.getElementById('e-ciudad_origen').value=v==='Otro'?inp.value:v;">
-              <option value="">— seleccionar —</option>
-              ${CIUDADES.map(c=>`<option value="${c}"${selVal===c?' selected':''}>${c}</option>`).join('')}
-            </select>
-            <input id="e-ciudad_origen_txt" placeholder="Especificar ciudad..."
-              value="${isOtro?cur:''}"
-              oninput="document.getElementById('e-ciudad_origen').value=this.value"
-              style="margin-top:.4rem;display:${isOtro?'block':'none'}">
-            <input type="hidden" id="e-ciudad_origen" value="${cur}">`;
+            const saved = (r.ciudad_origen||'').split(',').map(s=>s.trim()).filter(Boolean);
+            const hasOtroVal = saved.find(s=>!CIUDADES.slice(0,-1).includes(s));
+            const otroTxt = hasOtroVal || '';
+            const normalSaved = saved.filter(s=>CIUDADES.includes(s));
+            if(hasOtroVal && !normalSaved.includes('Otro')) normalSaved.push('Otro');
+            return `<div id="e-ciudad-origen-checkboxes" style="display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.4rem">
+              ${CIUDADES.map(c=>`<label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;cursor:pointer;font-weight:400">
+                <input type="checkbox" value="${c}" ${normalSaved.includes(c)?'checked':''}
+                  onchange="syncCiudadOrigenHidden()" style="accent-color:var(--gold)">
+                ${c}
+              </label>`).join('')}
+            </div>
+            <input id="e-ciudad_origen_otro_txt" placeholder="Especificar otra ciudad..."
+              value="${otroTxt}"
+              oninput="syncCiudadOrigenHidden()"
+              style="display:${normalSaved.includes('Otro')?'block':'none'};margin-top:.3rem">
+            <input type="hidden" id="e-ciudad_origen" value="${r.ciudad_origen||''}">`;
           })()}
         </div>
         <div class="form-group"><label>Como supieron</label>
@@ -1279,7 +1280,7 @@ async function saveModal(id){
   const body={
     nombre_cliente:g('e-nombre'), telefono:g('e-telefono'), email:g('e-email'),
     status:g('e-status'), observaciones:g('e-observaciones'),
-    ciudad_origen:g('e-ciudad_origen'),
+    ciudad_origen:(g('e-ciudad_origen')||'').trim(),
     como_supieron:g('e-como_supieron'), clima_del_dia:g('e-clima_del_dia'),
     categoria_clientes:g('e-categoria_clientes'), tipo_clientes:g('e-tipo_clientes'),
     quien_atendio:(g('e-quien_atendio')||'').trim(),
@@ -1301,7 +1302,7 @@ async function saveModal(id){
   body.pagos = _pagos.filter(p=>p.amount||p.method);
   body.descuentos = _descuentos.filter(d=>d.amount||d.type||d.note);
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos','quien_atendio']);
+  const keepAlways = new Set(['extras_json','descuentos','quien_atendio','ciudad_origen']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -2026,6 +2027,27 @@ function syncQuienAtendioHidden(){
   const otroTxt = document.getElementById('e-quien_atendio_otro_txt');
   if(otroTxt) otroTxt.style.display = otroCb?.checked ? 'block':'none';
   const hidden = document.getElementById('e-quien_atendio');
+  if(hidden) hidden.value = vals.join(', ');
+}
+
+function syncCiudadOrigenHidden(){
+  const boxes = document.querySelectorAll('#e-ciudad-origen-checkboxes input[type="checkbox"]');
+  const vals = [];
+  boxes.forEach(cb=>{
+    if(!cb.checked) return;
+    if(cb.value==='Otro'){
+      const txt = document.getElementById('e-ciudad_origen_otro_txt');
+      if(txt) txt.style.display='block';
+      const v = txt ? txt.value.trim() : '';
+      if(v) vals.push(v); else vals.push('Otro');
+    } else {
+      vals.push(cb.value);
+    }
+  });
+  const otroCb = [...boxes].find(cb=>cb.value==='Otro');
+  const otroTxt = document.getElementById('e-ciudad_origen_otro_txt');
+  if(otroTxt) otroTxt.style.display = otroCb?.checked ? 'block':'none';
+  const hidden = document.getElementById('e-ciudad_origen');
   if(hidden) hidden.value = vals.join(', ');
 }
 
