@@ -578,6 +578,17 @@ class EmailWorkflowTestBody(BaseModel):
     to: Optional[str] = None
 
 
+@admin_router.get("/api/admin/email-workflows/{trigger}/default-html")
+async def get_workflow_default_html(trigger: str, x_admin_key: str = Header("")):
+    """Return the built-in HTML template rendered with sample booking data."""
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import TRIGGER_META
+    if trigger not in TRIGGER_META:
+        raise HTTPException(status_code=404, detail=f"Trigger '{trigger}' no existe")
+    from app.booking.booking_email import get_default_html_for_trigger
+    return {"trigger": trigger, "html": get_default_html_for_trigger(trigger)}
+
+
 @admin_router.post("/api/admin/email-workflows/{trigger}/test")
 async def post_email_workflow_test(trigger: str, body: EmailWorkflowTestBody,
                                     x_admin_key: str = Header("")):

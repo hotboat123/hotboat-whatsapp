@@ -1544,9 +1544,15 @@ function renderWorkflowCards(d){
                    border-radius:8px;padding:.4rem .6rem;font-size:.86rem">
         </div>
         <div style="margin-bottom:.85rem">
-          <label style="font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.35rem">Cuerpo HTML <span style="text-transform:none;font-size:.72rem">(vacío = plantilla por defecto)</span></label>
-          <textarea id="wf-html-${trigger}" rows="7"
-            placeholder="HTML personalizado. Usa variables {{booking_ref}}, {{customer_name}}…"
+          <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.35rem;flex-wrap:wrap">
+            <label style="font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex:1">Cuerpo HTML</label>
+            <button type="button" onclick="loadDefaultHtml('${trigger}')"
+              style="background:none;border:1px solid var(--border);color:var(--muted);
+                     border-radius:7px;padding:.18rem .55rem;font-size:.72rem;cursor:pointer;
+                     white-space:nowrap;line-height:1.5">↩ Cargar plantilla por defecto</button>
+          </div>
+          <textarea id="wf-html-${trigger}" rows="16"
+            placeholder="HTML personalizado. Usa variables {{booking_ref}}, {{customer_name}}…&#10;O haz clic en 'Cargar plantilla por defecto' para partir desde el diseño base."
             style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
                    border-radius:8px;padding:.45rem .6rem;font-size:.78rem;
                    font-family:ui-monospace,monospace;line-height:1.45;resize:vertical"
@@ -1606,6 +1612,15 @@ async function saveWorkflowFull(trigger){
     await api('/api/admin/email-workflows/'+trigger,{method:'PUT',body:JSON.stringify(payload)});
     showToast('Workflow guardado ✓');
   }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function loadDefaultHtml(trigger){
+  try{
+    const r = await api('/api/admin/email-workflows/'+trigger+'/default-html');
+    const ta = document.getElementById('wf-html-'+trigger);
+    if(ta){ ta.value = r.html || ''; ta.focus(); }
+    showToast('Plantilla cargada — edítala y guarda ✓');
+  }catch(e){ showToast('Error cargando plantilla: '+(e.message||e)); }
 }
 
 async function runWorkflowSweep(trigger){

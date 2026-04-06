@@ -415,6 +415,13 @@ def send_email_for_trigger_with_data(trigger: str, to_addr: str,
     return _render_and_send(trigger, to_addr, ctx)
 
 
+def get_default_html_for_trigger(trigger: str) -> str:
+    """Return the built-in HTML template for a trigger rendered with sample data."""
+    ctx = _sample_ctx("preview@hotboat.cl")
+    builder = _DEFAULT_TEMPLATES.get(trigger, _default_html_booking_confirmed)
+    return builder(ctx)
+
+
 def send_test_email_for_trigger(trigger: str, to_addr: str) -> Dict[str, Any]:
     """Send test email for any trigger (uses sample data, does not touch DB)."""
     if trigger not in TRIGGER_META:
