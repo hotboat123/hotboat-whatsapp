@@ -231,6 +231,7 @@ async def create_booking_endpoint(request: CreateBookingRequest):
             "customer_name": request.customer_name,
             "customer_phone": request.customer_phone,
             "customer_email": request.customer_email,
+            "customer_birthday": request.customer_birthday,
             "booking_date": request.booking_date,
             "booking_time": request.booking_time,
             "num_people": n,
@@ -247,12 +248,13 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         result = create_booking(data)
         booking_ref = result["booking_ref"]
 
-        # Fire booking_created email (async, best-effort)
+        # Fire booking_created (→ cliente) and admin_new_lead (→ admin), best-effort
         try:
             from app.booking.booking_email import send_email_for_trigger
             send_email_for_trigger("booking_created", booking_ref)
+            send_email_for_trigger("admin_new_lead", booking_ref)
         except Exception as _em:
-            logger.warning("booking_created email: %s", _em)
+            logger.warning("Lead/created emails: %s", _em)
 
         # Determine amount to charge (50% deposit, support test_price override)
         if request.test_price is not None and request.test_price > 0:

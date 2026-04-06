@@ -320,15 +320,24 @@ TRIGGER_META: dict = {
             }
         ],
     },
+    "admin_new_lead": {
+        "label": "Nuevo lead en formulario de reserva",
+        "description": (
+            "Se envía AL ADMINISTRADOR (no al cliente) cuando alguien completa "
+            "sus datos y hace clic en 'Ir a pagar'."
+        ),
+        "default_subject": "🔔 Nuevo lead: {{customer_name}} — {{booking_date}} {{booking_time}}",
+        "icon": "🔔",
+        "recipient": "admin",
+    },
     "customer_birthday": {
         "label": "Cumpleaños del cliente",
         "description": (
-            "⚠️ Próximamente — requiere recopilar la fecha de nacimiento del cliente "
-            "en el formulario de reserva."
+            "El servidor revisa cada día si algún cliente cumple años hoy. "
+            "Requiere que el cliente ingrese su fecha de nacimiento al reservar."
         ),
         "default_subject": "¡Feliz cumpleaños de parte de HotBoat! 🎂",
         "icon": "🎂",
-        "coming_soon": True,
     },
 }
 

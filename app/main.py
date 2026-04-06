@@ -274,17 +274,21 @@ async def _run_auto_sync():
         await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
 
 
-async def _run_followup_email_scheduler():
-    """Run once every hour; actual sending is idempotent (DB flag guards duplicates)."""
+async def _run_email_sweeps_scheduler():
+    """Run followup + birthday email sweeps every hour (DB flags ensure idempotency)."""
     await asyncio.sleep(120)  # brief delay after startup
     while True:
         try:
-            from app.booking.booking_email import run_followup_email_sweep
-            result = await asyncio.to_thread(run_followup_email_sweep)
-            if result.get("sent", 0) or result.get("errors"):
-                logger.info("📧 Followup email sweep: %s", result)
+            from app.booking.booking_email import run_followup_email_sweep, run_birthday_email_sweep
+            for fn, name in ((run_followup_email_sweep, "followup"), (run_birthday_email_sweep, "birthday")):
+                try:
+                    result = await asyncio.to_thread(fn)
+                    if result.get("sent", 0) or result.get("errors"):
+                        logger.info("📧 %s email sweep: %s", name, result)
+                except Exception as _se:
+                    logger.error("Email sweep %s error: %s", name, _se)
         except Exception as _fe:
-            logger.error("Followup email scheduler error: %s", _fe)
+            logger.error("Email sweeps scheduler error: %s", _fe)
         await asyncio.sleep(3600)  # re-check every hour
 
 
@@ -292,11 +296,11 @@ async def _run_followup_email_scheduler():
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
     sync_task = asyncio.create_task(_run_auto_sync())
-    followup_task = asyncio.create_task(_run_followup_email_scheduler())
+    email_task = asyncio.create_task(_run_email_sweeps_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
-    logger.info("📧 Followup email scheduler iniciado (cada 1 h)")
+    logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 1 h)")
     yield
-    for task in (sync_task, followup_task):
+    for task in (sync_task, email_task):
         task.cancel()
         try:
             await task

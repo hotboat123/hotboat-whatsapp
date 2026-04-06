@@ -14,6 +14,7 @@ class CreateBookingRequest(BaseModel):
     customer_name: str
     customer_phone: str
     customer_email: Optional[str] = None
+    customer_birthday: Optional[str] = None  # YYYY-MM-DD, optional
     booking_date: str
     booking_time: str
     num_people: int

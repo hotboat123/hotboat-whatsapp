@@ -22,16 +22,25 @@ def create_booking(data: dict) -> dict:
         with conn.cursor() as cur:
             sql = (
                 "INSERT INTO hotboat_appointments"
-                " (booking_ref,customer_name,customer_phone,customer_email,"
+                " (booking_ref,customer_name,customer_phone,customer_email,customer_birthday,"
                 "  booking_date,booking_time,num_people,"
                 "  price_per_person,subtotal,extras_total,flex_amount,total_price,"
                 "  extras,has_flex,status,source,notes)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_payment',%s,%s)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_payment',%s,%s)"
                 " RETURNING id,booking_ref,status"
             )
+            bday_raw = data.get("customer_birthday") or None
+            bday = None
+            if bday_raw:
+                try:
+                    from datetime import date as _date
+                    bday = _date.fromisoformat(str(bday_raw))
+                except ValueError:
+                    pass
             cur.execute(sql, (
                 ref,
-                data["customer_name"], data["customer_phone"], data.get("customer_email"),
+                data["customer_name"], data["customer_phone"],
+                data.get("customer_email"), bday,
                 data["booking_date"], data["booking_time"], data["num_people"],
                 data["price_per_person"], data["subtotal"],
                 data.get("extras_total", 0), data.get("flex_amount", 0), data["total_price"],
@@ -140,6 +149,66 @@ def mark_followup_email_sent(booking_ref: str) -> bool:
                 "UPDATE hotboat_appointments SET followup_email_sent_at=NOW(), updated_at=NOW() "
                 "WHERE booking_ref=%s AND followup_email_sent_at IS NULL",
                 (booking_ref,),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+
+# ── Birthday sweep ────────────────────────────────────────────────────────────
+
+def get_customers_for_birthday_email() -> list:
+    """
+    Return one record per customer whose birthday is today and who hasn't
+    received a birthday email this calendar year yet.
+    Uses DISTINCT ON (customer_email) to avoid duplicate sends for multi-booking customers.
+    """
+    from datetime import date
+    today = date.today()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (ha.customer_email)
+                       ha.customer_email, ha.customer_name, ha.customer_phone,
+                       ha.booking_ref, ha.booking_date, ha.booking_time,
+                       ha.num_people, ha.total_price, ha.subtotal, ha.extras_total
+                FROM hotboat_appointments ha
+                WHERE ha.customer_birthday IS NOT NULL
+                  AND ha.customer_email IS NOT NULL
+                  AND ha.customer_email <> ''
+                  AND EXTRACT(MONTH FROM ha.customer_birthday) = %s
+                  AND EXTRACT(DAY   FROM ha.customer_birthday) = %s
+                  AND ha.customer_email NOT IN (
+                      SELECT customer_email FROM birthday_emails_sent
+                      WHERE sent_year = %s
+                  )
+                ORDER BY ha.customer_email, ha.created_at DESC
+                """,
+                (today.month, today.day, today.year),
+            )
+            cols = ["customer_email", "customer_name", "customer_phone",
+                    "booking_ref", "booking_date", "booking_time",
+                    "num_people", "total_price", "subtotal", "extras_total"]
+            rows = []
+            for row in cur.fetchall():
+                d = dict(zip(cols, row))
+                for k in ("booking_date", "booking_time"):
+                    if d.get(k):
+                        d[k] = str(d[k])
+                rows.append(d)
+            return rows
+
+
+def mark_birthday_email_sent(customer_email: str) -> bool:
+    """Record that birthday email was sent this year (idempotent)."""
+    from datetime import date
+    year = date.today().year
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO birthday_emails_sent (customer_email, sent_year) "
+                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (customer_email, year),
             )
             conn.commit()
             return cur.rowcount > 0

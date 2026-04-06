@@ -606,6 +606,16 @@ async def run_followup_sweep(x_admin_key: str = Header("")):
     return {"ok": True, **result}
 
 
+@admin_router.post("/api/admin/email-workflows/customer_birthday/run")
+async def run_birthday_sweep(x_admin_key: str = Header("")):
+    """Manually trigger the birthday email sweep."""
+    _check_auth(x_admin_key)
+    import asyncio
+    from app.booking.booking_email import run_birthday_email_sweep
+    result = await asyncio.to_thread(run_birthday_email_sweep)
+    return {"ok": True, **result}
+
+
 # ── Legacy email-booking shim (backwards compat) ─────────────────────────────
 
 @admin_router.get("/api/admin/email-booking")

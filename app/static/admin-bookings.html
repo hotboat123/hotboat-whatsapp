@@ -1501,11 +1501,16 @@ function renderWorkflowCards(d){
         </div>`;
     }
 
-    // Manual run button for followup sweep
-    const runBtn = trigger === 'booking_followup' ? `
-      <button onclick="runFollowupSweep()"
+    // Manual run buttons for scheduled triggers
+    const runBtnMap = {
+      'booking_followup': `<button onclick="runWorkflowSweep('booking_followup')"
         style="background:var(--card);border:1px solid var(--border);color:var(--text);
-               border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer">⚙️ Ejecutar ahora</button>` : '';
+               border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer">⚙️ Ejecutar ahora</button>`,
+      'customer_birthday': `<button onclick="runWorkflowSweep('customer_birthday')"
+        style="background:var(--card);border:1px solid var(--border);color:var(--text);
+               border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer">⚙️ Ejecutar ahora</button>`,
+    };
+    const runBtn = runBtnMap[trigger] || '';
 
     const card = document.createElement('div');
     card.className = 'chart-wrap';
@@ -1603,11 +1608,11 @@ async function saveWorkflowFull(trigger){
   }catch(e){ showToast('Error: '+e.message); }
 }
 
-async function runFollowupSweep(){
+async function runWorkflowSweep(trigger){
   try{
     showToast('Ejecutando sweep…');
-    const r = await api('/api/admin/email-workflows/booking_followup/run',{method:'POST',body:JSON.stringify({})});
-    showToast(`Sweep completado: ${r.sent||0} enviados, ${r.checked||0} revisados`);
+    const r = await api('/api/admin/email-workflows/'+trigger+'/run',{method:'POST',body:JSON.stringify({})});
+    showToast(`Sweep ${trigger}: ${r.sent||0} enviados, ${r.checked||0} revisados`);
   }catch(e){ showToast('Error sweep: '+(e.message||e)); }
 }
 
