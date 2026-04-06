@@ -1007,9 +1007,8 @@ async function openModal(id){
         <div class="form-group"><label>Total ingresos</label>
           <input id="e-ingreso_total" value="${r.ingreso_total||0}" style="color:var(--gold);font-weight:700"
             oninput="syncCostoTotal();syncPagoFaltante()"></div>
-        <div class="form-group"><label>Costo fijo</label>
-          <input id="e-costo_operativo_fijo" value="${r.costo_operativo_fijo||0}" oninput="syncCostoTotal()"></div>
       </div>
+      <input type="hidden" id="e-costo_operativo_fijo" value="${r.costo_operativo_fijo??0}">
       <div class="form-row">
         <div class="form-group"><label>Costos extra</label>
           <input id="e-costo_operativo_variable" value="${r.costo_operativo_variable||0}" oninput="syncCostoTotal()"></div>
@@ -1022,13 +1021,8 @@ async function openModal(id){
             ${['confirmed','pending','cancelled','solicitud','paid','aprobado','pendiente','cancelada'].map(s=>`<option value="${s}"${r.status===s?' selected':''}>${s}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group"><label>Tiene cruce</label>
-          <select id="e-tiene_cruce">
-            <option value="false"${!r.tiene_cruce?' selected':''}>No</option>
-            <option value="true"${r.tiene_cruce?' selected':''}>Sí</option>
-          </select>
-        </div>
       </div>
+      <input type="hidden" id="e-tiene_cruce" value="${r.tiene_cruce?'true':'false'}">
       <div class="form-row">
         <div class="form-group"><label>Ciudad origen <span style="color:var(--muted);font-size:.72rem;font-weight:400">(varias)</span></label>
           ${(()=>{
