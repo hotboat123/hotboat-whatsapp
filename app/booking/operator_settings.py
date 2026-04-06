@@ -274,24 +274,93 @@ def calculate_dynamic_multiplier(
     return round(max(lo, min(hi, mult)), 4)
 
 
-# ── Booking confirmation emails (Resend, Booknetic-style triggers) ───────────
+# ── Booking email workflows (Booknetic-style multi-trigger) ─────────────────
 
-EMAIL_BOOKING_DEFAULT = {
-    "confirmation_enabled": True,
-    "on_payment_confirmed": True,
-    "subject": "Reserva confirmada — {{booking_ref}}",
-    "body_html": "",  # empty = use built-in template
+TRIGGER_META: dict = {
+    "booking_created": {
+        "label": "Nueva reserva (pendiente pago)",
+        "description": "Se envía al cliente justo al crear la reserva, antes de completar el pago.",
+        "default_subject": "Recibimos tu reserva — {{booking_ref}}",
+        "icon": "📋",
+    },
+    "booking_confirmed": {
+        "label": "Pago confirmado",
+        "description": "Se envía cuando el pago queda registrado correctamente (WooCommerce / Transbank).",
+        "default_subject": "Reserva confirmada — {{booking_ref}}",
+        "icon": "✅",
+    },
+    "booking_cancelled": {
+        "label": "Reserva cancelada",
+        "description": "Se envía cuando el estado de la reserva cambia a 'cancelled'.",
+        "default_subject": "Tu reserva fue cancelada — {{booking_ref}}",
+        "icon": "❌",
+    },
+    "booking_status_changed": {
+        "label": "Estado cambiado por el admin",
+        "description": "Se envía cuando el administrador cambia el estado manualmente (cualquier estado).",
+        "default_subject": "Actualización de tu reserva — {{booking_ref}}",
+        "icon": "🔄",
+    },
 }
 
+# Triggers activos por defecto
+_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed"}
 
+
+def get_email_workflows() -> dict:
+    """Returns {trigger: {enabled, subject, body_html}} for all known triggers."""
+    raw = _json_setting("email_workflows", {})
+    # Migrate legacy email_booking config into booking_confirmed
+    legacy = _json_setting("email_booking", {})
+    result = {}
+    for trigger, meta in TRIGGER_META.items():
+        saved = raw.get(trigger) or {}
+        defaults_for_trigger: dict = {
+            "enabled": trigger in _TRIGGERS_ENABLED_DEFAULT,
+            "subject": meta["default_subject"],
+            "body_html": "",
+        }
+        if trigger == "booking_confirmed" and not saved and legacy:
+            if "confirmation_enabled" in legacy:
+                defaults_for_trigger["enabled"] = bool(legacy["confirmation_enabled"])
+            if legacy.get("subject"):
+                defaults_for_trigger["subject"] = legacy["subject"]
+            if legacy.get("body_html"):
+                defaults_for_trigger["body_html"] = legacy["body_html"]
+        result[trigger] = {**defaults_for_trigger, **saved}
+    return result
+
+
+def get_email_workflow(trigger: str) -> dict:
+    return get_email_workflows().get(trigger, {})
+
+
+def set_email_workflow(trigger: str, cfg: dict) -> bool:
+    if trigger not in TRIGGER_META:
+        return False
+    all_raw = _json_setting("email_workflows", {})
+    existing = dict(all_raw.get(trigger) or {})
+    for k in ("enabled", "subject", "body_html"):
+        if k in cfg:
+            existing[k] = cfg[k]
+    all_raw[trigger] = existing
+    return set_setting("email_workflows", json.dumps(all_raw))
+
+
+# Keep legacy alias so old call sites don't break during migration
 def get_email_booking_config() -> dict:
-    raw = _json_setting("email_booking", {})
-    return {**EMAIL_BOOKING_DEFAULT, **raw}
+    cfg = get_email_workflow("booking_confirmed")
+    return {
+        "confirmation_enabled": cfg.get("enabled", True),
+        "on_payment_confirmed": True,
+        "subject": cfg.get("subject", TRIGGER_META["booking_confirmed"]["default_subject"]),
+        "body_html": cfg.get("body_html", ""),
+    }
 
 
 def set_email_booking_config(cfg: dict) -> bool:
-    merged = get_email_booking_config()
-    for k in EMAIL_BOOKING_DEFAULT:
-        if k in cfg:
-            merged[k] = cfg[k]
-    return set_setting("email_booking", json.dumps(merged))
+    return set_email_workflow("booking_confirmed", {
+        "enabled": cfg.get("confirmation_enabled", True),
+        "subject": cfg.get("subject", ""),
+        "body_html": cfg.get("body_html", ""),
+    })

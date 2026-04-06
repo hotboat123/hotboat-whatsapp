@@ -247,6 +247,13 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         result = create_booking(data)
         booking_ref = result["booking_ref"]
 
+        # Fire booking_created email (async, best-effort)
+        try:
+            from app.booking.booking_email import send_email_for_trigger
+            send_email_for_trigger("booking_created", booking_ref)
+        except Exception as _em:
+            logger.warning("booking_created email: %s", _em)
+
         # Determine amount to charge (50% deposit, support test_price override)
         if request.test_price is not None and request.test_price > 0:
             woo_monto_reserva = request.test_price

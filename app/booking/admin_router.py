@@ -217,6 +217,39 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                             )
 
                 conn.commit()
+
+        # ── Trigger status-change emails ───────────────────────────────────
+        if "status" in updates:
+            try:
+                from app.booking.booking_email import send_email_for_trigger_with_data
+                with get_connection() as conn3:
+                    with conn3.cursor() as cur3:
+                        cur3.execute(
+                            f"SELECT email, nombre_cliente, telefono, fecha, hora, "
+                            f"num_personas, ingreso_total, ingreso_reserva, ingreso_extras, "
+                            f"source_id, source FROM {TABLE} WHERE id=%s",
+                            (rid,)
+                        )
+                        rr = cur3.fetchone()
+                if rr:
+                    email_to = (rr[0] or "").strip()
+                    row_data = {
+                        "nombre_cliente": rr[1], "telefono": rr[2],
+                        "fecha": str(rr[3]) if rr[3] else "",
+                        "hora": str(rr[4])[:5] if rr[4] else "",
+                        "num_personas": rr[5],
+                        "ingreso_total": rr[6], "ingreso_reserva": rr[7], "ingreso_extras": rr[8],
+                        "source_id": rr[9], "source": rr[10],
+                        "status": updates["status"],
+                    }
+                    new_status = updates["status"]
+                    trigger = "booking_cancelled" if new_status == "cancelled" else "booking_status_changed"
+                    if email_to:
+                        em = send_email_for_trigger_with_data(trigger, email_to, row_data)
+                        logger.info("Status-change email trigger=%s result=%s", trigger, em)
+            except Exception as em_err:
+                logger.warning("Status-change email error: %s", em_err)
+
         return {"ok": True}
     except Exception as e:
         logger.error(f"Error updating reserva {rid}: {e}")
@@ -504,10 +537,68 @@ async def update_dp(request: Request, x_admin_key: str = Header("")):
     return {"ok": True}
 
 
-# ── Booking emails (Resend, reservas.hotboat.cl) ─────────────────────────────
+# ── Email workflows (Booknetic-style multi-trigger, Resend) ──────────────────
+
+@admin_router.get("/api/admin/email-workflows")
+async def get_email_workflows_endpoint(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import get_email_workflows, TRIGGER_META
+    from app.config import get_settings
+    s = get_settings()
+    return {
+        "workflows": get_email_workflows(),
+        "trigger_meta": TRIGGER_META,
+        "from_hint": (getattr(s, "resend_from_confirmations", "") or getattr(s, "email_from", "") or "").strip(),
+        "bcc_configured": bool((getattr(s, "resend_bcc_booking", "") or "").strip()),
+        "has_resend_key": bool((getattr(s, "resend_api_key", "") or "").strip()),
+    }
+
+
+class EmailWorkflowBody(BaseModel):
+    enabled: Optional[bool] = None
+    subject: Optional[str] = None
+    body_html: Optional[str] = None
+
+
+@admin_router.put("/api/admin/email-workflows/{trigger}")
+async def put_email_workflow(trigger: str, body: EmailWorkflowBody,
+                              x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import set_email_workflow, TRIGGER_META
+    if trigger not in TRIGGER_META:
+        raise HTTPException(status_code=404, detail=f"Trigger '{trigger}' no existe")
+    data = {k: v for k, v in body.model_dump().items() if v is not None}
+    set_email_workflow(trigger, data)
+    from app.booking.operator_settings import get_email_workflow
+    return {"ok": True, "trigger": trigger, "config": get_email_workflow(trigger)}
+
+
+class EmailWorkflowTestBody(BaseModel):
+    to: Optional[str] = None
+
+
+@admin_router.post("/api/admin/email-workflows/{trigger}/test")
+async def post_email_workflow_test(trigger: str, body: EmailWorkflowTestBody,
+                                    x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import TRIGGER_META
+    if trigger not in TRIGGER_META:
+        raise HTTPException(status_code=404, detail=f"Trigger '{trigger}' no existe")
+    from app.config import get_settings
+    from app.booking.booking_email import send_test_email_for_trigger
+    to_addr = (body.to or "").strip() or (get_settings().business_email or "").strip()
+    if not to_addr:
+        raise HTTPException(status_code=400, detail="Indica un correo de prueba")
+    result = send_test_email_for_trigger(trigger, to_addr)
+    if not result.get("sent"):
+        raise HTTPException(status_code=500, detail=result.get("reason") or "send failed")
+    return {"ok": True, **result}
+
+
+# ── Legacy email-booking shim (backwards compat) ─────────────────────────────
 
 @admin_router.get("/api/admin/email-booking")
-async def get_email_booking(x_admin_key: str = Header("")):
+async def get_email_booking_legacy(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     from app.booking.operator_settings import get_email_booking_config
     from app.config import get_settings
@@ -518,44 +609,6 @@ async def get_email_booking(x_admin_key: str = Header("")):
         "bcc_configured": bool((getattr(s, "resend_bcc_booking", "") or "").strip()),
         "has_resend_key": bool((getattr(s, "resend_api_key", "") or "").strip()),
     }
-
-
-class EmailBookingConfigBody(BaseModel):
-    confirmation_enabled: Optional[bool] = None
-    on_payment_confirmed: Optional[bool] = None
-    subject: Optional[str] = None
-    body_html: Optional[str] = None
-
-
-@admin_router.put("/api/admin/email-booking")
-async def put_email_booking(body: EmailBookingConfigBody, x_admin_key: str = Header("")):
-    _check_auth(x_admin_key)
-    from app.booking.operator_settings import get_email_booking_config, set_email_booking_config
-    cur = get_email_booking_config()
-    data = body.model_dump(exclude_none=True)
-    cur.update(data)
-    set_email_booking_config(cur)
-    return {"ok": True, "config": get_email_booking_config()}
-
-
-class EmailBookingTestBody(BaseModel):
-    to: Optional[str] = None
-
-
-@admin_router.post("/api/admin/email-booking/test")
-async def post_email_booking_test(body: EmailBookingTestBody, x_admin_key: str = Header("")):
-    _check_auth(x_admin_key)
-    from app.config import get_settings
-    from app.booking.booking_email import send_test_booking_email
-    to_addr = (body.to or "").strip()
-    if not to_addr:
-        to_addr = (get_settings().business_email or "").strip()
-    if not to_addr:
-        raise HTTPException(status_code=400, detail="Indica un correo en el campo o configura BUSINESS_EMAIL")
-    result = send_test_booking_email(to_addr)
-    if not result.get("sent"):
-        raise HTTPException(status_code=500, detail=result.get("reason") or "send failed")
-    return {"ok": True, **result}
 
 
 # ── Incremental sync ──────────────────────────────────────────────────────────
