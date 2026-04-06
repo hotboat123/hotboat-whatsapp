@@ -66,7 +66,7 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                 "       booking_date,booking_time,num_people,price_per_person,"
                 "       subtotal,extras_total,flex_amount,total_price,"
                 "       extras,has_flex,status,payment_id,payment_status,"
-                "       paid_at,source,notes,created_at"
+                "       paid_at,source,notes,created_at,confirmation_email_sent_at"
                 " FROM hotboat_appointments WHERE booking_ref=%s",
                 (booking_ref,)
             )
@@ -77,12 +77,25 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                     "booking_date","booking_time","num_people","price_per_person",
                     "subtotal","extras_total","flex_amount","total_price",
                     "extras","has_flex","status","payment_id","payment_status",
-                    "paid_at","source","notes","created_at"]
+                    "paid_at","source","notes","created_at","confirmation_email_sent_at"]
             result = dict(zip(cols, row))
-            for k in ("booking_date","booking_time","paid_at","created_at"):
+            for k in ("booking_date","booking_time","paid_at","created_at", "confirmation_email_sent_at"):
                 if result.get(k):
                     result[k] = str(result[k])
             return result
+
+
+def mark_confirmation_email_sent(booking_ref: str) -> bool:
+    """Set confirmation_email_sent_at once (returns True if row updated)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE hotboat_appointments SET confirmation_email_sent_at=NOW(), updated_at=NOW() "
+                "WHERE booking_ref=%s AND confirmation_email_sent_at IS NULL",
+                (booking_ref,),
+            )
+            conn.commit()
+            return cur.rowcount > 0
 
 
 def get_all_bookings(limit: int = 200) -> List[dict]:

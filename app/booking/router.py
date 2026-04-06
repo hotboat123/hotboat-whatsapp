@@ -44,6 +44,11 @@ async def booking_success(
     if booking_ref and pid:
         try:
             update_booking_payment(booking_ref, pid, pid, pstatus)
+            try:
+                from app.booking.booking_email import try_send_booking_confirmation_after_payment
+                try_send_booking_confirmation_after_payment(booking_ref)
+            except Exception as em_err:
+                logger.warning(f"Confirmation email after payment: {em_err}")
         except Exception as e:
             logger.error(f"Payment update error: {e}")
     return _booking_html()

@@ -272,3 +272,26 @@ def calculate_dynamic_multiplier(
     lo = float(cfg.get("min_mult", 0.8))
     hi = float(cfg.get("max_mult", 1.6))
     return round(max(lo, min(hi, mult)), 4)
+
+
+# ── Booking confirmation emails (Resend, Booknetic-style triggers) ───────────
+
+EMAIL_BOOKING_DEFAULT = {
+    "confirmation_enabled": True,
+    "on_payment_confirmed": True,
+    "subject": "Reserva confirmada — {{booking_ref}}",
+    "body_html": "",  # empty = use built-in template
+}
+
+
+def get_email_booking_config() -> dict:
+    raw = _json_setting("email_booking", {})
+    return {**EMAIL_BOOKING_DEFAULT, **raw}
+
+
+def set_email_booking_config(cfg: dict) -> bool:
+    merged = get_email_booking_config()
+    for k in EMAIL_BOOKING_DEFAULT:
+        if k in cfg:
+            merged[k] = cfg[k]
+    return set_setting("email_booking", json.dumps(merged))

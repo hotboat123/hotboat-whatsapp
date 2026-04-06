@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     email_enabled: bool = False
     resend_api_key: str = ""
     email_from: str = "onboarding@resend.dev"  # Change to your verified domain
+    # Booking confirmations (e.g. Reservas HotBoat <noreply@reservas.hotboat.cl>)
+    resend_from_confirmations: str = ""
+    # Optional BCC for every transactional booking email (comma-separated)
+    resend_bcc_booking: str = ""
     notification_emails: str = ""  # Comma-separated list of emails to notify
     
     # SMTP Email Configuration (alternative to Resend)

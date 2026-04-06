@@ -27,7 +27,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
   display:flex;align-items:center;gap:.6rem}
 .sb-logo span{font-size:1.3rem;font-weight:700;color:var(--gold)}
 .sb-logo small{font-size:.7rem;color:var(--muted);display:block}
-.sb-nav{flex:1;padding:.5rem 0}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
 .nav-item{display:flex;align-items:center;gap:.7rem;padding:.65rem 1.2rem;
   cursor:pointer;color:var(--muted);border-left:3px solid transparent;
   transition:all .15s;font-size:.85rem}
@@ -309,6 +309,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('extras-cat')" id="nav-extras-cat">
       <span class="ni">🏷️</span> Precios Extras
     </div>
+    <div class="nav-item" onclick="showSection('emails')" id="nav-emails">
+      <span class="ni">✉️</span> Emails reservas
+    </div>
     <div class="nav-item" onclick="showSection('settings')" id="nav-settings">
       <span class="ni">⚙️</span> Configuracion
     </div>
@@ -428,6 +431,53 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </thead>
           <tbody id="ec-tbody"><tr><td colspan="7" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- EMAILS RESERVAS (Resend / Booknetic-style) -->
+    <div id="section-emails" class="section">
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">✉️ Emails de confirmación (reservas web)</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.65">
+          Cuando el pago queda confirmado (WooCommerce / webhook), se envía un correo al cliente con Resend.
+          El remitente y copia oculta (BCC) se definen en el servidor con variables de entorno:
+          <code style="font-size:.78rem">RESEND_FROM_CONFIRMATIONS</code>,
+          <code style="font-size:.78rem">RESEND_BCC_BOOKING</code>,
+          <code style="font-size:.78rem">RESEND_API_KEY</code>.
+        </p>
+        <p id="email-env-hint" style="font-size:.78rem;color:var(--muted);margin-bottom:1rem"></p>
+
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="eb-confirm-enabled">
+            <span class="toggle-slider"></span>
+          </label>
+          <span style="font-size:.9rem;color:var(--muted)">Enviar email de confirmación al cliente</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem;flex-wrap:wrap">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="eb-on-payment">
+            <span class="toggle-slider"></span>
+          </label>
+          <span style="font-size:.9rem;color:var(--muted)">Disparador: al confirmarse el pago</span>
+        </div>
+
+        <div style="margin-bottom:1rem">
+          <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.4rem">Asunto</label>
+          <input type="text" id="eb-subject" placeholder="Reserva confirmada — {{booking_ref}}"
+            style="width:100%;max-width:520px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .65rem;font-size:.88rem">
+        </div>
+        <div style="margin-bottom:.6rem">
+          <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.4rem">Cuerpo HTML (opcional)</label>
+          <textarea id="eb-body-html" rows="10" placeholder="Vacío = plantilla por defecto. Usa variables: {{booking_ref}}, {{customer_name}}, {{booking_date}}, {{booking_time}}, {{num_people}}, {{total_price_fmt}}, {{business_phone}}…"
+            style="width:100%;max-width:640px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.5rem .65rem;font-size:.8rem;font-family:ui-monospace,monospace;line-height:1.45"></textarea>
+        </div>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-top:1rem">
+          <button type="button" onclick="saveEmailBookingConfig()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Guardar emails</button>
+          <input type="email" id="eb-test-to" placeholder="Correo de prueba (opcional)"
+            style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .65rem;font-size:.82rem;min-width:200px">
+          <button type="button" onclick="sendTestBookingEmail()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.45rem 1rem;font-size:.82rem;cursor:pointer">Enviar prueba</button>
+        </div>
       </div>
     </div>
 
@@ -629,13 +679,14 @@ function showSection(name){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('section-'+name).classList.add('active');
   document.getElementById('nav-'+name).classList.add('active');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',settings:'Configuracion'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',emails:'Emails de reservas',settings:'Configuracion'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
   if(name==='clientes') loadClients();
   if(name==='stats') loadStats();
   if(name==='extras-cat') loadExtrasCat();
+  if(name==='emails') loadEmailBookingConfig();
   if(name==='settings'){ loadSettings(); loadVacationDays(); }
 }
 function toggleSidebar(){
@@ -1404,6 +1455,57 @@ async function loadSettings(){
     if(d.urgency_config){ _urgencyCfg = d.urgency_config; renderUrgencyConfig(); }
     if(d.dynamic_pricing){ _dpCfg = d.dynamic_pricing; renderDpConfig(); }
   }catch(e){ console.error(e); }
+}
+
+async function loadEmailBookingConfig(){
+  try{
+    const d = await api('/api/admin/email-booking');
+    const c = d.config || {};
+    const en = document.getElementById('eb-confirm-enabled');
+    const pay = document.getElementById('eb-on-payment');
+    const sub = document.getElementById('eb-subject');
+    const body = document.getElementById('eb-body-html');
+    const hint = document.getElementById('email-env-hint');
+    if(en) en.checked = !!c.confirmation_enabled;
+    if(pay) pay.checked = c.on_payment_confirmed !== false;
+    if(sub) sub.value = c.subject || '';
+    if(body) body.value = c.body_html || '';
+    if(hint){
+      let t = 'Remitente efectivo: <strong>' + (d.from_hint || '(configura RESEND_FROM_CONFIRMATIONS)') + '</strong>';
+      if(d.bcc_configured) t += ' · BCC activo';
+      if(!d.has_resend_key) t += ' · <span style="color:var(--red)">Falta RESEND_API_KEY en el servidor</span>';
+      hint.innerHTML = t;
+    }
+  }catch(e){ console.error(e); showToast('Error cargando emails: '+e.message); }
+}
+
+async function saveEmailBookingConfig(){
+  try{
+    const en = document.getElementById('eb-confirm-enabled');
+    const pay = document.getElementById('eb-on-payment');
+    const sub = document.getElementById('eb-subject');
+    const body = document.getElementById('eb-body-html');
+    await api('/api/admin/email-booking',{method:'PUT',body:JSON.stringify({
+      confirmation_enabled: !!(en && en.checked),
+      on_payment_confirmed: !!(pay && pay.checked),
+      subject: sub ? sub.value : '',
+      body_html: body ? body.value : ''
+    })});
+    showToast('Configuración de emails guardada');
+    await loadEmailBookingConfig();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function sendTestBookingEmail(){
+  try{
+    const inp = document.getElementById('eb-test-to');
+    const to = inp && inp.value.trim();
+    const r = await api('/api/admin/email-booking/test',{method:'POST',body:JSON.stringify({to:to||null})});
+    showToast(r.sent ? 'Correo de prueba enviado' : ('Estado: '+ (r.reason||'')));
+  }catch(e){
+    const msg = e.message || String(e);
+    showToast('Error envío prueba: '+ msg);
+  }
 }
 
 async function setUrgency(val){

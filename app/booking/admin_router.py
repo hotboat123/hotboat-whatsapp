@@ -504,6 +504,60 @@ async def update_dp(request: Request, x_admin_key: str = Header("")):
     return {"ok": True}
 
 
+# ── Booking emails (Resend, reservas.hotboat.cl) ─────────────────────────────
+
+@admin_router.get("/api/admin/email-booking")
+async def get_email_booking(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import get_email_booking_config
+    from app.config import get_settings
+    s = get_settings()
+    return {
+        "config": get_email_booking_config(),
+        "from_hint": (getattr(s, "resend_from_confirmations", "") or getattr(s, "email_from", "") or "").strip(),
+        "bcc_configured": bool((getattr(s, "resend_bcc_booking", "") or "").strip()),
+        "has_resend_key": bool((getattr(s, "resend_api_key", "") or "").strip()),
+    }
+
+
+class EmailBookingConfigBody(BaseModel):
+    confirmation_enabled: Optional[bool] = None
+    on_payment_confirmed: Optional[bool] = None
+    subject: Optional[str] = None
+    body_html: Optional[str] = None
+
+
+@admin_router.put("/api/admin/email-booking")
+async def put_email_booking(body: EmailBookingConfigBody, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import get_email_booking_config, set_email_booking_config
+    cur = get_email_booking_config()
+    data = body.model_dump(exclude_none=True)
+    cur.update(data)
+    set_email_booking_config(cur)
+    return {"ok": True, "config": get_email_booking_config()}
+
+
+class EmailBookingTestBody(BaseModel):
+    to: Optional[str] = None
+
+
+@admin_router.post("/api/admin/email-booking/test")
+async def post_email_booking_test(body: EmailBookingTestBody, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.config import get_settings
+    from app.booking.booking_email import send_test_booking_email
+    to_addr = (body.to or "").strip()
+    if not to_addr:
+        to_addr = (get_settings().business_email or "").strip()
+    if not to_addr:
+        raise HTTPException(status_code=400, detail="Indica un correo en el campo o configura BUSINESS_EMAIL")
+    result = send_test_booking_email(to_addr)
+    if not result.get("sent"):
+        raise HTTPException(status_code=500, detail=result.get("reason") or "send failed")
+    return {"ok": True, **result}
+
+
 # ── Incremental sync ──────────────────────────────────────────────────────────
 # Syncs reservas_con_extras → all_appointments (full upsert)
 # Then pulls NEW records from booknetic + hotboat into all_appointments
@@ -1094,6 +1148,14 @@ async def woo_webhook(request: Request):
                                         conn2.commit()
 
                             logger.info(f"WC webhook: hotboat_appointments {booking_ref_wc} confirmed + synced")
+                            try:
+                                from app.booking.booking_email import (
+                                    try_send_booking_confirmation_after_payment,
+                                )
+                                em = try_send_booking_confirmation_after_payment(booking_ref_wc)
+                                logger.info("WC webhook: confirmation email %s", em)
+                            except Exception as em_err:
+                                logger.warning("WC webhook: confirmation email error: %s", em_err)
             except Exception as he:
                 logger.error(f"WC webhook: error updating hotboat_appointments {booking_ref_wc}: {he}")
 
