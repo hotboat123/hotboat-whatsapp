@@ -1082,7 +1082,7 @@ async function openModal(id){
           const otroTxt = hasOtroVal || '';
           const normalSaved = saved.filter(s=>CLIMAS.includes(s));
           if(hasOtroVal && !normalSaved.includes('Otro')) normalSaved.push('Otro');
-          return `<div style="display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.4rem">
+          return `<div id="e-clima-checkboxes" style="display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.4rem">
             ${CLIMAS.map(c=>`<label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;cursor:pointer;font-weight:400">
               <input type="checkbox" value="${c}" ${normalSaved.includes(c)?'checked':''}
                 onchange="syncClimaHidden()" style="accent-color:var(--gold)">
@@ -1153,25 +1153,26 @@ async function openModal(id){
         })()}
       </div>
       <div class="form-group" style="margin-bottom:.8rem">
-        <label>Quién los atendió</label>
+        <label>Quién los atendió <span style="color:var(--muted);font-size:.72rem;font-weight:400">(selecciona varios)</span></label>
         ${(()=>{
           const ATEND=['Nestor','Axel','Tomás','Panchini','Otro'];
-          const cur = r.quien_atendio||'';
-          const isOtro = cur && !ATEND.slice(0,-1).includes(cur);
-          const selVal = isOtro ? 'Otro' : cur;
-          return `<select id="e-quien_atendio_sel" onchange="
-            const v=this.value;
-            const inp=document.getElementById('e-quien_atendio_txt');
-            inp.style.display=v==='Otro'?'block':'none';
-            if(v!=='Otro') document.getElementById('e-quien_atendio').value=v; else document.getElementById('e-quien_atendio').value=inp.value;">
-            <option value="">— seleccionar —</option>
-            ${ATEND.map(t=>`<option value="${t}"${selVal===t?' selected':''}>${t}</option>`).join('')}
-          </select>
-          <input id="e-quien_atendio_txt" placeholder="Especificar quién atendió..."
-            value="${isOtro?cur:''}"
-            oninput="document.getElementById('e-quien_atendio').value=this.value"
-            style="margin-top:.4rem;display:${isOtro?'block':'none'}">
-          <input type="hidden" id="e-quien_atendio" value="${cur}">`;
+          const saved = (r.quien_atendio||'').split(',').map(s=>s.trim()).filter(Boolean);
+          const hasOtroVal = saved.find(s=>!ATEND.slice(0,-1).includes(s));
+          const otroTxt = hasOtroVal || '';
+          const normalSaved = saved.filter(s=>ATEND.includes(s));
+          if(hasOtroVal && !normalSaved.includes('Otro')) normalSaved.push('Otro');
+          return `<div id="e-quien-atendio-checkboxes" style="display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.4rem">
+            ${ATEND.map(t=>`<label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;cursor:pointer;font-weight:400">
+              <input type="checkbox" value="${t}" ${normalSaved.includes(t)?'checked':''}
+                onchange="syncQuienAtendioHidden()" style="accent-color:var(--gold)">
+              ${t}
+            </label>`).join('')}
+          </div>
+          <input id="e-quien_atendio_otro_txt" placeholder="Especificar otro..."
+            value="${otroTxt}"
+            oninput="syncQuienAtendioHidden()"
+            style="display:${normalSaved.includes('Otro')?'block':'none'};margin-top:.3rem">
+          <input type="hidden" id="e-quien_atendio" value="${r.quien_atendio||''}">`;
         })()}
       </div>
       <div class="form-group" style="margin-bottom:.8rem">
@@ -1985,7 +1986,7 @@ function addDescuento(){
 
 // Recalculate costo_operativo_total when fijo or variable changes
 function syncClimaHidden(){
-  const boxes = document.querySelectorAll('#modal-body input[type="checkbox"]');
+  const boxes = document.querySelectorAll('#e-clima-checkboxes input[type="checkbox"]');
   const vals = [];
   boxes.forEach(cb=>{
     if(!cb.checked) return;
@@ -2004,6 +2005,27 @@ function syncClimaHidden(){
   const otroTxt = document.getElementById('e-clima_otro_txt');
   if(otroTxt) otroTxt.style.display = otroCb?.checked ? 'block':'none';
   const hidden = document.getElementById('e-clima_del_dia');
+  if(hidden) hidden.value = vals.join(', ');
+}
+
+function syncQuienAtendioHidden(){
+  const boxes = document.querySelectorAll('#e-quien-atendio-checkboxes input[type="checkbox"]');
+  const vals = [];
+  boxes.forEach(cb=>{
+    if(!cb.checked) return;
+    if(cb.value==='Otro'){
+      const txt = document.getElementById('e-quien_atendio_otro_txt');
+      if(txt) txt.style.display='block';
+      const v = txt ? txt.value.trim() : '';
+      if(v) vals.push(v); else vals.push('Otro');
+    } else {
+      vals.push(cb.value);
+    }
+  });
+  const otroCb = [...boxes].find(cb=>cb.value==='Otro');
+  const otroTxt = document.getElementById('e-quien_atendio_otro_txt');
+  if(otroTxt) otroTxt.style.display = otroCb?.checked ? 'block':'none';
+  const hidden = document.getElementById('e-quien_atendio');
   if(hidden) hidden.value = vals.join(', ');
 }
 
