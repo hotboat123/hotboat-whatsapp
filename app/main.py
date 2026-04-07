@@ -754,6 +754,52 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         elif menu_option == 5:
             # Ubicación y reseñas
             response_text = faq_handler.get_response("ubicación", language)
+        elif menu_option == 8:
+            # Packs Completos — equivale al flujo menú 7 → 1
+            import asyncio, os
+            from app.utils.media_handler import PACKS_IMAGES_DIR
+            pack_text = get_text("complete_packages_menu", language)
+            resumen_path = os.path.join(PACKS_IMAGES_DIR, "resumen-packs.jpg")
+            if os.path.exists(resumen_path):
+                try:
+                    media_id_img = await whatsapp_client.upload_media(resumen_path, mime_type="image/jpeg")
+                    if media_id_img:
+                        await whatsapp_client.send_image_message(
+                            to=phone_number,
+                            media_id=media_id_img,
+                            caption="📦 Packs Completos HotBoat"
+                        )
+                        await asyncio.sleep(0.5)
+                except Exception as img_err:
+                    logger.warning(f"Could not send packs image: {img_err}")
+            # Send the packs menu text
+            await whatsapp_client.send_text_message(to=phone_number, message=pack_text)
+            await save_conversation(
+                phone_number=phone_number,
+                customer_name=customer_name,
+                message_text="",
+                response_text=pack_text,
+                message_type="text",
+                direction="outgoing"
+            )
+            conversation["messages"].append({
+                "role": "assistant",
+                "content": pack_text,
+                "timestamp": datetime.now(CHILE_TZ).isoformat()
+            })
+            # Set complete_packages_flow so the bot continues when user replies
+            conversation["metadata"]["complete_packages_flow"] = {"step": "selecting_type"}
+            # Clear any conflicting flows
+            for key in ("awaiting_packages_submenu", "accommodation_flow", "experience_flow", "build_package_flow"):
+                conversation["metadata"].pop(key, None)
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "menu_option": menu_option,
+                "message_sent": "Packs Completos: imagen + texto enviados",
+                "whatsapp_response": {}
+            }
         elif menu_option == 9:
             # Solo alojamientos — equivale al flujo menú 7 → 2
             import asyncio
@@ -810,7 +856,7 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 "whatsapp_response": {}
             }
         else:
-            raise HTTPException(status_code=400, detail="Invalid menu option (must be 0-5 or 9)")
+            raise HTTPException(status_code=400, detail="Invalid menu option (must be 0-5, 8 or 9)")
         
         # Send message via WhatsApp
         result = await whatsapp_client.send_text_message(
