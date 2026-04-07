@@ -452,7 +452,11 @@ class ConversationManager:
                     logger.info(f"Unsupported language requested: {requested_language}")
                     response = self._language_not_supported_response(conversation)
             # Always show welcome message on first interaction
-            elif is_first:
+            # BUT skip if an active flow was already set (e.g. via quick reply from admin)
+            elif is_first and not any(metadata.get(k) for k in (
+                "accommodation_flow", "experience_flow", "complete_packages_flow",
+                "build_package_flow", "awaiting_packages_submenu",
+            )):
                 logger.info("First message - sending welcome menu")
                 metadata["language_selected"] = True
                 language = metadata.get("language", "es")
