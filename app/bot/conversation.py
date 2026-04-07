@@ -460,6 +460,8 @@ class ConversationManager:
                 logger.info("First message - sending welcome menu")
                 metadata["language_selected"] = True
                 language = metadata.get("language", "es")
+                # Signal webhook to schedule a 2-min follow-up if user doesn't reply
+                metadata["schedule_followup"] = True
                 response = self._get_main_menu_message(language)
             elif self._is_thanks_message(message_text):
                 logger.info("Gratitude detected - sending friendly reply")

@@ -1,8 +1,10 @@
 """
 WhatsApp webhook handler
 """
+import asyncio
 import logging
 import os
+from datetime import datetime
 from typing import Dict, Any, Optional
 
 from app.whatsapp.client import whatsapp_client
@@ -10,6 +12,56 @@ from app.db.queries import save_conversation
 from app.db.leads import increment_unread_count
 
 logger = logging.getLogger(__name__)
+
+# ── Menu follow-up: send nudge if user doesn't reply within FOLLOWUP_DELAY_S ──
+FOLLOWUP_DELAY_S = 120  # 2 minutes
+
+_pending_followups: dict[str, asyncio.Task] = {}
+
+
+async def _menu_followup_task(phone_number: str, contact_name: str) -> None:
+    """Wait FOLLOWUP_DELAY_S then send a friendly nudge if still pending."""
+    try:
+        await asyncio.sleep(FOLLOWUP_DELAY_S)
+        logger.info(f"⏰ Sending menu follow-up to {phone_number}")
+        msg1 = "¿Todo bien? 😊"
+        msg2 = "¿Quieres que te ayude con algo? 🙌"
+        await whatsapp_client.send_text_message(phone_number, msg1)
+        await asyncio.sleep(1.5)
+        await whatsapp_client.send_text_message(phone_number, msg2)
+        # Persist both messages
+        for msg in (msg1, msg2):
+            try:
+                await save_conversation(
+                    phone_number=phone_number,
+                    customer_name=contact_name,
+                    message_text="",
+                    response_text=msg,
+                    message_type="text",
+                    direction="outgoing",
+                )
+            except Exception:
+                pass
+    except asyncio.CancelledError:
+        logger.debug(f"Follow-up cancelled for {phone_number} (user replied)")
+    except Exception as e:
+        logger.error(f"Error in menu follow-up for {phone_number}: {e}")
+    finally:
+        _pending_followups.pop(phone_number, None)
+
+
+def _cancel_followup(phone_number: str) -> None:
+    """Cancel any pending follow-up for this user (they replied)."""
+    task = _pending_followups.pop(phone_number, None)
+    if task and not task.done():
+        task.cancel()
+
+
+def _schedule_followup(phone_number: str, contact_name: str) -> None:
+    """Schedule a menu follow-up, replacing any existing one."""
+    _cancel_followup(phone_number)
+    task = asyncio.create_task(_menu_followup_task(phone_number, contact_name))
+    _pending_followups[phone_number] = task
 
 
 def verify_webhook(mode: Optional[str], token: Optional[str], expected_token: str) -> bool:
@@ -137,6 +189,9 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     logger.warning(f"Could not save conversation: {e}")
                 return  # Exit early, no bot response
             
+            # Cancel any pending follow-up — user is replying
+            _cancel_followup(from_number)
+
             # Process the message with conversation manager
             try:
                 response = await conversation_manager.process_message(
@@ -151,7 +206,13 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 traceback.print_exc()
                 # Send error message to user
                 response = "🥬 ¡Ahoy, grumete! ⚓ Disculpa, estoy teniendo problemas técnicos. ¿Podrías intentar de nuevo en un momento?"
-            
+
+            # Check if the bot just sent the welcome menu → schedule a follow-up
+            _conv = conversation_manager.conversations.get(from_number, {})
+            if _conv.get("metadata", {}).pop("schedule_followup", False):
+                _schedule_followup(from_number, contact_name)
+                logger.info(f"⏰ Follow-up scheduled for {from_number} in {FOLLOWUP_DELAY_S}s")
+
             response_text = None
             manual_handover_only = False
             
@@ -458,6 +519,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             )
         
         elif message_type == "image":
+            _cancel_followup(from_number)
             image_obj = message.get("image", {}) or {}
             caption = (image_obj.get("caption") or "").strip()
             media_id = image_obj.get("id")
@@ -687,6 +749,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     logger.warning(f"Could not save image conversation: {e}")
         
         elif message_type == "audio":
+            _cancel_followup(from_number)
             audio_obj = message.get("audio", {}) or {}
             media_id = audio_obj.get("id")
             mime_type = audio_obj.get("mime_type", "audio/ogg")
