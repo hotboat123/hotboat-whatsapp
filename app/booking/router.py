@@ -611,7 +611,6 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
     """Send email with WhatsApp links to admin for accommodation inquiries."""
     import urllib.parse
     from app.config import get_settings
-    from app.bot.accommodations_contacts import ACCOMMODATION_CONTACTS, generate_whatsapp_link
     from app.email.resend_booking import send_booking_html
     from app.db.connection import get_connection
 
@@ -619,8 +618,9 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
     parts = (req.service_type or "").split(":", 1)
     aloj_ref = parts[1].strip() if len(parts) > 1 else ""
 
-    slug = None
     aloj_name = req.title or "Alojamiento"
+    owner_whatsapp = None
+    owner_name = None
 
     if aloj_ref:
         try:
@@ -628,29 +628,25 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
                 with conn.cursor() as cur:
                     try:
                         aloj_id = int(aloj_ref)
-                        cur.execute("SELECT slug, name FROM alojamientos WHERE id=%s", (aloj_id,))
+                        cur.execute("SELECT name, group_name, owner_whatsapp FROM alojamientos WHERE id=%s", (aloj_id,))
                     except ValueError:
-                        cur.execute("SELECT slug, name FROM alojamientos WHERE slug=%s", (aloj_ref,))
+                        cur.execute("SELECT name, group_name, owner_whatsapp FROM alojamientos WHERE slug=%s", (aloj_ref,))
                     row = cur.fetchone()
                     if row:
-                        slug, aloj_name = row
+                        aloj_name, owner_name, owner_whatsapp = row
+                        if not owner_name:
+                            owner_name = aloj_name
         except Exception as db_err:
             logger.warning(f"Could not look up alojamiento {aloj_ref}: {db_err}")
 
-    # Map slug to owner contact
-    prop_key = None
-    if slug:
-        s = slug.lower()
-        if "open" in s or "sky" in s:
-            prop_key = "open_sky"
-        elif "relikura" in s:
-            prop_key = "relikura"
-
-    contact = ACCOMMODATION_CONTACTS.get(prop_key) if prop_key else None
+    def _wa_link(phone: str, message: str) -> str:
+        import urllib.parse
+        clean = phone.replace("+", "").replace(" ", "").replace("-", "")
+        return f"https://wa.me/{clean}?text={urllib.parse.quote(message)}"
 
     # Pre-filled WhatsApp messages
     owner_wa_section = ""
-    if contact:
+    if owner_whatsapp and owner_whatsapp.strip():
         owner_msg = (
             f"Hola! Tengo una consulta de disponibilidad de parte de HotBoat:\n\n"
             f"🏠 *Alojamiento:* {aloj_name}\n"
@@ -659,16 +655,22 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
             f"¿Tienen disponibilidad para estas fechas?\n\n"
             f"Cliente: {req.customer_name} ({req.customer_phone})"
         )
-        owner_link = generate_whatsapp_link(contact["whatsapp"], owner_msg)
+        owner_link = _wa_link(owner_whatsapp, owner_msg)
+        display_name = owner_name or owner_whatsapp
         owner_wa_section = f"""
         <div style="background:#ecfdf5;padding:20px;border-radius:8px;margin:16px 0">
-          <h3 style="margin-top:0;color:#065f46">📞 Consultar disponibilidad con {contact['name']}</h3>
+          <h3 style="margin-top:0;color:#065f46">📞 Consultar disponibilidad con {display_name}</h3>
           <p style="margin-bottom:12px">Click para abrir WhatsApp con el mensaje pre-escrito al propietario:</p>
           <a href="{owner_link}"
              style="display:inline-block;background:#25D366;color:#fff;padding:12px 24px;
                     text-decoration:none;border-radius:6px;font-weight:bold">
-            💬 Consultar con {contact['name']}
+            💬 Consultar con {display_name}
           </a>
+        </div>"""
+    else:
+        owner_wa_section = """
+        <div style="background:#fff3cd;padding:16px;border-radius:8px;margin:16px 0;color:#856404">
+          ⚠️ No hay número de WhatsApp configurado para este alojamiento. Agrega uno en el panel de administración.
         </div>"""
 
     clean_client = (req.customer_phone or "").replace("+", "").replace(" ", "").replace("-", "")

@@ -500,6 +500,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div class="form-group-adm"><label>Grupo (para agrupar en el bot)</label><input id="aloj-group" placeholder="Ej: Open Sky o Raíces de Relikura"></div>
           <div class="form-group-adm"><label>Slug (identificador único)</label><input id="aloj-slug" placeholder="Ej: open-sky-domo-tina"></div>
           <div class="form-group-adm"><label>Descripción</label><input id="aloj-desc" placeholder="Domo transparente con tina de baño interior..."></div>
+          <div class="form-group-adm">
+            <label>WhatsApp administrador del alojamiento</label>
+            <input id="aloj-owner-wa" placeholder="+56 9 XXXX XXXX" style="font-family:monospace">
+            <small style="color:var(--muted);font-size:.72rem">Se usa para generar el enlace wa.me en los emails de consulta de disponibilidad</small>
+          </div>
           <div style="display:grid;grid-template-columns:60px 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Icono</label><input id="aloj-icon" placeholder="🏠"></div>
             <div class="form-group-adm"><label>Capacidad (personas)</label><input id="aloj-capacity" type="number" min="1" value="2"></div>
@@ -2852,6 +2857,7 @@ function renderAlojList(){
             &nbsp;·&nbsp; ${a.capacity||1} persona${(a.capacity||1)>1?'s':''}
             ${a.cost_from ? `&nbsp;·&nbsp; <span style="color:var(--muted)">costo $${Number(a.cost_from).toLocaleString('es-CL')}</span>` : ''}
           </div>
+          ${a.owner_whatsapp ? `<div style="font-size:.75rem;color:var(--muted);margin:.1rem 0">📱 Admin: <a href="https://wa.me/${(a.owner_whatsapp).replace(/[^0-9]/g,'')}" target="_blank" style="color:#25D366">${a.owner_whatsapp}</a></div>` : '<div style="font-size:.75rem;color:#ff6b6b;margin:.1rem 0">⚠️ Sin WhatsApp admin</div>'}
           <span class="status-badge ${a.is_active?'badge-on':'badge-off'}">${a.is_active?'Activo':'Inactivo'}</span>
         </div>
         <div class="item-actions">
@@ -2873,6 +2879,7 @@ function openAlojModal(id){
   document.getElementById('aloj-slug').value = a ? a.slug : '';
   document.getElementById('aloj-icon').value = a ? (a.icon||'🏠') : '🏠';
   document.getElementById('aloj-desc').value = a ? (a.description||'') : '';
+  document.getElementById('aloj-owner-wa').value = a ? (a.owner_whatsapp||'') : '';
   document.getElementById('aloj-capacity').value = a ? (a.capacity||2) : 2;
   document.getElementById('aloj-price').value = a ? (a.price_from||0) : 0;
   document.getElementById('aloj-cost').value = a ? (a.cost_from||0) : 0;
@@ -2898,6 +2905,7 @@ async function saveAloj(){
     group_name: document.getElementById('aloj-group').value.trim(),
     icon: document.getElementById('aloj-icon').value.trim()||'🏠',
     description: document.getElementById('aloj-desc').value.trim(),
+    owner_whatsapp: document.getElementById('aloj-owner-wa').value.trim(),
     capacity: +document.getElementById('aloj-capacity').value||2,
     price_from: +document.getElementById('aloj-price').value||0,
     cost_from: +document.getElementById('aloj-cost').value||0,
@@ -2925,7 +2933,7 @@ async function toggleAloj(id, active){
   if(!a) return;
   const body = {
     slug:a.slug, name:a.name, group_name:a.group_name||'', icon:a.icon||'🏠',
-    description:a.description||'', capacity:a.capacity||2,
+    description:a.description||'', owner_whatsapp:a.owner_whatsapp||'', capacity:a.capacity||2,
     price_from:a.price_from||0, cost_from:a.cost_from||0,
     display_order:a.display_order||0, is_active:active, image_path:a.image_path||null,
   };

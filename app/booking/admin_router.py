@@ -1392,7 +1392,7 @@ async def admin_list_alojamientos(x_admin_key: str = Header(...)):
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id,slug,name,group_name,icon,description,price_from,cost_from,"
-                "capacity,image_path,is_active,display_order FROM alojamientos ORDER BY display_order,id"
+                "capacity,owner_whatsapp,image_path,is_active,display_order FROM alojamientos ORDER BY display_order,id"
             )
             cols = [d.name for d in cur.description]
             return {"alojamientos": [_aloj_row(r, cols) for r in cur.fetchall()]}
@@ -1407,6 +1407,7 @@ class AlojamientoBody(BaseModel):
     price_from: int = 0
     cost_from: int = 0
     capacity: int = 2
+    owner_whatsapp: str = ""
     image_path: Optional[str] = None
     is_active: bool = True
     display_order: int = 0
@@ -1419,10 +1420,10 @@ async def admin_create_alojamiento(body: AlojamientoBody, x_admin_key: str = Hea
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO alojamientos"
-                " (slug,name,group_name,icon,description,price_from,cost_from,capacity,image_path,is_active,display_order)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                " (slug,name,group_name,icon,description,price_from,cost_from,capacity,owner_whatsapp,image_path,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
                 (body.slug, body.name, body.group_name, body.icon, body.description,
-                 body.price_from, body.cost_from, body.capacity,
+                 body.price_from, body.cost_from, body.capacity, body.owner_whatsapp,
                  body.image_path, body.is_active, body.display_order),
             )
             new_id = cur.fetchone()[0]
@@ -1437,10 +1438,10 @@ async def admin_update_alojamiento(aloj_id: int, body: AlojamientoBody, x_admin_
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE alojamientos SET slug=%s,name=%s,group_name=%s,icon=%s,description=%s,"
-                "price_from=%s,cost_from=%s,capacity=%s,image_path=%s,is_active=%s,"
+                "price_from=%s,cost_from=%s,capacity=%s,owner_whatsapp=%s,image_path=%s,is_active=%s,"
                 "display_order=%s WHERE id=%s",
                 (body.slug, body.name, body.group_name, body.icon, body.description,
-                 body.price_from, body.cost_from, body.capacity,
+                 body.price_from, body.cost_from, body.capacity, body.owner_whatsapp,
                  body.image_path, body.is_active, body.display_order, aloj_id),
             )
             conn.commit()
