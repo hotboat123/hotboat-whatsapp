@@ -251,7 +251,7 @@ class PushNotifier:
                 with conn.cursor() as cur:
                     cur.execute("""
                         SELECT token FROM push_tokens 
-                        WHERE last_used_at > NOW() - INTERVAL '30 days'
+                        WHERE last_used_at > NOW() - INTERVAL '90 days'
                         ORDER BY last_used_at DESC
                     """)
                     

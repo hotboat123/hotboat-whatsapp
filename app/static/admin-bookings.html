@@ -779,6 +779,20 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
+      <!-- ── Push Notifications ─────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">🔔 Notificaciones Push (Expo Go)</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Diagnóstico de notificaciones push hacia tu celular.
+          Si no llegan, re-abre la app de Expo Go y pulsa <strong>Registrar dispositivo</strong>.
+        </p>
+        <div style="display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:1rem">
+          <button onclick="checkPushStatus()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Ver dispositivos registrados</button>
+          <button onclick="sendTestPush()" style="background:var(--border);color:var(--text);border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Enviar notificación de prueba</button>
+        </div>
+        <div id="push-status-box" style="display:none;font-size:.82rem;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;line-height:1.7"></div>
+      </div>
+
       <!-- ── Dynamic Pricing ──────────────────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">💰 Precios Dinamicos</div>
@@ -2093,6 +2107,53 @@ async function saveUrgencyConfig(){
     })});
     showToast('Configuracion de urgencia guardada ✅');
   }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Push notification diagnostics ─────────────────────────────────────────────
+
+async function checkPushStatus(){
+  const box = document.getElementById('push-status-box');
+  box.style.display='block';
+  box.innerHTML='<span style="color:var(--muted)">Cargando...</span>';
+  try{
+    const data = await api('/api/push/status');
+    if(data.total === 0){
+      box.innerHTML='<span style="color:#f87171">⚠️ No hay dispositivos registrados. Abre la app de Expo Go y registra tu dispositivo.</span>';
+      return;
+    }
+    let html=`<strong>${data.total} dispositivo(s) registrado(s):</strong><br><br>`;
+    data.tokens.forEach((t,i)=>{
+      const ago = t.last_used_at ? new Date(t.last_used_at).toLocaleString('es-CL') : '?';
+      const badge = t.active
+        ? '<span style="color:#4ade80;font-weight:700">✅ Activo</span>'
+        : '<span style="color:#f87171;font-weight:700">❌ Expirado (>90d)</span>';
+      html+=`<div style="margin-bottom:.5rem">${badge} — Token: <code>${t.token_suffix}</code> — Último uso: ${ago}</div>`;
+    });
+    box.innerHTML=html;
+  }catch(e){
+    box.innerHTML=`<span style="color:#f87171">Error: ${e.message}</span>`;
+  }
+}
+
+async function sendTestPush(){
+  const box = document.getElementById('push-status-box');
+  box.style.display='block';
+  box.innerHTML='<span style="color:var(--muted)">Enviando notificación de prueba...</span>';
+  try{
+    const res = await fetch('/api/push/test',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({title:'🔔 Prueba HotBoat', body:'Las notificaciones funcionan correctamente ✅'})
+    });
+    const data = await res.json();
+    if(data.status==='success'){
+      box.innerHTML='<span style="color:#4ade80">✅ Notificación enviada. Revisa tu celular.</span>';
+    } else {
+      box.innerHTML=`<span style="color:#f87171">⚠️ ${data.message}. Puede que no haya dispositivos registrados.</span>`;
+    }
+  }catch(e){
+    box.innerHTML=`<span style="color:#f87171">Error: ${e.message}</span>`;
+  }
 }
 
 // ── Dynamic pricing UI ────────────────────────────────────────────────────────

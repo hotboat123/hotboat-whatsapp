@@ -1030,6 +1030,41 @@ async def send_test_notification(request: PushTestNotification):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/push/status")
+async def push_status(x_admin_key: str = Header(...)):
+    """Return registered push tokens with diagnostic info"""
+    settings = get_settings()
+    if x_admin_key != settings.admin_api_key:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT token, device_info, created_at, last_used_at
+                    FROM push_tokens
+                    ORDER BY last_used_at DESC
+                """)
+                rows = cur.fetchall()
+                tokens = []
+                for row in rows:
+                    token, device_info, created_at, last_used_at = row
+                    short = token[-12:] if token else "?"
+                    tokens.append({
+                        "token_suffix": f"...{short}",
+                        "device_info": device_info,
+                        "created_at": created_at.isoformat() if created_at else None,
+                        "last_used_at": last_used_at.isoformat() if last_used_at else None,
+                        "active": last_used_at is not None and (
+                            (datetime.now() - last_used_at.replace(tzinfo=None)).days < 90
+                        )
+                    })
+                return {"total": len(tokens), "tokens": tokens}
+    except Exception as e:
+        logger.error(f"Error getting push status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # MESSAGE REACTIONS ENDPOINT
 # ============================================================================
