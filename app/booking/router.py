@@ -182,54 +182,69 @@ async def get_availability(days: int = Query(30, ge=1, le=60)):
                 grouped[dk] = []
             grouped[dk].append(s["time"])
 
-        # Apply urgency filter if enabled
+        # Compute fake_booked_slots for grey display in urgency mode.
+        # NOTE: availability.py already applies the urgency filter correctly (using data
+        # from both booknetic + hotboat_appointments). We do NOT re-apply it here to
+        # avoid double-filtering that empties valid days.
+        fake_booked_by_day: dict = {}
         if is_urgency_mode():
-            # Get already-booked slots per day from hotboat_appointments
+            # Load actual bookings from BOTH sources for the fake-slot calculation
             booked_by_day: dict = {}
             try:
                 with get_connection() as conn:
                     with conn.cursor() as cur:
+                        # Web bookings
                         cur.execute("""
-                            SELECT booking_date::text, booking_time::text
+                            SELECT booking_date::text,
+                                   TO_CHAR(booking_time, 'HH24:MI') AS t
                             FROM hotboat_appointments
                             WHERE booking_date >= %s AND booking_date <= %s
                               AND status NOT IN ('cancelled','rejected','solicitud','pending_payment')
+                              AND booking_time IS NOT NULL
                         """, (start.date(), end.date()))
                         for row in cur.fetchall():
-                            d, t = row[0], row[1][:5]  # HH:MM
-                            if d not in booked_by_day:
-                                booked_by_day[d] = []
-                            booked_by_day[d].append(t)
+                            booked_by_day.setdefault(row[0], []).append(row[1])
+                        # Booknetic bookings (stored as Chile time, no tz offset)
+                        cur.execute("""
+                            SELECT (starts_at AT TIME ZONE 'UTC')::date::text AS d,
+                                   TO_CHAR(starts_at AT TIME ZONE 'UTC', 'HH24:MI') AS t
+                            FROM booknetic_appointments
+                            WHERE starts_at IS NOT NULL
+                              AND starts_at >= %s AND starts_at <= %s
+                              AND (status IS NULL OR status NOT IN ('cancelled','rejected'))
+                        """, (start.date(), end.date()))
+                        for row in cur.fetchall():
+                            booked_by_day.setdefault(row[0], []).append(row[1])
             except Exception as e:
-                logger.warning(f"Urgency: could not fetch booked slots: {e}")
+                logger.warning(f"Urgency fake-slots: could not fetch booked: {e}")
 
-            urgency_grouped = {}
-            fake_booked_by_day = {}
-            fake_base = get_urgency_fake_slots()  # slots gris cuando no hay reservas
+            fake_base = get_urgency_fake_slots()  # grey slots when no real bookings
+            from app.booking.operator_settings import get_urgency_config
+            gap_min = int(float(get_urgency_config().get("gap_hours", 3)) * 60)
+
             for dk, times in grouped.items():
                 booked = booked_by_day.get(dk, [])
-                urgency_grouped[dk] = apply_urgency_filter(times, booked)
-                # Si no hay reservas reales ese día → mostrar slots fantasma en gris
+                avail_set = set(times)
                 if not booked:
-                    fake_booked_by_day[dk] = fake_base
-                # Si hay reservas → los slots de expansión no usados son los gris
+                    # No real bookings → show constant seed±gap slots as grey
+                    fake_booked_by_day[dk] = [t for t in fake_base if t not in avail_set]
                 else:
+                    # Real bookings → show the expansion targets that ended up NOT available
                     all_expansion = []
                     for bt in booked:
                         try:
                             bh, bm = map(int, bt.split(":"))
                             b_min = bh * 60 + bm
-                            from app.booking.operator_settings import get_urgency_config
-                            gap_min = int(float(get_urgency_config().get("gap_hours", 3)) * 60)
                             for delta in (-gap_min, gap_min):
                                 t_min = b_min + delta
                                 if 6 * 60 <= t_min < 24 * 60:
                                     all_expansion.append(f"{t_min//60:02d}:{t_min%60:02d}")
                         except Exception:
                             pass
-                    green = set(urgency_grouped[dk])
-                    fake_booked_by_day[dk] = [t for t in all_expansion if t not in green and t not in booked]
-            grouped = {k: v for k, v in urgency_grouped.items() if v}
+                    fake_booked_by_day[dk] = [
+                        t for t in all_expansion
+                        if t not in avail_set and t not in booked
+                    ]
 
         result = {
             "availability": grouped,

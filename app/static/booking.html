@@ -998,10 +998,11 @@ function renderTimeSelect(){
   const avail = S.availability[S.selectedDate] || [];
   const fake  = S.fakeBooked[S.selectedDate] || [];
 
-  // Merge and sort all slots by time
+  // Merge and sort all slots by time; never mark a slot grey if it's already available
   const toMin = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
-  const fakeSet = new Set(fake);
-  const allTimes = [...new Set([...avail, ...fake])].sort((a,b)=>toMin(a)-toMin(b));
+  const availSet = new Set(avail);
+  const fakeSet = new Set(fake.filter(t => !availSet.has(t)));
+  const allTimes = [...new Set([...avail, ...fakeSet])].sort((a,b)=>toMin(a)-toMin(b));
 
   const btns = allTimes.map(t => {
     if(fakeSet.has(t)){
