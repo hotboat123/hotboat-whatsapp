@@ -148,7 +148,7 @@ async def get_dynamic_price(
 
 
 @router.get("/api/booking/availability")
-async def get_availability(days: int = Query(30, ge=1, le=60)):
+async def get_availability(days: int = Query(90, ge=1, le=90)):
     cache_key = f"avail_{days}"
     cached = _avail_cache.get(cache_key)
     if cached and (_time.time() - cached["ts"]) < _AVAIL_CACHE_TTL:
