@@ -1129,6 +1129,10 @@ function renderForm(){
     ${extRows}
     ${flex ? `<div class="summary-row"><span>🔒 FLEX</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
     <div class="summary-row total"><span>TOTAL</span><span>$${total.toLocaleString('es-CL')}</span></div>
+    <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
+      🚤 Se pide el <strong style="color:var(--gold)">50% del total ($${Math.round(total*0.5).toLocaleString('es-CL')})</strong> para reservar.<br>
+      El resto se paga después de la Experiencia HotBoat, con efectivo, tarjeta o transferencia.
+    </div>
   </div>
   <div class="card">
     <div class="card-title">👤 Tus datos</div>
