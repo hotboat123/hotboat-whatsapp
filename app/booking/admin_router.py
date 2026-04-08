@@ -1377,6 +1377,96 @@ async def admin_upload_exp_image(exp_id: int, file: UploadFile = File(...), x_ad
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ALOJAMIENTOS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@admin_router.get("/api/admin/alojamientos")
+async def admin_list_alojamientos(x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id,slug,name,icon,description,price_from,cost_from,"
+                "image_path,is_active,display_order FROM alojamientos ORDER BY display_order,id"
+            )
+            cols = [d.name for d in cur.description]
+            return {"alojamientos": [dict(zip(cols, r)) for r in cur.fetchall()]}
+
+
+class AlojamientoBody(BaseModel):
+    slug: str
+    name: str
+    icon: str = "🏠"
+    description: str = ""
+    price_from: int = 0
+    cost_from: int = 0
+    image_path: Optional[str] = None
+    is_active: bool = True
+    display_order: int = 0
+
+
+@admin_router.post("/api/admin/alojamientos")
+async def admin_create_alojamiento(body: AlojamientoBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO alojamientos (slug,name,icon,description,price_from,cost_from,image_path,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (body.slug, body.name, body.icon, body.description,
+                 body.price_from, body.cost_from,
+                 body.image_path, body.is_active, body.display_order),
+            )
+            new_id = cur.fetchone()[0]
+            conn.commit()
+    return {"ok": True, "id": new_id}
+
+
+@admin_router.put("/api/admin/alojamientos/{aloj_id}")
+async def admin_update_alojamiento(aloj_id: int, body: AlojamientoBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE alojamientos SET slug=%s,name=%s,icon=%s,description=%s,"
+                "price_from=%s,cost_from=%s,image_path=%s,is_active=%s,"
+                "display_order=%s,updated_at=NOW() WHERE id=%s",
+                (body.slug, body.name, body.icon, body.description,
+                 body.price_from, body.cost_from,
+                 body.image_path, body.is_active, body.display_order, aloj_id),
+            )
+            conn.commit()
+    return {"ok": True}
+
+
+@admin_router.delete("/api/admin/alojamientos/{aloj_id}")
+async def admin_delete_alojamiento(aloj_id: int, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM alojamientos WHERE id=%s", (aloj_id,))
+            conn.commit()
+    return {"ok": True}
+
+
+@admin_router.post("/api/admin/alojamientos/{aloj_id}/image")
+async def admin_upload_aloj_image(aloj_id: int, file: UploadFile = File(...), x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    ext = os.path.splitext(file.filename or "img.jpg")[1].lower() or ".jpg"
+    dest_dir = os.path.join(MEDIA_ROOT, "images", "alojamientos", f"aloj_{aloj_id}")
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, f"main{ext}")
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    rel = f"/media/images/alojamientos/aloj_{aloj_id}/main{ext}"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE alojamientos SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, aloj_id))
+            conn.commit()
+    return {"ok": True, "image_path": rel}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PACKS COMPLETOS
 # ═══════════════════════════════════════════════════════════════════════════════
 
