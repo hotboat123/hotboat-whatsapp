@@ -1658,7 +1658,8 @@ async function saveMenuSettings(){
       show_packs_alojamientos: document.getElementById('ms-packs')?.checked ?? true,
       show_arma_pack:          document.getElementById('ms-armapack')?.checked ?? true,
     };
-    await api('/api/admin/menu-settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    // Do NOT pass a custom headers object — api() already includes x-admin-key + Content-Type
+    await api('/api/admin/menu-settings',{method:'PUT',body:JSON.stringify(body)});
     showToast('Visibilidad del menú guardada ✅');
   }catch(e){ showToast('Error: '+e.message); }
 }
