@@ -2621,6 +2621,9 @@ function showToast(msg){
   clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity='0',3000);
 }
 
+// helper: return current admin key (KEY is set by doLogin)
+function getKey(){ return KEY; }
+
 // ═══════════════════════════════════════════════════════════════
 // EXPERIENCIAS admin
 // ═══════════════════════════════════════════════════════════════

@@ -147,7 +147,7 @@ async def _run_auto_sync():
                                  ciudad_origen, como_supieron, clima_del_dia,
                                  categoria_clientes, tipo_clientes, tiene_cruce,
                                  status, extras_json, created_at, updated_at)
-                                VALUES ('sheets',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                                VALUES ('sheets',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
                                 ON CONFLICT DO NOTHING
                             """, (str(rid), str(appt_id) if appt_id else None,
                                   fecha, hora, nombre, email,
