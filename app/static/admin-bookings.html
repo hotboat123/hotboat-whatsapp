@@ -571,10 +571,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
     <!-- CALENDARIO EXTRAS -->
     <div id="section-cal-extras" class="section">
-      <div style="display:flex;gap:.75rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center">
-        <button class="sync-btn" style="background:var(--green)" onclick="openExtrasBookingModal()">+ Nueva Reserva Extra</button>
-        <span style="color:var(--muted);font-size:.82rem">Packs, experiencias y alojamientos con fechas.</span>
+      <div class="cal-nav">
+        <h2 id="ce-title">Cargando...</h2>
+        <button onclick="ceCalPrev()">‹</button>
+        <button onclick="ceCalNext()">›</button>
+        <button class="sync-btn" style="background:var(--green);padding:.35rem .9rem;font-size:.8rem;margin-left:.75rem" onclick="openExtrasBookingModal()">+ Nueva Reserva</button>
       </div>
+      <div class="cal-grid" id="ce-cal-grid" style="margin-bottom:1.5rem"></div>
       <div id="cal-extras-list" style="display:flex;flex-direction:column;gap:.75rem"></div>
 
       <!-- Extras Booking Modal -->
@@ -2832,52 +2835,110 @@ async function deletePack(id){
 // CALENDARIO EXTRAS
 // ═══════════════════════════════════════════════════════════════
 let _extrasBookings = [];
+const STATUS_COLORS = {pendiente:'#f0a500',confirmado:'#00c055',cancelado:'#ff4444'};
+const TYPE_ICON = {experience:'🏔️',pack:'🎁',alojamiento:'🏠'};
+let ceYear = new Date().getFullYear(), ceMonth = new Date().getMonth();
+
+function ceCalPrev(){ ceMonth--; if(ceMonth<0){ceMonth=11;ceYear--;} renderCalExtras(); }
+function ceCalNext(){ ceMonth++; if(ceMonth>11){ceMonth=0;ceYear++;} renderCalExtras(); }
 
 async function loadCalExtras(){
   try{
-    const year = document.getElementById('year-sel')?.value || new Date().getFullYear();
-    const r = await fetch(`/api/admin/extras-bookings?desde=${year}-01-01&hasta=${year}-12-31`,{headers:{'x-admin-key':getKey()}});
+    const r = await fetch(`/api/admin/extras-bookings`,{headers:{'x-admin-key':getKey()}});
     const d = await r.json();
     _extrasBookings = d.bookings||[];
+    ceYear = new Date().getFullYear();
+    ceMonth = new Date().getMonth();
     renderCalExtras();
   }catch(e){ showToast('Error cargando extras: '+e.message); }
 }
 
-const STATUS_COLORS = {pendiente:'#f0a500',confirmado:'#00c055',cancelado:'#ff4444'};
-
 function renderCalExtras(){
-  const el = document.getElementById('cal-extras-list');
-  if(!_extrasBookings.length){ el.innerHTML='<p style="color:var(--muted)">No hay reservas de extras aún.</p>'; return; }
-  // Group by month
-  const byMonth = {};
+  // ── Calendar grid ─────────────────────────────────────────────
+  document.getElementById('ce-title').textContent = `${MONTHS[ceMonth]} ${ceYear}`;
+  const grid = document.getElementById('ce-cal-grid');
+  const firstDayJs = new Date(ceYear, ceMonth, 1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
+  const daysInMonth = new Date(ceYear, ceMonth+1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Build a map: dateStr → list of extras that overlap that date
+  const byDate = {};
   _extrasBookings.forEach(b=>{
-    const m = b.start_date?.slice(0,7)||'?';
-    if(!byMonth[m]) byMonth[m]=[];
-    byMonth[m].push(b);
+    if(!b.start_date) return;
+    const start = new Date(b.start_date+'T00:00:00');
+    const end   = b.end_date ? new Date(b.end_date+'T00:00:00') : start;
+    for(let dt=new Date(start); dt<=end; dt.setDate(dt.getDate()+1)){
+      const y=dt.getFullYear(), m=dt.getMonth(), d=dt.getDate();
+      if(y===ceYear && m===ceMonth){
+        const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        if(!byDate[key]) byDate[key]=[];
+        byDate[key].push(b);
+      }
+    }
   });
-  const typeIcon = {experience:'🏔️',pack:'🎁',alojamiento:'🏠'};
-  el.innerHTML = Object.entries(byMonth).sort(([a],[b])=>a.localeCompare(b)).map(([m,bks])=>`
-    <div style="margin-bottom:1.25rem">
-      <div style="font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">${m}</div>
-      ${bks.map(b=>`
-        <div style="background:var(--card);border:1px solid var(--border);border-left:4px solid ${STATUS_COLORS[b.status]||'var(--border)'};border-radius:10px;padding:.85rem;margin-bottom:.5rem;display:flex;align-items:flex-start;gap:.75rem">
-          <div style="flex:1">
-            <div style="font-weight:700;font-size:.92rem">${typeIcon[b.item_type]||'📌'} ${b.item_name}</div>
-            <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${b.customer_name}${b.customer_phone?' · '+b.customer_phone:''} · ${b.num_people}p</div>
-            <div style="font-size:.8rem">📅 ${b.start_date}${b.end_date && b.end_date!==b.start_date?' → '+b.end_date:''}</div>
-            ${b.total_price?`<div style="font-size:.8rem;color:var(--gold)">Total: $${Number(b.total_price).toLocaleString('es-CL')} · Depósito: $${Number(b.deposit_paid).toLocaleString('es-CL')}</div>`:''}
-            ${b.notes?`<div style="font-size:.75rem;color:var(--muted);margin-top:.25rem">${b.notes}</div>`:''}
-            <span class="status-badge" style="margin-top:.3rem;background:${STATUS_COLORS[b.status]||'#888'}22;color:${STATUS_COLORS[b.status]||'#888'}">${b.status}</span>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:.3rem">
-            <button class="sync-btn" style="font-size:.75rem;padding:.3rem .6rem" onclick="openExtrasBookingModal(${b.id})">Editar</button>
-            <button class="sync-btn" style="font-size:.75rem;padding:.3rem .6rem;background:#ff444422;color:#ff4444" onclick="deleteExtrasBooking(${b.id})">Borrar</button>
-          </div>
-        </div>`).join('')}
+
+  let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
+  for(let i=0;i<leadDays;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${ceYear}-${String(ceMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt=new Date(ceYear,ceMonth,d);
+    const isToday = dt.getTime()===today.getTime();
+    const bks = byDate[dateStr]||[];
+    const pills = bks.slice(0,3).map(b=>{
+      const col = STATUS_COLORS[b.status]||'#8899bb';
+      const icon = TYPE_ICON[b.item_type]||'📌';
+      const nm = b.customer_name?.split(' ')[0]||'?';
+      return `<div class="cal-pill" style="background:${col}22;color:${col};border-left:2px solid ${col}"
+        onclick="event.stopPropagation();openExtrasBookingModal(${b.id})">
+        <div class="cal-pill-name">${icon} ${nm}</div>
+        <div class="cal-pill-sub">${b.item_name?.split(' ').slice(0,2).join(' ')}</div>
+      </div>`;
+    }).join('');
+    const more = bks.length>3?`<div style="font-size:.6rem;color:var(--muted)">+${bks.length-3} más</div>`:'';
+    html+=`<div class="cal-day${isToday?' today':''}" onclick="openExtrasBookingModal(null,'${dateStr}')">
+      <div class="cal-day-num">${d}${bks.length?` <span style="color:var(--gold);font-size:.6rem">(${bks.length})</span>`:''}</div>
+      ${pills}${more}
+    </div>`;
+  }
+  grid.innerHTML = html;
+
+  // ── List view below calendar ───────────────────────────────────
+  const el = document.getElementById('cal-extras-list');
+  // Show current month's bookings in the list
+  const monthBks = _extrasBookings.filter(b=>{
+    if(!b.start_date) return false;
+    const [y,m] = b.start_date.split('-').map(Number);
+    return y===ceYear && m===ceMonth+1;
+  });
+
+  if(!_extrasBookings.length){
+    el.innerHTML='<p style="color:var(--muted);text-align:center;margin-top:1rem">No hay reservas de extras aún. Haz click en "+ Nueva Reserva".</p>';
+    return;
+  }
+  if(!monthBks.length){
+    el.innerHTML='<p style="color:var(--muted);text-align:center;margin-top:.5rem;font-size:.83rem">Sin reservas este mes.</p>';
+    return;
+  }
+
+  el.innerHTML = monthBks.map(b=>`
+    <div style="background:var(--card);border:1px solid var(--border);border-left:4px solid ${STATUS_COLORS[b.status]||'var(--border)'};border-radius:10px;padding:.85rem;display:flex;align-items:flex-start;gap:.75rem">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:.92rem">${TYPE_ICON[b.item_type]||'📌'} ${b.item_name}</div>
+        <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${b.customer_name}${b.customer_phone?' · '+b.customer_phone:''} · ${b.num_people}p</div>
+        <div style="font-size:.8rem">📅 ${b.start_date}${b.end_date&&b.end_date!==b.start_date?' → '+b.end_date:''}</div>
+        ${b.total_price?`<div style="font-size:.8rem;color:var(--gold)">Total: $${Number(b.total_price).toLocaleString('es-CL')} · Depósito: $${Number(b.deposit_paid).toLocaleString('es-CL')}</div>`:''}
+        ${b.notes?`<div style="font-size:.75rem;color:var(--muted);margin-top:.25rem">${b.notes}</div>`:''}
+        <span class="status-badge" style="margin-top:.3rem;background:${STATUS_COLORS[b.status]||'#888'}22;color:${STATUS_COLORS[b.status]||'#888'}">${b.status}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.3rem;flex-shrink:0">
+        <button class="sync-btn" style="font-size:.75rem;padding:.3rem .6rem" onclick="openExtrasBookingModal(${b.id})">Editar</button>
+        <button class="sync-btn" style="font-size:.75rem;padding:.3rem .6rem;background:#ff444422;color:#ff4444" onclick="deleteExtrasBooking(${b.id})">Borrar</button>
+      </div>
     </div>`).join('');
 }
 
-function openExtrasBookingModal(id){
+function openExtrasBookingModal(id, prefillDate){
   const b = id ? _extrasBookings.find(x=>x.id===id) : null;
   document.getElementById('eb-modal-title').textContent = b ? 'Editar Reserva Extra' : 'Nueva Reserva Extra';
   document.getElementById('eb-id').value = b ? b.id : '';
@@ -2886,8 +2947,8 @@ function openExtrasBookingModal(id){
   document.getElementById('eb-type').value = b ? b.item_type : 'experience';
   document.getElementById('eb-item-name').value = b ? b.item_name : '';
   document.getElementById('eb-slug').value = b ? b.item_slug : '';
-  document.getElementById('eb-start').value = b ? b.start_date : '';
-  document.getElementById('eb-end').value = b ? (b.end_date||'') : '';
+  document.getElementById('eb-start').value = b ? b.start_date : (prefillDate||'');
+  document.getElementById('eb-end').value = b ? (b.end_date||'') : (prefillDate||'');
   document.getElementById('eb-people').value = b ? b.num_people : 2;
   document.getElementById('eb-total').value = b ? b.total_price : 0;
   document.getElementById('eb-deposit').value = b ? b.deposit_paid : 0;
