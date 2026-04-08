@@ -18,10 +18,8 @@
 body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min-height:100vh;
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem}
 
-.logo{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;color:var(--gold);
-  letter-spacing:.08em;text-align:center;margin-bottom:.2rem}
-.tagline{color:var(--muted);font-size:.85rem;text-align:center;margin-bottom:2rem;letter-spacing:.05em}
-.boat-emoji{font-size:2.5rem;display:block;text-align:center;margin-bottom:.5rem}
+.site-logo{display:block;margin:0 auto 2rem;height:70px;width:auto}
+.boat-emoji{display:none}
 
 .card{background:var(--card);border:1px solid var(--border);border-radius:20px;
   width:100%;max-width:420px;padding:2rem;box-shadow:0 8px 40px rgba(0,0,0,.4)}
@@ -65,9 +63,7 @@ body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min
 </head>
 <body>
 
-<span class="boat-emoji">🚤</span>
-<div class="logo">HotBoat Chile</div>
-<p class="tagline">LAGO VILLARRICA · PUCÓN</p>
+<img src="/static/Logo sin Fondo y sin CHILE.png" alt="HotBoat" class="site-logo">
 
 <div class="card" id="main-card">
   <div class="loading" id="loading-state">Cargando tu reserva...</div>
