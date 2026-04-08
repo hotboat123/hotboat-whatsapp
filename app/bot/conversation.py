@@ -949,18 +949,28 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             from app.booking.operator_settings import get_menu_settings
             ms = get_menu_settings()
             show_exp  = ms.get("show_experiencias", True)
-            show_packs = ms.get("show_packs_alojamientos", True)
+            show_aloj = ms.get("show_alojamientos", True)
+            show_packs = ms.get("show_packs", True)
         except Exception:
-            show_exp = show_packs = True
+            show_exp = show_aloj = show_packs = True
 
-        if show_exp and show_packs:
-            # Both on → standard hardcoded menu (fastest path)
+        show_opt7 = show_aloj or show_packs
+
+        if show_exp and show_aloj and show_packs:
+            # All on → standard hardcoded menu (fastest path)
             return get_text("main_menu", language)
 
-        # Build dynamic version (Spanish only for now; fallback for other langs)
+        # Build dynamic version (Spanish only; fallback for other langs)
         if language != "es":
-            # For other languages, just use the standard text
             return get_text("main_menu", language)
+
+        # Build option 7 label based on what's active
+        if show_aloj and show_packs:
+            opt7_label = "7️⃣ *Alojamientos y Packs Pucón*"
+        elif show_aloj:
+            opt7_label = "7️⃣ *Alojamientos Pucón* (Domos · Cabañas · Hostal)"
+        else:
+            opt7_label = "7️⃣ *Packs Completos Pucón* (Romántico · Familiar · Amigos)"
 
         lines = [
             "🥬 ¡Ahoy, grumete! ⚓",
@@ -981,8 +991,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         ]
         if show_exp:
             lines += ["", "6️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*"]
-        if show_packs:
-            lines += ["", "7️⃣ *Alojamientos y Packs Pucón*"]
+        if show_opt7:
+            lines += ["", opt7_label]
         lines += [
             "",
             "Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *8️⃣* 👨‍✈️🌿",

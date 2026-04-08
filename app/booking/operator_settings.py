@@ -415,9 +415,12 @@ def set_email_booking_config(cfg: dict) -> bool:
 # Controls which sections appear in the WhatsApp bot menu AND in booking.html.
 
 MENU_SETTINGS_DEFAULTS = {
-    "show_experiencias": True,      # WhatsApp option 6 + booking page button
-    "show_packs_alojamientos": True,  # WhatsApp option 7 + booking page buttons
-    "show_arma_pack": True,         # booking page "Arma tu Pack" button
+    "show_experiencias": True,       # WhatsApp option 6 + booking page button
+    "show_alojamientos": True,       # WhatsApp option 7 (aloj branch) + booking page button
+    "show_packs": True,              # WhatsApp option 7 (packs branch) + booking page button
+    "show_arma_pack": True,          # booking page "Arma tu Pack" button
+    # Legacy key kept for backwards-compat; ignored in new code
+    "show_packs_alojamientos": True,
 }
 
 

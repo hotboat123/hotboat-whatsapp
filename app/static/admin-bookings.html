@@ -644,12 +644,22 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
           <div style="display:flex;align-items:center;gap:1rem">
             <label class="toggle-wrap">
+              <input type="checkbox" id="ms-alojamientos" onchange="saveMenuSettings()">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:.9rem;font-weight:600">7️⃣ Alojamientos</div>
+              <div style="font-size:.77rem;color:var(--muted)">Domos · Cabañas · Hostal — aparece en WhatsApp y en la web</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            <label class="toggle-wrap">
               <input type="checkbox" id="ms-packs" onchange="saveMenuSettings()">
               <span class="toggle-slider"></span>
             </label>
             <div>
-              <div style="font-size:.9rem;font-weight:600">7️⃣ Alojamientos y Packs Completos</div>
-              <div style="font-size:.77rem;color:var(--muted)">Domos · Cabañas · Packs — aparece en WhatsApp y en la web</div>
+              <div style="font-size:.9rem;font-weight:600">7️⃣ Packs Completos</div>
+              <div style="font-size:.77rem;color:var(--muted)">Romántico · Familiar · Amigos — aparece en WhatsApp y en la web</div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:1rem">
@@ -1643,20 +1653,23 @@ async function loadSettings(){
     if(d.dynamic_pricing){ _dpCfg = d.dynamic_pricing; renderDpConfig(); }
     // Menu visibility toggles
     const msExp  = document.getElementById('ms-experiencias');
+    const msAloj = document.getElementById('ms-alojamientos');
     const msPack = document.getElementById('ms-packs');
     const msArma = document.getElementById('ms-armapack');
-    if(msExp)  msExp.checked  = ms.show_experiencias      !== false;
-    if(msPack) msPack.checked = ms.show_packs_alojamientos !== false;
-    if(msArma) msArma.checked = ms.show_arma_pack          !== false;
+    if(msExp)  msExp.checked  = ms.show_experiencias !== false;
+    if(msAloj) msAloj.checked = ms.show_alojamientos !== false;
+    if(msPack) msPack.checked = ms.show_packs        !== false;
+    if(msArma) msArma.checked = ms.show_arma_pack    !== false;
   }catch(e){ console.error(e); }
 }
 
 async function saveMenuSettings(){
   try{
     const body = {
-      show_experiencias:       document.getElementById('ms-experiencias')?.checked ?? true,
-      show_packs_alojamientos: document.getElementById('ms-packs')?.checked ?? true,
-      show_arma_pack:          document.getElementById('ms-armapack')?.checked ?? true,
+      show_experiencias:  document.getElementById('ms-experiencias')?.checked  ?? true,
+      show_alojamientos:  document.getElementById('ms-alojamientos')?.checked  ?? true,
+      show_packs:         document.getElementById('ms-packs')?.checked          ?? true,
+      show_arma_pack:     document.getElementById('ms-armapack')?.checked       ?? true,
     };
     // Do NOT pass a custom headers object — api() already includes x-admin-key + Content-Type
     await api('/api/admin/menu-settings',{method:'PUT',body:JSON.stringify(body)});

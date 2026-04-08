@@ -1575,7 +1575,8 @@ async def admin_get_menu_settings(x_admin_key: str = Header(...)):
 
 class MenuSettingsBody(BaseModel):
     show_experiencias: bool = True
-    show_packs_alojamientos: bool = True
+    show_alojamientos: bool = True
+    show_packs: bool = True
     show_arma_pack: bool = True
 
 
