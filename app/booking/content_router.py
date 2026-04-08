@@ -134,6 +134,118 @@ def build_packs_menu_text_es(packs=None):
     return "\n".join(lines)
 
 
+def _send_accommodation_email(
+    customer_name: str,
+    customer_phone: str,
+    item_name: str,
+    item_slug: str,
+    start_date: str,
+    end_date: str,
+    num_people: int,
+    notes: str,
+    booking_id: int,
+):
+    """Send email to Tomás with WhatsApp links to contact the accommodation owner."""
+    import os, urllib.parse
+    from app.bot.accommodations_contacts import ACCOMMODATION_CONTACTS, generate_whatsapp_link
+
+    # Map slug → property key
+    slug_lower = (item_slug or "").lower()
+    if "open" in slug_lower or "sky" in slug_lower:
+        prop_key = "open_sky"
+    elif "relikura" in slug_lower:
+        prop_key = "relikura"
+    else:
+        prop_key = None
+
+    contact = ACCOMMODATION_CONTACTS.get(prop_key) if prop_key else None
+
+    fechas = start_date
+    if end_date:
+        fechas += f" al {end_date}"
+
+    # WhatsApp pre-filled message to the accommodation owner
+    owner_msg = (
+        f"Hola! Tengo una consulta de disponibilidad:\n\n"
+        f"🏠 *Alojamiento:* {item_name}\n"
+        f"👥 *Personas:* {num_people}\n"
+        f"📅 *Fechas:* {fechas}\n\n"
+        f"¿Tienen disponibilidad para estas fechas?\n\n"
+        f"Cliente: {customer_name} ({customer_phone})"
+    )
+
+    # WhatsApp link to contact the CLIENT directly
+    clean_client = (customer_phone or "").replace("+", "").replace(" ", "").replace("-", "")
+    client_link = f"https://wa.me/{clean_client}" if clean_client else None
+
+    # Build email HTML
+    owner_section = ""
+    if contact:
+        owner_wa_link = generate_whatsapp_link(contact["whatsapp"], owner_msg)
+        owner_section = f"""
+        <div style="background:#ecfdf5;padding:20px;border-radius:8px;margin:16px 0">
+          <h3 style="margin-top:0;color:#065f46">📞 Consultar disponibilidad con {contact['name']}</h3>
+          <p>Haz click para abrir WhatsApp con el mensaje pre-escrito al propietario:</p>
+          <a href="{owner_wa_link}"
+             style="display:inline-block;background:#25D366;color:#fff;padding:12px 24px;
+                    text-decoration:none;border-radius:6px;font-weight:bold">
+            💬 Consultar con {contact['name']}
+          </a>
+        </div>"""
+
+    client_section = ""
+    if client_link:
+        client_section = f"""
+        <div style="background:#eff6ff;padding:20px;border-radius:8px;margin:16px 0">
+          <h3 style="margin-top:0;color:#1e40af">📱 Contactar al cliente directamente</h3>
+          <a href="{client_link}"
+             style="display:inline-block;background:#25D366;color:#fff;padding:12px 24px;
+                    text-decoration:none;border-radius:6px;font-weight:bold">
+            💬 WhatsApp a {customer_name}
+          </a>
+        </div>"""
+
+    html = f"""
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <h2 style="color:#1d4ed8">🏠 Nueva Solicitud de Alojamiento — Web #{booking_id}</h2>
+  <div style="background:#f3f4f6;padding:20px;border-radius:8px;margin:16px 0">
+    <h3 style="margin-top:0">Detalles</h3>
+    <p><strong>🏠 Alojamiento:</strong> {item_name}</p>
+    <p><strong>📅 Fechas:</strong> {fechas}</p>
+    <p><strong>👥 Personas:</strong> {num_people}</p>
+    <p><strong>👤 Cliente:</strong> {customer_name}</p>
+    <p><strong>📱 Teléfono:</strong> {customer_phone or '-'}</p>
+    <p><strong>📝 Notas:</strong> {notes or '-'}</p>
+  </div>
+  {owner_section}
+  {client_section}
+  <p style="color:#9ca3af;font-size:12px;margin-top:24px">
+    Solicitud automática desde la app de reservas HotBoat.
+  </p>
+</div>"""
+
+    try:
+        from app.config import get_settings
+        settings = get_settings()
+        resend_key  = (getattr(settings, "resend_api_key", "") or "").strip()
+        from_addr   = (getattr(settings, "resend_from_confirmations", "") or "onboarding@resend.dev").strip()
+        admin_email = os.getenv("ADMIN_EMAIL", "hotboatchile@gmail.com")
+        if not resend_key:
+            logger.warning("_send_accommodation_email: no RESEND_API_KEY, skipping email")
+            return
+        from app.email.resend_booking import send_booking_html
+        send_booking_html(
+            to=admin_email,
+            subject=f"🏠 Nueva solicitud: {item_name} ({fechas})",
+            html=html,
+            from_address=from_addr,
+            api_key=resend_key,
+        )
+        logger.info(f"Accommodation availability email sent for booking #{booking_id}")
+    except Exception as e:
+        logger.warning(f"_send_accommodation_email send failed: {e}")
+
+
 @content_router.post("/api/content/extras-booking")
 async def public_create_extras_booking(body: PublicExtrasBookingBody):
     """Public endpoint so booking.html can submit extras without admin key."""
@@ -170,7 +282,6 @@ async def public_create_extras_booking(body: PublicExtrasBookingBody):
                 fechas = body.start_date
                 if body.end_date:
                     fechas += f" al {body.end_date}"
-                precio_txt = f"${body.total_price:,}".replace(",", ".") if body.total_price else "a coordinar"
                 msg = (
                     f"📋 *Nueva Solicitud Web* (extras-{new_id})\n\n"
                     f"*Tipo:* {tipo_label}\n"
@@ -179,9 +290,8 @@ async def public_create_extras_booking(body: PublicExtrasBookingBody):
                     f"*Teléfono:* {body.customer_phone or '-'}\n"
                     f"*Fechas:* {fechas}\n"
                     f"*Personas:* {body.num_people}\n"
-                    f"*Precio total:* {precio_txt}\n"
                     f"*Notas:* {body.notes or '-'}\n\n"
-                    f"Responde directamente al cliente por WhatsApp 👇\n"
+                    f"Responde al cliente 👇\n"
                     f"https://wa.me/{(body.customer_phone or '').replace('+','').replace(' ','')}"
                 )
                 async with _httpx.AsyncClient() as client:
@@ -194,6 +304,28 @@ async def public_create_extras_booking(body: PublicExtrasBookingBody):
                     )
         except Exception as notify_err:
             logger.warning(f"extras-booking WhatsApp notify failed: {notify_err}")
+
+        # 3. For accommodations: send email with WhatsApp links to owner + client
+        if body.item_type == "alojamiento":
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None,
+                    lambda: _send_accommodation_email(
+                        customer_name=body.customer_name,
+                        customer_phone=body.customer_phone or "",
+                        item_name=body.item_name,
+                        item_slug=body.item_slug,
+                        start_date=body.start_date,
+                        end_date=body.end_date or "",
+                        num_people=body.num_people,
+                        notes=body.notes or "",
+                        booking_id=new_id,
+                    )
+                )
+            except Exception as email_err:
+                logger.warning(f"extras-booking accommodation email failed: {email_err}")
 
         return {"ok": True, "id": new_id}
     except Exception as e:

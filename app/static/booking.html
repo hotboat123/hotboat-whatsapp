@@ -899,15 +899,11 @@ async function enviarSolicitud(){
     const r = await fetch('/api/booking/solicitud',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d = await r.json();
     if(!r.ok) throw new Error(d.detail||'Error');
-    mc.innerHTML = `
-    <div class="card" style="text-align:center">
-      <div class="success-icon">✅</div>
-      <div class="card-title">Solicitud Enviada!</div>
-      <div class="info-box" style="margin-top:1rem">
-        El Capitan Tomas revisara tu solicitud y te contactara pronto por WhatsApp al <strong>${phone}</strong> 📱
-      </div>
-    </div>
-    <button class="btn" style="margin-top:1rem" onclick="renderMenu()">Volver al inicio</button>`;
+    mc.innerHTML = '<div class="card" style="text-align:center"><div class="success-icon">✅</div>'
+      + '<div class="card-title">Solicitud Enviada!</div>'
+      + '<div class="info-box" style="margin-top:1rem">El Capitán Tomás revisará tu solicitud y te contactará pronto por WhatsApp al <strong>'
+      + phone + '</strong> 📱</div></div>'
+      + '<button class="btn" style="margin-top:1rem" onclick="renderMenu()">Volver al inicio</button>';
   }catch(e){ showToast('Error: '+e.message); }
 }
 
