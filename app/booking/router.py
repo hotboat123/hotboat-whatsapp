@@ -229,7 +229,9 @@ async def get_availability(days: int = Query(30, ge=1, le=60)):
                     # No real bookings → show constant seed±gap slots as grey
                     fake_booked_by_day[dk] = [t for t in fake_base if t not in avail_set]
                 else:
-                    # Real bookings → show the expansion targets that ended up NOT available
+                    # Real bookings → grey = the booked times themselves + expansion
+                    # targets that ended up NOT available (not green)
+                    booked_set = set(booked)
                     all_expansion = []
                     for bt in booked:
                         try:
@@ -241,10 +243,11 @@ async def get_availability(days: int = Query(30, ge=1, le=60)):
                                     all_expansion.append(f"{t_min//60:02d}:{t_min%60:02d}")
                         except Exception:
                             pass
-                    fake_booked_by_day[dk] = [
-                        t for t in all_expansion
-                        if t not in avail_set and t not in booked
-                    ]
+                    grey = list(booked_set)  # the actually booked time(s) show as grey
+                    for t in all_expansion:
+                        if t not in avail_set and t not in booked_set:
+                            grey.append(t)
+                    fake_booked_by_day[dk] = grey
 
         result = {
             "availability": grouped,
