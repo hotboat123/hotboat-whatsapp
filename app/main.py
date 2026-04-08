@@ -207,10 +207,11 @@ async def _run_auto_sync():
                             total = float(raw.get("total_price") or raw.get("total") or 0)
                             cur.execute(f"""
                                 INSERT INTO {TABLE}
-                                (source,source_id,booking_ref,fecha,hora,nombre_cliente,email,telefono,servicio,num_personas,ingreso_total,status,created_at)
-                                VALUES ('booknetic',%s,%s,%s,%s,%s,%s,%s,'HotBoat Booknetic',%s,%s,%s,NOW())
+                                (source,source_id,fecha,hora,nombre_cliente,email,telefono,
+                                 servicio,num_personas,ingreso_total,status,created_at)
+                                VALUES ('booknetic',%s,%s,%s,%s,%s,%s,'HotBoat Booknetic',%s,%s,%s,NOW())
                                 ON CONFLICT DO NOTHING
-                            """, (str(bid), f"BK-{bid}", fecha, hora, nombre, email, phone, str(num_p), total, status or "confirmed"))
+                            """, (str(bid), fecha, hora, nombre, email, phone, str(num_p), total, status or "confirmed"))
                             inserted_book += 1
 
                     # Sync hotboat_web (same rationale: do not use reservas MAX fecha as cutoff)
@@ -238,12 +239,12 @@ async def _run_auto_sync():
                         else:
                             cur.execute(f"""
                                 INSERT INTO {TABLE}
-                                (source,source_id,booking_ref,fecha,hora,nombre_cliente,email,telefono,
-                                 servicio,num_personas,ingreso_base,ingreso_extras,ingreso_total,
+                                (source,source_id,fecha,hora,nombre_cliente,email,telefono,
+                                 servicio,num_personas,ingreso_reserva,ingreso_extras,ingreso_total,
                                  status,extras_json,observaciones,payment_id,payment_status,created_at)
-                                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
                                 ON CONFLICT DO NOTHING
-                            """, (ref, ref, fecha, hora, nombre, email, normalize_phone(phone),
+                            """, (ref, fecha, hora, nombre, email, normalize_phone(phone),
                                   f"HotBoat Web ({num_p}p)", str(num_p),
                                   float(sub or 0), float(ext or 0), float(total or 0),
                                   status, PgJson(extras or {}), notes, pay_id, pay_st))

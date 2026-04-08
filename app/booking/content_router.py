@@ -137,7 +137,9 @@ def build_packs_menu_text_es(packs=None):
 @content_router.post("/api/content/extras-booking")
 async def public_create_extras_booking(body: PublicExtrasBookingBody):
     """Public endpoint so booking.html can submit extras without admin key."""
+    import os, httpx as _httpx
     try:
+        # 1. Save to DB
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -153,6 +155,46 @@ async def public_create_extras_booking(body: PublicExtrasBookingBody):
                 )
                 new_id = cur.fetchone()[0]
                 conn.commit()
+
+        # 2. Notify admin via WhatsApp
+        try:
+            token    = os.getenv("WHATSAPP_API_TOKEN", "")
+            phone_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+            admin    = os.getenv("ADMIN_PHONE", "56974950762")
+            if token and phone_id:
+                tipo_label = {
+                    "alojamiento": "🏠 Alojamiento",
+                    "experiencia": "🏔️ Experiencia",
+                    "pack": "🎁 Pack Completo",
+                }.get(body.item_type, body.item_type.title())
+                fechas = body.start_date
+                if body.end_date:
+                    fechas += f" al {body.end_date}"
+                precio_txt = f"${body.total_price:,}".replace(",", ".") if body.total_price else "a coordinar"
+                msg = (
+                    f"📋 *Nueva Solicitud Web* (extras-{new_id})\n\n"
+                    f"*Tipo:* {tipo_label}\n"
+                    f"*Servicio:* {body.item_name}\n"
+                    f"*Cliente:* {body.customer_name}\n"
+                    f"*Teléfono:* {body.customer_phone or '-'}\n"
+                    f"*Fechas:* {fechas}\n"
+                    f"*Personas:* {body.num_people}\n"
+                    f"*Precio total:* {precio_txt}\n"
+                    f"*Notas:* {body.notes or '-'}\n\n"
+                    f"Responde directamente al cliente por WhatsApp 👇\n"
+                    f"https://wa.me/{(body.customer_phone or '').replace('+','').replace(' ','')}"
+                )
+                async with _httpx.AsyncClient() as client:
+                    await client.post(
+                        f"https://graph.facebook.com/v17.0/{phone_id}/messages",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"messaging_product": "whatsapp", "to": admin,
+                              "type": "text", "text": {"body": msg}},
+                        timeout=10,
+                    )
+        except Exception as notify_err:
+            logger.warning(f"extras-booking WhatsApp notify failed: {notify_err}")
+
         return {"ok": True, "id": new_id}
     except Exception as e:
         logger.error(f"public extras booking error: {e}")
