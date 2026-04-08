@@ -173,27 +173,25 @@ def apply_urgency_filter(
 
     pool: set = set()
 
-    if not booked_times:
-        # Sin reservas: mostrar seed times disponibles
-        for st in seed_times:
-            if st in free_set:
-                pool.add(st)
-            else:
-                # Buscar slot libre más cercano al seed dentro de tolerancia
-                target = _to_min(st)
-                candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]
-                if candidates:
-                    pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
-    else:
-        # Con reservas: para cada reserva mostrar reserva ± gap
-        for bt in booked_times:
-            bt_min = _to_min(bt)
-            for delta in (-gap_min, gap_min):
-                target = bt_min + delta
-                # Buscar slot libre más cercano al target dentro de tolerancia
-                candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]
-                if candidates:
-                    pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
+    # 1. Siempre mostrar los seeds que estén libres (no reservados)
+    for st in seed_times:
+        if st in free_set:
+            pool.add(st)
+        elif st not in booked_set:
+            # Seed generado en horario no exacto → buscar dentro de tolerancia
+            target = _to_min(st)
+            candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]
+            if candidates:
+                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
+
+    # 2. Para cada reserva, agregar reserva ± gap (reemplaza solo ese seed reservado)
+    for bt in booked_times:
+        bt_min = _to_min(bt)
+        for delta in (-gap_min, gap_min):
+            target = bt_min + delta
+            candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]
+            if candidates:
+                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
 
     return sorted([t for t in free_set if t in pool], key=_to_min)
 
