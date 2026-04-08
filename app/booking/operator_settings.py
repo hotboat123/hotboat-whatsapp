@@ -136,16 +136,17 @@ def apply_urgency_filter(
     config: Optional[dict] = None,
 ) -> list:
     """
-    Urgency algorithm: show seed times + slots at booking ± gap_hours.
+    Urgency algorithm:
 
-    Rules:
-    - Seed pool: show each configured seed time IF it is free (not booked).
-      A booked seed time is NOT replaced by a nearby slot — that would
-      show something like 16:00 when 18:00 is booked, which is wrong.
-    - Expansion: for each booking at X, add the free slot nearest to
-      X ± gap_hours, but only if it falls within a ±30 min tolerance of
-      the target.  This prevents picking a "nearest" slot that is actually
-      only 1-2h from the booking.
+    • Sin reservas → mostrar las horas semilla (seed_times) que estén libres.
+    • Con reservas → para CADA reserva en X, ofrecer X - gap y X + gap.
+      Los seed_times ya NO se muestran; los reemplazan los slots de expansión.
+
+    Ejemplos con seeds=[10,18,21] gap=3:
+      - Sin reservas          → [10:00, 18:00, 21:00]
+      - Reserva a las 18:00   → [15:00, 21:00]
+      - Reserva a las 21:00   → [18:00] (24:00 fuera de rango)
+      - Reservas 18:00+21:00  → [15:00, 18:00, 24:00→ignorado] = [15:00, 18:00]
     """
     if not available_times:
         return []
@@ -158,38 +159,43 @@ def apply_urgency_filter(
         h, m = map(int, t.split(":"))
         return h * 60 + m
 
-    booked_set = set(booked_times)
-    free_times = [t for t in available_times if t not in booked_set]
+    def _from_min(total_min: int) -> str:
+        return f"{total_min // 60:02d}:{total_min % 60:02d}"
 
-    if not free_times:
+    booked_set = set(booked_times)
+    free_set = set(t for t in available_times if t not in booked_set)
+
+    if not free_set:
         return []
 
-    pool: set = set()
     gap_min = int(gap_hours * 60)
-    TOLERANCE = 30  # minutes — how close the found slot must be to the target
+    TOLERANCE = 30  # minutes — cómo de cerca debe estar el slot encontrado
 
-    # 1. Seed pool: only add seed times that are free themselves
-    for st in seed_times:
-        if st in free_times:
-            pool.add(st)
-        # If the exact seed time is not available (not generated or blocked),
-        # find the nearest free slot within tolerance
-        else:
-            target = _to_min(st)
-            candidates = [t for t in free_times if abs(_to_min(t) - target) <= TOLERANCE]
-            if candidates:
-                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
+    pool: set = set()
 
-    # 2. Expansion: for each booking, show slots at booking ± gap_hours
-    for bt in booked_times:
-        bt_min = _to_min(bt)
-        for delta in (-gap_min, gap_min):
-            target = bt_min + delta
-            candidates = [t for t in free_times if abs(_to_min(t) - target) <= TOLERANCE]
-            if candidates:
-                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
+    if not booked_times:
+        # Sin reservas: mostrar seed times disponibles
+        for st in seed_times:
+            if st in free_set:
+                pool.add(st)
+            else:
+                # Buscar slot libre más cercano al seed dentro de tolerancia
+                target = _to_min(st)
+                candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]
+                if candidates:
+                    pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
+    else:
+        # Con reservas: para cada reserva mostrar reserva ± gap
+        for bt in booked_times:
+            bt_min = _to_min(bt)
+            for delta in (-gap_min, gap_min):
+                target = bt_min + delta
+                # Buscar slot libre más cercano al target dentro de tolerancia
+                candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]
+                if candidates:
+                    pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
 
-    return sorted([t for t in free_times if t in pool], key=_to_min)
+    return sorted([t for t in free_set if t in pool], key=_to_min)
 
 
 # ── Dynamic Pricing ───────────────────────────────────────────────────────────
