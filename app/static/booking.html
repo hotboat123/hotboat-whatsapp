@@ -229,6 +229,7 @@ async function loadPricesAndAvail(){
     ]);
     S.prices = pr.prices || {};
     S.availability = av.availability || {};
+    S.fakeBooked = av.fake_booked_slots || {};
   }catch(e){ showToast('Error cargando disponibilidad'); }
 }
 
@@ -994,10 +995,21 @@ function selectDate(key){
 }
 
 function renderTimeSelect(){
-  const times = S.availability[S.selectedDate] || [];
-  const btns = times.map(t=>`
-    <button class="time-btn ${S.selectedTime===t?'selected':''}" onclick="selectTime('${t}')">${t}</button>
-  `).join('');
+  const avail = S.availability[S.selectedDate] || [];
+  const fake  = S.fakeBooked[S.selectedDate] || [];
+
+  // Merge and sort all slots by time
+  const toMin = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
+  const fakeSet = new Set(fake);
+  const allTimes = [...new Set([...avail, ...fake])].sort((a,b)=>toMin(a)-toMin(b));
+
+  const btns = allTimes.map(t => {
+    if(fakeSet.has(t)){
+      return `<button class="time-btn" disabled style="opacity:.45;cursor:not-allowed;filter:grayscale(1);background:var(--border);color:var(--muted);border-color:var(--border)">${t} 🔒</button>`;
+    }
+    return `<button class="time-btn ${S.selectedTime===t?'selected':''}" onclick="selectTime('${t}')">${t}</button>`;
+  }).join('');
+
   const [yr,mo,dy] = S.selectedDate.split('-');
   const d = new Date(yr,mo-1,dy);
   const dayStr = DAYS[(d.getDay()+6)%7]+' '+dy+'/'+mo+'/'+yr;
@@ -1008,6 +1020,7 @@ function renderTimeSelect(){
     <div class="card-title">🕐 Elige tu horario</div>
     <p style="color:var(--muted);margin-bottom:.8rem">📅 ${dayStr}</p>
     <div class="time-grid">${btns}</div>
+    ${fake.length ? `<p style="font-size:.75rem;color:var(--muted);margin-top:.8rem">🔒 Horarios no disponibles</p>` : ''}
   </div>
   <button class="btn btn-secondary" onclick="renderCal()">Cambiar fecha</button>`;
 }

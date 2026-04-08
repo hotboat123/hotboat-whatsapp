@@ -198,6 +198,51 @@ def apply_urgency_filter(
     return sorted([t for t in free_set if t in pool], key=_to_min)
 
 
+def get_urgency_fake_slots(config: Optional[dict] = None) -> list:
+    """
+    Calcula los slots "fantasma" que se muestran en GRIS (deshabilitados) en la app
+    cuando el modo urgencia está activo y NO hay reservas reales en el día.
+
+    Lógica: para cada seed S, calcular S±gap_hours.
+    Si el resultado NO es un seed y está dentro del rango 06:00-23:00 → slot gris.
+
+    Ejemplo: seeds=[10:00,18:00,21:00] gap=3
+      10+3=13:00 (no seed) → gris
+      10-3=07:00 (no seed) → gris
+      18+3=21:00 (ES seed) → omitir
+      18-3=15:00 (no seed) → gris
+      21+3=24:00 (fuera)   → omitir
+      21-3=18:00 (ES seed) → omitir
+    Resultado: [07:00, 13:00, 15:00]
+    """
+    cfg = config if config is not None else get_urgency_config()
+    seed_times: list = cfg.get("seed_times") or get_operating_hours()
+    gap_hours: float = float(cfg.get("gap_hours", 3))
+
+    def _to_min(t: str) -> int:
+        h, m = map(int, t.split(":"))
+        return h * 60 + m
+
+    def _from_min(total_min: int) -> str:
+        return f"{total_min // 60:02d}:{total_min % 60:02d}"
+
+    seed_set = set(seed_times)
+    seed_mins = [_to_min(s) for s in seed_times]
+    gap_min = int(gap_hours * 60)
+    fake = set()
+
+    for s_min in seed_mins:
+        for delta in (-gap_min, gap_min):
+            target = s_min + delta
+            if target < 6 * 60 or target >= 24 * 60:
+                continue
+            candidate = _from_min(target)
+            if candidate not in seed_set:
+                fake.add(candidate)
+
+    return sorted(fake, key=_to_min)
+
+
 # ── Dynamic Pricing ───────────────────────────────────────────────────────────
 
 DP_CONFIG_DEFAULT = {

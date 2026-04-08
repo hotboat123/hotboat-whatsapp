@@ -148,7 +148,7 @@ async def get_availability(days: int = Query(21, ge=1, le=60)):
     try:
         from app.booking.operator_settings import (
             get_vacation_days, is_urgency_mode, apply_urgency_filter,
-            get_operating_hours
+            get_operating_hours, get_urgency_fake_slots
         )
         from app.db.connection import get_connection
 
@@ -195,9 +195,31 @@ async def get_availability(days: int = Query(21, ge=1, le=60)):
                 logger.warning(f"Urgency: could not fetch booked slots: {e}")
 
             urgency_grouped = {}
+            fake_booked_by_day = {}
+            fake_base = get_urgency_fake_slots()  # slots gris cuando no hay reservas
             for dk, times in grouped.items():
                 booked = booked_by_day.get(dk, [])
                 urgency_grouped[dk] = apply_urgency_filter(times, booked)
+                # Si no hay reservas reales ese día → mostrar slots fantasma en gris
+                if not booked:
+                    fake_booked_by_day[dk] = fake_base
+                # Si hay reservas → los slots de expansión no usados son los gris
+                else:
+                    all_expansion = []
+                    for bt in booked:
+                        try:
+                            bh, bm = map(int, bt.split(":"))
+                            b_min = bh * 60 + bm
+                            from app.booking.operator_settings import get_urgency_config
+                            gap_min = int(float(get_urgency_config().get("gap_hours", 3)) * 60)
+                            for delta in (-gap_min, gap_min):
+                                t_min = b_min + delta
+                                if 6 * 60 <= t_min < 24 * 60:
+                                    all_expansion.append(f"{t_min//60:02d}:{t_min%60:02d}")
+                        except Exception:
+                            pass
+                    green = set(urgency_grouped[dk])
+                    fake_booked_by_day[dk] = [t for t in all_expansion if t not in green and t not in booked]
             grouped = {k: v for k, v in urgency_grouped.items() if v}
 
         return {
@@ -205,6 +227,7 @@ async def get_availability(days: int = Query(21, ge=1, le=60)):
             "operating_hours": get_operating_hours(),
             "urgency_mode": is_urgency_mode(),
             "vacation_days": list(vacation_dates),
+            "fake_booked_slots": fake_booked_by_day if is_urgency_mode() else {},
         }
     except Exception as e:
         logger.error(f"Availability error: {e}")
