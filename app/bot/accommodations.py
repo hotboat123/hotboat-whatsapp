@@ -1,6 +1,8 @@
 """
-Accommodations handler - manages accommodation information with images
+Accommodations handler - manages accommodation information with images.
+Prices and variants are loaded from the `alojamientos` DB table (admin CMS).
 """
+import json
 import logging
 from typing import Dict, List, Optional, Any
 
@@ -9,6 +11,27 @@ from app.bot.translations import get_text
 from app.utils.media_handler import get_accommodation_image_path
 
 logger = logging.getLogger(__name__)
+
+
+def _load_db_variants() -> Dict[str, List[dict]]:
+    """Load accommodation variants from DB. Returns {slug: [variant, ...]}."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT slug, variants FROM alojamientos WHERE is_active=TRUE ORDER BY display_order,id"
+                )
+                result = {}
+                for row in cur.fetchall():
+                    slug, variants = row
+                    if isinstance(variants, str):
+                        variants = json.loads(variants)
+                    result[slug] = variants or []
+                return result
+    except Exception as e:
+        logger.warning(f"_load_db_variants failed: {e}")
+        return {}
 
 
 class AccommodationInfo:
@@ -32,61 +55,83 @@ class AccommodationInfo:
 
 
 class AccommodationsHandler:
-    """Handle accommodation-related queries with images"""
-    
+    """Handle accommodation-related queries with images.
+    Prices are loaded from DB if available; hardcoded values are used as fallback."""
+
+    # Hardcoded fallback prices (used if DB is unavailable)
+    _FALLBACK = {
+        "open-sky": [
+            {"name": "Domo con Tina de Baño",  "price_per_night": 100000, "capacity": 2},
+            {"name": "Domo con Hidromasaje",    "price_per_night": 120000, "capacity": 2},
+        ],
+        "relikura": [
+            {"name": "Cabaña 2 personas", "price_per_night": 60000,  "capacity": 2},
+            {"name": "Cabaña 4 personas", "price_per_night": 80000,  "capacity": 4},
+            {"name": "Cabaña 6 personas", "price_per_night": 100000, "capacity": 6},
+            {"name": "Hostal",            "price_per_night": 20000,  "capacity": 1},
+        ],
+    }
+
     def __init__(self):
-        # Open Sky - Para parejas románticas
+        db = _load_db_variants()
+        os_vars  = db.get("open-sky") or self._FALLBACK["open-sky"]
+        rel_vars = db.get("relikura") or self._FALLBACK["relikura"]
+
+        def _price(variants, name_substr):
+            for v in variants:
+                if name_substr.lower() in v["name"].lower():
+                    return v["price_per_night"], v.get("capacity", 2)
+            return variants[0]["price_per_night"] if variants else 0, 2
+
+        p_bath,  cap_bath  = _price(os_vars,  "Tina")
+        p_hydro, cap_hydro = _price(os_vars,  "Hidro")
+        p_c2,    cap_c2    = _price(rel_vars, "2 persona")
+        p_c4,    cap_c4    = _price(rel_vars, "4 persona")
+        p_c6,    cap_c6    = _price(rel_vars, "6 persona")
+        p_host,  cap_host  = _price(rel_vars, "Hostal")
+
+        # Open Sky
         self.open_sky_domo_bath = AccommodationInfo(
             name="Open Sky - Domo con Tina de Baño",
             description="Domo transparente con vista a las estrellas, perfecto para parejas románticas 🌌",
-            price_per_night=100000,
-            capacity=2,
+            price_per_night=p_bath, capacity=cap_bath,
             image_url=ACCOMMODATION_IMAGES.get("open_sky_domo_bath"),
             features=["Domo transparente", "Tina de baño interior", "Vista a las estrellas", "Experiencia romántica"]
         )
-        
         self.open_sky_domo_hydromassage = AccommodationInfo(
             name="Open Sky - Domo con Hidromasaje",
             description="Domo transparente con hidromasaje interior, la experiencia más exclusiva 🌟",
-            price_per_night=120000,
-            capacity=2,
+            price_per_night=p_hydro, capacity=cap_hydro,
             image_url=ACCOMMODATION_IMAGES.get("open_sky_domo_hydromassage"),
             features=["Domo transparente", "Hidromasaje interior", "Vista a las estrellas", "Experiencia premium"]
         )
-        
-        # Raíces de Relikura - Familiar
+
+        # Raíces de Relikura
         self.relikura_cabin_2 = AccommodationInfo(
             name="Raíces de Relikura - Cabaña 2 personas",
             description="Cabaña junto al río, con tinaja y entorno natural perfecto para parejas 🌿",
-            price_per_night=60000,
-            capacity=2,
+            price_per_night=p_c2, capacity=cap_c2,
             image_url=ACCOMMODATION_IMAGES.get("relikura_cabin_2"),
             features=["Cabaña junto al río", "Tinaja exterior", "Entorno natural", "Ideal para parejas"]
         )
-        
         self.relikura_cabin_4 = AccommodationInfo(
             name="Raíces de Relikura - Cabaña 4 personas",
             description="Cabaña espaciosa junto al río, ideal para familias pequeñas 🏡",
-            price_per_night=80000,
-            capacity=4,
+            price_per_night=p_c4, capacity=cap_c4,
             image_url=ACCOMMODATION_IMAGES.get("relikura_cabin_4"),
             features=["Cabaña junto al río", "Tinaja exterior", "Entorno natural", "Ideal para familias"]
         )
-        
         self.relikura_cabin_6 = AccommodationInfo(
             name="Raíces de Relikura - Cabaña 6 personas",
             description="Cabaña grande junto al río, perfecta para grupos y familias grandes 👨‍👩‍👧‍👦",
-            price_per_night=100000,
-            capacity=6,
+            price_per_night=p_c6, capacity=cap_c6,
             image_url=ACCOMMODATION_IMAGES.get("relikura_cabin_6"),
             features=["Cabaña junto al río", "Tinaja exterior", "Entorno natural", "Ideal para grupos"]
         )
-        
         self.relikura_hostel = AccommodationInfo(
             name="Raíces de Relikura - Hostal",
             description="Hostal económico junto al río, con tinaja y actividades 🎒",
-            price_per_night=20000,
-            capacity=1,  # Por persona
+            price_per_night=p_host, capacity=cap_host,
             image_url=ACCOMMODATION_IMAGES.get("relikura_hostel"),
             features=["Hostal económico", "Tinaja compartida", "Entorno natural", "Actividades disponibles"]
         )
@@ -196,6 +241,10 @@ class AccommodationsHandler:
         return result
 
 
-# Global instance
+def get_accommodations_handler() -> "AccommodationsHandler":
+    """Return a fresh handler with prices loaded from DB."""
+    return AccommodationsHandler()
+
+# Keep backward-compatible name (loads once at import; use get_accommodations_handler() for fresh prices)
 accommodations_handler = AccommodationsHandler()
 

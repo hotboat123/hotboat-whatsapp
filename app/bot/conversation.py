@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS, CHILE_TZ
 from app.bot.faq import FAQHandler
-from app.bot.accommodations import accommodations_handler
+from app.bot.accommodations import accommodations_handler, get_accommodations_handler
 from app.bot.cart import CartManager, CartItem
 from app.bot.translations import (
     get_text,
@@ -709,7 +709,7 @@ O elige:
                 return {
                     "type": "accommodations",
                     "text": accommodations_handler.get_text_response(),
-                    "images": accommodations_handler.get_accommodations_with_images()
+                    "images": get_accommodations_handler().get_accommodations_with_images()
                 }
             # Check if user wants to make a reservation (but didn't specify date/time yet)
             # THIS MUST BE EARLY to catch "quiero reservar", "reservar" before other parsers
