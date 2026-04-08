@@ -136,11 +136,11 @@ def apply_urgency_filter(
     config: Optional[dict] = None,
 ) -> list:
     """
-    Limit visible slots to max 2 using urgency algorithm.
+    Urgency algorithm: show only seed times (+ slots near existing bookings).
 
     - Seed pool = slots nearest to each seed_time in config
     - For each booking at X: add nearest-available slots at X±gap_hours
-    - Remove booked slots; return up to 2 sorted chronologically
+    - Remove booked slots; return sorted chronologically
     """
     if not available_times:
         return []
@@ -182,8 +182,7 @@ def apply_urgency_filter(
             if n:
                 pool.add(n)
 
-    result = sorted([t for t in free_times if t in pool], key=_to_min)
-    return result[:2]
+    return sorted([t for t in free_times if t in pool], key=_to_min)
 
 
 # ── Dynamic Pricing ───────────────────────────────────────────────────────────
