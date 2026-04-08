@@ -153,17 +153,17 @@ async def check_slot_availability(slot_datetime: datetime, duration_hours: float
                       AND booking_time IS NOT NULL
                       AND status NOT IN ('cancelled','rejected','solicitud')
                       AND (
-                          (SPLIT_PART(booking_time,':',1)::int * 60 + SPLIT_PART(booking_time,':',2)::int)
+                          (EXTRACT(HOUR FROM booking_time)::int * 60 + EXTRACT(MINUTE FROM booking_time)::int)
                               - %s < %s
-                          AND (SPLIT_PART(booking_time,':',1)::int * 60 + SPLIT_PART(booking_time,':',2)::int)
+                          AND (EXTRACT(HOUR FROM booking_time)::int * 60 + EXTRACT(MINUTE FROM booking_time)::int)
                               + %s > %s
                       )
                 """, (
                     slot_date,
-                    int(buffer_hours * 60),   # booking_start_min - buf
-                    slot_end_min,             # must be < slot_end_min
-                    int((duration_hours + buffer_hours) * 60),  # booking_end_min = booking_start + dur+buf
-                    slot_start_min,           # must be > slot_start_min
+                    int(buffer_hours * 60),
+                    slot_end_min,
+                    int((duration_hours + buffer_hours) * 60),
+                    slot_start_min,
                 ))
                 if cur.fetchone()[0] > 0:
                     return False
@@ -255,7 +255,11 @@ async def get_booked_slots(
                 for row in cur.fetchall():
                     _, b_date, b_time, b_name, b_status = row
                     try:
-                        h, m = map(int, str(b_time).split(":")[:2])
+                        # b_time may be a datetime.time object or a "HH:MM" string
+                        if hasattr(b_time, 'hour'):
+                            h, m = b_time.hour, b_time.minute
+                        else:
+                            h, m = map(int, str(b_time).split(":")[:2])
                         dt_naive = datetime.combine(b_date, dt_time(h, m))
                         starts_at = CHILE_TZ.localize(dt_naive)
                         booked_slots.append({
