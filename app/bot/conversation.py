@@ -944,16 +944,54 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         return False
     
     def _get_main_menu_message(self, language: str = "es") -> str:
-        """
-        Return the standard main menu message in the specified language.
-        
-        Args:
-            language: Language code (es, en, pt)
-        
-        Returns:
-            Main menu message
-        """
-        return get_text("main_menu", language)
+        """Return the main menu, hiding options 6/7 if disabled in admin settings."""
+        try:
+            from app.booking.operator_settings import get_menu_settings
+            ms = get_menu_settings()
+            show_exp  = ms.get("show_experiencias", True)
+            show_packs = ms.get("show_packs_alojamientos", True)
+        except Exception:
+            show_exp = show_packs = True
+
+        if show_exp and show_packs:
+            # Both on → standard hardcoded menu (fastest path)
+            return get_text("main_menu", language)
+
+        # Build dynamic version (Spanish only for now; fallback for other langs)
+        if language != "es":
+            # For other languages, just use the standard text
+            return get_text("main_menu", language)
+
+        lines = [
+            "🥬 ¡Ahoy, grumete! ⚓",
+            "",
+            "Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥",
+            "",
+            "Puedes preguntarme por:",
+            "",
+            "1️⃣ *Disponibilidad y horarios HotBoat*",
+            "",
+            "2️⃣ *Precios por persona HotBoat*",
+            "",
+            "3️⃣ *Características Experiencia HotBoat*",
+            "",
+            "4️⃣ *Extras HotBoat (toallas, videos, tablas, etc.)*",
+            "",
+            "5️⃣ *Ubicación y Reseñas HotBoat*",
+        ]
+        if show_exp:
+            lines += ["", "6️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*"]
+        if show_packs:
+            lines += ["", "7️⃣ *Alojamientos y Packs Pucón*"]
+        lines += [
+            "",
+            "Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *8️⃣* 👨‍✈️🌿",
+            "",
+            "¿Listo para zarpar, grumete? ⛵",
+            "",
+            "*¿Qué número eliges?*",
+        ]
+        return "\n".join(lines)
     
     def _is_greeting_message(self, message: str) -> bool:
         """

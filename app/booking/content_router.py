@@ -48,6 +48,14 @@ def list_packs(active_only: bool = True):
             return {"packs": rows}
 
 
+# ── Public menu visibility settings (read-only) ───────────────────────────────
+
+@content_router.get("/api/content/menu-settings")
+def public_menu_settings():
+    from app.booking.operator_settings import get_menu_settings
+    return get_menu_settings()
+
+
 # ── Public extras booking submission (from booking page) ──────────────────────
 
 class PublicExtrasBookingBody(BaseModel):

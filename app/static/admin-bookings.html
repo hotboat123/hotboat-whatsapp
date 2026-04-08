@@ -624,6 +624,47 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <!-- SETTINGS -->
     <div id="section-settings" class="section">
 
+      <!-- ── Visibilidad del Menú ────────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">📋 Visibilidad del Menú</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1.2rem;line-height:1.6">
+          Activa o desactiva secciones completas en el menú de WhatsApp y en la app de reservas.<br>
+          Al desactivar, la opción desaparece del menú y de la página web.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:.9rem">
+          <div style="display:flex;align-items:center;gap:1rem">
+            <label class="toggle-wrap">
+              <input type="checkbox" id="ms-experiencias" onchange="saveMenuSettings()">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:.9rem;font-weight:600">6️⃣ Otras Experiencias</div>
+              <div style="font-size:.77rem;color:var(--muted)">Rafting · Cabalgata · Velerismo — aparece en WhatsApp y en la web</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            <label class="toggle-wrap">
+              <input type="checkbox" id="ms-packs" onchange="saveMenuSettings()">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:.9rem;font-weight:600">7️⃣ Alojamientos y Packs Completos</div>
+              <div style="font-size:.77rem;color:var(--muted)">Domos · Cabañas · Packs — aparece en WhatsApp y en la web</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            <label class="toggle-wrap">
+              <input type="checkbox" id="ms-armapack" onchange="saveMenuSettings()">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:.9rem;font-weight:600">🛒 Arma tu Pack</div>
+              <div style="font-size:.77rem;color:var(--muted)">Constructor de pack personalizado — solo en la web</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Urgency Mode ─────────────────────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">⚡ Modo Genera Urgencia</div>
@@ -1592,12 +1633,34 @@ const DAY_NAMES_SHORT = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 
 async function loadSettings(){
   try{
-    const d = await api('/api/admin/settings');
+    const [d, ms] = await Promise.all([
+      api('/api/admin/settings'),
+      api('/api/admin/menu-settings'),
+    ]);
     const cb = document.getElementById('urgency-toggle');
     if(cb){ cb.checked = d.urgency_mode; updateUrgencyLabel(d.urgency_mode); }
     if(d.urgency_config){ _urgencyCfg = d.urgency_config; renderUrgencyConfig(); }
     if(d.dynamic_pricing){ _dpCfg = d.dynamic_pricing; renderDpConfig(); }
+    // Menu visibility toggles
+    const msExp  = document.getElementById('ms-experiencias');
+    const msPack = document.getElementById('ms-packs');
+    const msArma = document.getElementById('ms-armapack');
+    if(msExp)  msExp.checked  = ms.show_experiencias      !== false;
+    if(msPack) msPack.checked = ms.show_packs_alojamientos !== false;
+    if(msArma) msArma.checked = ms.show_arma_pack          !== false;
   }catch(e){ console.error(e); }
+}
+
+async function saveMenuSettings(){
+  try{
+    const body = {
+      show_experiencias:       document.getElementById('ms-experiencias')?.checked ?? true,
+      show_packs_alojamientos: document.getElementById('ms-packs')?.checked ?? true,
+      show_arma_pack:          document.getElementById('ms-armapack')?.checked ?? true,
+    };
+    await api('/api/admin/menu-settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    showToast('Visibilidad del menú guardada ✅');
+  }catch(e){ showToast('Error: '+e.message); }
 }
 
 // ── Email workflows (Booknetic-style) ────────────────────────────────────────

@@ -1560,3 +1560,28 @@ async def admin_delete_extras_booking(eb_id: int, x_admin_key: str = Header(...)
             cur.execute("DELETE FROM extras_bookings WHERE id=%s", (eb_id,))
             conn.commit()
     return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MENU VISIBILITY (WhatsApp + booking page)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@admin_router.get("/api/admin/menu-settings")
+async def admin_get_menu_settings(x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import get_menu_settings
+    return get_menu_settings()
+
+
+class MenuSettingsBody(BaseModel):
+    show_experiencias: bool = True
+    show_packs_alojamientos: bool = True
+    show_arma_pack: bool = True
+
+
+@admin_router.put("/api/admin/menu-settings")
+async def admin_put_menu_settings(body: MenuSettingsBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import set_menu_settings
+    set_menu_settings(body.dict())
+    return {"ok": True}

@@ -169,6 +169,7 @@ const S = {
   dpEnabled: false,
   dpFactors: [],
   totalPrice: 0,
+  menuSettings: { show_experiencias: true, show_packs_alojamientos: true, show_arma_pack: true },
 };
 
 const DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
@@ -267,10 +268,12 @@ function renderMenu(){
         <span class="icon">📍</span><span class="label">Ubicacion</span>
         <span class="desc">Como llegar · Mapa</span>
       </button>
+      ${S.menuSettings.show_experiencias!==false?`
       <button class="menu-btn" onclick="showExperiencias()">
         <span class="icon">🚣</span><span class="label">Otras Experiencias</span>
         <span class="desc">Rafting · Cabalgata · Velero</span>
-      </button>
+      </button>`:''}
+      ${S.menuSettings.show_packs_alojamientos!==false?`
       <button class="menu-btn" onclick="showAlojamientos()">
         <span class="icon">🏠</span><span class="label">Alojamientos</span>
         <span class="desc">Domos · Cabanas · Hostal</span>
@@ -278,11 +281,12 @@ function renderMenu(){
       <button class="menu-btn" onclick="showPacks()">
         <span class="icon">🎁</span><span class="label">Packs Completos</span>
         <span class="desc">Romantico · Familiar · Amigos</span>
-      </button>
+      </button>`:''}
+      ${S.menuSettings.show_arma_pack!==false?`
       <button class="menu-btn" onclick="showArmaPack()">
         <span class="icon">🛒</span><span class="label">Arma tu Pack</span>
         <span class="desc">Elige tus actividades</span>
-      </button>
+      </button>`:''}
     </div>
   </div>`;
 }
@@ -353,10 +357,12 @@ let DYN_PACKS = [];
 
 async function loadDynamicContent(){
   try{
-    const [er, pr] = await Promise.all([
+    const [er, pr, ms] = await Promise.all([
       fetch('/api/content/experiencias').then(r=>r.json()),
       fetch('/api/content/packs').then(r=>r.json()),
+      fetch('/api/content/menu-settings').then(r=>r.json()).catch(()=>({})),
     ]);
+    if(ms && typeof ms === 'object') S.menuSettings = {...S.menuSettings, ...ms};
     if(er.experiences) DYN_EXPERIENCIAS = er.experiences;
     if(pr.packs) DYN_PACKS = pr.packs;
     // Sync ACTIVIDADES for arma-tu-pack using dynamic experiences (skip alojamiento-type)

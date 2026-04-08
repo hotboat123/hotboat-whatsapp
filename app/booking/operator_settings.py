@@ -409,3 +409,32 @@ def set_email_booking_config(cfg: dict) -> bool:
         "subject": cfg.get("subject", ""),
         "body_html": cfg.get("body_html", ""),
     })
+
+
+# ── Menu visibility settings ─────────────────────────────────────────────────
+# Controls which sections appear in the WhatsApp bot menu AND in booking.html.
+
+MENU_SETTINGS_DEFAULTS = {
+    "show_experiencias": True,      # WhatsApp option 6 + booking page button
+    "show_packs_alojamientos": True,  # WhatsApp option 7 + booking page buttons
+    "show_arma_pack": True,         # booking page "Arma tu Pack" button
+}
+
+
+def get_menu_settings() -> dict:
+    raw = get_setting("menu_visibility", "")
+    if raw:
+        try:
+            stored = json.loads(raw)
+            result = MENU_SETTINGS_DEFAULTS.copy()
+            result.update(stored)
+            return result
+        except Exception:
+            pass
+    return MENU_SETTINGS_DEFAULTS.copy()
+
+
+def set_menu_settings(cfg: dict) -> bool:
+    current = get_menu_settings()
+    current.update(cfg)
+    return set_setting("menu_visibility", json.dumps(current))
