@@ -469,17 +469,24 @@ async def arma_pack_pay(request: ArmaPackPayRequest):
 
     token = os.getenv("MERCADOPAGO_ACCESS_TOKEN", "")
     payment_url = None
-    if token:
+    mp_error = None
+
+    if not token:
+        mp_error = "MERCADOPAGO_ACCESS_TOKEN not configured"
+        logger.warning(f"arma_pack_pay: {mp_error} — booking_ref={booking_ref}")
+    else:
         try:
             import httpx
             base = os.getenv("PUBLIC_BASE_URL", "https://hotboat-app.up.railway.app")
+            # MercadoPago requires integer prices for CLP
+            unit_price = int(request.deposit_amount)
             payload = {
                 "items": [{
                     "id": booking_ref,
-                    "title": f"HotBoat Pack ({act_list}) – Deposito 50%",
+                    "title": f"HotBoat Pack – Deposito 50%",
                     "quantity": 1,
                     "currency_id": "CLP",
-                    "unit_price": request.deposit_amount,
+                    "unit_price": unit_price,
                 }],
                 "payer": {"name": request.customer_name, "phone": {"number": request.customer_phone}},
                 "back_urls": {
@@ -491,20 +498,32 @@ async def arma_pack_pay(request: ArmaPackPayRequest):
                 "external_reference": booking_ref,
                 "statement_descriptor": "HotBoat Chile",
             }
+            logger.info(f"arma_pack_pay: creating MP preference for {booking_ref}, amount={unit_price}")
             async with httpx.AsyncClient() as client:
-                r = await client.post(
+                resp = await client.post(
                     "https://api.mercadopago.com/checkout/preferences",
                     json=payload,
                     headers={"Authorization": f"Bearer {token}"},
                     timeout=15,
                 )
-                r.raise_for_status()
-                d = r.json()
-                payment_url = d.get("init_point") or d.get("sandbox_init_point")
+                logger.info(f"arma_pack_pay: MP response status={resp.status_code}")
+                if resp.status_code >= 400:
+                    mp_error = f"MP API error {resp.status_code}: {resp.text[:300]}"
+                    logger.error(f"arma_pack_pay: {mp_error}")
+                else:
+                    d = resp.json()
+                    payment_url = d.get("init_point") or d.get("sandbox_init_point")
+                    logger.info(f"arma_pack_pay: payment_url={payment_url}")
         except Exception as mp_e:
-            logger.warning(f"MercadoPago preference failed for arma-pack: {mp_e}")
+            mp_error = str(mp_e)
+            logger.error(f"arma_pack_pay: MercadoPago exception: {mp_e}")
 
-    return {"booking_ref": booking_ref, "payment_url": payment_url, "deposit_amount": request.deposit_amount}
+    return {
+        "booking_ref": booking_ref,
+        "payment_url": payment_url,
+        "deposit_amount": request.deposit_amount,
+        "mp_error": mp_error,
+    }
 
 
 def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):

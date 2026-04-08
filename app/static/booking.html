@@ -742,13 +742,35 @@ async function pagarArmaPack(mitad, total){
     if(d.payment_url){
       window.location.href = d.payment_url;
     } else if(d.booking_ref){
-      mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
-        <div style="font-size:3rem;margin-bottom:1rem">✅</div>
-        <div class="card-title">Solicitud enviada</div>
-        <p style="color:var(--muted);margin-top:.5rem">El Capitán Tomás te contactará por WhatsApp para coordinar el pago.</p>
-        <p style="color:var(--muted);font-size:.82rem;margin-top:.5rem">Ref: ${d.booking_ref}</p>
+      // MP not configured or failed — build WhatsApp deep link with payment details
+      const actNames = sel.map(id=>ACTIVIDADES.find(a=>a.id===id)?.name||id).join(', ');
+      const personas = S.armaPersonas||2;
+      const waMsg = encodeURIComponent(
+        `Hola! Quiero reservar mi Pack HotBoat 🚤\n`+
+        `Ref: ${d.booking_ref}\n`+
+        `Actividades: ${actNames}\n`+
+        `Personas: ${personas}\n`+
+        `Fechas: ${dates||'a coordinar'}\n`+
+        `Total: $${total.toLocaleString('es-CL')} · Depósito 50%: $${mitad.toLocaleString('es-CL')}\n`+
+        `Nombre: ${name} · Tel: ${phone}`
+      );
+      const waUrl = `https://wa.me/56975780920?text=${waMsg}`;
+      mc.innerHTML = `<div class="card" style="text-align:center;padding:1.5rem">
+        <div style="font-size:2.5rem;margin-bottom:.75rem">✅</div>
+        <div class="card-title" style="margin-bottom:.5rem">¡Reserva registrada!</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:.3rem">Ref: <strong>${d.booking_ref}</strong></p>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1.2rem">El pago se coordina directamente con el Capitán Tomás por WhatsApp.</p>
+        <div style="background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.25);border-radius:10px;padding:.85rem;margin-bottom:1rem;font-size:.84rem;line-height:1.8">
+          <div><strong>Actividades:</strong> ${actNames}</div>
+          <div><strong>Personas:</strong> ${personas}</div>
+          ${dates?`<div><strong>Fechas:</strong> ${dates}</div>`:''}
+          <div style="margin-top:.4rem;color:var(--gold);font-weight:700">Depósito a pagar: $${mitad.toLocaleString('es-CL')}</div>
+        </div>
       </div>
-      <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
+      <a href="${waUrl}" target="_blank" rel="noopener" class="btn" style="display:block;text-align:center;text-decoration:none;background:#25D366">
+        💬 Coordinar pago por WhatsApp
+      </a>
+      <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
     }
   }catch(e){
     showToast('Error: '+e.message);
