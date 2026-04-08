@@ -109,71 +109,69 @@ async def get_appointments_between_dates(
 
 async def check_slot_availability(slot_datetime: datetime, duration_hours: float = 2.0, buffer_hours: float = 0.5) -> bool:
     """
-    Check if a specific time slot is available
-    
-    Args:
-        slot_datetime: DateTime to check (in Chile timezone)
-        duration_hours: Duration of the booking in hours
-        buffer_hours: Buffer time before/after booking
-    
-    Returns:
-        True if available, False if booked
+    Check if a specific time slot is available.
+    Checks both booknetic_appointments AND hotboat_appointments (web bookings).
     """
     import pytz
     CHILE_TZ = pytz.timezone('America/Santiago')
-    
+
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Calculate the actual slot range with buffer
-                # Slot needs buffer before start and after end
-                slot_start_with_buffer = slot_datetime - timedelta(hours=buffer_hours)
-                slot_end = slot_datetime + timedelta(hours=duration_hours)
-                slot_end_with_buffer = slot_end + timedelta(hours=buffer_hours)
-                
-                # FIX TIMEZONE ISSUE:
-                # Since DB stores Chile time as UTC, we need to compare using naive datetimes
-                # or convert our slot times to "fake UTC" (which is actually Chile time in the DB)
-                
-                # Convert slot times to naive (removing timezone) for comparison
-                # Since DB timestamps are "Chile time marked as UTC"
-                slot_start_naive = slot_start_with_buffer.replace(tzinfo=None) if slot_start_with_buffer.tzinfo else slot_start_with_buffer
-                slot_end_naive = slot_end_with_buffer.replace(tzinfo=None) if slot_end_with_buffer.tzinfo else slot_end_with_buffer
-                
-                # An appointment overlaps if:
-                # 1. Appointment starts before our slot ends (with buffer), AND
-                # 2. Appointment ends (with buffer) after our slot starts
-                # 
-                # Appointment duration is assumed to be 2 hours (can be made configurable later)
-                appointment_duration_hours = 2.0
-                
-                # Calculate appointment end with buffer using Python timedelta
-                # Then pass as parameter to avoid SQL injection
+                slot_start_buf = slot_datetime - timedelta(hours=buffer_hours)
+                slot_end       = slot_datetime + timedelta(hours=duration_hours)
+                slot_end_buf   = slot_end + timedelta(hours=buffer_hours)
+
+                # Strip tz for booknetic (stores Chile time as UTC)
+                s_start = slot_start_buf.replace(tzinfo=None) if slot_start_buf.tzinfo else slot_start_buf
+                s_end   = slot_end_buf.replace(tzinfo=None)   if slot_end_buf.tzinfo   else slot_end_buf
+                appt_dur = duration_hours + buffer_hours
+
+                # 1. Booknetic appointments
                 cur.execute("""
-                    SELECT COUNT(*)
-                    FROM booknetic_appointments
+                    SELECT COUNT(*) FROM booknetic_appointments
                     WHERE starts_at IS NOT NULL
-                      AND (status IS NULL OR status NOT IN ('cancelled', 'rejected'))
+                      AND (status IS NULL OR status NOT IN ('cancelled','rejected'))
+                      AND starts_at < %s
+                      AND starts_at + INTERVAL '1 hour' * %s > %s
+                """, (s_end, appt_dur, s_start))
+                if cur.fetchone()[0] > 0:
+                    return False
+
+                # 2. Web bookings (hotboat_appointments)
+                # Reconstruct datetime from booking_date + booking_time text ("HH:MM")
+                slot_date   = slot_datetime.date()
+                slot_h      = slot_datetime.hour
+                slot_m      = slot_datetime.minute
+                # A web booking at H:MM overlaps if its window [H-buf .. H+dur+buf] overlaps ours
+                # Convert everything to minutes-since-midnight for a pure SQL comparison
+                slot_start_min = (slot_h * 60 + slot_m) - int(buffer_hours * 60)
+                slot_end_min   = (slot_h * 60 + slot_m) + int((duration_hours + buffer_hours) * 60)
+                cur.execute("""
+                    SELECT COUNT(*) FROM hotboat_appointments
+                    WHERE booking_date = %s
+                      AND booking_time IS NOT NULL
+                      AND status NOT IN ('cancelled','rejected','solicitud')
                       AND (
-                          -- Appointment starts before our slot ends (with buffer)
-                          starts_at < %s
-                          AND (
-                              -- Appointment ends (with buffer) after our slot starts (with buffer)
-                              starts_at + INTERVAL '1 hour' * %s > %s
-                          )
+                          (SPLIT_PART(booking_time,':',1)::int * 60 + SPLIT_PART(booking_time,':',2)::int)
+                              - %s < %s
+                          AND (SPLIT_PART(booking_time,':',1)::int * 60 + SPLIT_PART(booking_time,':',2)::int)
+                              + %s > %s
                       )
                 """, (
-                    slot_end_naive,  # Our slot end with buffer (naive)
-                    appointment_duration_hours + buffer_hours,  # Appointment duration + buffer
-                    slot_start_naive  # Our slot start with buffer (naive)
+                    slot_date,
+                    int(buffer_hours * 60),   # booking_start_min - buf
+                    slot_end_min,             # must be < slot_end_min
+                    int((duration_hours + buffer_hours) * 60),  # booking_end_min = booking_start + dur+buf
+                    slot_start_min,           # must be > slot_start_min
                 ))
-                
-                count = cur.fetchone()[0]
-                return count == 0
-    
+                if cur.fetchone()[0] > 0:
+                    return False
+
+                return True
+
     except Exception as e:
         logger.error(f"Error checking slot availability: {e}")
-        # Notify admin about the database error
         await _notify_admin_db_error(e, "check_slot_availability")
         return False
 
@@ -232,29 +230,48 @@ async def get_booked_slots(
                 booked_slots = []
                 for row in results:
                     starts_at = row[1]
-                    
-                    # FIX TIMEZONE ISSUE: 
-                    # Booknetic stores timestamps with local Chile time but marks them as UTC
-                    # We need to "fix" this by replacing the timezone
+                    # Booknetic stores Chile time marked as UTC — fix timezone
                     if starts_at and starts_at.tzinfo is not None:
-                        # Remove the UTC timezone and treat as naive
-                        naive_dt = starts_at.replace(tzinfo=None)
-                        # Re-apply Chile timezone (the actual timezone of the data)
-                        starts_at = CHILE_TZ.localize(naive_dt)
-                    
+                        starts_at = CHILE_TZ.localize(starts_at.replace(tzinfo=None))
                     booked_slots.append({
                         "id": row[0],
                         "starts_at": starts_at,
                         "service_name": row[2],
                         "customer_name": row[3],
-                        "status": row[4]
+                        "status": row[4],
                     })
-                
+
+                # Also include web bookings from hotboat_appointments
+                from datetime import time as dt_time
+                cur.execute("""
+                    SELECT booking_ref, booking_date, booking_time, customer_name, status
+                    FROM hotboat_appointments
+                    WHERE booking_date >= %s::date
+                      AND booking_date <= %s::date
+                      AND booking_time IS NOT NULL
+                      AND status NOT IN ('cancelled','rejected','solicitud')
+                    ORDER BY booking_date, booking_time
+                """, (start_date, end_date))
+                for row in cur.fetchall():
+                    _, b_date, b_time, b_name, b_status = row
+                    try:
+                        h, m = map(int, str(b_time).split(":")[:2])
+                        dt_naive = datetime.combine(b_date, dt_time(h, m))
+                        starts_at = CHILE_TZ.localize(dt_naive)
+                        booked_slots.append({
+                            "id": None,
+                            "starts_at": starts_at,
+                            "service_name": "HotBoat Web",
+                            "customer_name": b_name,
+                            "status": b_status,
+                        })
+                    except Exception:
+                        pass
+
                 return booked_slots
-    
+
     except Exception as e:
         logger.error(f"Error getting booked slots: {e}")
-        # Notify admin about the database error
         await _notify_admin_db_error(e, "get_booked_slots")
         return []
 
