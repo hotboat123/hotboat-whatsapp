@@ -136,28 +136,27 @@ def apply_urgency_filter(
     config: Optional[dict] = None,
 ) -> list:
     """
-    Urgency algorithm: show only seed times (+ slots near existing bookings).
+    Urgency algorithm: show seed times + slots at booking ± gap_hours.
 
-    - Seed pool = slots nearest to each seed_time in config
-    - For each booking at X: add nearest-available slots at X±gap_hours
-    - Remove booked slots; return sorted chronologically
+    Rules:
+    - Seed pool: show each configured seed time IF it is free (not booked).
+      A booked seed time is NOT replaced by a nearby slot — that would
+      show something like 16:00 when 18:00 is booked, which is wrong.
+    - Expansion: for each booking at X, add the free slot nearest to
+      X ± gap_hours, but only if it falls within a ±30 min tolerance of
+      the target.  This prevents picking a "nearest" slot that is actually
+      only 1-2h from the booking.
     """
     if not available_times:
         return []
 
     cfg = config if config is not None else get_urgency_config()
-    # Use configured seed_times, falling back to the admin-configured operating hours
     seed_times: list = cfg.get("seed_times") or get_operating_hours()
     gap_hours: float = float(cfg.get("gap_hours", 3))
 
     def _to_min(t: str) -> int:
         h, m = map(int, t.split(":"))
         return h * 60 + m
-
-    def _nearest(target_min: int, times: list) -> Optional[str]:
-        if not times:
-            return None
-        return min(times, key=lambda t: abs(_to_min(t) - target_min))
 
     booked_set = set(booked_times)
     free_times = [t for t in available_times if t not in booked_set]
@@ -166,21 +165,29 @@ def apply_urgency_filter(
         return []
 
     pool: set = set()
-
-    # Seed pool from configured seed times
-    for st in seed_times:
-        n = _nearest(_to_min(st), free_times)
-        if n:
-            pool.add(n)
-
-    # Expand based on existing bookings (±gap_hours)
     gap_min = int(gap_hours * 60)
+    TOLERANCE = 30  # minutes — how close the found slot must be to the target
+
+    # 1. Seed pool: only add seed times that are free themselves
+    for st in seed_times:
+        if st in free_times:
+            pool.add(st)
+        # If the exact seed time is not available (not generated or blocked),
+        # find the nearest free slot within tolerance
+        else:
+            target = _to_min(st)
+            candidates = [t for t in free_times if abs(_to_min(t) - target) <= TOLERANCE]
+            if candidates:
+                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
+
+    # 2. Expansion: for each booking, show slots at booking ± gap_hours
     for bt in booked_times:
         bt_min = _to_min(bt)
         for delta in (-gap_min, gap_min):
-            n = _nearest(bt_min + delta, free_times)
-            if n:
-                pool.add(n)
+            target = bt_min + delta
+            candidates = [t for t in free_times if abs(_to_min(t) - target) <= TOLERANCE]
+            if candidates:
+                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
 
     return sorted([t for t in free_times if t in pool], key=_to_min)
 
