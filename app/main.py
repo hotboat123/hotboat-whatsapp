@@ -214,7 +214,7 @@ async def _run_auto_sync():
                             """, (str(bid), fecha, hora, nombre, email, phone, str(num_p), total, status or "confirmed"))
                             inserted_book += 1
 
-                    # Sync hotboat_web (same rationale: do not use reservas MAX fecha as cutoff)
+                    # Sync hotboat_web — exclude cancelled/rejected so deleted bookings stay deleted
                     cur.execute("""
                         SELECT booking_ref, customer_name, customer_email, customer_phone,
                                booking_date, booking_time, num_people,
@@ -224,7 +224,7 @@ async def _run_auto_sync():
                         WHERE booking_date IS NOT NULL
                           AND booking_date >= (CURRENT_DATE - INTERVAL '3 years')
                           AND booking_date <= (CURRENT_DATE + INTERVAL '3 years')
-                          AND status != 'solicitud'
+                          AND status NOT IN ('solicitud', 'cancelled', 'rejected', 'cancelada', 'rechazada')
                     """)
                     for row in cur.fetchall():
                         (ref, nombre, email, phone, fecha, hora, num_p,

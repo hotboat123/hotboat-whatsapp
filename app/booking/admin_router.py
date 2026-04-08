@@ -308,11 +308,19 @@ async def delete_reserva(rid: int, x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"SELECT nombre_cliente, fecha FROM {TABLE} WHERE id=%s", (rid,))
+                cur.execute(f"SELECT nombre_cliente, fecha, source, source_id FROM {TABLE} WHERE id=%s", (rid,))
                 row = cur.fetchone()
                 if not row:
                     raise HTTPException(status_code=404, detail="Not found")
+                _, _, source, source_id = row
                 cur.execute(f"DELETE FROM {TABLE} WHERE id=%s", (rid,))
+                # If this was a web booking, also cancel it in hotboat_appointments
+                # so the auto-sync doesn't re-insert it on the next run
+                if source == "hotboat_web" and source_id:
+                    cur.execute(
+                        "UPDATE hotboat_appointments SET status='cancelled' WHERE booking_ref=%s",
+                        (source_id,)
+                    )
                 conn.commit()
         return {"ok": True, "deleted": rid}
     except HTTPException:
