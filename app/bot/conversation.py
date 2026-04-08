@@ -3404,6 +3404,15 @@ Escribe el número que prefieras 🚤"""
                 conversation["metadata"]["complete_packages_flow"] = {
                     "step": "selecting_type"
                 }
+                # Build dynamic packs menu from DB
+                try:
+                    from app.booking.content_router import build_packs_menu_text_es, get_active_packs_db
+                    active_packs = get_active_packs_db()
+                    packs_text = build_packs_menu_text_es(active_packs) if language == "es" else get_text("complete_packages_menu", language)
+                    # Store active slugs so flow can resolve by index
+                    conversation["metadata"]["complete_packages_flow"]["active_slugs"] = [p["slug"] for p in active_packs]
+                except Exception:
+                    packs_text = get_text("complete_packages_menu", language)
                 # Send image with packs summary
                 from app.utils.media_handler import PACKS_IMAGES_DIR
                 import os
@@ -3412,11 +3421,11 @@ Escribe el número que prefieras 🚤"""
                     return {
                         "type": "image_with_text",
                         "image_path": resumen_path,
-                        "text": get_text("complete_packages_menu", language),
+                        "text": packs_text,
                         "caption": "📦 Packs Completos HotBoat"
                     }
                 else:
-                    return get_text("complete_packages_menu", language)
+                    return packs_text
             
             # Option 2: Only Accommodations
             elif "2" in message_clean or ("solo" in message_clean and "aloj" in message_clean) or ("only" in message_clean and "accom" in message_clean):

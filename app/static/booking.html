@@ -347,98 +347,81 @@ function showUbicacion(){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
 }
 
+// Dynamic data loaded from API
+let DYN_EXPERIENCIAS = [];
+let DYN_PACKS = [];
+
+async function loadDynamicContent(){
+  try{
+    const [er, pr] = await Promise.all([
+      fetch('/api/content/experiencias').then(r=>r.json()),
+      fetch('/api/content/packs').then(r=>r.json()),
+    ]);
+    if(er.experiences) DYN_EXPERIENCIAS = er.experiences;
+    if(pr.packs) DYN_PACKS = pr.packs;
+    // Sync ACTIVIDADES for arma-tu-pack using dynamic experiences (skip alojamiento-type)
+    if(DYN_EXPERIENCIAS.length){
+      ACTIVIDADES.length = 0;
+      // Always keep HotBoat as first
+      ACTIVIDADES.push({id:'hotboat',icon:'🚤',name:'HotBoat',desc:'Paseo 2 horas en el lago',pricePP:69990,flat:false});
+      DYN_EXPERIENCIAS.forEach(e=>{
+        ACTIVIDADES.push({id:e.slug,icon:e.icon,name:e.name,desc:e.description||'',pricePP:e.price_per_person||0,flat:e.slug==='auto'});
+      });
+    }
+    if(DYN_PACKS.length){
+      PACKS.length=0;
+      DYN_PACKS.forEach(p=>{
+        PACKS.push({id:p.slug,icon:p.icon,name:p.name,personas:p.personas,desc:p.description,
+          includes:p.includes||[],desde:'Desde $'+Number(p.price_from).toLocaleString('es-CL'),
+          image:p.image_path});
+      });
+    }
+  }catch(e){ console.warn('Dynamic content load failed:', e); }
+}
+
 function showExperiencias(){
+  const list = DYN_EXPERIENCIAS.length ? DYN_EXPERIENCIAS : [
+    {slug:'rafting',icon:'🚣',name:'Rafting',description:'Rio Trancura · Bajo o Alto',price_per_person:30000,image_path:'/media/images/experiencias/rafting/Rafting.jpg'},
+    {slug:'cabalgata',icon:'🐴',name:'Cabalgata',description:'Parque Ojos del Caburguá',price_per_person:50000,image_path:'/media/images/experiencias/cabalgata/CAbalgatas.jpg'},
+    {slug:'velerismo',icon:'⛵',name:'Navegacion a Vela',description:'Lago Villarrica',price_per_person:50000,image_path:'/media/images/experiencias/velerismo/Velerismo.jpg'},
+  ];
+  const btns = list.map(e=>`
+    <button class="menu-btn" onclick="showExperienciaDetail('${e.slug}')" style="flex-direction:row;align-items:center;gap:.75rem">
+      <span style="font-size:2rem">${e.icon}</span>
+      <div><div class="label">${e.name}</div>
+        <div class="desc">${e.description||''}${e.price_per_person?` · $${Number(e.price_per_person).toLocaleString('es-CL')}/persona`:''}</div>
+      </div>
+    </button>`).join('');
   mc.innerHTML = `
   <div class="card">
     <div class="card-title">🏔️ Otras Experiencias</div>
     <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Aventuras en Pucon y alrededores</p>
-    <div style="display:flex;flex-direction:column;gap:.75rem">
-      <button class="menu-btn" onclick="showRafting()" style="flex-direction:row;align-items:center;gap:.75rem">
-        <span style="font-size:2rem">🚣</span>
-        <div><div class="label">Rafting</div>
-          <div class="desc">Rio Trancura · Desde $30.000/persona</div></div>
-      </button>
-      <button class="menu-btn" onclick="showCabalgata()" style="flex-direction:row;align-items:center;gap:.75rem">
-        <span style="font-size:2rem">🐴</span>
-        <div><div class="label">Cabalgata</div>
-          <div class="desc">Parque Ojos del Caburguá · $50.000/persona</div></div>
-      </button>
-      <button class="menu-btn" onclick="showVelerismo()" style="flex-direction:row;align-items:center;gap:.75rem">
-        <span style="font-size:2rem">⛵</span>
-        <div><div class="label">Navegacion a Vela</div>
-          <div class="desc">Lago Villarrica · Desde $120.000</div></div>
-      </button>
-    </div>
+    <div style="display:flex;flex-direction:column;gap:.75rem">${btns}</div>
   </div>
   <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
 }
 
-function showRafting(){
+function showExperienciaDetail(slug){
+  const list = DYN_EXPERIENCIAS.length ? DYN_EXPERIENCIAS : [];
+  const e = list.find(x=>x.slug===slug);
+  if(!e){ showExperiencias(); return; }
+  const img = e.image_path ? mediaBlock(slug, e.image_path, '/media/documents/experiencias.pdf') : '';
   mc.innerHTML = `
   <div class="card">
-    <div class="card-title">🚣 Rafting</div>
-    <p style="color:var(--muted);margin-bottom:.8rem">Rio Trancura · Pucon</p>
-    <div style="display:flex;flex-direction:column;gap:.6rem">
-      <div class="price-tag" style="text-align:left">
-        <strong>Rafting Bajo</strong> · Nivel principiante<br>
-        <span class="price-big">$30.000</span><span class="price-sub">/persona</span><br>
-        <span style="color:var(--muted);font-size:.8rem">2-3 horas · Ideal para familias 🌊</span>
-      </div>
-      <div class="price-tag" style="text-align:left">
-        <strong>Rafting Alto</strong> · Nivel avanzado<br>
-        <span class="price-big">$40.000</span><span class="price-sub">/persona</span><br>
-        <span style="color:var(--muted);font-size:.8rem">3-4 horas · Mas adrenalina 🌊🌊</span>
-      </div>
-    </div>
-    ${mediaBlock('rafting','/media/images/experiencias/rafting/Rafting.jpg','/media/documents/experiencias.pdf')}
+    <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${e.icon}</div>
+    <div class="card-title">${e.name}</div>
+    <p style="color:var(--muted);margin-bottom:.8rem">${e.description||''}</p>
+    ${e.price_per_person ? `<div class="price-tag"><div class="price-big">$${Number(e.price_per_person).toLocaleString('es-CL')}</div><div class="price-sub">/persona</div></div>` : ''}
+    ${img}
   </div>
-  <button class="btn" onclick="showSolicitudForm('Rafting','rafting')">Solicitar Rafting</button>
+  <button class="btn" onclick="showExtrasDateForm('${slug}','${e.name}','experience')">Solicitar ${e.name}</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
 }
 
-function showCabalgata(){
-  mc.innerHTML = `
-  <div class="card">
-    <div class="card-title">🐴 Cabalgata</div>
-    <p style="color:var(--muted);margin-bottom:.8rem">Parque Ojos del Caburguá</p>
-    <div class="price-tag" style="text-align:left">
-      <strong>Cabalgata Parque Ojos del Caburguá</strong><br>
-      <span class="price-big">$50.000</span><span class="price-sub">/persona</span><br>
-      <span style="color:var(--muted);font-size:.8rem">3-4 horas · Guia + equipo completo + snack 🌲</span>
-    </div>
-    <div class="info-box" style="margin-top:.8rem;font-size:.85rem;line-height:1.8">
-      🌿 Naturaleza a caballo en entorno magico<br>
-      🏔️ Vistas al volcan y lagunas<br>
-      👨‍🏫 Guia experto incluido
-    </div>
-    ${mediaBlock('cabalgata','/media/images/experiencias/cabalgata/CAbalgatas.jpg','/media/documents/experiencias.pdf')}
-  </div>
-  <button class="btn" onclick="showSolicitudForm('Cabalgata','cabalgata')">Solicitar Cabalgata</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
-}
-
-function showVelerismo(){
-  const opts = [
-    {label:'Travesia 30 min · 2p',price:'$300.000'},{label:'Travesia 30 min · 4p',price:'$340.000'},
-    {label:'Travesia 30 min · 6p',price:'$360.000'},{label:'Travesia 30 min · 8p',price:'$380.000'},
-    {label:'Travesia 30 min · 10p',price:'$400.000'},
-    {label:'Yave Akimbo 1.5hr · 2p',price:'$120.000'},{label:'Yave Akimbo 1.5hr · 3p',price:'$130.000'},
-    {label:'Yave Akimbo 1.5hr · 4p',price:'$140.000'},{label:'Yave Akimbo 1.5hr · 5p',price:'$150.000'},
-    {label:'Yave Akimbo 1.5hr · 6p',price:'$160.000'},
-  ];
-  const rows = opts.map(o=>`
-    <div class="summary-row"><span>${o.label}</span><span style="color:var(--gold);font-weight:700">${o.price}</span></div>`
-  ).join('');
-  mc.innerHTML = `
-  <div class="card">
-    <div class="card-title">⛵ Navegacion a Vela</div>
-    <p style="color:var(--muted);margin-bottom:.8rem">Lago Villarrica</p>
-    ${rows}
-    ${mediaBlock('velero','/media/images/experiencias/velerismo/Velerismo.jpg','/media/documents/experiencias.pdf')}
-  </div>
-  <button class="btn" onclick="showSolicitudForm('Navegacion a Vela','velerismo')">Solicitar Navegacion</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
-}
+// Legacy aliases kept for any remaining internal references
+function showRafting(){ showExperienciaDetail('rafting'); }
+function showCabalgata(){ showExperienciaDetail('cabalgata'); }
+function showVelerismo(){ showExperienciaDetail('velerismo'); }
 
 function showExtras(){
   mc.innerHTML = `
@@ -545,16 +528,22 @@ function showAlojamiento(id){
 }
 
 function showPacks(){
-  const cards = PACKS.map(p=>`
+  const list = PACKS.length ? PACKS : [];
+  if(!list.length){
+    mc.innerHTML = `<div class="card"><p style="color:var(--muted);text-align:center">No hay packs disponibles por el momento.</p></div>
+    <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
+    return;
+  }
+  const cards = list.map(p=>`
     <div class="card" style="margin-bottom:0">
       <div style="font-size:2rem;margin-bottom:.3rem">${p.icon}</div>
       <div style="font-size:1.1rem;font-weight:700;margin-bottom:.2rem">${p.name}</div>
-      <div style="color:var(--muted);font-size:.8rem;margin-bottom:.6rem">${p.personas} · ${p.desc}</div>
+      <div style="color:var(--muted);font-size:.8rem;margin-bottom:.6rem">${p.personas} · ${p.desc||p.description||''}</div>
       <div style="font-size:.85rem;line-height:1.8;margin-bottom:.6rem">
-        ${p.includes.map(i=>`✓ ${i}`).join('<br>')}
+        ${(p.includes||[]).map(i=>`✓ ${i}`).join('<br>')}
       </div>
-      <div style="color:var(--gold);font-weight:700;font-size:.95rem;margin-bottom:.6rem">${p.desde}</div>
-      <button class="btn" style="padding:.6rem" onclick="showPackDetail('${p.id}')">Ver detalles</button>
+      <div style="color:var(--gold);font-weight:700;font-size:.95rem;margin-bottom:.6rem">${p.desde||('Desde $'+Number(p.price_from||0).toLocaleString('es-CL'))}</div>
+      <button class="btn" style="padding:.6rem" onclick="showPackDetail('${p.id||p.slug}')">Ver detalles</button>
     </div>`).join('');
   mc.innerHTML = `
   <div class="card">
@@ -581,29 +570,30 @@ const PACK_IMGS = {
 };
 
 function showPackDetail(id){
-  const p = PACKS.find(x=>x.id===id);
+  const p = PACKS.find(x=>(x.id||x.slug)===id);
   if(!p) return showPacks();
-  const imgs = PACK_IMGS[id]||{};
+  const slug = p.id||p.slug;
+  const imgs = PACK_IMGS[slug]||{};
+  const dynImg = p.image;
+  const desde = p.desde || ('Desde $'+Number(p.price_from||0).toLocaleString('es-CL'));
   mc.innerHTML = `
   <div class="card">
     <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${p.icon}</div>
     <div class="card-title">${p.name}</div>
-    <div style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">${p.personas} · ${p.desc}</div>
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">${p.personas} · ${p.desc||p.description||''}</div>
     <div class="info-box" style="line-height:2">
-      ${p.includes.map(i=>`✓ ${i}`).join('<br>')}
+      ${(p.includes||[]).map(i=>`✓ ${i}`).join('<br>')}
     </div>
     <div class="price-tag" style="margin-top:.8rem">
-      <div class="price-big">${p.desde}</div>
+      <div class="price-big">${desde}</div>
       <div class="price-sub">Precio segun fechas y version (Basico / Premium)</div>
     </div>
-    ${imgs.basico ? `<button id="mb-btn-pk-${id}-b" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${id}-b','mb-box-pk-${id}-b','${imgs.basico}',true)">📸 Ver Pack Basico</button><div id="mb-box-pk-${id}-b"></div>` : ''}
-    ${imgs.premium ? `<button id="mb-btn-pk-${id}-p" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${id}-p','mb-box-pk-${id}-p','${imgs.premium}',true)">📸 Ver Pack Premium</button><div id="mb-box-pk-${id}-p"></div>` : ''}
+    ${dynImg ? `<button id="mb-btn-pk-${slug}-d" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${slug}-d','mb-box-pk-${slug}-d','${dynImg}',true)">📸 Ver foto del pack</button><div id="mb-box-pk-${slug}-d"></div>` : ''}
+    ${imgs.basico ? `<button id="mb-btn-pk-${slug}-b" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${slug}-b','mb-box-pk-${slug}-b','${imgs.basico}',true)">📸 Ver Pack Basico</button><div id="mb-box-pk-${slug}-b"></div>` : ''}
+    ${imgs.premium ? `<button id="mb-btn-pk-${slug}-p" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${slug}-p','mb-box-pk-${slug}-p','${imgs.premium}',true)">📸 Ver Pack Premium</button><div id="mb-box-pk-${slug}-p"></div>` : ''}
     <a href="/media/images/packs/resumen-packs.jpg" target="_blank" class="media-pdf">📸 Ver resumen de todos los packs →</a>
-    <div class="info-box" style="margin-top:.8rem;font-size:.8rem;line-height:1.7">
-      📋 Completa el formulario con tus fechas. El Capitan Tomas te contactara por WhatsApp para confirmar.
-    </div>
   </div>
-  <button class="btn" onclick="showSolicitudForm('${p.name}','pack:${p.id}')">Solicitar este Pack</button>
+  <button class="btn" onclick="showExtrasDateForm('${slug}','${p.name}','pack')">Solicitar este Pack</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showPacks()">Ver otros packs</button>`;
 }
 
@@ -763,6 +753,76 @@ async function pagarArmaPack(mitad, total){
   }catch(e){
     showToast('Error: '+e.message);
     if(btn){ btn.textContent='💳 Pagar reserva'; btn.disabled=false; }
+  }
+}
+
+function showExtrasDateForm(slug, name, type){
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">📅 ${name}</div>
+    <p style="color:var(--muted);font-size:.84rem;margin-bottom:1rem">Completa tus datos y fechas para que el Capitán Tomás te confirme la reserva.</p>
+    <div class="form-group"><label>Nombre completo *</label>
+      <input type="text" id="ef-name" placeholder="Tu nombre"></div>
+    <div class="form-group"><label>WhatsApp / Telefono *</label>
+      <input type="tel" id="ef-phone" placeholder="+56 9 xxxx xxxx"></div>
+    <div class="form-group"><label>Fecha inicio *</label>
+      <input type="date" id="ef-start"></div>
+    <div class="form-group"><label>Fecha fin (si aplica)</label>
+      <input type="date" id="ef-end"></div>
+    <div class="form-group"><label>Cuántas personas</label>
+      <input type="number" id="ef-people" min="1" value="2"></div>
+    <div class="form-group"><label>Mensaje adicional</label>
+      <textarea id="ef-notes" rows="2" placeholder="Consultas o preferencias..."></textarea></div>
+  </div>
+  <button class="btn" onclick="enviarExtrasForm('${slug}','${name}','${type}')">Enviar Solicitud 📩</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
+}
+
+async function enviarExtrasForm(slug, name, type){
+  const nameVal  = document.getElementById('ef-name').value.trim();
+  const phone    = document.getElementById('ef-phone').value.trim();
+  const start    = document.getElementById('ef-start').value;
+  const end      = document.getElementById('ef-end').value || null;
+  const people   = parseInt(document.getElementById('ef-people').value)||1;
+  const notes    = document.getElementById('ef-notes').value.trim();
+  if(!nameVal||!phone||!start){ showToast('Ingresa nombre, teléfono y fecha inicio'); return; }
+  const btn = mc.querySelector('.btn');
+  if(btn){ btn.textContent='Enviando...'; btn.disabled=true; }
+  try{
+    // Create extras booking (public endpoint, no auth needed)
+    await fetch('/api/content/extras-booking', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        customer_name: nameVal, customer_phone: phone,
+        item_type: type, item_slug: slug, item_name: name,
+        start_date: start, end_date: end,
+        num_people: people, notes: notes,
+        total_price:0, deposit_paid:0, status:'pendiente',
+      }),
+    });
+    // Also create solicitud for admin notification
+    await fetch('/api/booking/solicitud',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        customer_name:nameVal, customer_phone:phone,
+        service_type: type+':'+slug,
+        title: name,
+        dates_preference: start+(end?' al '+end:''),
+        people: String(people),
+        notes,
+      }),
+    });
+    mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+      <div style="font-size:3rem;margin-bottom:1rem">✅</div>
+      <div class="card-title">Solicitud enviada</div>
+      <p style="color:var(--muted);margin-top:.5rem">El Capitán Tomás te contactará por WhatsApp para coordinar los detalles.</p>
+    </div>
+    <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
+  }catch(e){
+    showToast('Error: '+e.message);
+    if(btn){ btn.textContent='Enviar Solicitud 📩'; btn.disabled=false; }
   }
 }
 
@@ -1155,7 +1215,7 @@ function checkReturnFromPayment(){
 async function init(){
   if(!checkReturnFromPayment()){
     mc.innerHTML = `<div class="card" style="text-align:center"><p>Cargando...</p></div>`;
-    await loadPricesAndAvail();
+    await Promise.all([loadPricesAndAvail(), loadDynamicContent()]);
     renderMenu();
 
     // Show test mode banner

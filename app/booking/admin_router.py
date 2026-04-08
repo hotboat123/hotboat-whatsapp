@@ -1,11 +1,13 @@
 """Admin dashboard router — uses all_appointments as single source of truth."""
+import json
 import logging
 import os
 import re
-from typing import Optional
+import shutil
+from typing import List, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query, Header, Request
+from fastapi import APIRouter, HTTPException, Query, Header, Request, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -1252,3 +1254,309 @@ async def woo_webhook(request: Request):
     except Exception as e:
         logger.error(f"WC webhook error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EXPERIENCES (Otras Experiencias)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+MEDIA_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "media")
+
+
+def _exp_row(r, cols):
+    row = dict(zip(cols, r))
+    return row
+
+
+@admin_router.get("/api/admin/experiencias")
+async def admin_list_experiencias(x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id,slug,name,icon,description,price_per_person,cost_per_person,"
+                "image_path,is_active,display_order FROM experiences ORDER BY display_order,id"
+            )
+            cols = [d.name for d in cur.description]
+            return {"experiences": [_exp_row(r, cols) for r in cur.fetchall()]}
+
+
+class ExperienceBody(BaseModel):
+    slug: str
+    name: str
+    icon: str = "🚣"
+    description: str = ""
+    price_per_person: int = 0
+    cost_per_person: int = 0
+    image_path: Optional[str] = None
+    is_active: bool = True
+    display_order: int = 0
+
+
+@admin_router.post("/api/admin/experiencias")
+async def admin_create_experiencia(body: ExperienceBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO experiences (slug,name,icon,description,price_per_person,cost_per_person,image_path,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (body.slug, body.name, body.icon, body.description,
+                 body.price_per_person, body.cost_per_person,
+                 body.image_path, body.is_active, body.display_order),
+            )
+            new_id = cur.fetchone()[0]
+            conn.commit()
+    return {"ok": True, "id": new_id}
+
+
+@admin_router.put("/api/admin/experiencias/{exp_id}")
+async def admin_update_experiencia(exp_id: int, body: ExperienceBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE experiences SET slug=%s,name=%s,icon=%s,description=%s,"
+                "price_per_person=%s,cost_per_person=%s,image_path=%s,is_active=%s,"
+                "display_order=%s,updated_at=NOW() WHERE id=%s",
+                (body.slug, body.name, body.icon, body.description,
+                 body.price_per_person, body.cost_per_person,
+                 body.image_path, body.is_active, body.display_order, exp_id),
+            )
+            conn.commit()
+    return {"ok": True}
+
+
+@admin_router.delete("/api/admin/experiencias/{exp_id}")
+async def admin_delete_experiencia(exp_id: int, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM experiences WHERE id=%s", (exp_id,))
+            conn.commit()
+    return {"ok": True}
+
+
+@admin_router.post("/api/admin/experiencias/{exp_id}/image")
+async def admin_upload_exp_image(exp_id: int, file: UploadFile = File(...), x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    ext = os.path.splitext(file.filename or "img.jpg")[1].lower() or ".jpg"
+    dest_dir = os.path.join(MEDIA_ROOT, "images", "experiencias", f"exp_{exp_id}")
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, f"main{ext}")
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    rel = f"/media/images/experiencias/exp_{exp_id}/main{ext}"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE experiences SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, exp_id))
+            conn.commit()
+    return {"ok": True, "image_path": rel}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PACKS COMPLETOS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@admin_router.get("/api/admin/packs")
+async def admin_list_packs(x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id,slug,name,icon,description,personas,price_from,cost_from,"
+                "image_path,includes,is_active,display_order FROM packs ORDER BY display_order,id"
+            )
+            cols = [d.name for d in cur.description]
+            rows = []
+            for r in cur.fetchall():
+                row = dict(zip(cols, r))
+                if isinstance(row.get("includes"), str):
+                    row["includes"] = json.loads(row["includes"])
+                rows.append(row)
+            return {"packs": rows}
+
+
+class PackBody(BaseModel):
+    slug: str
+    name: str
+    icon: str = "🎁"
+    description: str = ""
+    personas: str = "2 personas"
+    price_from: int = 0
+    cost_from: int = 0
+    image_path: Optional[str] = None
+    includes: List[str] = []
+    is_active: bool = True
+    display_order: int = 0
+
+
+@admin_router.post("/api/admin/packs")
+async def admin_create_pack(body: PackBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO packs (slug,name,icon,description,personas,price_from,cost_from,image_path,includes,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
+                (body.slug, body.name, body.icon, body.description, body.personas,
+                 body.price_from, body.cost_from, body.image_path,
+                 json.dumps(body.includes, ensure_ascii=False),
+                 body.is_active, body.display_order),
+            )
+            new_id = cur.fetchone()[0]
+            conn.commit()
+    return {"ok": True, "id": new_id}
+
+
+@admin_router.put("/api/admin/packs/{pack_id}")
+async def admin_update_pack(pack_id: int, body: PackBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE packs SET slug=%s,name=%s,icon=%s,description=%s,personas=%s,"
+                "price_from=%s,cost_from=%s,image_path=%s,includes=%s::jsonb,"
+                "is_active=%s,display_order=%s,updated_at=NOW() WHERE id=%s",
+                (body.slug, body.name, body.icon, body.description, body.personas,
+                 body.price_from, body.cost_from, body.image_path,
+                 json.dumps(body.includes, ensure_ascii=False),
+                 body.is_active, body.display_order, pack_id),
+            )
+            conn.commit()
+    return {"ok": True}
+
+
+@admin_router.delete("/api/admin/packs/{pack_id}")
+async def admin_delete_pack(pack_id: int, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM packs WHERE id=%s", (pack_id,))
+            conn.commit()
+    return {"ok": True}
+
+
+@admin_router.post("/api/admin/packs/{pack_id}/image")
+async def admin_upload_pack_image(pack_id: int, file: UploadFile = File(...), x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    ext = os.path.splitext(file.filename or "img.jpg")[1].lower() or ".jpg"
+    dest_dir = os.path.join(MEDIA_ROOT, "images", "packs", f"pack_{pack_id}")
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, f"main{ext}")
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    rel = f"/media/images/packs/pack_{pack_id}/main{ext}"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE packs SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, pack_id))
+            conn.commit()
+    return {"ok": True, "image_path": rel}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EXTRAS BOOKINGS (Calendario de Extras)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ExtrasBookingBody(BaseModel):
+    customer_name: str
+    customer_phone: Optional[str] = None
+    item_type: str          # 'experience' | 'pack' | 'alojamiento'
+    item_slug: str
+    item_name: str
+    start_date: str         # YYYY-MM-DD
+    end_date: Optional[str] = None
+    num_people: int = 1
+    total_price: int = 0
+    deposit_paid: int = 0
+    status: str = "pendiente"
+    notes: Optional[str] = None
+    booking_ref: Optional[str] = None
+
+
+@admin_router.get("/api/admin/extras-bookings")
+async def admin_list_extras_bookings(
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    x_admin_key: str = Header(...),
+):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            q = (
+                "SELECT id,booking_ref,customer_name,customer_phone,item_type,item_slug,item_name,"
+                "start_date,end_date,num_people,total_price,deposit_paid,status,notes,created_at"
+                " FROM extras_bookings"
+            )
+            params = []
+            conds = []
+            if desde:
+                conds.append("start_date >= %s")
+                params.append(desde)
+            if hasta:
+                conds.append("start_date <= %s")
+                params.append(hasta)
+            if conds:
+                q += " WHERE " + " AND ".join(conds)
+            q += " ORDER BY start_date,id"
+            cur.execute(q, params)
+            cols = [d.name for d in cur.description]
+            rows = []
+            for r in cur.fetchall():
+                row = dict(zip(cols, r))
+                for k in ("start_date", "end_date", "created_at"):
+                    if row.get(k):
+                        row[k] = str(row[k])
+                rows.append(row)
+            return {"bookings": rows}
+
+
+@admin_router.post("/api/admin/extras-bookings")
+async def admin_create_extras_booking(body: ExtrasBookingBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO extras_bookings"
+                " (booking_ref,customer_name,customer_phone,item_type,item_slug,item_name,"
+                "  start_date,end_date,num_people,total_price,deposit_paid,status,notes)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (body.booking_ref, body.customer_name, body.customer_phone,
+                 body.item_type, body.item_slug, body.item_name,
+                 body.start_date, body.end_date,
+                 body.num_people, body.total_price, body.deposit_paid,
+                 body.status, body.notes),
+            )
+            new_id = cur.fetchone()[0]
+            conn.commit()
+    return {"ok": True, "id": new_id}
+
+
+@admin_router.put("/api/admin/extras-bookings/{eb_id}")
+async def admin_update_extras_booking(eb_id: int, body: ExtrasBookingBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE extras_bookings SET customer_name=%s,customer_phone=%s,"
+                "item_type=%s,item_slug=%s,item_name=%s,start_date=%s,end_date=%s,"
+                "num_people=%s,total_price=%s,deposit_paid=%s,status=%s,notes=%s"
+                " WHERE id=%s",
+                (body.customer_name, body.customer_phone,
+                 body.item_type, body.item_slug, body.item_name,
+                 body.start_date, body.end_date,
+                 body.num_people, body.total_price, body.deposit_paid,
+                 body.status, body.notes, eb_id),
+            )
+            conn.commit()
+    return {"ok": True}
+
+
+@admin_router.delete("/api/admin/extras-bookings/{eb_id}")
+async def admin_delete_extras_booking(eb_id: int, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM extras_bookings WHERE id=%s", (eb_id,))
+            conn.commit()
+    return {"ok": True}

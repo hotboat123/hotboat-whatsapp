@@ -188,6 +188,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
   border-radius:8px;padding:.7rem;font-weight:700;cursor:pointer;font-size:.9rem}
 
 /* Toggle switch */
+.form-group-adm{margin-bottom:.75rem}.form-group-adm label{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.3rem}.form-group-adm input,.form-group-adm textarea,.form-group-adm select{width:100%;background:var(--deep);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem .7rem;font-family:inherit;font-size:.88rem;outline:none}.form-group-adm textarea{resize:vertical}
+.item-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;display:flex;align-items:flex-start;gap:.75rem}
+.item-card .item-thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--deep)}
+.item-card .item-body{flex:1;min-width:0}
+.item-card .item-actions{display:flex;flex-direction:column;gap:.4rem;flex-shrink:0}
+.status-badge{display:inline-block;padding:.15rem .55rem;border-radius:20px;font-size:.72rem;font-weight:700;text-transform:uppercase}
+.badge-on{background:#00c05533;color:#00c055}.badge-off{background:#ff444433;color:#ff4444}
 .toggle-wrap{position:relative;display:inline-block;width:48px;height:26px;cursor:pointer}
 .toggle-wrap input{opacity:0;width:0;height:0}
 .toggle-slider{position:absolute;inset:0;background:var(--border);border-radius:26px;transition:.3s}
@@ -311,6 +318,15 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div>
     <div class="nav-item" onclick="showSection('emails')" id="nav-emails">
       <span class="ni">✉️</span> Emails reservas
+    </div>
+    <div class="nav-item" onclick="showSection('experiencias')" id="nav-experiencias">
+      <span class="ni">🏔️</span> Experiencias
+    </div>
+    <div class="nav-item" onclick="showSection('packs-admin')" id="nav-packs-admin">
+      <span class="ni">🎁</span> Packs Completos
+    </div>
+    <div class="nav-item" onclick="showSection('cal-extras')" id="nav-cal-extras">
+      <span class="ni">🗓️</span> Calendario Extras
     </div>
     <div class="nav-item" onclick="showSection('settings')" id="nav-settings">
       <span class="ni">⚙️</span> Configuracion
@@ -461,6 +477,145 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
       <!-- Workflow cards (rendered by JS) -->
       <div id="email-workflows-list" style="display:flex;flex-direction:column;gap:1rem"></div>
+    </div>
+
+    <!-- EXPERIENCIAS -->
+    <div id="section-experiencias" class="section">
+      <div style="display:flex;gap:.75rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center">
+        <button class="sync-btn" style="background:var(--green)" onclick="openExpModal()">+ Nueva Experiencia</button>
+        <span style="color:var(--muted);font-size:.82rem">Gestiona las experiencias que aparecen en la app de reservas y WhatsApp.</span>
+      </div>
+      <div id="exp-list" style="display:flex;flex-direction:column;gap:.75rem"></div>
+
+      <!-- Exp Modal -->
+      <div id="exp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+        <div style="max-width:520px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
+          <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem" id="exp-modal-title">Nueva Experiencia</div>
+          <input type="hidden" id="exp-id">
+          <div class="form-group-adm"><label>Nombre *</label><input id="exp-name" placeholder="Rafting, Cabalgata..."></div>
+          <div class="form-group-adm"><label>Slug (identificador único)</label><input id="exp-slug" placeholder="rafting"></div>
+          <div class="form-group-adm"><label>Icono</label><input id="exp-icon" placeholder="🚣" style="width:80px"></div>
+          <div class="form-group-adm"><label>Descripción</label><input id="exp-desc" placeholder="Rio Trancura · Bajo o Alto"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Precio/persona ($)</label><input id="exp-price" type="number" min="0" value="0"></div>
+            <div class="form-group-adm"><label>Costo/persona ($)</label><input id="exp-cost" type="number" min="0" value="0"></div>
+          </div>
+          <div class="form-group-adm"><label>Orden de display</label><input id="exp-order" type="number" min="0" value="0"></div>
+          <div style="display:flex;align-items:center;gap:.75rem;margin:.8rem 0">
+            <label class="toggle-wrap"><input type="checkbox" id="exp-active" checked><span class="toggle-slider"></span></label>
+            <span style="font-size:.85rem">Activa (visible en app y WhatsApp)</span>
+          </div>
+          <div class="form-group-adm" id="exp-img-wrap" style="display:none">
+            <label>Foto actual</label>
+            <img id="exp-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
+          </div>
+          <div class="form-group-adm">
+            <label>Subir nueva foto</label>
+            <input type="file" id="exp-img-file" accept="image/*">
+          </div>
+          <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+            <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveExp()">Guardar</button>
+            <button class="sync-btn" style="flex:1" onclick="closeExpModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PACKS ADMIN -->
+    <div id="section-packs-admin" class="section">
+      <div style="display:flex;gap:.75rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center">
+        <button class="sync-btn" style="background:var(--green)" onclick="openPackModal()">+ Nuevo Pack</button>
+        <span style="color:var(--muted);font-size:.82rem">Gestiona los packs completos disponibles.</span>
+      </div>
+      <div id="pack-list" style="display:flex;flex-direction:column;gap:.75rem"></div>
+
+      <!-- Pack Modal -->
+      <div id="pack-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+        <div style="max-width:560px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
+          <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem" id="pack-modal-title">Nuevo Pack</div>
+          <input type="hidden" id="pack-id">
+          <div class="form-group-adm"><label>Nombre *</label><input id="pack-name" placeholder="Pack Romántico"></div>
+          <div class="form-group-adm"><label>Slug</label><input id="pack-slug" placeholder="romantico"></div>
+          <div style="display:grid;grid-template-columns:60px 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Icono</label><input id="pack-icon" placeholder="💕"></div>
+            <div class="form-group-adm"><label>Personas</label><input id="pack-personas" placeholder="2 personas"></div>
+          </div>
+          <div class="form-group-adm"><label>Descripción</label><input id="pack-desc" placeholder="Escapada romántica..."></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Precio desde ($)</label><input id="pack-price" type="number" min="0" value="0"></div>
+            <div class="form-group-adm"><label>Costo desde ($)</label><input id="pack-cost" type="number" min="0" value="0"></div>
+          </div>
+          <div class="form-group-adm"><label>Incluye (uno por línea)</label>
+            <textarea id="pack-includes" rows="5" placeholder="Open Sky Domo (1 noche)&#10;Paseo en HotBoat&#10;..."></textarea>
+          </div>
+          <div class="form-group-adm"><label>Orden</label><input id="pack-order" type="number" min="0" value="0"></div>
+          <div style="display:flex;align-items:center;gap:.75rem;margin:.8rem 0">
+            <label class="toggle-wrap"><input type="checkbox" id="pack-active" checked><span class="toggle-slider"></span></label>
+            <span style="font-size:.85rem">Activo (visible en app y WhatsApp)</span>
+          </div>
+          <div class="form-group-adm" id="pack-img-wrap" style="display:none">
+            <label>Foto actual</label>
+            <img id="pack-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
+          </div>
+          <div class="form-group-adm">
+            <label>Subir nueva foto</label>
+            <input type="file" id="pack-img-file" accept="image/*">
+          </div>
+          <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+            <button class="sync-btn" style="background:var(--green);flex:1" onclick="savePack()">Guardar</button>
+            <button class="sync-btn" style="flex:1" onclick="closePackModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CALENDARIO EXTRAS -->
+    <div id="section-cal-extras" class="section">
+      <div style="display:flex;gap:.75rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center">
+        <button class="sync-btn" style="background:var(--green)" onclick="openExtrasBookingModal()">+ Nueva Reserva Extra</button>
+        <span style="color:var(--muted);font-size:.82rem">Packs, experiencias y alojamientos con fechas.</span>
+      </div>
+      <div id="cal-extras-list" style="display:flex;flex-direction:column;gap:.75rem"></div>
+
+      <!-- Extras Booking Modal -->
+      <div id="eb-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+        <div style="max-width:520px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
+          <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem" id="eb-modal-title">Nueva Reserva Extra</div>
+          <input type="hidden" id="eb-id">
+          <div class="form-group-adm"><label>Cliente *</label><input id="eb-name" placeholder="Nombre del cliente"></div>
+          <div class="form-group-adm"><label>Teléfono</label><input id="eb-phone" placeholder="+56 9 xxxx xxxx"></div>
+          <div class="form-group-adm"><label>Tipo</label>
+            <select id="eb-type" style="width:100%;background:var(--deep);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem;font-family:inherit">
+              <option value="experience">Experiencia</option>
+              <option value="pack">Pack Completo</option>
+              <option value="alojamiento">Alojamiento</option>
+            </select>
+          </div>
+          <div class="form-group-adm"><label>Item (nombre)</label><input id="eb-item-name" placeholder="Rafting, Pack Romántico..."></div>
+          <div class="form-group-adm"><label>Slug / ID</label><input id="eb-slug" placeholder="rafting, romantico..."></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Fecha inicio *</label><input type="date" id="eb-start"></div>
+            <div class="form-group-adm"><label>Fecha fin</label><input type="date" id="eb-end"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Personas</label><input type="number" id="eb-people" min="1" value="2"></div>
+            <div class="form-group-adm"><label>Total ($)</label><input type="number" id="eb-total" min="0" value="0"></div>
+            <div class="form-group-adm"><label>Depósito ($)</label><input type="number" id="eb-deposit" min="0" value="0"></div>
+          </div>
+          <div class="form-group-adm"><label>Estado</label>
+            <select id="eb-status" style="width:100%;background:var(--deep);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem;font-family:inherit">
+              <option value="pendiente">Pendiente</option>
+              <option value="confirmado">Confirmado</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+          <div class="form-group-adm"><label>Notas</label><textarea id="eb-notes" rows="2"></textarea></div>
+          <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+            <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveExtrasBooking()">Guardar</button>
+            <button class="sync-btn" style="flex:1" onclick="closeEbModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- SETTINGS -->
@@ -661,7 +816,7 @@ function showSection(name){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('section-'+name).classList.add('active');
   document.getElementById('nav-'+name).classList.add('active');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',emails:'Emails de reservas',settings:'Configuracion'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',emails:'Emails de reservas',settings:'Configuracion',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
@@ -670,6 +825,9 @@ function showSection(name){
   if(name==='extras-cat') loadExtrasCat();
   if(name==='emails') loadEmailBookingConfig();
   if(name==='settings'){ loadSettings(); loadVacationDays(); }
+  if(name==='experiencias') loadExperiencias();
+  if(name==='packs-admin') loadPacksAdmin();
+  if(name==='cal-extras') loadCalExtras();
 }
 function toggleSidebar(){
   document.getElementById('sidebar').classList.toggle('open');
@@ -2461,6 +2619,310 @@ function showToast(msg){
     document.body.appendChild(t); }
   t.textContent=msg; t.style.opacity='1';
   clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity='0',3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXPERIENCIAS admin
+// ═══════════════════════════════════════════════════════════════
+let _exps = [];
+
+async function loadExperiencias(){
+  try{
+    const r = await fetch('/api/admin/experiencias',{headers:{'x-admin-key':getKey()}});
+    const d = await r.json();
+    _exps = d.experiences||[];
+    renderExpList();
+  }catch(e){ showToast('Error cargando experiencias: '+e.message); }
+}
+
+function renderExpList(){
+  const el = document.getElementById('exp-list');
+  if(!_exps.length){ el.innerHTML='<p style="color:var(--muted)">No hay experiencias aún. Haz click en "+ Nueva Experiencia".</p>'; return; }
+  el.innerHTML = _exps.map(e=>`
+    <div class="item-card">
+      ${e.image_path ? `<img class="item-thumb" src="${e.image_path}" onerror="this.style.display='none'">` : `<div class="item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:2rem">${e.icon}</div>`}
+      <div class="item-body">
+        <div style="font-weight:700;font-size:.95rem">${e.icon} ${e.name}</div>
+        <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${e.description||''}</div>
+        <div style="font-size:.8rem">Precio: <strong>$${Number(e.price_per_person).toLocaleString('es-CL')}/persona</strong> · Costo: $${Number(e.cost_per_person).toLocaleString('es-CL')}</div>
+        <span class="status-badge ${e.is_active?'badge-on':'badge-off'}" style="margin-top:.35rem">${e.is_active?'Activa':'Inactiva'}</span>
+      </div>
+      <div class="item-actions">
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem" onclick="openExpModal(${e.id})">Editar</button>
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:${e.is_active?'#ff444433':'#00c05533'};color:${e.is_active?'#ff4444':'#00c055'}" onclick="toggleExp(${e.id},${!e.is_active})">${e.is_active?'Desactivar':'Activar'}</button>
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:#ff444422;color:#ff4444" onclick="deleteExp(${e.id})">Eliminar</button>
+      </div>
+    </div>`).join('');
+}
+
+function openExpModal(id){
+  const e = id ? _exps.find(x=>x.id===id) : null;
+  document.getElementById('exp-modal-title').textContent = e ? 'Editar Experiencia' : 'Nueva Experiencia';
+  document.getElementById('exp-id').value = e ? e.id : '';
+  document.getElementById('exp-name').value = e ? e.name : '';
+  document.getElementById('exp-slug').value = e ? e.slug : '';
+  document.getElementById('exp-icon').value = e ? e.icon : '🚣';
+  document.getElementById('exp-desc').value = e ? (e.description||'') : '';
+  document.getElementById('exp-price').value = e ? e.price_per_person : 0;
+  document.getElementById('exp-cost').value = e ? e.cost_per_person : 0;
+  document.getElementById('exp-order').value = e ? e.display_order : 0;
+  document.getElementById('exp-active').checked = e ? e.is_active : true;
+  const wrap = document.getElementById('exp-img-wrap');
+  if(e && e.image_path){ wrap.style.display=''; document.getElementById('exp-img-preview').src=e.image_path; }
+  else { wrap.style.display='none'; }
+  document.getElementById('exp-img-file').value='';
+  document.getElementById('exp-modal').style.display='';
+}
+function closeExpModal(){ document.getElementById('exp-modal').style.display='none'; }
+
+async function saveExp(){
+  const id = document.getElementById('exp-id').value;
+  const body = {
+    slug: document.getElementById('exp-slug').value.trim(),
+    name: document.getElementById('exp-name').value.trim(),
+    icon: document.getElementById('exp-icon').value.trim()||'🚣',
+    description: document.getElementById('exp-desc').value.trim(),
+    price_per_person: +document.getElementById('exp-price').value||0,
+    cost_per_person: +document.getElementById('exp-cost').value||0,
+    display_order: +document.getElementById('exp-order').value||0,
+    is_active: document.getElementById('exp-active').checked,
+    image_path: id ? (_exps.find(x=>x.id==id)?.image_path||null) : null,
+  };
+  if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
+  try{
+    const url = id ? `/api/admin/experiencias/${id}` : '/api/admin/experiencias';
+    const method = id ? 'PUT' : 'POST';
+    const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+    const d = await r.json();
+    const savedId = id || d.id;
+    // Upload image if selected
+    const file = document.getElementById('exp-img-file').files[0];
+    if(file && savedId){
+      const fd = new FormData(); fd.append('file',file);
+      await fetch(`/api/admin/experiencias/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+    }
+    closeExpModal(); await loadExperiencias(); showToast('Experiencia guardada ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function toggleExp(id, active){
+  const e = _exps.find(x=>x.id===id);
+  if(!e) return;
+  const body = {...e, is_active:active, image_path:e.image_path||null};
+  delete body.id; delete body.created_at; delete body.updated_at;
+  await fetch(`/api/admin/experiencias/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+  await loadExperiencias(); showToast(active?'Experiencia activada ✅':'Experiencia desactivada');
+}
+
+async function deleteExp(id){
+  if(!confirm('¿Eliminar esta experiencia?')) return;
+  await fetch(`/api/admin/experiencias/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
+  await loadExperiencias(); showToast('Eliminada');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PACKS ADMIN
+// ═══════════════════════════════════════════════════════════════
+let _packs = [];
+
+async function loadPacksAdmin(){
+  try{
+    const r = await fetch('/api/admin/packs',{headers:{'x-admin-key':getKey()}});
+    const d = await r.json();
+    _packs = d.packs||[];
+    renderPackList();
+  }catch(e){ showToast('Error cargando packs: '+e.message); }
+}
+
+function renderPackList(){
+  const el = document.getElementById('pack-list');
+  if(!_packs.length){ el.innerHTML='<p style="color:var(--muted)">No hay packs. Haz click en "+ Nuevo Pack".</p>'; return; }
+  el.innerHTML = _packs.map(p=>`
+    <div class="item-card">
+      ${p.image_path ? `<img class="item-thumb" src="${p.image_path}" onerror="this.style.display='none'">` : `<div class="item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:2rem">${p.icon}</div>`}
+      <div class="item-body">
+        <div style="font-weight:700;font-size:.95rem">${p.icon} ${p.name}</div>
+        <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${p.personas} · ${p.description||''}</div>
+        <div style="font-size:.8rem">Desde: <strong>$${Number(p.price_from).toLocaleString('es-CL')}</strong> · Costo: $${Number(p.cost_from).toLocaleString('es-CL')}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:.2rem">${(p.includes||[]).slice(0,3).map(i=>'✓ '+i).join(' · ')}</div>
+        <span class="status-badge ${p.is_active?'badge-on':'badge-off'}" style="margin-top:.35rem">${p.is_active?'Activo':'Inactivo'}</span>
+      </div>
+      <div class="item-actions">
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem" onclick="openPackModal(${p.id})">Editar</button>
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:${p.is_active?'#ff444433':'#00c05533'};color:${p.is_active?'#ff4444':'#00c055'}" onclick="togglePack(${p.id},${!p.is_active})">${p.is_active?'Desactivar':'Activar'}</button>
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:#ff444422;color:#ff4444" onclick="deletePack(${p.id})">Eliminar</button>
+      </div>
+    </div>`).join('');
+}
+
+function openPackModal(id){
+  const p = id ? _packs.find(x=>x.id===id) : null;
+  document.getElementById('pack-modal-title').textContent = p ? 'Editar Pack' : 'Nuevo Pack';
+  document.getElementById('pack-id').value = p ? p.id : '';
+  document.getElementById('pack-name').value = p ? p.name : '';
+  document.getElementById('pack-slug').value = p ? p.slug : '';
+  document.getElementById('pack-icon').value = p ? p.icon : '🎁';
+  document.getElementById('pack-personas').value = p ? p.personas : '2 personas';
+  document.getElementById('pack-desc').value = p ? (p.description||'') : '';
+  document.getElementById('pack-price').value = p ? p.price_from : 0;
+  document.getElementById('pack-cost').value = p ? p.cost_from : 0;
+  document.getElementById('pack-includes').value = p ? (p.includes||[]).join('\n') : '';
+  document.getElementById('pack-order').value = p ? p.display_order : 0;
+  document.getElementById('pack-active').checked = p ? p.is_active : true;
+  const wrap = document.getElementById('pack-img-wrap');
+  if(p && p.image_path){ wrap.style.display=''; document.getElementById('pack-img-preview').src=p.image_path; }
+  else { wrap.style.display='none'; }
+  document.getElementById('pack-img-file').value='';
+  document.getElementById('pack-modal').style.display='';
+}
+function closePackModal(){ document.getElementById('pack-modal').style.display='none'; }
+
+async function savePack(){
+  const id = document.getElementById('pack-id').value;
+  const includesTxt = document.getElementById('pack-includes').value;
+  const includes = includesTxt.split('\n').map(s=>s.trim()).filter(Boolean);
+  const body = {
+    slug: document.getElementById('pack-slug').value.trim(),
+    name: document.getElementById('pack-name').value.trim(),
+    icon: document.getElementById('pack-icon').value.trim()||'🎁',
+    description: document.getElementById('pack-desc').value.trim(),
+    personas: document.getElementById('pack-personas').value.trim()||'2 personas',
+    price_from: +document.getElementById('pack-price').value||0,
+    cost_from: +document.getElementById('pack-cost').value||0,
+    display_order: +document.getElementById('pack-order').value||0,
+    is_active: document.getElementById('pack-active').checked,
+    includes,
+    image_path: id ? (_packs.find(x=>x.id==id)?.image_path||null) : null,
+  };
+  if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
+  try{
+    const url = id ? `/api/admin/packs/${id}` : '/api/admin/packs';
+    const method = id ? 'PUT' : 'POST';
+    const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+    const d = await r.json();
+    const savedId = id || d.id;
+    const file = document.getElementById('pack-img-file').files[0];
+    if(file && savedId){
+      const fd = new FormData(); fd.append('file',file);
+      await fetch(`/api/admin/packs/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+    }
+    closePackModal(); await loadPacksAdmin(); showToast('Pack guardado ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function togglePack(id, active){
+  const p = _packs.find(x=>x.id===id);
+  if(!p) return;
+  const body = {...p, is_active:active, image_path:p.image_path||null};
+  delete body.id; delete body.created_at; delete body.updated_at;
+  await fetch(`/api/admin/packs/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+  await loadPacksAdmin(); showToast(active?'Pack activado ✅':'Pack desactivado');
+}
+
+async function deletePack(id){
+  if(!confirm('¿Eliminar este pack?')) return;
+  await fetch(`/api/admin/packs/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
+  await loadPacksAdmin(); showToast('Eliminado');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CALENDARIO EXTRAS
+// ═══════════════════════════════════════════════════════════════
+let _extrasBookings = [];
+
+async function loadCalExtras(){
+  try{
+    const year = document.getElementById('year-sel')?.value || new Date().getFullYear();
+    const r = await fetch(`/api/admin/extras-bookings?desde=${year}-01-01&hasta=${year}-12-31`,{headers:{'x-admin-key':getKey()}});
+    const d = await r.json();
+    _extrasBookings = d.bookings||[];
+    renderCalExtras();
+  }catch(e){ showToast('Error cargando extras: '+e.message); }
+}
+
+const STATUS_COLORS = {pendiente:'#f0a500',confirmado:'#00c055',cancelado:'#ff4444'};
+
+function renderCalExtras(){
+  const el = document.getElementById('cal-extras-list');
+  if(!_extrasBookings.length){ el.innerHTML='<p style="color:var(--muted)">No hay reservas de extras aún.</p>'; return; }
+  // Group by month
+  const byMonth = {};
+  _extrasBookings.forEach(b=>{
+    const m = b.start_date?.slice(0,7)||'?';
+    if(!byMonth[m]) byMonth[m]=[];
+    byMonth[m].push(b);
+  });
+  const typeIcon = {experience:'🏔️',pack:'🎁',alojamiento:'🏠'};
+  el.innerHTML = Object.entries(byMonth).sort(([a],[b])=>a.localeCompare(b)).map(([m,bks])=>`
+    <div style="margin-bottom:1.25rem">
+      <div style="font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">${m}</div>
+      ${bks.map(b=>`
+        <div style="background:var(--card);border:1px solid var(--border);border-left:4px solid ${STATUS_COLORS[b.status]||'var(--border)'};border-radius:10px;padding:.85rem;margin-bottom:.5rem;display:flex;align-items:flex-start;gap:.75rem">
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:.92rem">${typeIcon[b.item_type]||'📌'} ${b.item_name}</div>
+            <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${b.customer_name}${b.customer_phone?' · '+b.customer_phone:''} · ${b.num_people}p</div>
+            <div style="font-size:.8rem">📅 ${b.start_date}${b.end_date && b.end_date!==b.start_date?' → '+b.end_date:''}</div>
+            ${b.total_price?`<div style="font-size:.8rem;color:var(--gold)">Total: $${Number(b.total_price).toLocaleString('es-CL')} · Depósito: $${Number(b.deposit_paid).toLocaleString('es-CL')}</div>`:''}
+            ${b.notes?`<div style="font-size:.75rem;color:var(--muted);margin-top:.25rem">${b.notes}</div>`:''}
+            <span class="status-badge" style="margin-top:.3rem;background:${STATUS_COLORS[b.status]||'#888'}22;color:${STATUS_COLORS[b.status]||'#888'}">${b.status}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:.3rem">
+            <button class="sync-btn" style="font-size:.75rem;padding:.3rem .6rem" onclick="openExtrasBookingModal(${b.id})">Editar</button>
+            <button class="sync-btn" style="font-size:.75rem;padding:.3rem .6rem;background:#ff444422;color:#ff4444" onclick="deleteExtrasBooking(${b.id})">Borrar</button>
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+function openExtrasBookingModal(id){
+  const b = id ? _extrasBookings.find(x=>x.id===id) : null;
+  document.getElementById('eb-modal-title').textContent = b ? 'Editar Reserva Extra' : 'Nueva Reserva Extra';
+  document.getElementById('eb-id').value = b ? b.id : '';
+  document.getElementById('eb-name').value = b ? b.customer_name : '';
+  document.getElementById('eb-phone').value = b ? (b.customer_phone||'') : '';
+  document.getElementById('eb-type').value = b ? b.item_type : 'experience';
+  document.getElementById('eb-item-name').value = b ? b.item_name : '';
+  document.getElementById('eb-slug').value = b ? b.item_slug : '';
+  document.getElementById('eb-start').value = b ? b.start_date : '';
+  document.getElementById('eb-end').value = b ? (b.end_date||'') : '';
+  document.getElementById('eb-people').value = b ? b.num_people : 2;
+  document.getElementById('eb-total').value = b ? b.total_price : 0;
+  document.getElementById('eb-deposit').value = b ? b.deposit_paid : 0;
+  document.getElementById('eb-status').value = b ? b.status : 'pendiente';
+  document.getElementById('eb-notes').value = b ? (b.notes||'') : '';
+  document.getElementById('eb-modal').style.display='';
+}
+function closeEbModal(){ document.getElementById('eb-modal').style.display='none'; }
+
+async function saveExtrasBooking(){
+  const id = document.getElementById('eb-id').value;
+  const body = {
+    customer_name: document.getElementById('eb-name').value.trim(),
+    customer_phone: document.getElementById('eb-phone').value.trim()||null,
+    item_type: document.getElementById('eb-type').value,
+    item_name: document.getElementById('eb-item-name').value.trim(),
+    item_slug: document.getElementById('eb-slug').value.trim()||'custom',
+    start_date: document.getElementById('eb-start').value,
+    end_date: document.getElementById('eb-end').value||null,
+    num_people: +document.getElementById('eb-people').value||1,
+    total_price: +document.getElementById('eb-total').value||0,
+    deposit_paid: +document.getElementById('eb-deposit').value||0,
+    status: document.getElementById('eb-status').value,
+    notes: document.getElementById('eb-notes').value.trim()||null,
+  };
+  if(!body.customer_name||!body.item_name||!body.start_date){ showToast('Cliente, item y fecha inicio son obligatorios'); return; }
+  try{
+    const url = id ? `/api/admin/extras-bookings/${id}` : '/api/admin/extras-bookings';
+    const method = id ? 'PUT' : 'POST';
+    await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+    closeEbModal(); await loadCalExtras(); showToast('Reserva guardada ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function deleteExtrasBooking(id){
+  if(!confirm('¿Eliminar esta reserva?')) return;
+  await fetch(`/api/admin/extras-bookings/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
+  await loadCalExtras(); showToast('Eliminada');
 }
 </script>
 </body>
