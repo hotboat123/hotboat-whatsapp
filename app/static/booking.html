@@ -21,7 +21,7 @@ body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min
   text-align:center;padding:1.2rem 1rem 1rem;
   border-bottom:2px solid var(--coral);
 }
-.logo-img{max-height:80px;max-width:280px;width:auto;object-fit:contain;display:block;margin:0 auto}
+.logo-img{max-height:120px;max-width:420px;width:auto;object-fit:contain;display:block;margin:0 auto;filter:brightness(0) invert(1)}
 /* Fallback text shown only when logo image is missing */
 .logo-wrap{display:none;align-items:center;justify-content:center;gap:.5rem}
 .fire{font-size:2.5rem}
@@ -140,7 +140,7 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem;font-
     <span class="brand">HOTBOAT</span>
     <span class="sub">CHILE</span>
   </div>
-  <p class="tagline">Reserva tu experiencia unica en el lago Villarrica</p>
+  <p class="tagline">Reserva tu experiencia única en Pucón</p>
 </header>
 <main id="main-content"></main>
 <div id="toast" class="toast hidden"></div>
@@ -249,12 +249,7 @@ function stepsHtml(active){
 
 function renderMenu(){
   mc.innerHTML = `
-  <div class="card">
-    <div class="card-title">Bienvenido a HotBoat</div>
-    <div class="info-box">
-      🚤 Paseo en bote caliente · Lago Villarrica · 2 horas · Motor electrico
-    </div>
-    <br>
+  <div class="card" style="padding-top:.8rem;padding-bottom:.8rem">
     <div class="menu-grid">
       <button class="menu-btn" onclick="goReservar()">
         <span class="icon">📅</span><span class="label">Reservar HotBoat</span>
@@ -503,12 +498,12 @@ const PACKS = [
 ];
 
 const ACTIVIDADES = [
-  {id:'hotboat',icon:'🚤',name:'HotBoat',desc:'Paseo 2 horas'},
-  {id:'rafting',icon:'🚣',name:'Rafting',desc:'Bajo o Alto'},
-  {id:'volcan',icon:'🌋',name:'Subida al Volcan',desc:'Trek inolvidable'},
-  {id:'cabalgata',icon:'🐴',name:'Cabalgata',desc:'Ojos del Caburguá'},
-  {id:'velero',icon:'⛵',name:'Navegacion a Vela',desc:'Lago Villarrica'},
-  {id:'auto',icon:'🚗',name:'Arriendo Vehiculo',desc:'$50.000/dia'},
+  {id:'hotboat', icon:'🚤', name:'HotBoat',           desc:'Paseo 2 horas en el lago', pricePP:69990,  flat:false},
+  {id:'rafting', icon:'🚣', name:'Rafting',            desc:'Rio Trancura · Bajo o Alto', pricePP:35000, flat:false},
+  {id:'volcan',  icon:'🌋', name:'Subida al Volcan',   desc:'Trek guiado',               pricePP:40000,  flat:false},
+  {id:'cabalgata',icon:'🐴',name:'Cabalgata',          desc:'Ojos del Caburguá',         pricePP:35000,  flat:false},
+  {id:'velero',  icon:'⛵', name:'Navegacion a Vela',  desc:'Lago Villarrica',            pricePP:50000,  flat:false},
+  {id:'auto',    icon:'🚗', name:'Arriendo Vehiculo',  desc:'$50.000/dia',               pricePP:50000,  flat:true},
 ];
 
 function showAlojamientos(){
@@ -647,10 +642,128 @@ function toggleActividad(id){
 function submitArmaPack(){
   const sel = Object.entries(S.armaActividades||{}).filter(([,v])=>v).map(([k])=>k);
   if(sel.length===0){ showToast('Elige al menos una actividad'); return; }
-  const actNames = sel.map(id=>ACTIVIDADES.find(a=>a.id===id)?.name||id).join(' + ');
-  const aljName = S.armaAlojamiento ? ALOJAMIENTOS.find(a=>a.id===S.armaAlojamiento)?.name||'' : '';
-  const ctx = 'armaPack:'+sel.join('+')+'|alj:'+(S.armaAlojamiento||'none');
-  showSolicitudForm('Pack: '+actNames, ctx, 'Actividades: '+actNames+(aljName?'\nAlojamiento: '+aljName:''));
+  showArmaPackCart();
+}
+
+function _armaTotal(personas){
+  const sel = Object.entries(S.armaActividades||{}).filter(([,v])=>v).map(([k])=>k);
+  let total = 0;
+  sel.forEach(id=>{
+    const act = ACTIVIDADES.find(a=>a.id===id);
+    if(!act) return;
+    total += act.flat ? act.pricePP : act.pricePP * personas;
+  });
+  if(S.armaAlojamiento){
+    const alj = ALOJAMIENTOS.find(a=>a.id===S.armaAlojamiento);
+    if(alj){
+      // parse "$XX.XXX/noche" → number
+      const raw = alj.price.replace(/\./g,'').replace(/[^0-9]/g,'');
+      total += parseInt(raw,10)||0;
+    }
+  }
+  return total;
+}
+
+function showArmaPackCart(){
+  const sel = Object.entries(S.armaActividades||{}).filter(([,v])=>v).map(([k])=>k);
+  const personas = S.armaPersonas || 2;
+  const alj = S.armaAlojamiento ? ALOJAMIENTOS.find(a=>a.id===S.armaAlojamiento) : null;
+  const total = _armaTotal(personas);
+  const mitad = Math.round(total/2);
+
+  const rows = sel.map(id=>{
+    const act = ACTIVIDADES.find(a=>a.id===id);
+    if(!act) return '';
+    const monto = act.flat ? act.pricePP : act.pricePP * personas;
+    return `<div class="summary-row">
+      <span>${act.icon} ${act.name}${act.flat?'':' ×'+personas}</span>
+      <span>$${monto.toLocaleString('es-CL')}</span>
+    </div>`;
+  }).join('');
+
+  const aljRow = alj ? `<div class="summary-row">
+    <span>${alj.icon} ${alj.name}</span>
+    <span>${alj.price}${alj.unit}</span>
+  </div>` : '';
+
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">🛒 Tu Pack</div>
+    <div style="margin-bottom:.8rem">
+      <label style="font-size:.8rem;color:var(--muted)">¿Cuántas personas?</label>
+      <div class="counter" style="margin-top:.4rem">
+        <button class="counter-btn" onclick="S.armaPersonas=Math.max(1,(S.armaPersonas||2)-1);showArmaPackCart()">−</button>
+        <div class="counter-val">${personas}</div>
+        <button class="counter-btn" onclick="S.armaPersonas=(S.armaPersonas||2)+1;showArmaPackCart()">+</button>
+      </div>
+    </div>
+    ${rows}${aljRow}
+    <div style="border-top:1px solid var(--border);margin:.8rem 0"></div>
+    <div class="summary-row total"><span>Total estimado</span><span>$${total.toLocaleString('es-CL')}</span></div>
+    <div class="summary-row" style="color:var(--gold);font-weight:700">
+      <span>💳 Reservar ahora (50%)</span>
+      <span>$${mitad.toLocaleString('es-CL')}</span>
+    </div>
+    <div style="background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.2);border-radius:10px;padding:.7rem;font-size:.78rem;color:var(--muted);margin-top:.8rem;line-height:1.6">
+      El 50% restante se paga el dia de la actividad.<br>
+      Los precios son referenciales y pueden ajustarse segun fechas.
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">👤 Tus datos</div>
+    <div class="form-group"><label>Nombre completo *</label>
+      <input type="text" id="ap-name" placeholder="Tu nombre"></div>
+    <div class="form-group"><label>WhatsApp / Telefono *</label>
+      <input type="tel" id="ap-phone" placeholder="+56 9 xxxx xxxx"></div>
+    <div class="form-group"><label>Fechas preferidas *</label>
+      <input type="text" id="ap-dates" placeholder="Ej: 15 al 17 de enero 2026"></div>
+    <div class="form-group"><label>Mensaje adicional</label>
+      <textarea id="ap-notes" rows="2" placeholder="Consultas o preferencias..."></textarea></div>
+  </div>
+  <button class="btn" onclick="pagarArmaPack(${mitad},${total})">💳 Pagar reserva ($${mitad.toLocaleString('es-CL')}) →</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showArmaPack()">← Modificar seleccion</button>`;
+}
+
+async function pagarArmaPack(mitad, total){
+  const name  = document.getElementById('ap-name').value.trim();
+  const phone = document.getElementById('ap-phone').value.trim();
+  const dates = document.getElementById('ap-dates').value.trim();
+  if(!name||!phone){ showToast('Ingresa nombre y telefono'); return; }
+  const sel = Object.entries(S.armaActividades||{}).filter(([,v])=>v).map(([k])=>k);
+  const btn = mc.querySelector('.btn');
+  if(btn){ btn.textContent='Procesando...'; btn.disabled=true; }
+  try{
+    const r = await fetch('/api/booking/arma-pack-pay',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        customer_name: name,
+        customer_phone: phone,
+        activities: sel,
+        alojamiento: S.armaAlojamiento||'',
+        num_people: S.armaPersonas||2,
+        dates_preference: dates,
+        notes: document.getElementById('ap-notes').value.trim(),
+        total_amount: total,
+        deposit_amount: mitad,
+      }),
+    });
+    const d = await r.json();
+    if(d.payment_url){
+      window.location.href = d.payment_url;
+    } else if(d.booking_ref){
+      mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+        <div style="font-size:3rem;margin-bottom:1rem">✅</div>
+        <div class="card-title">Solicitud enviada</div>
+        <p style="color:var(--muted);margin-top:.5rem">El Capitán Tomás te contactará por WhatsApp para coordinar el pago.</p>
+        <p style="color:var(--muted);font-size:.82rem;margin-top:.5rem">Ref: ${d.booking_ref}</p>
+      </div>
+      <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
+    }
+  }catch(e){
+    showToast('Error: '+e.message);
+    if(btn){ btn.textContent='💳 Pagar reserva'; btn.disabled=false; }
+  }
 }
 
 function showSolicitudForm(title, ctx, prefill){

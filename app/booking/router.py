@@ -416,6 +416,97 @@ async def create_solicitud(request: SolicitudRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ArmaPackPayRequest(BaseModel):
+    customer_name: str
+    customer_phone: str
+    activities: list
+    alojamiento: Optional[str] = ""
+    num_people: int = 2
+    dates_preference: Optional[str] = None
+    notes: Optional[str] = None
+    total_amount: int
+    deposit_amount: int
+
+
+@router.post("/api/booking/arma-pack-pay")
+async def arma_pack_pay(request: ArmaPackPayRequest):
+    """Create a deposit payment (50%) for a custom pack via MercadoPago."""
+    from app.db.connection import get_connection
+    booking_ref = generate_booking_ref()
+    act_list = ", ".join(request.activities)
+    notes_full = (
+        f"Arma tu Pack — deposito 50%\n"
+        f"Actividades: {act_list}\n"
+        f"Alojamiento: {request.alojamiento or 'ninguno'}\n"
+        f"Personas: {request.num_people}\n"
+        f"Fechas: {request.dates_preference or '-'}\n"
+        f"Total estimado: ${request.total_amount:,}\n"
+        f"Deposito (50%): ${request.deposit_amount:,}\n"
+        f"Notas: {request.notes or '-'}"
+    )
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO hotboat_appointments"
+                    " (booking_ref,customer_name,customer_phone,customer_email,"
+                    "  booking_date,booking_time,num_people,"
+                    "  price_per_person,subtotal,total_price,status,source,notes)"
+                    " VALUES (%s,%s,%s,%s,CURRENT_DATE,'00:00',%s,0,%s,%s,'pendiente','web_armapack',%s)"
+                    " RETURNING booking_ref",
+                    (
+                        booking_ref,
+                        request.customer_name, request.customer_phone, None,
+                        request.num_people,
+                        request.deposit_amount, request.total_amount,
+                        notes_full,
+                    )
+                )
+                conn.commit()
+    except Exception as e:
+        logger.error(f"arma_pack_pay DB error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    token = os.getenv("MERCADOPAGO_ACCESS_TOKEN", "")
+    payment_url = None
+    if token:
+        try:
+            import httpx
+            base = os.getenv("PUBLIC_BASE_URL", "https://hotboat-app.up.railway.app")
+            payload = {
+                "items": [{
+                    "id": booking_ref,
+                    "title": f"HotBoat Pack ({act_list}) – Deposito 50%",
+                    "quantity": 1,
+                    "currency_id": "CLP",
+                    "unit_price": request.deposit_amount,
+                }],
+                "payer": {"name": request.customer_name, "phone": {"number": request.customer_phone}},
+                "back_urls": {
+                    "success": f"{base}/booking/success?booking_ref={booking_ref}",
+                    "failure": f"{base}/booking/failure?booking_ref={booking_ref}",
+                    "pending": f"{base}/booking/pending?booking_ref={booking_ref}",
+                },
+                "auto_return": "approved",
+                "external_reference": booking_ref,
+                "statement_descriptor": "HotBoat Chile",
+            }
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    "https://api.mercadopago.com/checkout/preferences",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=15,
+                )
+                r.raise_for_status()
+                d = r.json()
+                payment_url = d.get("init_point") or d.get("sandbox_init_point")
+        except Exception as mp_e:
+            logger.warning(f"MercadoPago preference failed for arma-pack: {mp_e}")
+
+    return {"booking_ref": booking_ref, "payment_url": payment_url, "deposit_amount": request.deposit_amount}
+
+
 def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):
     """Upsert a hotboat web booking into all_appointments."""
     from app.db.connection import get_connection
