@@ -18,14 +18,16 @@
 body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min-height:100vh}
 #hdr{
   background:linear-gradient(135deg,var(--deep) 0%,var(--blue) 100%);
-  text-align:center;padding:2rem 1rem 1.5rem;
+  text-align:center;padding:1.2rem 1rem 1rem;
   border-bottom:2px solid var(--coral);
 }
-.logo-wrap{display:flex;align-items:center;justify-content:center;gap:.5rem}
+.logo-img{max-height:80px;max-width:280px;width:auto;object-fit:contain;display:block;margin:0 auto}
+/* Fallback text shown only when logo image is missing */
+.logo-wrap{display:none;align-items:center;justify-content:center;gap:.5rem}
 .fire{font-size:2.5rem}
 .brand{font-family:'Bebas Neue',sans-serif;font-size:3rem;color:var(--text);letter-spacing:.1em}
 .sub{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--coral)}
-.tagline{margin-top:.5rem;color:var(--muted);font-size:.95rem;font-weight:300}
+.tagline{margin-top:.4rem;color:var(--muted);font-size:.85rem;font-weight:300}
 #main-content{max-width:680px;margin:0 auto;padding:1.5rem 1rem 4rem}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:1.5rem;margin-bottom:1.2rem}
 .card-title{font-family:'Bebas Neue',sans-serif;font-size:1.6rem;color:var(--coral);letter-spacing:.05em;margin-bottom:1rem}
@@ -127,7 +129,13 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem;font-
 <body>
 <div id="app">
 <header id="hdr">
-  <div class="logo-wrap">
+  <img
+    src="/static/logo.png"
+    alt="HotBoat Chile"
+    class="logo-img"
+    onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='flex'"
+  >
+  <div class="logo-wrap" id="logo-fallback">
     <span class="fire">🔥</span>
     <span class="brand">HOTBOAT</span>
     <span class="sub">CHILE</span>
