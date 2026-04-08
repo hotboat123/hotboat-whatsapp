@@ -21,8 +21,28 @@
 !documents/*.md
 !accommodations/*.md
 
-# Experiencias: estructura y README (las imágenes las subes en deploy / volumen)
+# Experiencias: estructura, README e imágenes
 !images/
 !images/experiencias/
 !images/experiencias/**/*.md
 !images/experiencias/**/.gitkeep
+!images/experiencias/**/*.jpg
+!images/experiencias/**/*.jpeg
+!images/experiencias/**/*.png
+!images/experiencias/**/*.webp
+
+# Alojamientos: imágenes
+!images/alojamientos/
+!images/alojamientos/**
+!images/alojamientos/**/*.jpg
+!images/alojamientos/**/*.jpeg
+!images/alojamientos/**/*.png
+!images/alojamientos/**/*.webp
+
+# Packs: imágenes y estructura
+!images/packs/
+!images/packs/**
+!images/packs/**/*.jpg
+!images/packs/**/*.jpeg
+!images/packs/**/*.png
+!images/packs/**/*.webp
