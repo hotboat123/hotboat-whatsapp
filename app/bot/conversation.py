@@ -478,6 +478,19 @@ class ConversationManager:
                     ],
                     "delay": 1.5
                 }
+            # PRIORITY 0.66: Safety / security question — always answer regardless of active flow
+            elif any(w in message_text.lower() for w in ["seguridad", "seguro", "segura", "peligro", "peligroso", "peligrosa", "riesgo", "accidente", "emergencia", "salvavidas", "chaleco", "ahog"]):
+                logger.info("Safety question detected - sending safety info sequence")
+                response = {
+                    "type": "sequence",
+                    "messages": [
+                        "Tenemos aro salvavidas y chalecos salvavidas en caso de emergencia 🦺",
+                        "Estamos comunicados todo el tiempo por radio 📻",
+                        "Tenemos un bote de emergencia y un kayak de apoyo por cualquier emergencia 🚣",
+                        "La laguna es super tranquila la verdad, hasta ahora no hemos tenido ningún problema 😊",
+                    ],
+                    "delay": 1.5
+                }
             # PRIORITY 0.7: Check if user wants to return to main menu
             elif self._is_menu_request(message_text):
                 logger.info("User requested main menu - clearing all flows")
