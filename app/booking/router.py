@@ -287,7 +287,8 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         except Exception as pe:
             logger.warning(f"WooCommerce skip: {pe}")
             try:
-                payment_url = await _create_mp_preference(booking_ref, request, total)
+                deposit = round(total * 0.5)
+                payment_url = await _create_mp_preference(booking_ref, request, deposit)
             except Exception as mpe:
                 logger.warning(f"MercadoPago skip: {mpe}")
 
@@ -328,7 +329,7 @@ async def _create_mp_preference(booking_ref: str, req: CreateBookingRequest, tot
     base = os.getenv("PUBLIC_BASE_URL", "https://hotboat-app.up.railway.app")
     payload = {
         "items": [{"id": booking_ref, "quantity": 1, "currency_id": "CLP", "unit_price": total,
-                   "title": f"HotBoat {req.booking_date} {req.booking_time} {req.num_people}p"}],
+                   "title": f"HotBoat – Depósito 50% | {req.booking_date} {req.booking_time} {req.num_people}p"}],
         "payer": {"name": req.customer_name, "phone": {"number": req.customer_phone}},
         "back_urls": {
             "success": f"{base}/booking/success?booking_ref={booking_ref}",
