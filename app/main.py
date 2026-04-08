@@ -261,7 +261,7 @@ async def _run_auto_sync():
                         cur.execute("""
                             DELETE FROM hotboat_appointments
                             WHERE status = 'pending_payment'
-                              AND created_at < NOW() - INTERVAL '45 minutes'
+                              AND created_at < NOW() - INTERVAL '10 minutes'
                         """)
                         deleted = cur.rowcount
                         conn.commit()
