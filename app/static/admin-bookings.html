@@ -442,6 +442,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th>Ícono</th>
               <th>Nombre extra</th>
               <th>Descripción (app)</th>
+              <th style="text-align:center">Mostrar en<br>reservas</th>
               <th style="text-align:right">Precio venta</th>
               <th style="text-align:right">Costo</th>
               <th style="text-align:right">Utilidad</th>
@@ -449,7 +450,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th></th>
             </tr>
           </thead>
-          <tbody id="ec-tbody"><tr><td colspan="8" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="ec-tbody"><tr><td colspan="9" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -1665,13 +1666,16 @@ function sourceColor(s){ if(!s) return '#7070a0'; if(s==='sheets') return '#7070
 // Default emoji icon for an extra based on its slugified key
 function defaultExtraIcon(key){
   const k = (key||'').toLowerCase();
+  if(k.includes('roman')||k.includes('rosas')||k.includes('flores')) return '🌹';
   if(k.includes('foto'))            return '📸';
   if(k.includes('gopro')||k.includes('video')||k.includes('camara')||k.includes('cam_')) return '🎥';
   if(k.includes('buceo')||k.includes('dive')) return '🤿';
   if(k.includes('snorkel'))         return '🤿';
   if(k.includes('kayak'))           return '🛶';
-  if(k.includes('sup')||k.includes('tabla')) return '🏄';
-  if(k.includes('traslado')||k.includes('transfer')) return '🚐';
+  if(k.includes('picot')||k.includes('tabla')) return '🧺';
+  if(k.includes('sup'))             return '🏄';
+  if(k.includes('traslado')||k.includes('transporte')||k.includes('transfer')) return '🚗';
+  if(k.includes('toalla')||k.includes('poncho')) return '🏖️';
   if(k.includes('pizza')||k.includes('sanguchito')) return '🍕';
   if(k.includes('espumante')||k.includes('champagne')||k.includes('botella')||k.includes('vino')) return '🍾';
   if(k.includes('cocktail')||k.includes('trago')||k.includes('pisco')) return '🍹';
@@ -1683,6 +1687,7 @@ function defaultExtraIcon(key){
   if(k.includes('seguro'))          return '🛡️';
   if(k.includes('guia'))            return '🧭';
   if(k.includes('nino')||k.includes('menor')) return '👦';
+  if(k.includes('flex'))            return '🔒';
   return '⭐';
 }
 
@@ -2468,6 +2473,13 @@ function renderExtrasCat(list){
           placeholder="Texto informativo visible en la app"
           oninput="ecMarkDirty('${e.id}')" style="min-width:220px;font-size:.8rem">
       </td>
+      <td style="text-align:center">
+        <label class="toggle-wrap" title="Mostrar en app de reservas">
+          <input type="checkbox" ${e.show_in_booking!==false?'checked':''} data-field="show_in_booking"
+            onchange="ecMarkDirty('${e.id}')">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
       <td>
         <input class="ec-input" type="number" min="0" value="${e.price||0}"
           oninput="ecMarkDirty('${e.id}');ecUpdateRow('${e.id}')" data-field="price">
@@ -2494,9 +2506,13 @@ function filterExtrasCat(){
 function ecGetRow(id){
   const row = document.getElementById(`ec-row-${id}`);
   if(!row) return null;
-  const inputs = row.querySelectorAll('.ec-input');
   const data = {};
-  inputs.forEach(inp=>{ data[inp.dataset.field] = inp.type==='number' ? +inp.value : inp.value; });
+  row.querySelectorAll('.ec-input').forEach(inp=>{
+    data[inp.dataset.field] = inp.type==='number' ? +inp.value : inp.value;
+  });
+  // read checkbox for show_in_booking
+  const chk = row.querySelector('input[data-field="show_in_booking"]');
+  if(chk) data.show_in_booking = chk.checked;
   return data;
 }
 

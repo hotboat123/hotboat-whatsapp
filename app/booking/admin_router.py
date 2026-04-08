@@ -931,14 +931,15 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                            raw->>'Precio' AS precio,
                            raw->>'costo' AS costo,
                            COALESCE(raw->>'icon', '') AS icon,
-                           COALESCE(raw->>'description', '') AS description
+                           COALESCE(raw->>'description', '') AS description,
+                           COALESCE(raw->>'show_in_booking', 'true') AS show_in_booking
                     FROM "Precios Extras"
                     WHERE raw->>'Extra' IS NOT NULL
                     ORDER BY raw->>'Extra', updated_at DESC
                 """)
                 extras = []
                 seen_keys: set = set()
-                for row_id, name, precio, costo, icon, description in cur.fetchall():
+                for row_id, name, precio, costo, icon, description, show_in_booking in cur.fetchall():
                     key = _slugify_extra(name)
                     if key in seen_keys:
                         continue
@@ -951,6 +952,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                         "cost": _parse_clp(costo) if costo else 0,
                         "icon": icon or "",
                         "description": description or "",
+                        "show_in_booking": show_in_booking != "false",
                     })
         extras.sort(key=lambda x: x["name"])
         return {"extras": extras}
@@ -969,6 +971,8 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         cost = int(body.get("cost") or 0)
         icon = body.get("icon", "").strip()
         description = body.get("description", "").strip()
+        show_in_booking = body.get("show_in_booking", True)
+        show_str = "false" if not show_in_booking else "true"
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
         margen = f"{round(price / cost * 100)}%" if cost else ""
@@ -984,10 +988,11 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                         || jsonb_build_object('margen', %s::text)
                         || jsonb_build_object('Utilidad', %s::text)
                         || jsonb_build_object('icon', %s::text)
-                        || jsonb_build_object('description', %s::text),
+                        || jsonb_build_object('description', %s::text)
+                        || jsonb_build_object('show_in_booking', %s::text),
                         updated_at = NOW()
                     WHERE id = %s
-                """, (name, str(price), str(cost), margen, str(utilidad), icon, description, extra_id))
+                """, (name, str(price), str(cost), margen, str(utilidad), icon, description, show_str, extra_id))
                 conn.commit()
         return {"ok": True}
     except HTTPException:
@@ -1009,12 +1014,14 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
         description = body.get("description", "").strip()
+        show_in_booking = body.get("show_in_booking", True)
         margen = f"{round(price / cost * 100)}%" if cost else ""
         utilidad = price - cost
         new_id = hashlib.sha1(f"{name}{time.time()}".encode()).hexdigest()
         raw = {"id": new_id, "Extra": name, "Precio": str(price),
                "costo": str(cost), "margen": margen, "Utilidad": str(utilidad),
-               "description": description}
+               "description": description,
+               "show_in_booking": "false" if not show_in_booking else "true"}
         with get_connection() as conn:
             with conn.cursor() as cur:
                 from psycopg.types.json import Jsonb as PgJson

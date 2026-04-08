@@ -15,9 +15,29 @@ MEDIA_BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file
 
 # ── Public endpoints ──────────────────────────────────────────────────────────
 
+def _default_extra_icon(key: str) -> str:
+    k = (key or "").lower()
+    if "roman" in k or "flores" in k or "rosas" in k:  return "🌹"
+    if "tabla" in k or "picot" in k:                   return "🧺"
+    if "video" in k or "gopro" in k or "camara" in k:  return "🎥"
+    if "traslado" in k or "transporte" in k or "trans" in k: return "🚗"
+    if "toalla" in k or "poncho" in k:                 return "🏖️"
+    if "espumante" in k or "champa" in k or "vino" in k or "botella" in k: return "🍾"
+    if "cocktail" in k or "trago" in k or "pisco" in k: return "🍹"
+    if "cerveza" in k:                                 return "🍺"
+    if "foto" in k:                                    return "📸"
+    if "kayak" in k:                                   return "🛶"
+    if "sup" in k:                                     return "🏄"
+    if "musica" in k or "dj" in k:                     return "🎵"
+    if "deco" in k:                                    return "🎊"
+    if "pack" in k:                                    return "📦"
+    if "flex" in k:                                    return "🔒"
+    return "🎁"
+
+
 @content_router.get("/api/content/extras")
 def list_extras():
-    """Public endpoint: returns the extras catalog with name, price, icon and description."""
+    """Public endpoint: returns extras visible in the booking app (show_in_booking != false)."""
     try:
         from app.booking.admin_router import _slugify_extra, _parse_clp
         with get_connection() as conn:
@@ -28,24 +48,28 @@ def list_extras():
                            raw->>'Extra'       AS name,
                            raw->>'Precio'      AS precio,
                            COALESCE(raw->>'icon', '')        AS icon,
-                           COALESCE(raw->>'description', '') AS description
+                           COALESCE(raw->>'description', '') AS description,
+                           COALESCE(raw->>'show_in_booking', 'true') AS show_in_booking
                     FROM "Precios Extras"
                     WHERE raw->>'Extra' IS NOT NULL
                     ORDER BY raw->>'Extra', updated_at DESC
                 """)
                 extras = []
                 seen: set = set()
-                for row_id, name, precio, icon, description in cur.fetchall():
+                for row_id, name, precio, icon, description, show_in_booking in cur.fetchall():
+                    if show_in_booking == "false":
+                        continue
                     key = _slugify_extra(name)
                     if key in seen:
                         continue
                     seen.add(key)
+                    resolved_icon = icon or _default_extra_icon(key)
                     extras.append({
                         "id": row_id,
                         "key": key,
                         "name": name,
                         "price": _parse_clp(precio),
-                        "icon": icon or "",
+                        "icon": resolved_icon,
                         "description": description or "",
                     })
         extras.sort(key=lambda x: x["name"])
