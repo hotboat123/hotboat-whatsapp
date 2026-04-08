@@ -176,14 +176,7 @@ const DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 function calLeadDaysMonFirst(jsGetDay){ return (jsGetDay + 6) % 7; }
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-const EXTRAS_CATALOG = [
-  {id:'tabla_g',name:'Tabla de Picoteo Grande (4 pers)',price:25000,icon:'🧺'},
-  {id:'tabla_p',name:'Tabla de Picoteo Pequeña (2 pers)',price:20000,icon:'🧺'},
-  {id:'modo_rom',name:'Modo Romantico',price:25000,icon:'🌹'},
-  {id:'video_15',name:'Video Cinematografico 15s',price:30000,icon:'🎥'},
-  {id:'transp',name:'Transporte desde Pucon',price:50000,icon:'🚗'},
-  {id:'toalla_p',name:'Toalla Poncho',price:10000,icon:'🏖️'},
-];
+let EXTRAS_CATALOG = [];  // loaded from /api/content/extras
 
 function showToast(msg, ms=3000){
   const t = $('toast');
@@ -223,13 +216,21 @@ function mediaBlock(id, imgSrc, pdfSrc){
 
 async function loadPricesAndAvail(){
   try{
-    const [pr, av] = await Promise.all([
+    const [pr, av, ex] = await Promise.all([
       fetch('/api/booking/prices').then(r=>r.json()),
       fetch('/api/booking/availability?days=90').then(r=>r.json()),
+      fetch('/api/content/extras').then(r=>r.json()),
     ]);
     S.prices = pr.prices || {};
     S.availability = av.availability || {};
     S.fakeBooked = av.fake_booked_slots || {};
+    EXTRAS_CATALOG = (ex.extras || []).map(e=>({
+      id: e.key || e.id,
+      name: e.name,
+      price: e.price,
+      icon: e.icon || '🎁',
+      description: e.description || '',
+    }));
   }catch(e){ showToast('Error cargando disponibilidad'); }
 }
 
@@ -1090,7 +1091,10 @@ function goExtras(){
 function renderExtras(){
   const items = EXTRAS_CATALOG.map(e=>`
     <div class="extra-item ${S.extras[e.id]?'selected':''}" onclick="toggleExtra('${e.id}')">
-      <div><div class="extra-name">${e.icon} ${e.name}</div></div>
+      <div>
+        <div class="extra-name">${e.icon} ${e.name}</div>
+        ${e.description ? `<div style="font-size:.75rem;color:var(--muted);margin-top:.15rem">${e.description}</div>` : ''}
+      </div>
       <div class="extra-price">+$${e.price.toLocaleString('es-CL')}</div>
     </div>`).join('');
   const flexCls = S.hasFlex ? 'selected' : '';

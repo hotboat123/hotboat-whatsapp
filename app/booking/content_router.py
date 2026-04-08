@@ -15,6 +15,46 @@ MEDIA_BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file
 
 # ── Public endpoints ──────────────────────────────────────────────────────────
 
+@content_router.get("/api/content/extras")
+def list_extras():
+    """Public endpoint: returns the extras catalog with name, price, icon and description."""
+    try:
+        from app.booking.admin_router import _slugify_extra, _parse_clp
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT DISTINCT ON (raw->>'Extra')
+                           id,
+                           raw->>'Extra'       AS name,
+                           raw->>'Precio'      AS precio,
+                           COALESCE(raw->>'icon', '')        AS icon,
+                           COALESCE(raw->>'description', '') AS description
+                    FROM "Precios Extras"
+                    WHERE raw->>'Extra' IS NOT NULL
+                    ORDER BY raw->>'Extra', updated_at DESC
+                """)
+                extras = []
+                seen: set = set()
+                for row_id, name, precio, icon, description in cur.fetchall():
+                    key = _slugify_extra(name)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    extras.append({
+                        "id": row_id,
+                        "key": key,
+                        "name": name,
+                        "price": _parse_clp(precio),
+                        "icon": icon or "",
+                        "description": description or "",
+                    })
+        extras.sort(key=lambda x: x["name"])
+        return {"extras": extras}
+    except Exception as e:
+        logger.error(f"Error fetching public extras: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @content_router.get("/api/content/alojamientos")
 def list_alojamientos(active_only: bool = True):
     with get_connection() as conn:

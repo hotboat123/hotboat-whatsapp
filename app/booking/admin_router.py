@@ -930,14 +930,15 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                            raw->>'Extra' AS name,
                            raw->>'Precio' AS precio,
                            raw->>'costo' AS costo,
-                           COALESCE(raw->>'icon', '') AS icon
+                           COALESCE(raw->>'icon', '') AS icon,
+                           COALESCE(raw->>'description', '') AS description
                     FROM "Precios Extras"
                     WHERE raw->>'Extra' IS NOT NULL
                     ORDER BY raw->>'Extra', updated_at DESC
                 """)
                 extras = []
                 seen_keys: set = set()
-                for row_id, name, precio, costo, icon in cur.fetchall():
+                for row_id, name, precio, costo, icon, description in cur.fetchall():
                     key = _slugify_extra(name)
                     if key in seen_keys:
                         continue
@@ -949,6 +950,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                         "price": _parse_clp(precio),
                         "cost": _parse_clp(costo) if costo else 0,
                         "icon": icon or "",
+                        "description": description or "",
                     })
         extras.sort(key=lambda x: x["name"])
         return {"extras": extras}
@@ -966,6 +968,7 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         price = int(body.get("price") or 0)
         cost = int(body.get("cost") or 0)
         icon = body.get("icon", "").strip()
+        description = body.get("description", "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
         margen = f"{round(price / cost * 100)}%" if cost else ""
@@ -980,10 +983,11 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                         || jsonb_build_object('costo', %s::text)
                         || jsonb_build_object('margen', %s::text)
                         || jsonb_build_object('Utilidad', %s::text)
-                        || jsonb_build_object('icon', %s::text),
+                        || jsonb_build_object('icon', %s::text)
+                        || jsonb_build_object('description', %s::text),
                         updated_at = NOW()
                     WHERE id = %s
-                """, (name, str(price), str(cost), margen, str(utilidad), icon, extra_id))
+                """, (name, str(price), str(cost), margen, str(utilidad), icon, description, extra_id))
                 conn.commit()
         return {"ok": True}
     except HTTPException:
@@ -1004,11 +1008,13 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
         cost = int(body.get("cost") or 0)
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
+        description = body.get("description", "").strip()
         margen = f"{round(price / cost * 100)}%" if cost else ""
         utilidad = price - cost
         new_id = hashlib.sha1(f"{name}{time.time()}".encode()).hexdigest()
         raw = {"id": new_id, "Extra": name, "Precio": str(price),
-               "costo": str(cost), "margen": margen, "Utilidad": str(utilidad)}
+               "costo": str(cost), "margen": margen, "Utilidad": str(utilidad),
+               "description": description}
         with get_connection() as conn:
             with conn.cursor() as cur:
                 from psycopg.types.json import Jsonb as PgJson

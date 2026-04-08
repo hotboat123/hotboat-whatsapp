@@ -441,6 +441,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <tr>
               <th>Ícono</th>
               <th>Nombre extra</th>
+              <th>Descripción (app)</th>
               <th style="text-align:right">Precio venta</th>
               <th style="text-align:right">Costo</th>
               <th style="text-align:right">Utilidad</th>
@@ -448,7 +449,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th></th>
             </tr>
           </thead>
-          <tbody id="ec-tbody"><tr><td colspan="7" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="ec-tbody"><tr><td colspan="8" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -2463,6 +2464,11 @@ function renderExtrasCat(list){
           oninput="ecMarkDirty('${e.id}')" data-field="name" style="min-width:180px">
       </td>
       <td>
+        <input class="ec-input" value="${escHtml(e.description||'')}" data-field="description"
+          placeholder="Texto informativo visible en la app"
+          oninput="ecMarkDirty('${e.id}')" style="min-width:220px;font-size:.8rem">
+      </td>
+      <td>
         <input class="ec-input" type="number" min="0" value="${e.price||0}"
           oninput="ecMarkDirty('${e.id}');ecUpdateRow('${e.id}')" data-field="price">
       </td>
@@ -2546,7 +2552,11 @@ function openNewExtraModal(){
   document.getElementById('modal-body').innerHTML=`
     <div class="form-row">
       <div class="form-group"><label>Nombre del extra</label>
-        <input id="ne-name" placeholder="Ej: Tabla 3 personas" style="grid-column:1/-1"></div>
+        <input id="ne-name" placeholder="Ej: Modo Romántico" style="grid-column:1/-1"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="grid-column:1/-1"><label>Descripción (texto informativo en la app)</label>
+        <input id="ne-desc" placeholder="Ej: Decora el bote con rosas, velas y música romántica"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Precio venta ($)</label>
@@ -2579,12 +2589,13 @@ function neCalc(){
 
 async function createExtra(){
   const name=(document.getElementById('ne-name')?.value||'').trim();
+  const description=(document.getElementById('ne-desc')?.value||'').trim();
   const price=+document.getElementById('ne-price')?.value||0;
   const cost=+document.getElementById('ne-cost')?.value||0;
   const errEl=document.getElementById('ne-err');
   if(!name){ if(errEl){errEl.textContent='El nombre es obligatorio';errEl.style.display='';} return; }
   try{
-    const d=await api('/api/admin/precios-extras',{method:'POST',body:JSON.stringify({name,price,cost})});
+    const d=await api('/api/admin/precios-extras',{method:'POST',body:JSON.stringify({name,description,price,cost})});
     showToast(`"${name}" creado ✓`);
     closeModal();
     loadExtrasCat();
