@@ -1382,13 +1382,6 @@ async def admin_upload_exp_image(exp_id: int, file: UploadFile = File(...), x_ad
 
 def _aloj_row(r, cols):
     row = dict(zip(cols, r))
-    if isinstance(row.get("variants"), str):
-        try:
-            row["variants"] = json.loads(row["variants"])
-        except Exception:
-            row["variants"] = []
-    if row.get("variants") is None:
-        row["variants"] = []
     return row
 
 
@@ -1398,47 +1391,39 @@ async def admin_list_alojamientos(x_admin_key: str = Header(...)):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id,slug,name,icon,description,price_from,cost_from,"
-                "image_path,is_active,display_order,variants FROM alojamientos ORDER BY display_order,id"
+                "SELECT id,slug,name,group_name,icon,description,price_from,cost_from,"
+                "capacity,image_path,is_active,display_order FROM alojamientos ORDER BY display_order,id"
             )
             cols = [d.name for d in cur.description]
             return {"alojamientos": [_aloj_row(r, cols) for r in cur.fetchall()]}
 
 
-class AlojamientoVariant(BaseModel):
-    name: str
-    price_per_night: int = 0
-    cost_per_night: int = 0
-    capacity: int = 2
-    description: str = ""
-
-
 class AlojamientoBody(BaseModel):
     slug: str
     name: str
+    group_name: str = ""
     icon: str = "🏠"
     description: str = ""
     price_from: int = 0
     cost_from: int = 0
+    capacity: int = 2
     image_path: Optional[str] = None
     is_active: bool = True
     display_order: int = 0
-    variants: List[AlojamientoVariant] = []
 
 
 @admin_router.post("/api/admin/alojamientos")
 async def admin_create_alojamiento(body: AlojamientoBody, x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
-    variants_json = json.dumps([v.dict() for v in body.variants])
-    price_from = body.price_from or (min(v.price_per_night for v in body.variants) if body.variants else 0)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO alojamientos (slug,name,icon,description,price_from,cost_from,image_path,is_active,display_order,variants)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) RETURNING id",
-                (body.slug, body.name, body.icon, body.description,
-                 price_from, body.cost_from,
-                 body.image_path, body.is_active, body.display_order, variants_json),
+                "INSERT INTO alojamientos"
+                " (slug,name,group_name,icon,description,price_from,cost_from,capacity,image_path,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (body.slug, body.name, body.group_name, body.icon, body.description,
+                 body.price_from, body.cost_from, body.capacity,
+                 body.image_path, body.is_active, body.display_order),
             )
             new_id = cur.fetchone()[0]
             conn.commit()
@@ -1448,17 +1433,15 @@ async def admin_create_alojamiento(body: AlojamientoBody, x_admin_key: str = Hea
 @admin_router.put("/api/admin/alojamientos/{aloj_id}")
 async def admin_update_alojamiento(aloj_id: int, body: AlojamientoBody, x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
-    variants_json = json.dumps([v.dict() for v in body.variants])
-    price_from = body.price_from or (min(v.price_per_night for v in body.variants) if body.variants else 0)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE alojamientos SET slug=%s,name=%s,icon=%s,description=%s,"
-                "price_from=%s,cost_from=%s,image_path=%s,is_active=%s,"
-                "display_order=%s,variants=%s::jsonb,updated_at=NOW() WHERE id=%s",
-                (body.slug, body.name, body.icon, body.description,
-                 price_from, body.cost_from,
-                 body.image_path, body.is_active, body.display_order, variants_json, aloj_id),
+                "UPDATE alojamientos SET slug=%s,name=%s,group_name=%s,icon=%s,description=%s,"
+                "price_from=%s,cost_from=%s,capacity=%s,image_path=%s,is_active=%s,"
+                "display_order=%s WHERE id=%s",
+                (body.slug, body.name, body.group_name, body.icon, body.description,
+                 body.price_from, body.cost_from, body.capacity,
+                 body.image_path, body.is_active, body.display_order, aloj_id),
             )
             conn.commit()
     return {"ok": True}

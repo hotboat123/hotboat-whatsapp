@@ -355,21 +355,43 @@ function showUbicacion(){
 // Dynamic data loaded from API
 let DYN_EXPERIENCIAS = [];
 let DYN_PACKS = [];
+let DYN_ALOJAMIENTOS = [];
 
 async function loadDynamicContent(){
   try{
-    const [er, pr, ms] = await Promise.all([
+    const [er, pr, ar, ms] = await Promise.all([
       fetch('/api/content/experiencias').then(r=>r.json()),
       fetch('/api/content/packs').then(r=>r.json()),
+      fetch('/api/content/alojamientos').then(r=>r.json()),
       fetch('/api/content/menu-settings').then(r=>r.json()).catch(()=>({})),
     ]);
     if(ms && typeof ms === 'object') S.menuSettings = {...S.menuSettings, ...ms};
     if(er.experiences) DYN_EXPERIENCIAS = er.experiences;
     if(pr.packs) DYN_PACKS = pr.packs;
-    // Sync ACTIVIDADES for arma-tu-pack using dynamic experiences (skip alojamiento-type)
+    if(ar.alojamientos) DYN_ALOJAMIENTOS = ar.alojamientos;
+
+    // Sync ALOJAMIENTOS static array
+    if(DYN_ALOJAMIENTOS.length){
+      ALOJAMIENTOS.length = 0;
+      DYN_ALOJAMIENTOS.forEach(a=>{
+        ALOJAMIENTOS.push({
+          id: a.slug,
+          dbId: a.id,
+          name: a.name,
+          icon: a.icon||'🏠',
+          desc: a.description||'',
+          price: '$'+Number(a.price_from||0).toLocaleString('es-CL'),
+          unit: '/noche',
+          cap: a.capacity||2,
+          features: [a.group_name||'', 'Hasta '+(a.capacity||2)+' persona'+(a.capacity>1?'s':'')].filter(Boolean),
+          image_path: a.image_path||null,
+        });
+      });
+    }
+
+    // Sync ACTIVIDADES for arma-tu-pack using dynamic experiences
     if(DYN_EXPERIENCIAS.length){
       ACTIVIDADES.length = 0;
-      // Always keep HotBoat as first
       ACTIVIDADES.push({id:'hotboat',icon:'🚤',name:'HotBoat',desc:'Paseo 2 horas en el lago',pricePP:69990,flat:false});
       DYN_EXPERIENCIAS.forEach(e=>{
         ACTIVIDADES.push({id:e.slug,icon:e.icon,name:e.name,desc:e.description||'',pricePP:e.price_per_person||0,flat:e.slug==='auto'});
@@ -518,19 +540,19 @@ function showAlojamientos(){
 function showAlojamiento(id){
   const a = ALOJAMIENTOS.find(x=>x.id===id);
   if(!a) return showAlojamientos();
+  const imgHtml = a.image_path
+    ? `<img src="${a.image_path}" style="width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin-bottom:.8rem" onerror="this.style.display='none'">`
+    : `<div style="text-align:center;font-size:4rem;margin-bottom:.5rem">${a.icon}</div>`;
   mc.innerHTML = `
   <div class="card">
-    <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${a.icon}</div>
+    ${imgHtml}
     <div class="card-title">${a.name}</div>
     <div class="price-tag"><div class="price-big">${a.price}</div>
-      <div class="price-sub">${a.unit} · ${a.cap} pers. max</div></div>
-    <div class="info-box" style="margin-top:.8rem;line-height:2">
-      ${a.features.map(f=>`✓ ${f}`).join('<br>')}
-    </div>
-    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">${a.desc}</p>
-    ${mediaBlock('alj-'+id,'/media/images/alojamientos/01-intro.jpg','/media/documents/alojamientos.pdf')}
+      <div class="price-sub">${a.unit} · hasta ${a.cap} pers.</div></div>
+    <p style="color:var(--muted);font-size:.85rem;margin-top:.8rem;line-height:1.5">${a.desc}</p>
+    ${a.features.filter(f=>f).map(f=>`<div style="font-size:.82rem;margin-top:.3rem">✓ ${f}</div>`).join('')}
   </div>
-  <button class="btn" onclick="showSolicitudForm('${a.name}','alojamiento:${a.id}')">Solicitar Reserva</button>
+  <button class="btn" onclick="showSolicitudForm('${a.name}','alojamiento:${a.dbId||a.id}')">Solicitar Reserva</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showAlojamientos()">Ver mas opciones</button>`;
 }
 

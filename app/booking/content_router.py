@@ -15,6 +15,21 @@ MEDIA_BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file
 
 # ── Public endpoints ──────────────────────────────────────────────────────────
 
+@content_router.get("/api/content/alojamientos")
+def list_alojamientos(active_only: bool = True):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            q = ("SELECT id,slug,name,group_name,icon,description,"
+                 "price_from,cost_from,capacity,image_path,is_active,display_order"
+                 " FROM alojamientos")
+            if active_only:
+                q += " WHERE is_active=TRUE"
+            q += " ORDER BY display_order,id"
+            cur.execute(q)
+            cols = [d.name for d in cur.description]
+            return {"alojamientos": [dict(zip(cols, r)) for r in cur.fetchall()]}
+
+
 @content_router.get("/api/content/experiencias")
 def list_experiencias(active_only: bool = True):
     with get_connection() as conn:

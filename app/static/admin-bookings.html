@@ -493,37 +493,32 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
       <!-- Aloj Modal -->
       <div id="aloj-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;overflow-y:auto;padding:2rem 1rem">
-        <div style="max-width:600px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
+        <div style="max-width:580px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
           <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem" id="aloj-modal-title">Nuevo Alojamiento</div>
           <input type="hidden" id="aloj-id">
-          <div class="form-group-adm"><label>Nombre *</label><input id="aloj-name" placeholder="Open Sky, Relikura..."></div>
-          <div class="form-group-adm"><label>Slug (identificador único)</label><input id="aloj-slug" placeholder="open-sky"></div>
+          <div class="form-group-adm"><label>Nombre *</label><input id="aloj-name" placeholder="Ej: Open Sky – Domo con Tina de Baño"></div>
+          <div class="form-group-adm"><label>Grupo (para agrupar en el bot)</label><input id="aloj-group" placeholder="Ej: Open Sky o Raíces de Relikura"></div>
+          <div class="form-group-adm"><label>Slug (identificador único)</label><input id="aloj-slug" placeholder="Ej: open-sky-domo-tina"></div>
+          <div class="form-group-adm"><label>Descripción</label><input id="aloj-desc" placeholder="Domo transparente con tina de baño interior..."></div>
           <div style="display:grid;grid-template-columns:60px 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Icono</label><input id="aloj-icon" placeholder="🏠"></div>
-            <div class="form-group-adm"><label>Descripción general</label><input id="aloj-desc" placeholder="Domos románticos con vista a las estrellas"></div>
+            <div class="form-group-adm"><label>Capacidad (personas)</label><input id="aloj-capacity" type="number" min="1" value="2"></div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem">
-            <div class="form-group-adm"><label>Costo base ($)</label><input id="aloj-cost" type="number" min="0" value="0"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Precio/noche ($)</label><input id="aloj-price" type="number" min="0" value="0"></div>
+            <div class="form-group-adm"><label>Costo/noche ($)</label><input id="aloj-cost" type="number" min="0" value="0"></div>
             <div class="form-group-adm"><label>Orden</label><input id="aloj-order" type="number" min="0" value="0"></div>
             <div style="display:flex;align-items:flex-end;padding-bottom:.6rem">
               <label class="toggle-wrap" style="flex-shrink:0"><input type="checkbox" id="aloj-active" checked><span class="toggle-slider"></span></label>
               <span style="font-size:.8rem;margin-left:.5rem">Activo</span>
             </div>
           </div>
-
-          <!-- Variants editor -->
-          <div style="border-top:1px solid var(--border);margin-top:.8rem;padding-top:.8rem">
-            <div style="font-size:.82rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem">Opciones / Variantes de precio</div>
-            <div id="aloj-variants-list" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem"></div>
-            <button onclick="addAlojVariant()" style="background:rgba(255,200,0,.15);border:1px solid rgba(255,200,0,.3);color:var(--gold);border-radius:8px;padding:.3rem .8rem;font-size:.8rem;cursor:pointer">+ Agregar opción</button>
-          </div>
-
           <div class="form-group-adm" id="aloj-img-wrap" style="display:none;margin-top:.8rem">
             <label>Foto actual</label>
             <img id="aloj-img-preview" src="" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:contain;margin-top:.4rem">
           </div>
           <div class="form-group-adm">
-            <label>Subir nueva foto principal</label>
+            <label>Subir foto</label>
             <input type="file" id="aloj-img-file" accept="image/*">
           </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
@@ -2839,58 +2834,34 @@ async function loadAlojamientos(){
 function renderAlojList(){
   const el = document.getElementById('aloj-list');
   if(!_alojs.length){ el.innerHTML='<p style="color:var(--muted)">No hay alojamientos aún. Haz click en &quot;+ Nuevo Alojamiento&quot;.</p>'; return; }
-  el.innerHTML = _alojs.map(a=>{
-    const variants = a.variants||[];
-    const varHtml = variants.map(v=>
-      `<div style="font-size:.76rem;color:var(--muted);margin-top:.15rem">
-        <span style="color:var(--text)">${v.name}</span> &ndash;
-        <strong style="color:var(--gold)">$${Number(v.price_per_night).toLocaleString('es-CL')}/noche</strong>
-        &middot; ${v.capacity}p
-        ${v.description ? `<em style="color:var(--muted)"> · ${v.description}</em>` : ''}
-      </div>`
-    ).join('');
-    const minPrice = variants.length ? Math.min(...variants.map(v=>v.price_per_night)) : a.price_from;
-    return `<div class="item-card">
-      ${a.image_path ? `<img class="item-thumb" src="${a.image_path}" onerror="this.style.display='none'" style="object-fit:contain">` : `<div class="item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:2rem">${a.icon}</div>`}
-      <div class="item-body" style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:.95rem">${a.icon} ${a.name}</div>
-        <div style="color:var(--muted);font-size:.78rem;margin:.15rem 0">${a.description||''}</div>
-        <div style="font-size:.8rem;margin:.2rem 0">Precio desde: <strong>$${Number(minPrice).toLocaleString('es-CL')}/noche</strong></div>
-        ${varHtml}
-        <span class="status-badge ${a.is_active?'badge-on':'badge-off'}" style="margin-top:.4rem">${a.is_active?'Activo':'Inactivo'}</span>
-      </div>
-      <div class="item-actions">
-        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem" onclick="openAlojModal(${a.id})">Editar</button>
-        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:${a.is_active?'#ff444433':'#00c05533'};color:${a.is_active?'#ff4444':'#00c055'}" onclick="toggleAloj(${a.id},${!a.is_active})">${a.is_active?'Desactivar':'Activar'}</button>
-        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:#ff444422;color:#ff4444" onclick="deleteAloj(${a.id})">Eliminar</button>
-      </div>
-    </div>`;
-  }).join('');
-}
 
-let _alojVariants = [];
+  // Group by group_name for display
+  const groups = {};
+  _alojs.forEach(a=>{ (groups[a.group_name||'Sin grupo'] = groups[a.group_name||'Sin grupo']||[]).push(a); });
 
-function renderAlojVariants(){
-  const el = document.getElementById('aloj-variants-list');
-  if(!el) return;
-  if(!_alojVariants.length){ el.innerHTML='<p style="color:var(--muted);font-size:.8rem">Sin opciones. Agrega al menos una.</p>'; return; }
-  el.innerHTML = _alojVariants.map((v,i)=>`
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem;display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.5rem;align-items:center">
-      <input value="${v.name}" placeholder="Ej: Cabaña 2 personas" style="background:transparent;border:none;color:var(--text);font-size:.82rem;width:100%" oninput="_alojVariants[${i}].name=this.value">
-      <input type="number" value="${v.price_per_night}" placeholder="Precio/noche" style="background:transparent;border:none;color:var(--gold);font-size:.82rem;text-align:right;width:100%" oninput="_alojVariants[${i}].price_per_night=+this.value">
-      <input type="number" value="${v.cost_per_night||0}" placeholder="Costo/noche" style="background:transparent;border:none;color:var(--muted);font-size:.82rem;text-align:right;width:100%" oninput="_alojVariants[${i}].cost_per_night=+this.value">
-      <input type="number" value="${v.capacity}" placeholder="Personas" style="background:transparent;border:none;color:var(--text);font-size:.82rem;text-align:right;width:100%" oninput="_alojVariants[${i}].capacity=+this.value">
-      <button onclick="_alojVariants.splice(${i},1);renderAlojVariants()" style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:1.1rem;padding:0 .2rem">✕</button>
-    </div>`).join('');
-  const header = `<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.5rem;padding:0 .75rem;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem">
-    <span>Nombre opción</span><span style="text-align:right">Precio/noche</span><span style="text-align:right">Costo/noche</span><span style="text-align:right">Personas</span><span></span>
-  </div>`;
-  el.innerHTML = header + el.innerHTML;
-}
-
-function addAlojVariant(){
-  _alojVariants.push({name:'',price_per_night:0,cost_per_night:0,capacity:2,description:''});
-  renderAlojVariants();
+  el.innerHTML = Object.entries(groups).map(([grp, items])=>`
+    <div style="margin-bottom:.5rem">
+      <div style="font-size:.72rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.4rem;padding:.2rem .5rem;background:rgba(255,200,0,.08);border-radius:6px">${grp}</div>
+      ${items.map(a=>`<div class="item-card" style="margin-bottom:.5rem">
+        ${a.image_path ? `<img class="item-thumb" src="${a.image_path}" onerror="this.style.display='none'" style="object-fit:cover">` : `<div class="item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:2rem">${a.icon||'🏠'}</div>`}
+        <div class="item-body" style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:.93rem">${a.icon||'🏠'} ${a.name}</div>
+          <div style="color:var(--muted);font-size:.76rem;margin:.1rem 0">${a.description||''}</div>
+          <div style="font-size:.8rem;margin:.2rem 0">
+            <strong style="color:var(--gold)">$${Number(a.price_from||0).toLocaleString('es-CL')}/noche</strong>
+            &nbsp;·&nbsp; ${a.capacity||1} persona${(a.capacity||1)>1?'s':''}
+            ${a.cost_from ? `&nbsp;·&nbsp; <span style="color:var(--muted)">costo $${Number(a.cost_from).toLocaleString('es-CL')}</span>` : ''}
+          </div>
+          <span class="status-badge ${a.is_active?'badge-on':'badge-off'}">${a.is_active?'Activo':'Inactivo'}</span>
+        </div>
+        <div class="item-actions">
+          <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem" onclick="openAlojModal(${a.id})">Editar</button>
+          <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:${a.is_active?'#ff444433':'#00c05533'};color:${a.is_active?'#ff4444':'#00c055'}" onclick="toggleAloj(${a.id},${!a.is_active})">${a.is_active?'Desactivar':'Activar'}</button>
+          <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:#ff444422;color:#ff4444" onclick="deleteAloj(${a.id})">Eliminar</button>
+        </div>
+      </div>`).join('')}
+    </div>`
+  ).join('');
 }
 
 function openAlojModal(id){
@@ -2898,14 +2869,15 @@ function openAlojModal(id){
   document.getElementById('aloj-modal-title').textContent = a ? 'Editar Alojamiento' : 'Nuevo Alojamiento';
   document.getElementById('aloj-id').value = a ? a.id : '';
   document.getElementById('aloj-name').value = a ? a.name : '';
+  document.getElementById('aloj-group').value = a ? (a.group_name||'') : '';
   document.getElementById('aloj-slug').value = a ? a.slug : '';
-  document.getElementById('aloj-icon').value = a ? a.icon : '🏠';
+  document.getElementById('aloj-icon').value = a ? (a.icon||'🏠') : '🏠';
   document.getElementById('aloj-desc').value = a ? (a.description||'') : '';
-  document.getElementById('aloj-cost').value = a ? a.cost_from : 0;
-  document.getElementById('aloj-order').value = a ? a.display_order : 0;
+  document.getElementById('aloj-capacity').value = a ? (a.capacity||2) : 2;
+  document.getElementById('aloj-price').value = a ? (a.price_from||0) : 0;
+  document.getElementById('aloj-cost').value = a ? (a.cost_from||0) : 0;
+  document.getElementById('aloj-order').value = a ? (a.display_order||0) : 0;
   document.getElementById('aloj-active').checked = a ? a.is_active : true;
-  _alojVariants = a && a.variants ? JSON.parse(JSON.stringify(a.variants)) : [];
-  renderAlojVariants();
   const wrap = document.getElementById('aloj-img-wrap');
   if(a && a.image_path){ wrap.style.display=''; document.getElementById('aloj-img-preview').src=a.image_path; }
   else { wrap.style.display='none'; }
@@ -2916,21 +2888,23 @@ function closeAlojModal(){ document.getElementById('aloj-modal').style.display='
 
 async function saveAloj(){
   const id = document.getElementById('aloj-id').value;
-  const variants = _alojVariants.filter(v=>v.name.trim());
-  const minPrice = variants.length ? Math.min(...variants.map(v=>v.price_per_night)) : 0;
+  const name = document.getElementById('aloj-name').value.trim();
+  let slug = document.getElementById('aloj-slug').value.trim();
+  if(!name){ showToast('El nombre es obligatorio'); return; }
+  if(!slug){ slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); document.getElementById('aloj-slug').value=slug; }
   const body = {
-    slug: document.getElementById('aloj-slug').value.trim(),
-    name: document.getElementById('aloj-name').value.trim(),
+    slug,
+    name,
+    group_name: document.getElementById('aloj-group').value.trim(),
     icon: document.getElementById('aloj-icon').value.trim()||'🏠',
     description: document.getElementById('aloj-desc').value.trim(),
-    price_from: minPrice,
+    capacity: +document.getElementById('aloj-capacity').value||2,
+    price_from: +document.getElementById('aloj-price').value||0,
     cost_from: +document.getElementById('aloj-cost').value||0,
     display_order: +document.getElementById('aloj-order').value||0,
     is_active: document.getElementById('aloj-active').checked,
     image_path: id ? (_alojs.find(x=>x.id==id)?.image_path||null) : null,
-    variants,
   };
-  if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
   try{
     const url = id ? `/api/admin/alojamientos/${id}` : '/api/admin/alojamientos';
     const method = id ? 'PUT' : 'POST';
@@ -2949,8 +2923,12 @@ async function saveAloj(){
 async function toggleAloj(id, active){
   const a = _alojs.find(x=>x.id===id);
   if(!a) return;
-  const body = {...a, is_active:active, image_path:a.image_path||null, variants:a.variants||[]};
-  delete body.id; delete body.created_at; delete body.updated_at;
+  const body = {
+    slug:a.slug, name:a.name, group_name:a.group_name||'', icon:a.icon||'🏠',
+    description:a.description||'', capacity:a.capacity||2,
+    price_from:a.price_from||0, cost_from:a.cost_from||0,
+    display_order:a.display_order||0, is_active:active, image_path:a.image_path||null,
+  };
   await fetch(`/api/admin/alojamientos/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
   await loadAlojamientos(); showToast(active?'Alojamiento activado ✅':'Alojamiento desactivado');
 }
