@@ -1,11 +1,15 @@
 """FastAPI router for /booking and /api/booking/*"""
-import logging, os
+import logging, os, time as _time
 from typing import Optional
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+# Simple in-memory cache for availability (avoids re-running 60-day scan on rapid reloads)
+_avail_cache: dict = {}
+_AVAIL_CACHE_TTL = 30  # seconds
 
 from app.booking.models import CreateBookingRequest
 from app.booking.db import (
@@ -144,7 +148,12 @@ async def get_dynamic_price(
 
 
 @router.get("/api/booking/availability")
-async def get_availability(days: int = Query(21, ge=1, le=60)):
+async def get_availability(days: int = Query(30, ge=1, le=60)):
+    cache_key = f"avail_{days}"
+    cached = _avail_cache.get(cache_key)
+    if cached and (_time.time() - cached["ts"]) < _AVAIL_CACHE_TTL:
+        return cached["data"]
+
     try:
         from app.booking.operator_settings import (
             get_vacation_days, is_urgency_mode, apply_urgency_filter,
@@ -222,13 +231,15 @@ async def get_availability(days: int = Query(21, ge=1, le=60)):
                     fake_booked_by_day[dk] = [t for t in all_expansion if t not in green and t not in booked]
             grouped = {k: v for k, v in urgency_grouped.items() if v}
 
-        return {
+        result = {
             "availability": grouped,
             "operating_hours": get_operating_hours(),
             "urgency_mode": is_urgency_mode(),
             "vacation_days": list(vacation_dates),
             "fake_booked_slots": fake_booked_by_day if is_urgency_mode() else {},
         }
+        _avail_cache[cache_key] = {"data": result, "ts": _time.time()}
+        return result
     except Exception as e:
         logger.error(f"Availability error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

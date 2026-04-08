@@ -290,7 +290,9 @@ class AvailabilityChecker:
                     slot_end = slot_datetime + timedelta(hours=self.config.duration_hours)
                     slot_end_with_buffer = slot_end + timedelta(hours=self.config.buffer_hours)
                     
-                    # Check if slot overlaps with any booked appointment
+                    # Check if slot overlaps with any booked appointment (in-memory, fast)
+                    # get_booked_slots already loaded both booknetic + hotboat_appointments,
+                    # so no need for a second per-slot DB query (check_slot_availability).
                     overlaps = False
                     for booked_range in booked_ranges:
                         if booked_range['date'] != slot_datetime.date():
@@ -301,22 +303,15 @@ class AvailabilityChecker:
                             break
                     
                     if not overlaps:
-                        is_available = await check_slot_availability(
-                            slot_datetime,
-                            duration_hours=self.config.duration_hours,
-                            buffer_hours=self.config.buffer_hours
-                        )
-                        
-                        if is_available:
-                            slot_info = {
-                                'datetime': slot_datetime,
-                                'date': slot_datetime.date(),
-                                'time': slot_datetime.strftime('%H:%M'),
-                                'date_str': slot_datetime.strftime('%d/%m/%Y'),
-                                'weekday': slot_datetime.strftime('%A')
-                            }
-                            dk = str(slot_datetime.date())
-                            by_date.setdefault(dk, []).append(slot_info)
+                        slot_info = {
+                            'datetime': slot_datetime,
+                            'date': slot_datetime.date(),
+                            'time': slot_datetime.strftime('%H:%M'),
+                            'date_str': slot_datetime.strftime('%d/%m/%Y'),
+                            'weekday': slot_datetime.strftime('%A')
+                        }
+                        dk = str(slot_datetime.date())
+                        by_date.setdefault(dk, []).append(slot_info)
                 
                 current_date += timedelta(days=1)
 
