@@ -684,7 +684,6 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
             f"📅 *Fechas:* {req.dates_preference or '-'}\n"
             f"👥 *Personas:* {req.people or '-'}\n\n"
             f"✅ *¡SÍ hay disponibilidad!*\n"
-            f"_(si no hay, cambia esta línea por: ❌ Lo sentimos, no hay disponibilidad para esas fechas)_\n\n"
             f"¿Coordinamos los detalles para confirmar tu reserva? 😊"
         )
         client_link = _wa_link(clean_client, client_avail_msg)
