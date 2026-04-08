@@ -69,11 +69,13 @@ Puedes preguntarme por:
 
 5️⃣ *Ubicación y Reseñas HotBoat*
 
-6️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*
+6️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*
 
-7️⃣ *Alojamientos y Packs Pucón*
+7️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*
 
-Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *8️⃣* 👨‍✈️🌿
+8️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*
+
+Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *9️⃣* 👨‍✈️🌿
 
 ¿Listo para zarpar, grumete? ⛵
 
@@ -102,11 +104,13 @@ You can ask me about:
 
 5️⃣ *HotBoat Location and reviews*
 
-6️⃣ *Other Pucón Experiences (Rafting, horseback riding, sailing)*
+6️⃣ *Pucón Accommodations (Domes · Cabins · Hostel)*
 
-7️⃣ *Pucón Accommodations and Packages*
+7️⃣ *Other Pucón Experiences (Rafting, horseback riding, sailing)*
 
-If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *8️⃣* 👨‍✈️🌿
+8️⃣ *Complete Packages Pucón (Romantic · Family · Friends · Build Your Pack)*
+
+If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *9️⃣* 👨‍✈️🌿
 
 Ready to set sail, sailor? ⛵
 
@@ -135,11 +139,13 @@ Você pode me perguntar sobre:
 
 5️⃣ *Localização e avaliações HotBoat*
 
-6️⃣ *Outras Experiências Pucón (Rafting, cavalgadas, vela)*
+6️⃣ *Hospedagens Pucón (Domos · Cabanas · Hostel)*
 
-7️⃣ *Hospedagens e Pacotes Pucón*
+7️⃣ *Outras Experiências Pucón (Rafting, cavalgadas, vela)*
 
-Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *8️⃣* 👨‍✈️🌿
+8️⃣ *Pacotes Completos Pucón (Romântico · Familiar · Amigos · Monte seu Pacote)*
+
+Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *9️⃣* 👨‍✈️🌿
 
 Pronto para zarpar, marujo? ⛵
 
@@ -903,54 +909,45 @@ Precisa de mais informações?"""
     # ===== ACCOMMODATION MESSAGES =====
     
     "accommodations_and_packages_menu": {
-        "es": """🏠📦 *Alojamientos y Packs en Pucón*
+        "es": """📦 *Packs Completos Pucón*
 
 ¡Perfecto grumete! Te ofrezco varias opciones:
 
 1️⃣ *Packs Completos* 🎁
    Experiencias todo incluido con alojamiento y actividades
 
-2️⃣ *Solo Alojamientos* 🏠
-   Buscar y reservar alojamiento en Pucón
-
-3️⃣ *Arma tu Pack* 🛒
+2️⃣ *Arma tu Pack* 🛒
    Personaliza: elige actividades y agrega alojamiento
 
-📲 Escribe el número que prefieras (1, 2, o 3)
+📲 Escribe el número que prefieras (1 o 2)
 
 💡 *Recuerda:* Escribe *"Menu"* en cualquier momento para volver al *Menú HotBoat* principal 🚤""",
         
-        "en": """🏠📦 *Accommodations and Packages in Pucón*
+        "en": """📦 *Complete Packages Pucón*
 
 Perfect sailor! I offer you several options:
 
 1️⃣ *Complete Packages* 🎁
    All-inclusive experiences with accommodation and activities
 
-2️⃣ *Accommodations Only* 🏠
-   Search and book accommodation in Pucón
-
-3️⃣ *Build Your Package* 🛒
+2️⃣ *Build Your Package* 🛒
    Customize: choose activities and add accommodation
 
-📲 Type the number you prefer (1, 2, or 3)
+📲 Type the number you prefer (1 or 2)
 
 💡 *Remember:* Type *"Menu"* anytime to return to the main *HotBoat Menu* 🚤""",
         
-        "pt": """🏠📦 *Acomodações e Pacotes em Pucón*
+        "pt": """📦 *Pacotes Completos Pucón*
 
 Perfeito marinheiro! Ofereço várias opções:
 
 1️⃣ *Pacotes Completos* 🎁
    Experiências tudo incluído com acomodação e atividades
 
-2️⃣ *Apenas Acomodações* 🏠
-   Buscar e reservar acomodação em Pucón
-
-3️⃣ *Monte seu Pacote* 🛒
+2️⃣ *Monte seu Pacote* 🛒
    Personalize: escolha atividades e adicione acomodação
 
-📲 Digite o número que preferir (1, 2, ou 3)
+📲 Digite o número que preferir (1 ou 2)
 
 💡 *Lembre-se:* Digite *"Menu"* a qualquer momento para voltar ao *Menu HotBoat* principal 🚤"""
     },

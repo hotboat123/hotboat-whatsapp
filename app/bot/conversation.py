@@ -667,27 +667,41 @@ O elige:
                     # Option 5: Ubicación y Reseñas HotBoat
                     response = self.faq_handler.get_response("ubicación", language)
                 elif menu_number == 6:
-                    # Option 6: Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)
+                    # Option 6: Alojamientos Pucón
+                    logger.info("User selected accommodations from menu")
+                    conversation["metadata"]["accommodation_flow"] = {
+                        "step": "choosing_property",
+                        "property": None,
+                        "room_type": None,
+                        "guests": None,
+                        "checkin_date": None,
+                        "checkout_date": None,
+                    }
+                    for k in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
+                        conversation["metadata"].pop(k, None)
+                    response = {
+                        "type": "accommodations_pdf",
+                        "text": get_text("accommodations_only_intro", language)
+                    }
+                elif menu_number == 7:
+                    # Option 7: Otras Experiencias Pucón
                     logger.info("User selected experiences and activities from menu")
                     conversation["metadata"]["awaiting_experience_menu"] = True
-                    # Return response to send PDF first
                     response = {
                         "type": "experiences_pdf",
                         "text": get_text("experiences_menu", language)
                     }
-                elif menu_number == 7:
-                    # Option 7: Alojamientos y Packs Pucón
-                    logger.info("User selected accommodations and packages from menu")
-                    # Set state to await submenu selection
+                elif menu_number == 8:
+                    # Option 8: Packs Completos + Arma tu Pack
+                    logger.info("User selected packs from menu")
                     conversation["metadata"]["awaiting_packages_submenu"] = True
                     response = get_text("accommodations_and_packages_menu", language)
-                elif menu_number == 8:
-                    # Option 8: Llamar al Capitán Tomás
-                    # Send notification to Capitán Tomás
+                elif menu_number == 9:
+                    # Option 9: Llamar al Capitán Tomás
                     await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                     response = self.faq_handler.get_response("llamar a tomas", language)
                 else:
-                    response = "No entendí esa opción. Por favor elige un número del 1 al 8, grumete ⚓"
+                    response = "No entendí esa opción. Por favor elige un número del 1 al 9, grumete ⚓"
             # Check if asking about accommodations (special handling with images)
             elif self._is_accommodation_query(message_text):
                 logger.info("User asking about accommodations - will send with images")
@@ -944,17 +958,15 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         return False
     
     def _get_main_menu_message(self, language: str = "es") -> str:
-        """Return the main menu, hiding options 6/7 if disabled in admin settings."""
+        """Return the main menu, hiding options 6/7/8 if disabled in admin settings."""
         try:
             from app.booking.operator_settings import get_menu_settings
             ms = get_menu_settings()
-            show_exp  = ms.get("show_experiencias", True)
-            show_aloj = ms.get("show_alojamientos", True)
+            show_exp   = ms.get("show_experiencias", True)
+            show_aloj  = ms.get("show_alojamientos", True)
             show_packs = ms.get("show_packs", True)
         except Exception:
             show_exp = show_aloj = show_packs = True
-
-        show_opt7 = show_aloj or show_packs
 
         if show_exp and show_aloj and show_packs:
             # All on → standard hardcoded menu (fastest path)
@@ -964,14 +976,7 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         if language != "es":
             return get_text("main_menu", language)
 
-        # Build option 7 label based on what's active
-        if show_aloj and show_packs:
-            opt7_label = "7️⃣ *Alojamientos y Packs Pucón*"
-        elif show_aloj:
-            opt7_label = "7️⃣ *Alojamientos Pucón* (Domos · Cabañas · Hostal)"
-        else:
-            opt7_label = "7️⃣ *Packs Completos Pucón* (Romántico · Familiar · Amigos)"
-
+        # Dynamic Spanish menu — number options shift based on what is active
         lines = [
             "🥬 ¡Ahoy, grumete! ⚓",
             "",
@@ -989,13 +994,21 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             "",
             "5️⃣ *Ubicación y Reseñas HotBoat*",
         ]
+        next_num = 6
+        num_aloj = num_exp = num_packs = None
+        if show_aloj:
+            num_aloj = next_num; next_num += 1
+            lines += ["", f"{num_aloj}️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*"]
         if show_exp:
-            lines += ["", "6️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*"]
-        if show_opt7:
-            lines += ["", opt7_label]
+            num_exp = next_num; next_num += 1
+            lines += ["", f"{num_exp}️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*"]
+        if show_packs:
+            num_packs = next_num; next_num += 1
+            lines += ["", f"{num_packs}️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*"]
+        capitan_num = next_num
         lines += [
             "",
-            "Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *8️⃣* 👨‍✈️🌿",
+            f"Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *{capitan_num}️⃣* 👨‍✈️🌿",
             "",
             "¿Listo para zarpar, grumete? ⛵",
             "",
@@ -1463,8 +1476,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         if has_extra_keywords and not has_action_words:
             # Check if it contains numbers (quantities) and extra keywords
             has_numbers = bool(re.search(r'\d+', message_lower))
-            # Make sure it's not just a simple menu number (1-6) or just "X helados" without other context
-            is_simple_menu_number = message_lower.strip() in ['1', '2', '3', '4', '5', '6']
+            # Make sure it's not just a simple menu number (1-9) or just "X helados" without other context
+            is_simple_menu_number = message_lower.strip() in ['1', '2', '3', '4', '5', '6', '7', '8', '9']
             # More strict check: must have number + "y" or comma (indicating multiple items)
             has_multiple_items_pattern = bool(re.search(r'\d+.*(y|,).*\d*', message_lower))
             if has_numbers and not is_simple_menu_number and has_multiple_items_pattern:
@@ -2131,7 +2144,7 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
         Handle multiple menu number selections and return combined response.
         
         Args:
-            menu_numbers: List of menu numbers selected (1-6)
+            menu_numbers: List of menu numbers selected (1-9)
             conversation: Conversation context
             language: Language code
             from_number: User's phone number
@@ -2177,14 +2190,22 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 # Option 5: Ubicación y Reseñas HotBoat
                 responses.append(self.faq_handler.get_response("ubicación", language))
             elif menu_number == 6:
-                # Option 6: Otras Experiencias Pucón
-                responses.append(get_text("experiences_menu", language))
+                # Option 6: Alojamientos Pucón
+                conversation["metadata"]["accommodation_flow"] = {
+                    "step": "choosing_property", "property": None,
+                    "room_type": None, "guests": None,
+                    "checkin_date": None, "checkout_date": None,
+                }
+                responses.append(get_text("accommodations_only_intro", language))
             elif menu_number == 7:
-                # Option 7: Alojamientos y Packs Pucón
+                # Option 7: Otras Experiencias Pucón
+                responses.append(get_text("experiences_menu", language))
+            elif menu_number == 8:
+                # Option 8: Packs Completos + Arma tu Pack
                 conversation["metadata"]["awaiting_packages_submenu"] = True
                 responses.append(get_text("accommodations_and_packages_menu", language))
-            elif menu_number == 8:
-                # Option 8: Llamar al Capitán Tomás
+            elif menu_number == 9:
+                # Option 9: Llamar al Capitán Tomás
                 await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                 responses.append(self.faq_handler.get_response("llamar a tomas", language))
         
@@ -2302,15 +2323,27 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             elif menu_num == 5:
                 return self.faq_handler.get_response("ubicación", language)
             elif menu_num == 6:
+                conversation["metadata"]["accommodation_flow"] = {
+                    "step": "choosing_property", "property": None,
+                    "room_type": None, "guests": None,
+                    "checkin_date": None, "checkout_date": None,
+                }
+                for k in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
+                    conversation["metadata"].pop(k, None)
+                return {
+                    "type": "accommodations_pdf",
+                    "text": get_text("accommodations_only_intro", language)
+                }
+            elif menu_num == 7:
                 conversation["metadata"]["awaiting_experience_menu"] = True
                 return {
                     "type": "experiences_pdf",
                     "text": get_text("experiences_menu", language)
                 }
-            elif menu_num == 7:
+            elif menu_num == 8:
                 conversation["metadata"]["awaiting_packages_submenu"] = True
                 return get_text("accommodations_and_packages_menu", language)
-            elif menu_num == 8:
+            elif menu_num == 9:
                 await self._notify_capitan_tomas(contact_name, phone_number, [], reason="call_request")
                 return self.faq_handler.get_response("llamar a tomas", language)
 
@@ -3475,27 +3508,8 @@ Escribe el número que prefieras 🚤"""
                 else:
                     return packs_text
             
-            # Option 2: Only Accommodations
-            elif "2" in message_clean or ("solo" in message_clean and "aloj" in message_clean) or ("only" in message_clean and "accom" in message_clean):
-                logger.info("User selected only accommodations")
-                del conversation["metadata"]["awaiting_packages_submenu"]
-                # Start accommodation flow
-                conversation["metadata"]["accommodation_flow"] = {
-                    "step": "choosing_property",
-                    "property": None,
-                    "room_type": None,
-                    "guests": None,
-                    "checkin_date": None,
-                    "checkout_date": None
-                }
-                # Return response to send PDF
-                return {
-                    "type": "accommodations_pdf",
-                    "text": get_text("accommodations_only_intro", language)
-                }
-            
-            # Option 3: Build your package
-            elif "3" in message_clean or "arma" in message_clean or "build" in message_clean or "monte" in message_clean:
+            # Option 2: Arma tu Pack
+            elif "2" in message_clean or "arma" in message_clean or "build" in message_clean or "monte" in message_clean:
                 logger.info("User selected build your package")
                 del conversation["metadata"]["awaiting_packages_submenu"]
                 conversation["metadata"]["build_package_flow"] = {
