@@ -582,13 +582,154 @@ async def _notify_solicitud(req: SolicitudRequest, ref: str):
         f"*Personas:* {req.people or '-'}\n"
         f"*Notas:* {req.notes or '-'}"
     )
-    async with _httpx.AsyncClient() as client:
-        await client.post(
-            f"https://graph.facebook.com/v17.0/{phone_id}/messages",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"messaging_product": "whatsapp", "to": admin,
-                  "type": "text", "text": {"body": msg}},
-            timeout=10
+    try:
+        async with _httpx.AsyncClient() as client:
+            await client.post(
+                f"https://graph.facebook.com/v17.0/{phone_id}/messages",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"messaging_product": "whatsapp", "to": admin,
+                      "type": "text", "text": {"body": msg}},
+                timeout=10
+            )
+    except Exception as wa_err:
+        logger.warning(f"WhatsApp notify failed for solicitud {ref}: {wa_err}")
+
+    # For accommodation requests: send an email with WhatsApp links to contact the owner
+    if (req.service_type or "").startswith("alojamiento"):
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: _email_accommodation_solicitud(req, ref)
+            )
+        except Exception as email_err:
+            logger.warning(f"Accommodation email failed for {ref}: {email_err}")
+
+
+def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
+    """Send email with WhatsApp links to admin for accommodation inquiries."""
+    import urllib.parse
+    from app.config import get_settings
+    from app.bot.accommodations_contacts import ACCOMMODATION_CONTACTS, generate_whatsapp_link
+    from app.email.resend_booking import send_booking_html
+    from app.db.connection import get_connection
+
+    # Parse accommodation ID/slug from service_type ("alojamiento:ID_OR_SLUG")
+    parts = (req.service_type or "").split(":", 1)
+    aloj_ref = parts[1].strip() if len(parts) > 1 else ""
+
+    slug = None
+    aloj_name = req.title or "Alojamiento"
+
+    if aloj_ref:
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    try:
+                        aloj_id = int(aloj_ref)
+                        cur.execute("SELECT slug, name FROM alojamientos WHERE id=%s", (aloj_id,))
+                    except ValueError:
+                        cur.execute("SELECT slug, name FROM alojamientos WHERE slug=%s", (aloj_ref,))
+                    row = cur.fetchone()
+                    if row:
+                        slug, aloj_name = row
+        except Exception as db_err:
+            logger.warning(f"Could not look up alojamiento {aloj_ref}: {db_err}")
+
+    # Map slug to owner contact
+    prop_key = None
+    if slug:
+        s = slug.lower()
+        if "open" in s or "sky" in s:
+            prop_key = "open_sky"
+        elif "relikura" in s:
+            prop_key = "relikura"
+
+    contact = ACCOMMODATION_CONTACTS.get(prop_key) if prop_key else None
+
+    # Pre-filled WhatsApp messages
+    owner_wa_section = ""
+    if contact:
+        owner_msg = (
+            f"Hola! Tengo una consulta de disponibilidad de parte de HotBoat:\n\n"
+            f"🏠 *Alojamiento:* {aloj_name}\n"
+            f"📅 *Fechas:* {req.dates_preference or '-'}\n"
+            f"👥 *Personas:* {req.people or '-'}\n\n"
+            f"¿Tienen disponibilidad para estas fechas?\n\n"
+            f"Cliente: {req.customer_name} ({req.customer_phone})"
         )
+        owner_link = generate_whatsapp_link(contact["whatsapp"], owner_msg)
+        owner_wa_section = f"""
+        <div style="background:#ecfdf5;padding:20px;border-radius:8px;margin:16px 0">
+          <h3 style="margin-top:0;color:#065f46">📞 Consultar disponibilidad con {contact['name']}</h3>
+          <p style="margin-bottom:12px">Click para abrir WhatsApp con el mensaje pre-escrito al propietario:</p>
+          <a href="{owner_link}"
+             style="display:inline-block;background:#25D366;color:#fff;padding:12px 24px;
+                    text-decoration:none;border-radius:6px;font-weight:bold">
+            💬 Consultar con {contact['name']}
+          </a>
+        </div>"""
+
+    clean_client = (req.customer_phone or "").replace("+", "").replace(" ", "").replace("-", "")
+    client_section = ""
+    if clean_client:
+        client_link = f"https://wa.me/{clean_client}"
+        client_section = f"""
+        <div style="background:#eff6ff;padding:20px;border-radius:8px;margin:16px 0">
+          <h3 style="margin-top:0;color:#1e40af">📱 Contactar al cliente</h3>
+          <a href="{client_link}"
+             style="display:inline-block;background:#25D366;color:#fff;padding:12px 24px;
+                    text-decoration:none;border-radius:6px;font-weight:bold">
+            💬 WhatsApp a {req.customer_name}
+          </a>
+        </div>"""
+
+    html = f"""
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <h2 style="color:#1d4ed8">🏠 Nueva Solicitud de Alojamiento — Web</h2>
+  <div style="background:#f3f4f6;padding:20px;border-radius:8px;margin:16px 0">
+    <h3 style="margin-top:0">Detalles de la solicitud</h3>
+    <p><strong>📋 Ref:</strong> {ref}</p>
+    <p><strong>🏠 Alojamiento:</strong> {aloj_name}</p>
+    <p><strong>📅 Fechas:</strong> {req.dates_preference or '-'}</p>
+    <p><strong>👥 Personas:</strong> {req.people or '-'}</p>
+    <p><strong>👤 Cliente:</strong> {req.customer_name}</p>
+    <p><strong>📱 Teléfono:</strong> {req.customer_phone}</p>
+    {f"<p><strong>📧 Email:</strong> {req.customer_email}</p>" if req.customer_email else ""}
+    <p><strong>📝 Notas:</strong> {req.notes or '-'}</p>
+  </div>
+  {owner_wa_section}
+  {client_section}
+  <p style="color:#9ca3af;font-size:12px;margin-top:24px">
+    Solicitud automática desde la app de reservas HotBoat.
+  </p>
+</div>"""
+
+    try:
+        settings = get_settings()
+        resend_key = (getattr(settings, "resend_api_key", "") or "").strip()
+        from_addr  = (getattr(settings, "resend_from_confirmations", "") or
+                      getattr(settings, "email_from", "onboarding@resend.dev")).strip()
+        notif_emails = (getattr(settings, "notification_emails", "") or "").strip()
+        recipients = [e.strip() for e in notif_emails.split(",") if e.strip()]
+        if not recipients:
+            recipients = ["hotboatnotification@gmail.com"]
+
+        if not resend_key:
+            logger.warning("_email_accommodation_solicitud: RESEND_API_KEY not set, skipping email")
+            return
+
+        for recipient in recipients:
+            send_booking_html(
+                to=recipient,
+                subject=f"🏠 Nueva solicitud: {aloj_name} · {req.dates_preference or 'fechas a definir'}",
+                html=html,
+                from_address=from_addr,
+                api_key=resend_key,
+            )
+        logger.info(f"Accommodation solicitud email sent for {ref} to {recipients}")
+    except Exception as e:
+        logger.warning(f"_email_accommodation_solicitud send error: {e}")
 
 
