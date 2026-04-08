@@ -952,6 +952,8 @@ function showSection(name){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('section-'+name).classList.add('active');
   document.getElementById('nav-'+name).classList.add('active');
+  // En mobile, cerrar el sidebar automáticamente al elegir una sección
+  document.getElementById('sidebar').classList.remove('open');
   const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
