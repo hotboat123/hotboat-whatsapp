@@ -21,6 +21,7 @@ TABLE = "all_appointments"
 from app.booking.operator_settings import (
     get_vacation_days, add_vacation_day, remove_vacation_day,
     get_setting, set_setting, is_urgency_mode,
+    get_operating_hours, set_operating_hours,
 )
 
 
@@ -492,6 +493,27 @@ async def update_settings(body: SettingsRequest, x_admin_key: str = Header("")):
     if body.urgency_mode is not None:
         set_setting("urgency_mode", "true" if body.urgency_mode else "false")
     return {"ok": True, "urgency_mode": is_urgency_mode()}
+
+
+# ── Operating hours ────────────────────────────────────────────────────────────
+
+@admin_router.get("/api/admin/operating-hours")
+async def get_op_hours(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    return {"hours": get_operating_hours()}
+
+
+class OperatingHoursRequest(BaseModel):
+    hours: list  # list of "HH:MM" strings
+
+
+@admin_router.put("/api/admin/operating-hours")
+async def update_op_hours(body: OperatingHoursRequest, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    if not body.hours:
+        raise HTTPException(status_code=400, detail="Debe haber al menos un horario")
+    set_operating_hours(body.hours)
+    return {"ok": True, "hours": get_operating_hours()}
 
 
 # ── Urgency config ─────────────────────────────────────────────────────────────

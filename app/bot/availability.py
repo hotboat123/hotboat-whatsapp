@@ -158,11 +158,12 @@ class AvailabilityChecker:
         end_date = normalized.replace(hour=23, minute=59, second=59, microsecond=999999)
         return await self.get_available_slots(start_date, end_date)
     
-    def _generate_time_slots_for_date(self, date: datetime) -> List[datetime]:
+    def _generate_time_slots_for_date(self, date: datetime, override_hours: list = None) -> List[datetime]:
         """Generate all possible time slots for a given date"""
         slots = []
         date_obj = date.date() if isinstance(date, datetime) else date
-        for hour in self.config.operating_hours:
+        hours = override_hours if override_hours is not None else self.config.operating_hours
+        for hour in hours:
             dt_naive = datetime.combine(date_obj, time(hour, 0))
             slot = CHILE_TZ.localize(dt_naive)
             slots.append(slot)
@@ -220,16 +221,19 @@ class AvailabilityChecker:
             # Load vacation days and settings once
             try:
                 from app.booking.operator_settings import (
-                    get_vacation_days, is_urgency_mode, apply_urgency_filter
+                    get_vacation_days, is_urgency_mode, apply_urgency_filter,
+                    get_operating_hours_as_ints
                 )
                 vacation_dates = {
                     v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
                 }
                 urgency = is_urgency_mode()
+                db_operating_hours = get_operating_hours_as_ints()
             except Exception as se:
                 logger.warning(f"Could not load operator settings: {se}")
                 vacation_dates = set()
                 urgency = False
+                db_operating_hours = None
 
             # Generate all possible slots and check availability
             available_slots = []
@@ -260,7 +264,8 @@ class AvailabilityChecker:
                     continue
 
                 date_slots = self._generate_time_slots_for_date(
-                    datetime.combine(current_date, time(0, 0))
+                    datetime.combine(current_date, time(0, 0)),
+                    override_hours=db_operating_hours
                 )
                 
                 for slot_datetime in date_slots:

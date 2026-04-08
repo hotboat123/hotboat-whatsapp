@@ -675,6 +675,20 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
+      <!-- ── Horarios HotBoat ─────────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">🕐 Horarios HotBoat</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Horarios disponibles para reservar el HotBoat (aplica en WhatsApp y en la web).<br>
+          El <strong>Modo Genera Urgencia</strong> usará estos mismos horarios como base para filtrar.
+        </p>
+        <div id="oh-chips" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.8rem"></div>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <input type="time" id="oh-new-input" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.85rem">
+          <button onclick="addOpHour()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer;font-weight:600">+ Agregar</button>
+        </div>
+      </div>
+
       <!-- ── Urgency Mode ─────────────────────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">⚡ Modo Genera Urgencia</div>
@@ -1641,16 +1655,60 @@ let _urgencyCfg = {seed_times:['10:00','18:00'], gap_hours:3};
 let _dpCfg = null;
 const DAY_NAMES_SHORT = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 
+// ── Operating Hours ───────────────────────────────────────────────────────────
+let _opHours = ['10:00','18:00','21:00'];
+
+function renderOpHours(){
+  const el = document.getElementById('oh-chips');
+  if(!el) return;
+  el.innerHTML = _opHours.map(h =>
+    `<div style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(255,200,0,.15);border:1px solid rgba(255,200,0,.3);border-radius:20px;padding:.25rem .7rem;font-size:.85rem;font-weight:600">
+      ${h}
+      <span onclick="removeOpHour('${h}')" style="cursor:pointer;color:var(--muted);font-size:.9rem;line-height:1;margin-left:.1rem" title="Eliminar">✕</span>
+    </div>`
+  ).join('');
+}
+
+function addOpHour(){
+  const inp = document.getElementById('oh-new-input');
+  const val = inp ? inp.value.trim() : '';
+  if(!val){ showToast('Selecciona un horario'); return; }
+  const [h,m] = val.split(':');
+  const hhmm = h.padStart(2,'0')+':'+(m||'00').padStart(2,'0');
+  if(_opHours.includes(hhmm)){ showToast('Horario ya existe'); inp.value=''; return; }
+  _opHours = [..._opHours, hhmm].sort();
+  inp.value = '';
+  renderOpHours();
+  saveOpHours();
+}
+
+function removeOpHour(h){
+  if(_opHours.length <= 1){ showToast('Debe haber al menos un horario'); return; }
+  _opHours = _opHours.filter(x => x !== h);
+  renderOpHours();
+  saveOpHours();
+}
+
+async function saveOpHours(){
+  try{
+    await api('/api/admin/operating-hours',{method:'PUT',body:JSON.stringify({hours:_opHours})});
+    showToast('Horarios guardados ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
 async function loadSettings(){
   try{
-    const [d, ms] = await Promise.all([
+    const [d, ms, oh] = await Promise.all([
       api('/api/admin/settings'),
       api('/api/admin/menu-settings'),
+      api('/api/admin/operating-hours'),
     ]);
     const cb = document.getElementById('urgency-toggle');
     if(cb){ cb.checked = d.urgency_mode; updateUrgencyLabel(d.urgency_mode); }
     if(d.urgency_config){ _urgencyCfg = d.urgency_config; renderUrgencyConfig(); }
     if(d.dynamic_pricing){ _dpCfg = d.dynamic_pricing; renderDpConfig(); }
+    // Operating hours
+    if(oh && oh.hours){ _opHours = oh.hours; renderOpHours(); }
     // Menu visibility toggles
     const msExp  = document.getElementById('ms-experiencias');
     const msAloj = document.getElementById('ms-alojamientos');

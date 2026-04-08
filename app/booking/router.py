@@ -147,7 +147,8 @@ async def get_dynamic_price(
 async def get_availability(days: int = Query(21, ge=1, le=60)):
     try:
         from app.booking.operator_settings import (
-            get_vacation_days, is_urgency_mode, apply_urgency_filter
+            get_vacation_days, is_urgency_mode, apply_urgency_filter,
+            get_operating_hours
         )
         from app.db.connection import get_connection
 
@@ -201,7 +202,7 @@ async def get_availability(days: int = Query(21, ge=1, le=60)):
 
         return {
             "availability": grouped,
-            "operating_hours": AVAILABILITY_CONFIG.operating_hours,
+            "operating_hours": get_operating_hours(),
             "urgency_mode": is_urgency_mode(),
             "vacation_days": list(vacation_dates),
         }

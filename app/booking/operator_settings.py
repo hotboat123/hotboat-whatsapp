@@ -146,7 +146,8 @@ def apply_urgency_filter(
         return []
 
     cfg = config if config is not None else get_urgency_config()
-    seed_times: list = cfg.get("seed_times", ["10:00", "18:00"])
+    # Use configured seed_times, falling back to the admin-configured operating hours
+    seed_times: list = cfg.get("seed_times") or get_operating_hours()
     gap_hours: float = float(cfg.get("gap_hours", 3))
 
     def _to_min(t: str) -> int:
@@ -409,6 +410,41 @@ def set_email_booking_config(cfg: dict) -> bool:
         "subject": cfg.get("subject", ""),
         "body_html": cfg.get("body_html", ""),
     })
+
+
+# ── Operating hours (available time slots for HotBoat) ───────────────────────
+
+OPERATING_HOURS_DEFAULT = ["10:00", "18:00", "21:00"]
+
+
+def get_operating_hours() -> list:
+    """Return list of 'HH:MM' strings — the base available time slots."""
+    raw = get_setting("operating_hours", "")
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and parsed:
+                return sorted(parsed)
+        except Exception:
+            pass
+    return OPERATING_HOURS_DEFAULT.copy()
+
+
+def set_operating_hours(hours: list) -> bool:
+    """Store list of 'HH:MM' strings."""
+    cleaned = sorted({h.strip() for h in hours if h.strip()})
+    return set_setting("operating_hours", json.dumps(cleaned))
+
+
+def get_operating_hours_as_ints() -> list:
+    """Return operating hours as list of integers for compatibility."""
+    result = []
+    for h in get_operating_hours():
+        try:
+            result.append(int(h.split(":")[0]))
+        except Exception:
+            pass
+    return result
 
 
 # ── Menu visibility settings ─────────────────────────────────────────────────
