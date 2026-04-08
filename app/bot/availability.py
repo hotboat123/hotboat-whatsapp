@@ -252,6 +252,18 @@ class AvailabilityChecker:
                         except Exception:
                             pass
 
+            # In urgency mode generate a full hourly range so the filter can find
+            # slots at booking ± gap_hours (e.g. 18:00 booked → 15:00 candidate).
+            # Outside urgency, use only the configured operating hours.
+            if urgency and db_operating_hours:
+                from app.booking.operator_settings import get_urgency_config
+                _gap = int(get_urgency_config().get("gap_hours", 3))
+                _min_h = max(8,  min(db_operating_hours) - _gap)
+                _max_h = min(22, max(db_operating_hours) + _gap)
+                hours_to_generate = list(range(_min_h, _max_h + 1))
+            else:
+                hours_to_generate = db_operating_hours
+
             # Group raw available slots by date (before urgency filter)
             by_date: dict = {}
             current_date = start_date.date()
@@ -265,7 +277,7 @@ class AvailabilityChecker:
 
                 date_slots = self._generate_time_slots_for_date(
                     datetime.combine(current_date, time(0, 0)),
-                    override_hours=db_operating_hours
+                    override_hours=hours_to_generate
                 )
                 
                 for slot_datetime in date_slots:
