@@ -676,14 +676,26 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
     clean_client = (req.customer_phone or "").replace("+", "").replace(" ", "").replace("-", "")
     client_section = ""
     if clean_client:
-        client_link = f"https://wa.me/{clean_client}"
+        client_avail_msg = (
+            f"Hola {req.customer_name}! 👋 Te escribimos de parte de *HotBoat Chile* 🚤\n\n"
+            f"Revisamos disponibilidad para tu solicitud:\n\n"
+            f"🏠 *Alojamiento:* {aloj_name}\n"
+            f"📅 *Fechas:* {req.dates_preference or '-'}\n"
+            f"👥 *Personas:* {req.people or '-'}\n\n"
+            f"✅ *¡SÍ hay disponibilidad!*\n"
+            f"_(si no hay, cambia esta línea por: ❌ Lo sentimos, no hay disponibilidad para esas fechas)_\n\n"
+            f"¿Coordinamos los detalles para confirmar tu reserva? 😊"
+        )
+        client_link = _wa_link(clean_client, client_avail_msg)
         client_section = f"""
         <div style="background:#eff6ff;padding:20px;border-radius:8px;margin:16px 0">
-          <h3 style="margin-top:0;color:#1e40af">📱 Contactar al cliente</h3>
+          <h3 style="margin-top:0;color:#1e40af">📱 Responder al cliente</h3>
+          <p style="margin-bottom:4px;font-size:.9rem">El mensaje incluye los detalles de la reserva y confirma disponibilidad.<br>
+          <strong>Puedes editar el mensaje en WhatsApp antes de enviarlo</strong> — cambia la línea ✅ por ❌ si no hay disponibilidad.</p>
           <a href="{client_link}"
              style="display:inline-block;background:#25D366;color:#fff;padding:12px 24px;
-                    text-decoration:none;border-radius:6px;font-weight:bold">
-            💬 WhatsApp a {req.customer_name}
+                    text-decoration:none;border-radius:6px;font-weight:bold;margin-top:12px">
+            💬 Responder a {req.customer_name}
           </a>
         </div>"""
 
