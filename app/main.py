@@ -1,7 +1,7 @@
 """
 FastAPI main application - Updated 2026-03-08
 """
-from fastapi import FastAPI, Request, Response, HTTPException, Query, UploadFile, Form
+from fastapi import FastAPI, Request, Response, HTTPException, Query, UploadFile, Form, Header
 from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
