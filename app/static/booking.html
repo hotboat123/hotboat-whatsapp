@@ -145,10 +145,23 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem;font-
 </header>
 <main id="main-content"></main>
 <div id="toast" class="toast hidden"></div>
+<button id="btn-home" onclick="renderMenu()" aria-label="Volver al menú"
+  style="position:fixed;bottom:1.2rem;left:1rem;z-index:999;visibility:hidden;opacity:0;
+         background:var(--deep);border:1.5px solid var(--coral);color:var(--coral);
+         border-radius:50px;padding:.45rem .9rem;font-size:.8rem;font-weight:700;
+         cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.4);
+         display:flex;align-items:center;gap:.35rem;transition:opacity .25s,visibility .25s">
+  ← Menú
+</button>
 </div>
 <script id="booking-js">
 const $ = id => document.getElementById(id);
 const mc = document.getElementById('main-content');
+function _homeBtn(show){ const b=$('btn-home'); if(!b)return; b.style.visibility=show?'visible':'hidden'; b.style.opacity=show?'1':'0'; }
+// Show/hide home button based on whether main menu is visible
+new MutationObserver(()=>{
+  _homeBtn(!mc.querySelector('.menu-grid'));
+}).observe(mc, {childList:true, subtree:false});
 
 const S = {
   step: 'menu',
