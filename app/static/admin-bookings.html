@@ -2557,12 +2557,10 @@ async function saveExtra(id){
   const btn = document.getElementById(`ec-btn-${id}`);
   if(btn){ btn.textContent='...'; btn.disabled=true; }
   try{
-    await api(`/api/admin/precios-extras/${id}`,{method:'PUT',body:JSON.stringify(d)});
+    await api(`/api/admin/precios-extras/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify(d)});
     if(btn){ btn.textContent='✓ Guardado'; btn.classList.add('saved'); btn.style.background='var(--green)'; btn.style.color='#fff'; btn.disabled=false; }
-    // Update local cache
-    const idx = _extrasCatData.findIndex(e=>e.id===id);
-    if(idx>=0){ _extrasCatData[idx].name=d.name; _extrasCatData[idx].price=d.price; _extrasCatData[idx].cost=d.cost; _extrasCatData[idx].icon=d.icon||''; }
-    EXTRAS_CATALOG = _extrasCatData;
+    // Refresh list so ID reflects any rename
+    await loadExtrasCat();
     showToast(`"${d.name}" guardado ✓`);
     setTimeout(()=>{ if(btn){ btn.textContent='Guardar'; btn.classList.remove('saved'); btn.style.background=''; btn.style.color=''; } }, 2500);
   }catch(e){
@@ -2577,7 +2575,7 @@ async function saveExtraVisibility(id, visible){
   if(!d) return;
   d.show_in_booking = visible;
   try{
-    await api(`/api/admin/precios-extras/${id}`,{method:'PUT',body:JSON.stringify(d)});
+    await api(`/api/admin/precios-extras/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify(d)});
     const idx = _extrasCatData.findIndex(e=>e.id===id);
     if(idx>=0) _extrasCatData[idx].show_in_booking = visible;
     showToast(visible ? '✓ Extra visible en reservas' : '✓ Extra oculto en reservas');
@@ -2587,7 +2585,7 @@ async function saveExtraVisibility(id, visible){
 async function deleteExtra(id, name){
   if(!confirm(`¿Eliminar "${name}"?`)) return;
   try{
-    await api(`/api/admin/precios-extras/${id}`,{method:'DELETE'});
+    await api(`/api/admin/precios-extras/${encodeURIComponent(id)}`,{method:'DELETE'});
     _extrasCatData = _extrasCatData.filter(e=>e.id!==id);
     EXTRAS_CATALOG = _extrasCatData;
     filterExtrasCat();

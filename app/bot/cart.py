@@ -165,7 +165,33 @@ class CartManager:
         "reserva flex": {"name": "Reserva FLEX (+10%)", "price": 0},  # Se calcula como % del total
         "flex": {"name": "Reserva FLEX (+10%)", "price": 0},
     }
-    
+
+    # Live prices loaded from extras_visibility (refreshed on startup and periodically)
+    _db_prices: dict = {}  # {name_lower: price}
+
+    @classmethod
+    def refresh_prices_from_db(cls):
+        """Load/refresh extra prices from extras_visibility (single source of truth)."""
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT LOWER(COALESCE(name, extra_name_lower)),
+                               COALESCE(precio_venta, 0)
+                        FROM extras_visibility
+                        WHERE precio_venta IS NOT NULL AND precio_venta > 0
+                    """)
+                    cls._db_prices = {row[0]: row[1] for row in cur.fetchall()}
+            logger.info(f"CartManager: loaded {len(cls._db_prices)} extra prices from extras_visibility")
+        except Exception as e:
+            logger.warning(f"CartManager: could not load prices from DB: {e}")
+
+    def get_extra_price(self, display_name: str, fallback_price: int) -> int:
+        """Get live price for an extra, preferring DB value over hardcoded."""
+        if not self.__class__._db_prices:
+            self.__class__.refresh_prices_from_db()
+        return self.__class__._db_prices.get(display_name.lower(), fallback_price)
+
     # Prices per person based on capacity
     PRICES_PER_PERSON = {
         2: 69990,
@@ -431,13 +457,14 @@ class CartManager:
             if message_lower.startswith(prefix):
                 message_lower = message_lower[len(prefix):].strip()
         
-        # Try to match with catalog
+        # Try to match with catalog (use live DB price when available)
         for key, value in self.EXTRAS_CATALOG.items():
             if key in message_lower:
+                live_price = self.get_extra_price(value["name"], value["price"])
                 return CartItem(
                     item_type="extra",
                     name=value["name"],
-                    price=value["price"],
+                    price=live_price,
                     quantity=1
                 )
         

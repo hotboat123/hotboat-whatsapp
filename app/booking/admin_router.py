@@ -903,7 +903,7 @@ async def sync_tables(x_admin_key: str = Header("")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── Precios Extras catalog ─────────────────────────────────────────────────────
+# ── Extras catalog (extras_visibility is the single source of truth) ──────────
 
 import unicodedata as _unicodedata
 
@@ -923,61 +923,38 @@ async def get_precios_extras(x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Join with extras_visibility for persistent show_in_booking flag
-                # (survives Google Sheets re-sync of "Precios Extras")
                 cur.execute("""
-                    SELECT DISTINCT ON (LOWER(pe.raw->>'Extra'))
-                           pe.id,
-                           pe.raw->>'Extra' AS name,
-                           pe.raw->>'Precio' AS precio_sheets,
-                           pe.raw->>'costo'  AS costo_sheets,
-                           pe.raw->>'icon'   AS icon_sheets,
-                           COALESCE(pe.raw->>'description', '') AS desc_sheets,
-                           COALESCE(ev.show_in_booking, TRUE)   AS show_in_booking,
-                           COALESCE(ev.sort_order, 999)         AS sort_order,
-                           ev.description   AS ev_desc,
-                           ev.precio_venta  AS ev_precio,
-                           ev.costo         AS ev_costo,
-                           ev.icon          AS ev_icon
-                    FROM "Precios Extras" pe
-                    LEFT JOIN extras_visibility ev
-                           ON ev.extra_name_lower = LOWER(pe.raw->>'Extra')
-                    WHERE pe.raw->>'Extra' IS NOT NULL
-                    ORDER BY LOWER(pe.raw->>'Extra'), pe.updated_at DESC
+                    SELECT extra_name_lower, name, show_in_booking,
+                           COALESCE(sort_order, 999) AS sort_order,
+                           COALESCE(description, '') AS description,
+                           COALESCE(precio_venta, 0) AS price,
+                           COALESCE(costo, 0)        AS cost,
+                           COALESCE(icon, '')        AS icon
+                    FROM extras_visibility
+                    ORDER BY sort_order, extra_name_lower
                 """)
                 extras = []
-                seen_keys: set = set()
-                for (row_id, name, precio_s, costo_s, icon_s, desc_s,
-                     show_in_booking, sort_order,
-                     ev_desc, ev_precio, ev_costo, ev_icon) in cur.fetchall():
-                    key = _slugify_extra(name)
-                    if key in seen_keys:
-                        continue
-                    seen_keys.add(key)
-                    # Prefer extras_visibility values (admin edits) over Sheets values
-                    price = ev_precio if ev_precio is not None else _parse_clp(precio_s)
-                    cost  = ev_costo  if ev_costo  is not None else (_parse_clp(costo_s) if costo_s else 0)
-                    icon  = ev_icon   if ev_icon   else (icon_s or "")
-                    desc  = ev_desc   if ev_desc   is not None else (desc_s or "")
+                for (name_lower, name, show_in_booking, sort_order,
+                     description, price, cost, icon) in cur.fetchall():
+                    display_name = name or name_lower
                     extras.append({
-                        "id": row_id,
-                        "key": key,
-                        "name": name,
+                        "id": name_lower,
+                        "key": _slugify_extra(display_name),
+                        "name": display_name,
                         "price": price,
                         "cost": cost,
                         "icon": icon,
-                        "description": desc,
+                        "description": description,
                         "show_in_booking": bool(show_in_booking),
                         "sort_order": int(sort_order),
                     })
-        extras.sort(key=lambda x: (x["sort_order"], x["name"]))
         return {"extras": extras}
     except Exception as e:
-        logger.error(f"Error fetching precios extras: {e}")
+        logger.error(f"Error fetching extras: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@admin_router.put("/api/admin/precios-extras/{extra_id}")
+@admin_router.put("/api/admin/precios-extras/{extra_id:path}")
 async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), request: Request = None):
     _check_auth(x_admin_key)
     try:
@@ -990,51 +967,52 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         show_in_booking = bool(body.get("show_in_booking", True))
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
-        margen = f"{round(price / cost * 100)}%" if cost else ""
-        utilidad = price - cost
+        new_name_lower = name.lower()
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Fetch old name before overwriting (to detect renames)
-                cur.execute('SELECT raw->>\'Extra\' FROM "Precios Extras" WHERE id = %s', (extra_id,))
-                old_row = cur.fetchone()
-                old_name = old_row[0] if old_row else None
-
-                cur.execute("""
-                    UPDATE "Precios Extras"
-                    SET raw = raw
-                        || jsonb_build_object('Extra', %s::text)
-                        || jsonb_build_object('Precio', %s::text)
-                        || jsonb_build_object('costo', %s::text)
-                        || jsonb_build_object('margen', %s::text)
-                        || jsonb_build_object('Utilidad', %s::text)
-                        || jsonb_build_object('icon', %s::text)
-                        || jsonb_build_object('description', %s::text),
-                        updated_at = NOW()
-                    WHERE id = %s
-                """, (name, str(price), str(cost), margen, str(utilidad), icon, description, extra_id))
-
-                # If the name changed, hide the old name so Sheets doesn't resurrect it
-                if old_name and old_name.lower() != name.lower():
+                # If key changed (rename), update the PK
+                if extra_id != new_name_lower:
                     cur.execute("""
-                        INSERT INTO extras_visibility (extra_name_lower, show_in_booking, updated_at)
-                        VALUES (LOWER(%s), FALSE, NOW())
+                        UPDATE extras_visibility
+                        SET extra_name_lower = %s, name = %s,
+                            show_in_booking = %s, description = %s,
+                            precio_venta = %s, costo = %s, icon = %s,
+                            updated_at = NOW()
+                        WHERE extra_name_lower = %s
+                    """, (new_name_lower, name, show_in_booking,
+                          description or None, price or None, cost or None, icon or None,
+                          extra_id))
+                    if cur.rowcount == 0:
+                        # Row didn't exist under old key — upsert under new key
+                        cur.execute("""
+                            INSERT INTO extras_visibility
+                                (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                            ON CONFLICT (extra_name_lower) DO UPDATE
+                                SET name = EXCLUDED.name,
+                                    show_in_booking = EXCLUDED.show_in_booking,
+                                    description = EXCLUDED.description,
+                                    precio_venta = EXCLUDED.precio_venta,
+                                    costo = EXCLUDED.costo,
+                                    icon = EXCLUDED.icon,
+                                    updated_at = NOW()
+                        """, (new_name_lower, name, show_in_booking,
+                              description or None, price or None, cost or None, icon or None))
+                else:
+                    cur.execute("""
+                        INSERT INTO extras_visibility
+                            (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                         ON CONFLICT (extra_name_lower) DO UPDATE
-                            SET show_in_booking = FALSE, updated_at = NOW()
-                    """, (old_name,))
-
-                # Persist ALL editable fields in extras_visibility (survives Sheets re-sync)
-                cur.execute("""
-                    INSERT INTO extras_visibility
-                        (extra_name_lower, show_in_booking, description, precio_venta, costo, icon, updated_at)
-                    VALUES (LOWER(%s), %s, %s, %s, %s, %s, NOW())
-                    ON CONFLICT (extra_name_lower) DO UPDATE
-                        SET show_in_booking = EXCLUDED.show_in_booking,
-                            description     = EXCLUDED.description,
-                            precio_venta    = EXCLUDED.precio_venta,
-                            costo           = EXCLUDED.costo,
-                            icon            = EXCLUDED.icon,
-                            updated_at      = NOW()
-                """, (name, show_in_booking, description or None, price or None, cost or None, icon or None))
+                            SET name = EXCLUDED.name,
+                                show_in_booking = EXCLUDED.show_in_booking,
+                                description = EXCLUDED.description,
+                                precio_venta = EXCLUDED.precio_venta,
+                                costo = EXCLUDED.costo,
+                                icon = EXCLUDED.icon,
+                                updated_at = NOW()
+                    """, (new_name_lower, name, show_in_booking,
+                          description or None, price or None, cost or None, icon or None))
                 conn.commit()
         return {"ok": True}
     except HTTPException:
@@ -1048,7 +1026,6 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
 async def create_precio_extra(x_admin_key: str = Header(""), request: Request = None):
     _check_auth(x_admin_key)
     try:
-        import hashlib, time
         body = await request.json()
         name = body.get("name", "").strip()
         price = int(body.get("price") or 0)
@@ -1056,23 +1033,26 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
         description = body.get("description", "").strip()
-        show_in_booking = body.get("show_in_booking", True)
-        margen = f"{round(price / cost * 100)}%" if cost else ""
-        utilidad = price - cost
-        new_id = hashlib.sha1(f"{name}{time.time()}".encode()).hexdigest()
-        raw = {"id": new_id, "Extra": name, "Precio": str(price),
-               "costo": str(cost), "margen": margen, "Utilidad": str(utilidad),
-               "description": description,
-               "show_in_booking": "false" if not show_in_booking else "true"}
+        show_in_booking = bool(body.get("show_in_booking", True))
+        name_lower = name.lower()
         with get_connection() as conn:
             with conn.cursor() as cur:
-                from psycopg.types.json import Jsonb as PgJson
-                cur.execute(
-                    'INSERT INTO "Precios Extras" (id, raw, source, created_at, updated_at) VALUES (%s, %s, %s, NOW(), NOW())',
-                    (new_id, PgJson(raw), "admin")
-                )
+                cur.execute("""
+                    INSERT INTO extras_visibility
+                        (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
+                         sort_order, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, '', 999, NOW())
+                    ON CONFLICT (extra_name_lower) DO UPDATE
+                        SET name = EXCLUDED.name,
+                            show_in_booking = EXCLUDED.show_in_booking,
+                            description = EXCLUDED.description,
+                            precio_venta = EXCLUDED.precio_venta,
+                            costo = EXCLUDED.costo,
+                            updated_at = NOW()
+                """, (name_lower, name, show_in_booking,
+                      description or None, price or None, cost or None))
                 conn.commit()
-        return {"ok": True, "id": new_id, "key": _slugify_extra(name)}
+        return {"ok": True, "id": name_lower, "key": _slugify_extra(name)}
     except HTTPException:
         raise
     except Exception as e:
@@ -1082,10 +1062,10 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
 
 @admin_router.post("/api/admin/precios-extras/reorder")
 async def reorder_extras(x_admin_key: str = Header(""), request: Request = None):
-    """Save new sort order for all extras. Body: [{name_lower, sort_order}, ...]"""
+    """Save new sort order. Body: [{name_lower, sort_order}, ...]"""
     _check_auth(x_admin_key)
     try:
-        items = await request.json()  # list of {name_lower, sort_order}
+        items = await request.json()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 for item in items:
@@ -1093,8 +1073,7 @@ async def reorder_extras(x_admin_key: str = Header(""), request: Request = None)
                         INSERT INTO extras_visibility (extra_name_lower, show_in_booking, sort_order, updated_at)
                         VALUES (%s, TRUE, %s, NOW())
                         ON CONFLICT (extra_name_lower) DO UPDATE
-                            SET sort_order = EXCLUDED.sort_order,
-                                updated_at = NOW()
+                            SET sort_order = EXCLUDED.sort_order, updated_at = NOW()
                     """, (item["name_lower"], item["sort_order"]))
                 conn.commit()
         return {"ok": True}
@@ -1103,25 +1082,14 @@ async def reorder_extras(x_admin_key: str = Header(""), request: Request = None)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@admin_router.delete("/api/admin/precios-extras/{extra_id}")
+@admin_router.delete("/api/admin/precios-extras/{extra_id:path}")
 async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # "Precios Extras" is synced from Google Sheets so physical deletes come back.
-                # We hide the entry persistently via extras_visibility instead.
-                cur.execute('SELECT raw->>\'Extra\' FROM "Precios Extras" WHERE id = %s', (extra_id,))
-                row = cur.fetchone()
-                if row and row[0]:
-                    extra_name = row[0]
-                    cur.execute("""
-                        INSERT INTO extras_visibility (extra_name_lower, show_in_booking, updated_at)
-                        VALUES (LOWER(%s), FALSE, NOW())
-                        ON CONFLICT (extra_name_lower) DO UPDATE
-                            SET show_in_booking = FALSE,
-                                updated_at = NOW()
-                    """, (extra_name,))
+                # Physical delete — extras_visibility is our own table, not Sheets-synced
+                cur.execute("DELETE FROM extras_visibility WHERE extra_name_lower = %s", (extra_id,))
                 conn.commit()
         return {"ok": True}
     except Exception as e:

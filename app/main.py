@@ -318,6 +318,7 @@ def _ensure_extras_visibility_table():
                     ("precio_venta", "INTEGER"),
                     ("costo",        "INTEGER"),
                     ("icon",         "TEXT"),
+                    ("name",         "TEXT"),
                 ]:
                     cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col} {definition}")
                 conn.commit()
@@ -330,6 +331,11 @@ def _ensure_extras_visibility_table():
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
     _ensure_extras_visibility_table()
+    try:
+        from app.bot.cart import CartManager
+        CartManager.refresh_prices_from_db()
+    except Exception as _e:
+        logger.warning(f"Cart price refresh skipped: {_e}")
     sync_task = asyncio.create_task(_run_auto_sync())
     email_task = asyncio.create_task(_run_email_sweeps_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")

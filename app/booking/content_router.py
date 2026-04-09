@@ -39,52 +39,34 @@ def _default_extra_icon(key: str) -> str:
 def list_extras():
     """Public endpoint: returns extras visible in the booking app (show_in_booking != false)."""
     try:
-        from app.booking.admin_router import _slugify_extra, _parse_clp
+        from app.booking.admin_router import _slugify_extra
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT DISTINCT ON (LOWER(pe.raw->>'Extra'))
-                           pe.id,
-                           pe.raw->>'Extra'       AS name,
-                           pe.raw->>'Precio'      AS precio_sheets,
-                           pe.raw->>'icon'        AS icon_sheets,
-                           COALESCE(pe.raw->>'description', '') AS desc_sheets,
-                           COALESCE(ev.show_in_booking, TRUE)   AS show_in_booking,
-                           COALESCE(ev.sort_order, 999)         AS sort_order,
-                           ev.description  AS ev_desc,
-                           ev.precio_venta AS ev_precio,
-                           ev.icon         AS ev_icon
-                    FROM "Precios Extras" pe
-                    LEFT JOIN extras_visibility ev
-                           ON ev.extra_name_lower = LOWER(pe.raw->>'Extra')
-                    WHERE pe.raw->>'Extra' IS NOT NULL
-                    ORDER BY LOWER(pe.raw->>'Extra'), pe.updated_at DESC
+                    SELECT extra_name_lower,
+                           COALESCE(name, extra_name_lower) AS name,
+                           COALESCE(precio_venta, 0)        AS price,
+                           COALESCE(icon, '')               AS icon,
+                           COALESCE(description, '')        AS description,
+                           COALESCE(sort_order, 999)        AS sort_order
+                    FROM extras_visibility
+                    WHERE show_in_booking = TRUE
+                    ORDER BY sort_order, extra_name_lower
                 """)
                 extras = []
-                seen: set = set()
-                for (row_id, name, precio_s, icon_s, desc_s,
-                     show_in_booking, sort_order,
-                     ev_desc, ev_precio, ev_icon) in cur.fetchall():
-                    if not show_in_booking:
-                        continue
+                for (name_lower, name, price, icon, description, sort_order) in cur.fetchall():
                     key = _slugify_extra(name)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    price = ev_precio if ev_precio is not None else _parse_clp(precio_s)
-                    icon  = ev_icon   if ev_icon   else (icon_s or "")
-                    desc  = ev_desc   if ev_desc   is not None else (desc_s or "")
                     resolved_icon = icon or _default_extra_icon(key)
                     extras.append({
-                        "id": row_id,
+                        "id": name_lower,
                         "key": key,
                         "name": name,
                         "price": price,
                         "icon": resolved_icon,
-                        "description": desc,
+                        "description": description,
                         "sort_order": int(sort_order),
                     })
-        extras.sort(key=lambda x: (x["sort_order"], x["name"]))
+        # already sorted by DB ORDER BY
         return {"extras": extras}
     except Exception as e:
         logger.error(f"Error fetching public extras: {e}")
