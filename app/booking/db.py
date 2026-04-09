@@ -122,23 +122,57 @@ def mark_confirmation_email_sent(booking_ref: str) -> bool:
 
 def get_bookings_for_followup(days_after: int) -> list:
     """Return confirmed bookings whose booking_date = today - days_after
-    that have a customer email and haven't received the followup email yet."""
+    that have a customer email and haven't received the followup email yet.
+    Includes both hotboat_appointments (public) and all_appointments (manual).
+    Manual rows use synthetic booking_ref = 'MANUAL-<id>'.
+    """
     from datetime import date, timedelta
     target_date = date.today() - timedelta(days=days_after)
+
+    # Ensure all_appointments has the followup column (safe guard for old DBs)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, booking_ref, customer_name, customer_phone, customer_email, "
-                "       booking_date, booking_time, num_people, subtotal, extras_total, "
-                "       total_price, has_flex, flex_amount, extras, notes "
-                "FROM hotboat_appointments "
-                "WHERE booking_date = %s "
-                "  AND status = 'confirmed' "
-                "  AND customer_email IS NOT NULL "
-                "  AND customer_email <> '' "
-                "  AND followup_email_sent_at IS NULL",
-                (target_date,),
-            )
+            cur.execute("""
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS followup_email_sent_at TIMESTAMPTZ
+            """)
+            conn.commit()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, booking_ref, customer_name, customer_phone, customer_email,
+                       booking_date, booking_time, num_people, subtotal, extras_total,
+                       total_price, has_flex, flex_amount, extras, notes
+                FROM hotboat_appointments
+                WHERE booking_date = %s
+                  AND status = 'confirmed'
+                  AND customer_email IS NOT NULL AND customer_email <> ''
+                  AND followup_email_sent_at IS NULL
+
+                UNION ALL
+
+                SELECT id,
+                       'MANUAL-' || id::text          AS booking_ref,
+                       nombre_cliente                  AS customer_name,
+                       telefono                        AS customer_phone,
+                       email                           AS customer_email,
+                       fecha                           AS booking_date,
+                       hora                            AS booking_time,
+                       num_personas                    AS num_people,
+                       ingreso_total                   AS subtotal,
+                       COALESCE(ingreso_extras, 0)     AS extras_total,
+                       ingreso_total                   AS total_price,
+                       FALSE                           AS has_flex,
+                       0                               AS flex_amount,
+                       NULL                            AS extras,
+                       observaciones                   AS notes
+                FROM all_appointments
+                WHERE fecha = %s
+                  AND status = 'confirmed'
+                  AND email IS NOT NULL AND email <> ''
+                  AND followup_email_sent_at IS NULL
+            """, (target_date, target_date))
             cols = [
                 "id", "booking_ref", "customer_name", "customer_phone", "customer_email",
                 "booking_date", "booking_time", "num_people", "subtotal", "extras_total",
@@ -155,14 +189,24 @@ def get_bookings_for_followup(days_after: int) -> list:
 
 
 def mark_followup_email_sent(booking_ref: str) -> bool:
-    """Set followup_email_sent_at once (idempotent)."""
+    """Set followup_email_sent_at once (idempotent).
+    Handles both hotboat_appointments (real ref) and all_appointments (MANUAL-<id>).
+    """
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE hotboat_appointments SET followup_email_sent_at=NOW(), updated_at=NOW() "
-                "WHERE booking_ref=%s AND followup_email_sent_at IS NULL",
-                (booking_ref,),
-            )
+            if booking_ref.startswith("MANUAL-"):
+                row_id = int(booking_ref.split("-", 1)[1])
+                cur.execute(
+                    "UPDATE all_appointments SET followup_email_sent_at=NOW(), updated_at=NOW() "
+                    "WHERE id=%s AND followup_email_sent_at IS NULL",
+                    (row_id,),
+                )
+            else:
+                cur.execute(
+                    "UPDATE hotboat_appointments SET followup_email_sent_at=NOW(), updated_at=NOW() "
+                    "WHERE booking_ref=%s AND followup_email_sent_at IS NULL",
+                    (booking_ref,),
+                )
             conn.commit()
             return cur.rowcount > 0
 
