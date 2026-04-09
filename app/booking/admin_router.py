@@ -921,6 +921,19 @@ def _parse_clp(s) -> int:
 async def get_precios_extras(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     try:
+        # Ensure all required columns exist (safe to run every time)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for col_def in [
+                    "name TEXT",
+                    "description TEXT",
+                    "precio_venta INTEGER",
+                    "costo INTEGER",
+                    "icon TEXT",
+                ]:
+                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
+                conn.commit()
+
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""

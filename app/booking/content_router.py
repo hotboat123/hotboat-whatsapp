@@ -37,9 +37,18 @@ def _default_extra_icon(key: str) -> str:
 
 @content_router.get("/api/content/extras")
 def list_extras():
-    """Public endpoint: returns extras visible in the booking app (show_in_booking != false)."""
+    """Public endpoint: returns extras visible in the booking app (show_in_booking = TRUE)."""
     try:
         from app.booking.admin_router import _slugify_extra
+        # Ensure name column exists before querying (may not exist on first deploy)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    ALTER TABLE extras_visibility
+                    ADD COLUMN IF NOT EXISTS name TEXT
+                """)
+                conn.commit()
+
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
