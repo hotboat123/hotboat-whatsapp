@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     # Optional BCC for every transactional booking email (comma-separated)
     resend_bcc_booking: str = ""
     notification_emails: str = ""  # Comma-separated list of emails to notify
+    # Direct URL of the logo image used in booking emails (must be publicly accessible)
+    email_logo_url: str = ""
     
     # SMTP Email Configuration (alternative to Resend)
     email_host: str = ""
