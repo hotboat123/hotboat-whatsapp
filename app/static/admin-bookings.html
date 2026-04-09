@@ -2476,7 +2476,7 @@ function renderExtrasCat(list){
       <td style="text-align:center">
         <label class="toggle-wrap" title="Mostrar en app de reservas">
           <input type="checkbox" ${e.show_in_booking!==false?'checked':''} data-field="show_in_booking"
-            onchange="ecMarkDirty('${e.id}')">
+            onchange="saveExtraVisibility('${e.id}', this.checked)">
           <span class="toggle-slider"></span>
         </label>
       </td>
@@ -2550,6 +2550,19 @@ async function saveExtra(id){
     showToast('Error: '+e.message);
     if(btn){ btn.textContent='Guardar'; btn.disabled=false; }
   }
+}
+
+async function saveExtraVisibility(id, visible){
+  // Auto-save the show_in_booking toggle without requiring "Guardar"
+  const d = ecGetRow(id);
+  if(!d) return;
+  d.show_in_booking = visible;
+  try{
+    await api(`/api/admin/precios-extras/${id}`,{method:'PUT',body:JSON.stringify(d)});
+    const idx = _extrasCatData.findIndex(e=>e.id===id);
+    if(idx>=0) _extrasCatData[idx].show_in_booking = visible;
+    showToast(visible ? '✓ Extra visible en reservas' : '✓ Extra oculto en reservas');
+  }catch(e){ showToast('Error: '+e.message); }
 }
 
 async function deleteExtra(id, name){
