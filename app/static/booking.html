@@ -1219,14 +1219,30 @@ function goExtras(){
 }
 
 function renderExtras(){
-  const items = EXTRAS_CATALOG.map(e=>`
-    <div class="extra-item ${S.extras[e.id]?'selected':''}" onclick="toggleExtra('${e.id}')">
-      <div>
+  const items = EXTRAS_CATALOG.map(e=>{
+    const qty = S.extras[e.id] || 0;
+    const sel = qty > 0;
+    const totalPrice = e.price * (qty || 1);
+    const priceStr = e.price > 0 ? `+$${(e.price*(sel?qty:1)).toLocaleString('es-CL')}` : '+$0';
+    return `
+    <div class="extra-item ${sel?'selected':''}" style="cursor:default;gap:.5rem">
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="addExtra('${e.id}')">
         <div class="extra-name">${e.icon} ${e.name}</div>
-        ${e.description ? `<div style="font-size:.75rem;color:var(--muted);margin-top:.15rem">${e.description}</div>` : ''}
+        ${e.description?`<div style="font-size:.75rem;color:var(--muted);margin-top:.15rem">${e.description}</div>`:''}
       </div>
-      <div class="extra-price">+$${e.price.toLocaleString('es-CL')}</div>
-    </div>`).join('');
+      <div style="display:flex;align-items:center;gap:.35rem;flex-shrink:0">
+        ${sel?`
+          <button onclick="removeExtra('${e.id}')" style="width:26px;height:26px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:#fff;font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">−</button>
+          <span style="min-width:18px;text-align:center;font-weight:700;font-size:.95rem">${qty}</span>
+          <button onclick="addExtra('${e.id}')" style="width:26px;height:26px;border-radius:50%;border:none;background:rgba(255,200,0,.25);color:var(--gold);font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>
+          <span class="extra-price" style="min-width:5rem;text-align:right">+$${(e.price*qty).toLocaleString('es-CL')}</span>
+        `:`
+          <button onclick="addExtra('${e.id}')" style="width:26px;height:26px;border-radius:50%;border:none;background:rgba(255,200,0,.15);color:var(--gold);font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>
+          <span class="extra-price" style="min-width:5rem;text-align:right">+$${e.price.toLocaleString('es-CL')}</span>
+        `}
+      </div>
+    </div>`;
+  }).join('');
   const flexCls = S.hasFlex ? 'selected' : '';
   mc.innerHTML = `
   ${stepsHtml('personas')}
@@ -1244,8 +1260,13 @@ function renderExtras(){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderPeopleSelect()">${t('back')}</button>`;
 }
 
-function toggleExtra(id){
-  S.extras[id] = !S.extras[id];
+function addExtra(id){
+  S.extras[id] = (S.extras[id] || 0) + 1;
+  renderExtras();
+}
+function removeExtra(id){
+  if((S.extras[id] || 0) <= 1) delete S.extras[id];
+  else S.extras[id]--;
   renderExtras();
 }
 function toggleFlex(){
@@ -1259,9 +1280,11 @@ function renderForm(){
   const pp = Math.round(basepp * mult / 1000) * 1000;
   const sub = pp * S.numPeople;
   let extTotal = 0;
-  const extRows = EXTRAS_CATALOG.filter(e=>S.extras[e.id]).map(e=>{
-    extTotal += e.price;
-    return `<div class="summary-row"><span>${e.icon} ${e.name}</span><span>$${e.price.toLocaleString('es-CL')}</span></div>`;
+  const extRows = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>{
+    const qty = S.extras[e.id];
+    const linePrice = e.price * qty;
+    extTotal += linePrice;
+    return `<div class="summary-row"><span>${e.icon} ${e.name}${qty>1?` <span style="opacity:.7">×${qty}</span>`:''}</span><span>$${linePrice.toLocaleString('es-CL')}</span></div>`;
   }).join('');
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
   const total = sub + extTotal + flex;
@@ -1311,8 +1334,8 @@ async function submitBooking(){
   }
   const pp = S.prices[S.numPeople] || 69990;
   const sub = pp * S.numPeople;
-  const extrasArr = EXTRAS_CATALOG.filter(e=>S.extras[e.id]).map(e=>({name:e.name,price:e.price,quantity:1}));
-  const extTotal = extrasArr.reduce((a,e)=>a+e.price,0);
+  const extrasArr = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>({name:e.name,price:e.price,quantity:S.extras[e.id]}));
+  const extTotal = extrasArr.reduce((a,e)=>a+e.price*e.quantity,0);
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
   const total = sub + extTotal + flex;
 
