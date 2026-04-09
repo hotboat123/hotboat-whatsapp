@@ -107,6 +107,60 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
             return result
 
 
+def get_bookings_pending_payment_email(delay_minutes: int = 5) -> list:
+    """Return bookings that are still pending payment after delay_minutes
+    and haven't had the booking_created reminder email sent yet.
+    Ensures the column exists defensively.
+    """
+    from datetime import datetime, timezone, timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=delay_minutes)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Defensive: add column if missing (covers old deployments)
+            cur.execute("""
+                ALTER TABLE hotboat_appointments
+                    ADD COLUMN IF NOT EXISTS pending_email_sent_at TIMESTAMPTZ
+            """)
+            conn.commit()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, booking_ref, customer_name, customer_phone, customer_email, "
+                "       booking_date, booking_time, num_people, subtotal, extras_total, "
+                "       total_price "
+                "FROM hotboat_appointments "
+                "WHERE status = 'pending_payment' "
+                "  AND customer_email IS NOT NULL AND customer_email <> '' "
+                "  AND pending_email_sent_at IS NULL "
+                "  AND created_at <= %s",
+                (cutoff,),
+            )
+            cols = ["id", "booking_ref", "customer_name", "customer_phone", "customer_email",
+                    "booking_date", "booking_time", "num_people", "subtotal", "extras_total",
+                    "total_price"]
+            rows = []
+            for row in cur.fetchall():
+                d = dict(zip(cols, row))
+                for k in ("booking_date", "booking_time"):
+                    if d.get(k):
+                        d[k] = str(d[k])
+                rows.append(d)
+            return rows
+
+
+def mark_pending_email_sent(booking_ref: str) -> bool:
+    """Mark the pending-payment reminder email as sent (idempotent)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE hotboat_appointments SET pending_email_sent_at=NOW(), updated_at=NOW() "
+                "WHERE booking_ref=%s AND pending_email_sent_at IS NULL",
+                (booking_ref,),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+
 def mark_confirmation_email_sent(booking_ref: str) -> bool:
     """Set confirmation_email_sent_at once (returns True if row updated)."""
     with get_connection() as conn:

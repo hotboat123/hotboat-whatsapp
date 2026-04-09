@@ -276,6 +276,20 @@ async def _run_auto_sync():
         await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
 
 
+async def _run_pending_payment_email_scheduler():
+    """Every 3 minutes: send booking_created email to bookings still pending after 5 min."""
+    await asyncio.sleep(60)  # short delay after startup
+    while True:
+        try:
+            from app.booking.booking_email import run_pending_payment_email_sweep
+            result = await asyncio.to_thread(run_pending_payment_email_sweep, 5)
+            if result.get("sent", 0) or result.get("errors"):
+                logger.info("📧 pending-payment sweep: %s", result)
+        except Exception as _pe:
+            logger.error("Pending-payment sweep error: %s", _pe)
+        await asyncio.sleep(180)  # every 3 minutes
+
+
 async def _run_email_sweeps_scheduler():
     """Run followup + birthday email sweeps every hour (DB flags ensure idempotency)."""
     await asyncio.sleep(120)  # brief delay after startup
@@ -347,12 +361,14 @@ async def lifespan(app: FastAPI):
         seed_email_workflow_defaults()
     except Exception as _e:
         logger.warning(f"Email workflow seed skipped: {_e}")
-    sync_task = asyncio.create_task(_run_auto_sync())
-    email_task = asyncio.create_task(_run_email_sweeps_scheduler())
+    sync_task    = asyncio.create_task(_run_auto_sync())
+    email_task   = asyncio.create_task(_run_email_sweeps_scheduler())
+    pending_task = asyncio.create_task(_run_pending_payment_email_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
     logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 1 h)")
+    logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
     yield
-    for task in (sync_task, email_task):
+    for task in (sync_task, email_task, pending_task):
         task.cancel()
         try:
             await task

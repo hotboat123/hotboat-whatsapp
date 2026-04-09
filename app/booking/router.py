@@ -301,13 +301,13 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         result = create_booking(data)
         booking_ref = result["booking_ref"]
 
-        # Fire booking_created (→ cliente) and admin_new_lead (→ admin), best-effort
+        # Fire admin_new_lead immediately; booking_created is sent by the
+        # pending-payment sweep after 5 min if payment not yet confirmed.
         try:
             from app.booking.booking_email import send_email_for_trigger
-            send_email_for_trigger("booking_created", booking_ref)
             send_email_for_trigger("admin_new_lead", booking_ref)
         except Exception as _em:
-            logger.warning("Lead/created emails: %s", _em)
+            logger.warning("admin_new_lead email: %s", _em)
 
         # Determine amount to charge (50% deposit, support test_price override)
         if request.test_price is not None and request.test_price > 0:

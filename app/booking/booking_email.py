@@ -8,6 +8,7 @@ from app.booking.db import (
     get_booking_by_ref, mark_confirmation_email_sent,
     get_bookings_for_followup, mark_followup_email_sent,
     get_customers_for_birthday_email, mark_birthday_email_sent,
+    get_bookings_pending_payment_email, mark_pending_email_sent,
 )
 from app.booking.operator_settings import get_email_workflow, TRIGGER_META
 from app.email.resend_booking import send_booking_html
@@ -124,202 +125,252 @@ def _footer(ctx: Dict[str, str]) -> str:
 </td></tr></table></td></tr></table></body></html>"""
 
 
-def _default_html_booking_created(ctx: Dict[str, str]) -> str:  # noqa: C901
-    name     = ctx.get("customer_name", "")
-    ref      = ctx.get("booking_ref", "")
-    date     = ctx.get("booking_date", "")
-    time_    = ctx.get("booking_time", "")
-    people   = ctx.get("num_people", "")
-    total    = ctx.get("total_price_fmt", "")
-    phone    = ctx.get("business_phone", "")
-    website  = ctx.get("business_website", "#")
-    biz      = ctx.get("business_name", "HotBoat")
+def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str,
+                         accent_bar: str, extra_body: str, cta_rows: str) -> str:
+    """Shared dark-card layout used by booking_created and booking_confirmed."""
+    phone   = ctx.get("business_phone", "")
+    website = ctx.get("business_website", "#")
+    biz     = ctx.get("business_name", "HotBoat")
+    logo_url = f"{website.rstrip('/')}/static/Logo%20sin%20Fondo%20y%20sin%20CHILE.png"
+    wa_num  = phone.replace(" ", "").replace("+", "")
+
+    ref    = ctx.get("booking_ref", "")
+    date   = ctx.get("booking_date", "")
+    time_  = ctx.get("booking_time", "")
+    people = ctx.get("num_people", "")
+    total  = ctx.get("total_price_fmt", "")
 
     return f"""<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Reserva recibida — {biz}</title></head>
+<title>{hero_title} — {biz}</title></head>
 <body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
 
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
 <tr><td align="center" style="padding:36px 16px 48px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;width:100%;">
 
-  <!-- Outer card -->
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-         style="max-width:560px;width:100%;">
+  <!-- Main card -->
+  <tr><td style="background:#131c2e;border-radius:20px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.55);">
 
-    <!-- Brand label -->
-    <tr><td align="center" style="padding-bottom:20px;">
-      <span style="color:#e8b86d;font-size:11px;letter-spacing:3.5px;text-transform:uppercase;font-weight:700;">🛥 &nbsp;HOTBOAT · PUCÓN</span>
+    <!-- Accent bar -->
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr>{accent_bar}</tr>
+    </table>
+
+    <!-- Logo + Hero -->
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td align="center" style="padding:36px 32px 24px;">
+      <img src="{logo_url}" alt="{biz}" width="160" height="auto"
+           style="display:block;margin:0 auto 20px;max-width:160px;height:auto;"
+           onerror="this.style.display='none'">
+      <h1 style="margin:0 0 10px;color:#f8fafc;font-size:26px;font-weight:800;
+                 letter-spacing:-0.5px;line-height:1.2;">{hero_title}</h1>
+      <p style="margin:0;color:#94a3b8;font-size:15px;line-height:1.55;">{hero_subtitle}</p>
     </td></tr>
+    </table>
 
-    <!-- Main card -->
-    <tr><td style="background:#131c2e;border-radius:20px;overflow:hidden;
-                   box-shadow:0 24px 64px rgba(0,0,0,.5);">
+    <!-- Booking details -->
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+             style="background:#0b1120;border-radius:14px;border:1px solid #1e2d45;overflow:hidden;">
 
-      <!-- Tri-color accent bar -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-      <tr>
-        <td width="33%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>
-        <td width="34%" height="4" bgcolor="#3b82f6" style="line-height:4px;font-size:0;">&nbsp;</td>
-        <td width="33%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>
-      </tr>
-      </table>
-
-      <!-- Hero -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-      <tr><td align="center" style="padding:40px 32px 28px;">
-        <div style="font-size:52px;line-height:1;margin-bottom:16px;">🛥️</div>
-        <h1 style="margin:0 0 10px;color:#f8fafc;font-size:28px;font-weight:800;
-                   letter-spacing:-0.5px;line-height:1.2;">¡Reserva recibida!</h1>
-        <p style="margin:0;color:#94a3b8;font-size:15px;line-height:1.5;">
-          Hola <strong style="color:#e2e8f0;">{name}</strong>, recibimos tu solicitud.<br>
-          Completa el pago para confirmar tu lugar en el agua.
-        </p>
-      </td></tr>
-      </table>
-
-      <!-- Booking details card -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-      <tr><td style="padding:0 28px 24px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-               style="background:#0b1120;border-radius:14px;border:1px solid #1e2d45;overflow:hidden;">
-
-          <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
-            <table width="100%" cellspacing="0" cellpadding="0"><tr>
-              <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">Referencia</td>
-              <td align="right" style="color:#e8b86d;font-size:13px;font-weight:700;font-family:'Courier New',monospace;">{ref}</td>
-            </tr></table>
-          </td></tr>
-
-          <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
-            <table width="100%" cellspacing="0" cellpadding="0"><tr>
-              <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">📅 &nbsp;Fecha</td>
-              <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{date}</td>
-            </tr></table>
-          </td></tr>
-
-          <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
-            <table width="100%" cellspacing="0" cellpadding="0"><tr>
-              <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">⏰ &nbsp;Hora</td>
-              <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{time_} hrs</td>
-            </tr></table>
-          </td></tr>
-
-          <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
-            <table width="100%" cellspacing="0" cellpadding="0"><tr>
-              <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">👥 &nbsp;Personas</td>
-              <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{people}</td>
-            </tr></table>
-          </td></tr>
-
-          <tr><td style="padding:16px 20px;background:rgba(16,185,129,.06);">
-            <table width="100%" cellspacing="0" cellpadding="0"><tr>
-              <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">💰 &nbsp;Total</td>
-              <td align="right" style="color:#10b981;font-size:18px;font-weight:800;">{total}</td>
-            </tr></table>
-          </td></tr>
-
-        </table>
-      </td></tr>
-      </table>
-
-      <!-- Payment note -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-      <tr><td style="padding:0 28px 28px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-               style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:12px;">
-        <tr><td style="padding:15px 20px;">
-          <p style="margin:0;color:#93c5fd;font-size:13px;line-height:1.65;">
-            💳 <strong>Se pide el 50% del total para reservar.</strong><br>
-            El resto se paga después de vivir la Experiencia HotBoat,<br>
-            con efectivo, tarjeta o transferencia.
-          </p>
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+          <table width="100%" cellspacing="0" cellpadding="0"><tr>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">Referencia</td>
+            <td align="right" style="color:#e8b86d;font-size:13px;font-weight:700;font-family:'Courier New',monospace;">{ref}</td>
+          </tr></table>
         </td></tr>
-        </table>
-      </td></tr>
-      </table>
 
-      <!-- CTA Buttons -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-      <tr><td style="padding:0 28px 36px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-        <tr>
-          <td style="padding-right:8px;" width="50%">
-            <a href="{website}"
-               style="display:block;text-align:center;background:#2563eb;color:#ffffff;
-                      text-decoration:none;padding:14px 12px;border-radius:11px;
-                      font-size:13px;font-weight:700;letter-spacing:0.3px;
-                      box-shadow:0 4px 14px rgba(37,99,235,.4);">
-              📋 Resumen de reserva
-            </a>
-          </td>
-          <td style="padding-left:8px;" width="50%">
-            <a href="{website}"
-               style="display:block;text-align:center;
-                      background:rgba(37,99,235,.1);color:#60a5fa;
-                      text-decoration:none;padding:14px 12px;border-radius:11px;
-                      font-size:13px;font-weight:700;letter-spacing:0.3px;
-                      border:1px solid rgba(96,165,250,.3);">
-              📄 Términos y condiciones
-            </a>
-          </td>
-        </tr>
-        </table>
-      </td></tr>
-      </table>
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+          <table width="100%" cellspacing="0" cellpadding="0"><tr>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">📅 &nbsp;Fecha</td>
+            <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{date}</td>
+          </tr></table>
+        </td></tr>
 
-      <!-- Divider -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-      <tr><td style="padding:0 28px;">
-        <hr style="border:none;border-top:1px solid #1e2d45;margin:0;">
-      </td></tr>
-      </table>
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+          <table width="100%" cellspacing="0" cellpadding="0"><tr>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">⏰ &nbsp;Hora</td>
+            <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{time_} hrs</td>
+          </tr></table>
+        </td></tr>
 
-      <!-- Footer contact -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-      <tr><td align="center" style="padding:24px 28px 32px;">
-        <p style="margin:0 0 6px;color:#475569;font-size:13px;">¿Tienes preguntas? Escríbenos por WhatsApp</p>
-        <a href="https://wa.me/{phone.replace(' ','').replace('+','')}"
-           style="color:#e8b86d;font-size:15px;font-weight:700;text-decoration:none;">
-          {phone}
-        </a>
-        <p style="margin:14px 0 0;color:#334155;font-size:11px;letter-spacing:0.5px;">
-          {biz} &nbsp;·&nbsp; Pucón, Chile
-        </p>
-      </td></tr>
-      </table>
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+          <table width="100%" cellspacing="0" cellpadding="0"><tr>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">👥 &nbsp;Personas</td>
+            <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{people}</td>
+          </tr></table>
+        </td></tr>
 
+        <tr><td style="padding:16px 20px;background:rgba(16,185,129,.06);">
+          <table width="100%" cellspacing="0" cellpadding="0"><tr>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">💰 &nbsp;Total</td>
+            <td align="right" style="color:#10b981;font-size:18px;font-weight:800;">{total}</td>
+          </tr></table>
+        </td></tr>
+
+      </table>
     </td></tr>
+    </table>
 
-    <!-- Bottom note -->
-    <tr><td align="center" style="padding-top:20px;">
-      <p style="margin:0;color:#374151;font-size:11px;line-height:1.6;">
-        Recibiste este correo porque realizaste una reserva en {biz}.<br>
-        Puedes responder este email si tienes alguna consulta.
-      </p>
+    {extra_body}
+
+    <!-- CTA Buttons -->
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 32px;">{cta_rows}</td></tr>
+    </table>
+
+    <!-- Divider -->
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px;"><hr style="border:none;border-top:1px solid #1e2d45;margin:0;"></td></tr>
+    </table>
+
+    <!-- Footer contact -->
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td align="center" style="padding:22px 28px 30px;">
+      <p style="margin:0 0 6px;color:#94a3b8;font-size:13px;">¿Tienes preguntas? Escríbenos por WhatsApp</p>
+      <a href="https://wa.me/{wa_num}" style="color:#e8b86d;font-size:15px;font-weight:700;text-decoration:none;">{phone}</a>
+      <p style="margin:12px 0 0;color:#64748b;font-size:11px;letter-spacing:0.5px;">{biz} &nbsp;·&nbsp; Pucón, Chile</p>
     </td></tr>
+    </table>
 
-  </table>
+  </td></tr>
+
+  <!-- Bottom note -->
+  <tr><td align="center" style="padding-top:18px;">
+    <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.7;">
+      Recibiste este correo porque realizaste una reserva en {biz}.<br>
+      Puedes responder este email si tienes alguna consulta.
+    </p>
+  </td></tr>
+
+</table>
 </td></tr>
 </table>
-
 </body>
 </html>"""
 
 
-def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
-    return (
-        _header(ctx, "Reserva confirmada ✓", "linear-gradient(135deg,#0f172a,#1e3a5f)")
-        + f"""<tr><td style="padding:26px 26px 8px;color:#0f172a;font-size:15px;line-height:1.65;">
-  <p style="margin:0 0 12px;">Hola <strong>{ctx.get('customer_name','')}</strong>,</p>
-  <p style="margin:0 0 12px;">Tu pago se registró correctamente.
-     Tu reserva <strong>{ctx.get('booking_ref','')}</strong> está
-     <strong style="color:#15803d;">confirmada</strong>. ¡Nos vemos en el agua!</p>
-</td></tr>
-<tr><td style="padding:0 26px 20px;">{_details_table(ctx)}</td></tr>"""
-        + _footer(ctx)
+def _cta_btn(label: str, url: str, solid: bool = True) -> str:
+    if solid:
+        style = ("display:block;text-align:center;background:#2563eb;color:#ffffff;"
+                 "text-decoration:none;padding:13px 10px;border-radius:11px;"
+                 "font-size:13px;font-weight:700;letter-spacing:0.3px;"
+                 "box-shadow:0 4px 14px rgba(37,99,235,.35);")
+    else:
+        style = ("display:block;text-align:center;background:rgba(37,99,235,.1);color:#60a5fa;"
+                 "text-decoration:none;padding:13px 10px;border-radius:11px;"
+                 "font-size:13px;font-weight:700;letter-spacing:0.3px;"
+                 "border:1px solid rgba(96,165,250,.3);")
+    return f'<a href="{url}" style="{style}">{label}</a>'
+
+
+def _default_html_booking_created(ctx: Dict[str, str]) -> str:
+    name    = ctx.get("customer_name", "")
+    website = ctx.get("business_website", "#")
+
+    accent = (
+        '<td width="33%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="34%" height="4" bgcolor="#3b82f6" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="33%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
     )
+
+    payment_note = """
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+             style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:12px;">
+      <tr><td style="padding:15px 20px;">
+        <p style="margin:0;color:#93c5fd;font-size:13px;line-height:1.65;">
+          💳 <strong>Se pide el 50% del total para reservar.</strong><br>
+          El resto se paga después de vivir la Experiencia HotBoat,<br>
+          con efectivo, tarjeta o transferencia.
+        </p>
+      </td></tr>
+      </table>
+    </td></tr>
+    </table>"""
+
+    cta_rows = f"""
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
+    <tr>
+      <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", website, solid=True)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn("📄 Términos y condiciones", website, solid=False)}</td>
+    </tr>
+    </table>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr>
+      <td width="50%" style="padding-right:6px;">{_cta_btn("🎬 Video instructivo", website, solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn("🍹 Tablas y bebestibles", website, solid=False)}</td>
+    </tr>
+    </table>"""
+
+    return _hotboat_email_card(
+        ctx,
+        hero_title="¡Reserva recibida!",
+        hero_subtitle=f"Hola <strong style=\"color:#e2e8f0;\">{name}</strong>, recibimos tu solicitud.<br>Completa el pago para confirmar tu lugar en el agua.",
+        accent_bar=accent,
+        extra_body=payment_note,
+        cta_rows=cta_rows,
+    )
+
+
+def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
+    name    = ctx.get("customer_name", "")
+    website = ctx.get("business_website", "#")
+
+    accent = (
+        '<td width="50%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="50%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
+    )
+
+    confirmed_note = """
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+             style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:12px;">
+      <tr><td style="padding:15px 20px;">
+        <p style="margin:0;color:#6ee7b7;font-size:13px;line-height:1.65;">
+          ✅ <strong>Tu pago fue confirmado.</strong><br>
+          Tu reserva está asegurada. ¡Nos vemos en el agua!<br>
+          El resto del pago se hace después de la experiencia.
+        </p>
+      </td></tr>
+      </table>
+    </td></tr>
+    </table>"""
+
+    cta_rows = f"""
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
+    <tr>
+      <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", website, solid=True)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn("📄 Términos y condiciones", website, solid=False)}</td>
+    </tr>
+    </table>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr>
+      <td width="50%" style="padding-right:6px;">{_cta_btn("🎬 Video instructivo", website, solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn("🍹 Tablas y bebestibles", website, solid=False)}</td>
+    </tr>
+    </table>"""
+
+    return _hotboat_email_card(
+        ctx,
+        hero_title="¡Reserva confirmada! ✅",
+        hero_subtitle=f"Hola <strong style=\"color:#e2e8f0;\">{name}</strong>, tu pago fue recibido correctamente.<br>¡Todo listo para tu experiencia HotBoat!",
+        accent_bar=accent,
+        extra_body=confirmed_note,
+        cta_rows=cta_rows,
+    )
+
+
+def _default_html_booking_created_OLD(ctx: Dict[str, str]) -> str:
+    """Legacy — kept only if someone references it directly."""
+    return _default_html_booking_created(ctx)
+
+
 
 
 def _default_html_booking_cancelled(ctx: Dict[str, str]) -> str:
@@ -713,6 +764,39 @@ def run_birthday_email_sweep() -> dict:
             out["errors"].append({"email": to_addr, "reason": result.get("reason")})
 
     logger.info("Birthday sweep: checked=%s sent=%s", out["checked"], out["sent"])
+    return out
+
+
+# ── Pending-payment reminder sweep ───────────────────────────────────────────
+
+def run_pending_payment_email_sweep(delay_minutes: int = 5) -> dict:
+    """
+    Runs every few minutes: find bookings still in 'pending_payment' status
+    that were created >{delay_minutes} minutes ago and haven't received the
+    booking_created reminder email yet. Sends once, marks sent.
+    """
+    out: Dict[str, Any] = {"checked": 0, "sent": 0, "errors": []}
+    settings = get_settings()
+    if not (getattr(settings, "resend_api_key", "") or "").strip():
+        out["reason"] = "no_resend_key"
+        return out
+
+    bookings = get_bookings_pending_payment_email(delay_minutes)
+    out["checked"] = len(bookings)
+    for b in bookings:
+        to_addr = (b.get("customer_email") or "").strip()
+        if not to_addr:
+            continue
+        ctx = _booking_ctx(b)
+        result = _render_and_send("booking_created", to_addr, ctx)
+        if result.get("sent"):
+            mark_pending_email_sent(b["booking_ref"])
+            out["sent"] += 1
+        else:
+            out["errors"].append({"ref": b["booking_ref"], "reason": result.get("reason")})
+
+    if out["checked"]:
+        logger.info("Pending-payment email sweep: checked=%s sent=%s", out["checked"], out["sent"])
     return out
 
 
