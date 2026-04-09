@@ -305,13 +305,21 @@ def _ensure_extras_visibility_table():
                         extra_name_lower TEXT PRIMARY KEY,
                         show_in_booking  BOOLEAN NOT NULL DEFAULT TRUE,
                         sort_order       INTEGER NOT NULL DEFAULT 999,
+                        description      TEXT,
+                        precio_venta     INTEGER,
+                        costo            INTEGER,
+                        icon             TEXT,
                         updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
-                cur.execute("""
-                    ALTER TABLE extras_visibility
-                        ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 999
-                """)
+                for col, definition in [
+                    ("sort_order",   "INTEGER NOT NULL DEFAULT 999"),
+                    ("description",  "TEXT"),
+                    ("precio_venta", "INTEGER"),
+                    ("costo",        "INTEGER"),
+                    ("icon",         "TEXT"),
+                ]:
+                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col} {definition}")
                 conn.commit()
         logger.info("✅ extras_visibility table ready")
     except Exception as e:

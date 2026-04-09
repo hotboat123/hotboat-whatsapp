@@ -929,12 +929,16 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                     SELECT DISTINCT ON (LOWER(pe.raw->>'Extra'))
                            pe.id,
                            pe.raw->>'Extra' AS name,
-                           pe.raw->>'Precio' AS precio,
-                           pe.raw->>'costo' AS costo,
-                           COALESCE(pe.raw->>'icon', '') AS icon,
-                           COALESCE(pe.raw->>'description', '') AS description,
-                           COALESCE(ev.show_in_booking, TRUE) AS show_in_booking,
-                           COALESCE(ev.sort_order, 999) AS sort_order
+                           pe.raw->>'Precio' AS precio_sheets,
+                           pe.raw->>'costo'  AS costo_sheets,
+                           pe.raw->>'icon'   AS icon_sheets,
+                           COALESCE(pe.raw->>'description', '') AS desc_sheets,
+                           COALESCE(ev.show_in_booking, TRUE)   AS show_in_booking,
+                           COALESCE(ev.sort_order, 999)         AS sort_order,
+                           ev.description   AS ev_desc,
+                           ev.precio_venta  AS ev_precio,
+                           ev.costo         AS ev_costo,
+                           ev.icon          AS ev_icon
                     FROM "Precios Extras" pe
                     LEFT JOIN extras_visibility ev
                            ON ev.extra_name_lower = LOWER(pe.raw->>'Extra')
@@ -943,19 +947,26 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                 """)
                 extras = []
                 seen_keys: set = set()
-                for row_id, name, precio, costo, icon, description, show_in_booking, sort_order in cur.fetchall():
+                for (row_id, name, precio_s, costo_s, icon_s, desc_s,
+                     show_in_booking, sort_order,
+                     ev_desc, ev_precio, ev_costo, ev_icon) in cur.fetchall():
                     key = _slugify_extra(name)
                     if key in seen_keys:
                         continue
                     seen_keys.add(key)
+                    # Prefer extras_visibility values (admin edits) over Sheets values
+                    price = ev_precio if ev_precio is not None else _parse_clp(precio_s)
+                    cost  = ev_costo  if ev_costo  is not None else (_parse_clp(costo_s) if costo_s else 0)
+                    icon  = ev_icon   if ev_icon   else (icon_s or "")
+                    desc  = ev_desc   if ev_desc   is not None else (desc_s or "")
                     extras.append({
                         "id": row_id,
                         "key": key,
                         "name": name,
-                        "price": _parse_clp(precio),
-                        "cost": _parse_clp(costo) if costo else 0,
-                        "icon": icon or "",
-                        "description": description or "",
+                        "price": price,
+                        "cost": cost,
+                        "icon": icon,
+                        "description": desc,
                         "show_in_booking": bool(show_in_booking),
                         "sort_order": int(sort_order),
                     })
@@ -1011,14 +1022,19 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                             SET show_in_booking = FALSE, updated_at = NOW()
                     """, (old_name,))
 
-                # Persist visibility for the new name
+                # Persist ALL editable fields in extras_visibility (survives Sheets re-sync)
                 cur.execute("""
-                    INSERT INTO extras_visibility (extra_name_lower, show_in_booking, updated_at)
-                    VALUES (LOWER(%s), %s, NOW())
+                    INSERT INTO extras_visibility
+                        (extra_name_lower, show_in_booking, description, precio_venta, costo, icon, updated_at)
+                    VALUES (LOWER(%s), %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (extra_name_lower) DO UPDATE
                         SET show_in_booking = EXCLUDED.show_in_booking,
-                            updated_at = NOW()
-                """, (name, show_in_booking))
+                            description     = EXCLUDED.description,
+                            precio_venta    = EXCLUDED.precio_venta,
+                            costo           = EXCLUDED.costo,
+                            icon            = EXCLUDED.icon,
+                            updated_at      = NOW()
+                """, (name, show_in_booking, description or None, price or None, cost or None, icon or None))
                 conn.commit()
         return {"ok": True}
     except HTTPException:

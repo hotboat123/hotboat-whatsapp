@@ -46,11 +46,14 @@ def list_extras():
                     SELECT DISTINCT ON (LOWER(pe.raw->>'Extra'))
                            pe.id,
                            pe.raw->>'Extra'       AS name,
-                           pe.raw->>'Precio'      AS precio,
-                           COALESCE(pe.raw->>'icon', '')        AS icon,
-                           COALESCE(pe.raw->>'description', '') AS description,
+                           pe.raw->>'Precio'      AS precio_sheets,
+                           pe.raw->>'icon'        AS icon_sheets,
+                           COALESCE(pe.raw->>'description', '') AS desc_sheets,
                            COALESCE(ev.show_in_booking, TRUE)   AS show_in_booking,
-                           COALESCE(ev.sort_order, 999)         AS sort_order
+                           COALESCE(ev.sort_order, 999)         AS sort_order,
+                           ev.description  AS ev_desc,
+                           ev.precio_venta AS ev_precio,
+                           ev.icon         AS ev_icon
                     FROM "Precios Extras" pe
                     LEFT JOIN extras_visibility ev
                            ON ev.extra_name_lower = LOWER(pe.raw->>'Extra')
@@ -59,21 +62,26 @@ def list_extras():
                 """)
                 extras = []
                 seen: set = set()
-                for row_id, name, precio, icon, description, show_in_booking, sort_order in cur.fetchall():
+                for (row_id, name, precio_s, icon_s, desc_s,
+                     show_in_booking, sort_order,
+                     ev_desc, ev_precio, ev_icon) in cur.fetchall():
                     if not show_in_booking:
                         continue
                     key = _slugify_extra(name)
                     if key in seen:
                         continue
                     seen.add(key)
+                    price = ev_precio if ev_precio is not None else _parse_clp(precio_s)
+                    icon  = ev_icon   if ev_icon   else (icon_s or "")
+                    desc  = ev_desc   if ev_desc   is not None else (desc_s or "")
                     resolved_icon = icon or _default_extra_icon(key)
                     extras.append({
                         "id": row_id,
                         "key": key,
                         "name": name,
-                        "price": _parse_clp(precio),
+                        "price": price,
                         "icon": resolved_icon,
-                        "description": description or "",
+                        "description": desc,
                         "sort_order": int(sort_order),
                     })
         extras.sort(key=lambda x: (x["sort_order"], x["name"]))
