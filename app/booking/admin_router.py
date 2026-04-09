@@ -1291,7 +1291,7 @@ async def woo_webhook(request: Request):
                 row = cur.fetchone()
                 if row:
                     res_id, nombre, pagos_raw = row
-                    pagos = _add_pago(list(pagos_raw) if pagos_raw else [], total, "Transbank")
+                    pagos = _add_pago(list(pagos_raw) if pagos_raw else [], total, "transbank")
                     cur.execute(
                         f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
                         (PgJson(pagos), status, res_id)
@@ -1358,7 +1358,7 @@ async def woo_webhook(request: Request):
                                         all_id, pagos_raw2 = all_row
                                         pagos2 = _add_pago(
                                             list(pagos_raw2) if pagos_raw2 else [],
-                                            total, "Transbank"
+                                            total, "transbank"
                                         )
                                         cur2.execute(
                                             f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",

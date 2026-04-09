@@ -2494,7 +2494,7 @@ function addPago(){
 }
 
 function initPagos(pagosArr){
-  _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p})) : [];
+  _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p, method:(p.method||'').toLowerCase()||'transferencia'})) : [];
   renderPagos();
   syncPagoFaltante();
 }
@@ -3088,6 +3088,16 @@ function initExtrasEditor(extrasJson){
   _expAddon    = [];
   const catalogByKey = {};
   EXTRAS_CATALOG.forEach(e=>{ catalogByKey[e.key]=e; });
+  // Web bookings store extras as an array [{name,price,quantity}] — convert to dict
+  if(Array.isArray(extrasJson)){
+    const converted = {};
+    extrasJson.forEach((e,i)=>{
+      const rawKey = (e.name||'extra_'+i).toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+      const key = rawKey || ('extra_'+i);
+      converted[key] = {qty: e.quantity||1, unit_price: e.price||0, name: e.name||'Extra'};
+    });
+    extrasJson = converted;
+  }
   Object.entries(extrasJson||{}).forEach(([key, val])=>{
     const isObj = typeof val === 'object' && val !== null;
     if(key.startsWith('aloj__')){
