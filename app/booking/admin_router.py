@@ -981,6 +981,11 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         utilidad = price - cost
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # Fetch old name before overwriting (to detect renames)
+                cur.execute('SELECT raw->>\'Extra\' FROM "Precios Extras" WHERE id = %s', (extra_id,))
+                old_row = cur.fetchone()
+                old_name = old_row[0] if old_row else None
+
                 cur.execute("""
                     UPDATE "Precios Extras"
                     SET raw = raw
@@ -994,7 +999,17 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                         updated_at = NOW()
                     WHERE id = %s
                 """, (name, str(price), str(cost), margen, str(utilidad), icon, description, extra_id))
-                # Persist show_in_booking in extras_visibility (survives Sheets re-sync)
+
+                # If the name changed, hide the old name so Sheets doesn't resurrect it
+                if old_name and old_name.lower() != name.lower():
+                    cur.execute("""
+                        INSERT INTO extras_visibility (extra_name_lower, show_in_booking, updated_at)
+                        VALUES (LOWER(%s), FALSE, NOW())
+                        ON CONFLICT (extra_name_lower) DO UPDATE
+                            SET show_in_booking = FALSE, updated_at = NOW()
+                    """, (old_name,))
+
+                # Persist visibility for the new name
                 cur.execute("""
                     INSERT INTO extras_visibility (extra_name_lower, show_in_booking, updated_at)
                     VALUES (LOWER(%s), %s, NOW())
