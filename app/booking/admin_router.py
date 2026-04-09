@@ -1044,7 +1044,14 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('DELETE FROM "Precios Extras" WHERE id = %s', (extra_id,))
+                # Get the extra name first so we can delete ALL rows with that name
+                cur.execute('SELECT raw->\'Extra\' FROM "Precios Extras" WHERE id = %s', (extra_id,))
+                row = cur.fetchone()
+                if row and row[0]:
+                    extra_name = row[0]
+                    cur.execute('DELETE FROM "Precios Extras" WHERE raw->>\'Extra\' = %s', (extra_name,))
+                else:
+                    cur.execute('DELETE FROM "Precios Extras" WHERE id = %s', (extra_id,))
                 conn.commit()
         return {"ok": True}
     except Exception as e:
