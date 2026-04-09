@@ -1363,8 +1363,8 @@ async function openModal(id){
         <span class="chip">ID: ${r.appointment_id||r.source_id||r.id}</span>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Fecha</label><input value="${r.fecha||''}" disabled></div>
-        <div class="form-group"><label>Hora</label><input value="${r.hora||''}" disabled></div>
+        <div class="form-group"><label>Fecha</label><input type="date" id="e-fecha" value="${r.fecha||''}"></div>
+        <div class="form-group"><label>Hora</label><input type="time" id="e-hora" value="${(r.hora||'').substring(0,5)}"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Cliente
@@ -1675,7 +1675,21 @@ async function openModal(id){
     initDescuentos(r.descuentos||[]);
     initExtrasEditor(r.extras_json||{});
     if(r.num_personas) lookupBasePrice(r.num_personas);
-    setTimeout(()=>{ initAddonDatePickers(); initDynamicDPs(); }, 80);
+    setTimeout(()=>{
+      initAddonDatePickers();
+      initDynamicDPs();
+      initDP('e-fecha', {
+        onChange(sel, dateStr){
+          // Update modal title to reflect the new date
+          const nameEl = document.getElementById('modal-title');
+          if(nameEl && dateStr){
+            const parts = dateStr.split('-');
+            const display = parts.length===3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
+            nameEl.textContent = nameEl.textContent.replace(/·\s*[\d\-\/]+$/, `· ${display}`);
+          }
+        }
+      });
+    }, 80);
   }catch(e){
     document.getElementById('modal-body').innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
   }
@@ -1712,6 +1726,8 @@ async function saveModal(id){
   const costoFijo=+g('e-costo_operativo_fijo')||0;
   const costoVar=+g('e-costo_operativo_variable')||0;
   const body={
+    fecha: g('e-fecha')||undefined,
+    hora:  g('e-hora')||undefined,
     nombre_cliente:g('e-nombre'), telefono:g('e-telefono'), email:g('e-email'),
     status:g('e-status'), observaciones:g('e-observaciones'),
     ciudad_origen:(g('e-ciudad_origen')||'').trim(),
@@ -1736,7 +1752,7 @@ async function saveModal(id){
   body.pagos = _pagos.filter(p=>p.amount||p.method);
   body.descuentos = _descuentos.filter(d=>d.amount||d.type||d.note);
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos','quien_atendio','ciudad_origen']);
+  const keepAlways = new Set(['extras_json','descuentos','quien_atendio','ciudad_origen','fecha','hora']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});

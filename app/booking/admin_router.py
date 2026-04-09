@@ -169,6 +169,8 @@ class UpdateReservaRequest(BaseModel):
     extras_json: Optional[dict] = None
     pagos: Optional[list] = None
     descuentos: Optional[list] = None
+    fecha: Optional[str] = None
+    hora: Optional[str] = None
 
 
 @admin_router.put("/api/admin/reservas/{rid}")
