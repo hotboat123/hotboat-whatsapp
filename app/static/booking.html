@@ -673,7 +673,7 @@ function showAlojamiento(id){
   const a = ALOJAMIENTOS.find(x=>x.id===id);
   if(!a) return showAlojamientos();
   const imgHtml = a.image_path
-    ? `<img src="${a.image_path}" style="width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin-bottom:.8rem" onerror="this.style.display='none'">`
+    ? `<img src="${a.image_path}" style="width:100%;height:auto;border-radius:10px;margin-bottom:.8rem;display:block" onerror="this.style.display='none'">`
     : `<div style="text-align:center;font-size:4rem;margin-bottom:.5rem">${a.icon}</div>`;
   mc.innerHTML = `
   <div class="card">
