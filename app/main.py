@@ -419,6 +419,12 @@ app.include_router(content_router)
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
+    """Redirect root to booking page"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/booking", status_code=302)
+
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_ui():
     """Serve Kia-Ai chat interface"""
     try:
         static_dir = os.path.join(os.path.dirname(__file__), "static")
