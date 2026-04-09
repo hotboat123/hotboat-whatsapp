@@ -238,9 +238,18 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .extras-hdr{display:grid;grid-template-columns:1fr 64px 90px 80px 28px;gap:.4rem;
   font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding-bottom:.3rem}
 .extras-add-row{display:flex;gap:.5rem;margin-top:.5rem;align-items:center}
-.extras-add-row select{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
-  border-radius:8px;padding:.4rem .7rem;font-size:.82rem;outline:none}
-.extras-add-row select:focus{border-color:var(--gold)}
+.extras-add-row select{flex:1;background:var(--surface);border:1px solid var(--border);color:#60a5fa;
+  border-radius:8px;padding:.4rem .7rem;font-size:.82rem;outline:none;cursor:pointer;
+  transition:border-color .15s,box-shadow .15s}
+.extras-add-row select:focus{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(96,165,250,.2)}
+.extras-add-row select option{color:#60a5fa;background:var(--surface)}
+.extras-add-row select option:first-child{color:var(--muted)}
+.addon-sel{flex:2;min-width:150px;font-size:.8rem;padding:.38rem .55rem;
+  background:var(--surface);border:1px solid var(--border);color:#60a5fa;
+  border-radius:8px;outline:none;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.addon-sel:focus{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(96,165,250,.2)}
+.addon-sel option{color:#60a5fa;background:var(--surface)}
+.addon-sel option:first-child{color:var(--muted);font-style:italic}
 .extras-add-row button{background:var(--gold);color:#000;border:none;border-radius:8px;
   padding:.4rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap}
 .extras-total-row{display:flex;justify-content:flex-end;gap:.5rem;align-items:center;
@@ -1583,7 +1592,7 @@ async function openModal(id){
         </div>
         <div id="aloj-addon-list"></div>
         <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap;align-items:center">
-          <select id="aloj-addon-sel" style="flex:2;min-width:150px;font-size:.8rem;padding:.35rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px">
+          <select id="aloj-addon-sel" class="addon-sel">
             <option value="">— Seleccionar alojamiento —</option>
           </select>
           <input type="date" id="aloj-addon-entry" title="Fecha entrada" style="flex:1;min-width:120px;font-size:.8rem;padding:.35rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px">
@@ -1604,7 +1613,7 @@ async function openModal(id){
         </div>
         <div id="exp-addon-list"></div>
         <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap;align-items:center">
-          <select id="exp-addon-sel" style="flex:2;min-width:150px;font-size:.8rem;padding:.35rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px">
+          <select id="exp-addon-sel" class="addon-sel">
             <option value="">— Seleccionar experiencia —</option>
           </select>
           <input type="date" id="exp-addon-date" title="Fecha de la experiencia" style="flex:1;min-width:130px;font-size:.8rem;padding:.35rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px">
