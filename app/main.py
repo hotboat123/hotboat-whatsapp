@@ -342,6 +342,11 @@ async def lifespan(app: FastAPI):
         load_prices_from_db()
     except Exception as _e:
         logger.warning(f"Booking prices refresh skipped: {_e}")
+    try:
+        from app.booking.operator_settings import seed_email_workflow_defaults
+        seed_email_workflow_defaults()
+    except Exception as _e:
+        logger.warning(f"Email workflow seed skipped: {_e}")
     sync_task = asyncio.create_task(_run_auto_sync())
     email_task = asyncio.create_task(_run_email_sweeps_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")

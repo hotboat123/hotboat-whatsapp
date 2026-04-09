@@ -398,7 +398,28 @@ TRIGGER_META: dict = {
 }
 
 # Triggers activos por defecto
-_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed"}
+_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed", "booking_created", "admin_new_lead"}
+
+
+def seed_email_workflow_defaults() -> None:
+    """
+    Called once at startup: enable triggers that should be on by default
+    but haven't been explicitly configured yet in the DB.
+    This is idempotent — it never overwrites an explicitly saved setting.
+    """
+    try:
+        raw = _json_setting("email_workflows", {})
+        changed = False
+        for trigger in _TRIGGERS_ENABLED_DEFAULT:
+            if trigger not in raw:
+                # Not yet touched by the user → seed as enabled
+                raw[trigger] = {"enabled": True}
+                changed = True
+        if changed:
+            set_setting("email_workflows", json.dumps(raw))
+            logger.info("Email workflow defaults seeded: %s", _TRIGGERS_ENABLED_DEFAULT - set(raw.keys() - {k for k in raw}))
+    except Exception as e:
+        logger.warning(f"seed_email_workflow_defaults: {e}")
 
 
 def get_email_workflows() -> dict:

@@ -308,7 +308,10 @@ def _render_and_send(trigger: str, to_addr: str, ctx: Dict[str, str],
         html = builder(ctx)
 
     from_addr = _get_from_addr(settings)
-    logger.info("Sending email trigger=%s to=%s from=%s", trigger, to_addr, from_addr)
+    # For customer-facing emails, set reply_to to the admin email so replies land in a real inbox
+    is_admin_trigger = (TRIGGER_META.get(trigger) or {}).get("recipient") == "admin"
+    reply_to_addr = None if is_admin_trigger else (_get_admin_email(settings) or None)
+    logger.info("Sending email trigger=%s to=%s from=%s reply_to=%s", trigger, to_addr, from_addr, reply_to_addr)
     try:
         send_booking_html(
             to=to_addr,
@@ -317,6 +320,7 @@ def _render_and_send(trigger: str, to_addr: str, ctx: Dict[str, str],
             from_address=from_addr,
             api_key=api_key,
             bcc=_get_bcc(settings),
+            reply_to=reply_to_addr,
         )
         out["sent"] = True
         out["reason"] = "ok"
