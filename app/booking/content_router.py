@@ -43,7 +43,7 @@ def list_extras():
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT DISTINCT ON (raw->>'Extra')
+                    SELECT DISTINCT ON (LOWER(raw->>'Extra'))
                            id,
                            raw->>'Extra'       AS name,
                            raw->>'Precio'      AS precio,
@@ -52,7 +52,7 @@ def list_extras():
                            COALESCE(raw->>'show_in_booking', 'true') AS show_in_booking
                     FROM "Precios Extras"
                     WHERE raw->>'Extra' IS NOT NULL
-                    ORDER BY raw->>'Extra', updated_at DESC
+                    ORDER BY LOWER(raw->>'Extra'), updated_at DESC
                 """)
                 extras = []
                 seen: set = set()

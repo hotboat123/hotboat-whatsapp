@@ -925,7 +925,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
             with conn.cursor() as cur:
                 # Deduplicate by name keeping the most recently updated row; include id
                 cur.execute("""
-                    SELECT DISTINCT ON (raw->>'Extra')
+                    SELECT DISTINCT ON (LOWER(raw->>'Extra'))
                            id,
                            raw->>'Extra' AS name,
                            raw->>'Precio' AS precio,
@@ -935,7 +935,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                            COALESCE(raw->>'show_in_booking', 'true') AS show_in_booking
                     FROM "Precios Extras"
                     WHERE raw->>'Extra' IS NOT NULL
-                    ORDER BY raw->>'Extra', updated_at DESC
+                    ORDER BY LOWER(raw->>'Extra'), updated_at DESC
                 """)
                 extras = []
                 seen_keys: set = set()
@@ -1049,7 +1049,11 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
                 row = cur.fetchone()
                 if row and row[0]:
                     extra_name = row[0]
-                    cur.execute('DELETE FROM "Precios Extras" WHERE raw->>\'Extra\' = %s', (extra_name,))
+                    # Delete ALL rows with the same name (case-insensitive) to catch capitalization variants
+                    cur.execute(
+                        'DELETE FROM "Precios Extras" WHERE LOWER(raw->>\'Extra\') = LOWER(%s)',
+                        (extra_name,)
+                    )
                 else:
                     cur.execute('DELETE FROM "Precios Extras" WHERE id = %s', (extra_id,))
                 conn.commit()
