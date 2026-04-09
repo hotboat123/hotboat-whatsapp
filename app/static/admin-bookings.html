@@ -277,6 +277,28 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
   .bar-lbl{display:none}
 }
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+/* Flatpickr theme overrides to match dark admin */
+.flatpickr-calendar{background:var(--surface,#16213e);border:1px solid var(--border,#2a2a4a);border-radius:12px;box-shadow:0 8px 32px #0008;font-family:inherit}
+.flatpickr-day{color:var(--text,#e2e8f0);border-radius:7px}
+.flatpickr-day:hover,.flatpickr-day:focus{background:var(--surface2,#1a1a3e);color:var(--text)}
+.flatpickr-day.selected,.flatpickr-day.selected:hover{background:var(--gold,#e8b86d);border-color:var(--gold,#e8b86d);color:#000;font-weight:700}
+.flatpickr-day.today{border-color:var(--gold,#e8b86d);color:var(--gold)}
+.flatpickr-day.inRange{background:rgba(232,184,109,.18);border-color:transparent;color:var(--text)}
+.flatpickr-day.startRange,.flatpickr-day.endRange{background:var(--gold,#e8b86d);border-color:var(--gold);color:#000}
+.flatpickr-months,.flatpickr-weekdays{background:transparent}
+.flatpickr-month{color:var(--text);fill:var(--text)}
+.flatpickr-current-month .cur-month,.flatpickr-current-month input.cur-year{color:var(--text);font-weight:600}
+.flatpickr-weekday{color:var(--muted,#8892b0);font-weight:600;font-size:.75rem}
+.flatpickr-prev-month,.flatpickr-next-month{fill:var(--text)!important}
+.flatpickr-prev-month:hover svg,.flatpickr-next-month:hover svg{fill:var(--gold)!important}
+.flatpickr-day.disabled,.flatpickr-day.disabled:hover{color:var(--muted);opacity:.35}
+.flatpickr-input.flatpickr-mobile{display:none}
+/* Hide the real input, show only the altInput */
+.flatpickr-input[readonly]{display:none}
+.flatpickr-input.flatpickr-alt-input{display:block!important;cursor:pointer}
+</style>
 </head>
 <body>
 
@@ -367,8 +389,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div id="section-lista" class="section">
       <div class="filter-bar">
         <input type="text" id="f-search" placeholder="Buscar cliente, tel, email..." oninput="debounce(loadLista,400)()">
-        <input type="date" id="f-desde" onchange="loadLista()">
-        <input type="date" id="f-hasta" onchange="loadLista()">
+        <input type="date" id="f-desde" placeholder="Desde">
+        <input type="date" id="f-hasta" placeholder="Hasta">
         <select id="f-status" onchange="loadLista()">
           <option value="all">Todos los estados</option>
           <option value="confirmed">Confirmada</option>
@@ -1143,7 +1165,11 @@ function sortRows(rows){
   });
 }
 function clearFilters(){
-  ['f-search','f-desde','f-hasta'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-search').value='';
+  ['f-desde','f-hasta'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && el._flatpickr) el._flatpickr.clear(); else if(el) el.value='';
+  });
   document.getElementById('f-status').value='all';
   document.getElementById('f-source').value='all';
   loadLista();
@@ -1640,6 +1666,7 @@ async function openModal(id){
     initDescuentos(r.descuentos||[]);
     initExtrasEditor(r.extras_json||{});
     if(r.num_personas) lookupBasePrice(r.num_personas);
+    setTimeout(()=>{ initAddonDatePickers(); initDynamicDPs(); }, 80);
   }catch(e){
     document.getElementById('modal-body').innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
   }
@@ -2404,10 +2431,12 @@ function renderPagos(){
         style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none;flex:1">
         ${METODOS.map(m=>`<option value="${m}"${p.method===m?' selected':''}>${m}</option>`).join('')}
       </select>
-      <input class="p-date" type="date" value="${p.date||''}"
+      <input class="p-date" type="date" value="${p.date||''}" data-idx="${i}"
         oninput="_pagos[${i}].date=this.value">
       <button class="p-del" onclick="_pagos.splice(${i},1);renderPagos()" title="Eliminar">✕</button>
     </div>`).join('');
+  // Re-init date pickers after render
+  setTimeout(initDynamicDPs, 30);
 }
 
 function renderPagosTotal(){
@@ -2501,7 +2530,11 @@ function openNewReservaModal(prefillDate){
       <button class="btn-save" onclick="submitNewReserva()">Crear reserva</button>
     </div>`;
   document.getElementById('overlay').classList.add('show');
-  setTimeout(()=>{ document.getElementById('nr-nombre')?.focus(); nrAutoFillPrice(2); }, 100);
+  setTimeout(()=>{
+    document.getElementById('nr-nombre')?.focus();
+    nrAutoFillPrice(2);
+    initDP('nr-fecha');
+  }, 100);
 }
 
 function nrAutoFillPrice(nStr){
@@ -2946,7 +2979,7 @@ function renderAlojAddon(){
     list.innerHTML = _alojAddon.map((item,i)=>`
       <div class="extras-row">
         <div class="ex-name">🏠 ${item.name}<br>
-          <span style="font-size:.7rem;color:var(--muted)">${item.entry_date} → ${item.exit_date}</span></div>
+          <span style="font-size:.7rem;color:var(--muted)">${fmtDateDisplay(item.entry_date)} → ${fmtDateDisplay(item.exit_date)}</span></div>
         <input type="number" min="1" value="${item.nights}" title="Noches"
           oninput="_alojAddon[${i}].nights=Math.max(1,+this.value||1);renderAlojAddon();updateAllAddons()">
         <input type="number" min="0" value="${item.unit_price}" title="$/noche"
@@ -2969,7 +3002,7 @@ function renderExpAddon(){
     list.innerHTML = _expAddon.map((item,i)=>`
       <div class="extras-row">
         <div class="ex-name">⭐ ${item.name}<br>
-          <span style="font-size:.7rem;color:var(--muted)">${item.date||'Sin fecha'}</span></div>
+          <span style="font-size:.7rem;color:var(--muted)">${fmtDateDisplay(item.date)||'Sin fecha'}</span></div>
         <input type="number" min="1" value="${item.qty}" title="Personas"
           oninput="_expAddon[${i}].qty=Math.max(1,+this.value||1);renderExpAddon();updateAllAddons()">
         <input type="number" min="0" value="${item.unit_price}" title="$/pers."
@@ -2993,8 +3026,10 @@ function addAlojAddon(){
   const nights= Math.max(1, Math.round((new Date(exit)-new Date(entry))/86400000));
   const price = aloj ? (+aloj.price_from||0) : 0;
   _alojAddon.push({key:`aloj__${slug}`, name:aloj?aloj.name:slug, nights, entry_date:entry, exit_date:exit, unit_price:price});
-  document.getElementById('aloj-addon-entry').value='';
-  document.getElementById('aloj-addon-exit').value='';
+  const entryEl = document.getElementById('aloj-addon-entry');
+  const exitEl  = document.getElementById('aloj-addon-exit');
+  if(entryEl._flatpickr) entryEl._flatpickr.clear(); else entryEl.value='';
+  if(exitEl._flatpickr)  exitEl._flatpickr.clear();  else exitEl.value='';
   sel.value='';
   renderAlojAddon(); updateAllAddons();
 }
@@ -3007,7 +3042,8 @@ function addExpAddon(){
   const exp  = EXP_CATALOG.find(e=>e.slug===slug);
   const price= exp ? (+exp.price_per_person||0) : 0;
   _expAddon.push({key:`exp__${slug}`, name:exp?exp.name:slug, date:date||'', qty:1, unit_price:price});
-  document.getElementById('exp-addon-date').value='';
+  const expDateEl = document.getElementById('exp-addon-date');
+  if(expDateEl._flatpickr) expDateEl._flatpickr.clear(); else expDateEl.value='';
   sel.value='';
   renderExpAddon(); updateAllAddons();
 }
@@ -3671,6 +3707,66 @@ async function deleteExtrasBooking(id){
   await fetch(`/api/admin/extras-bookings/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
   await loadCalExtras(); showToast('Eliminada');
 }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+// ── Flatpickr helpers ──────────────────────────────────────────────────────────
+const FP_BASE = {
+  dateFormat: 'Y-m-d',   // internal value (ISO, for backend)
+  altInput: true,
+  altFormat: 'd/m/Y',    // display format
+  allowInput: false,
+  disableMobile: true,
+  locale: { firstDayOfWeek: 1 },
+};
+
+// Destroy existing instance on element then init a fresh one
+function initDP(elOrId, extra){
+  const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+  if(!el) return null;
+  if(el._flatpickr) el._flatpickr.destroy();
+  return flatpickr(el, Object.assign({}, FP_BASE, extra||{}));
+}
+
+// Init the static modal date inputs for alojamientos + experiencias
+function initAddonDatePickers(){
+  initDP('aloj-addon-entry', {
+    onChange(sel, dateStr){
+      // Auto-set exit minDate to entry date
+      const exit = document.getElementById('aloj-addon-exit');
+      if(exit && exit._flatpickr) exit._flatpickr.set('minDate', dateStr||null);
+    }
+  });
+  initDP('aloj-addon-exit');
+  initDP('exp-addon-date');
+}
+
+// Init date inputs inside dynamically-rendered content (payments, etc.)
+function initDynamicDPs(){
+  document.querySelectorAll('.p-date').forEach(el => {
+    if(!el._flatpickr) flatpickr(el, Object.assign({}, FP_BASE));
+  });
+}
+
+// Convert yyyy-mm-dd → dd/mm/yyyy for display in rendered lists
+function fmtDateDisplay(iso){
+  if(!iso) return '';
+  const p = iso.split('-');
+  if(p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+  return iso;
+}
+
+// Init filter bar dates on page load
+document.addEventListener('DOMContentLoaded', () => {
+  initDP('f-desde', { onChange: () => loadLista() });
+  initDP('f-hasta', { onChange: () => loadLista() });
+  // Re-init on section change for extra-bookings date fields
+  const obs = new MutationObserver(() => {
+    ['eb-start','eb-end'].forEach(id => { if(document.getElementById(id)) initDP(id); });
+  });
+  const body = document.getElementById('modal-body');
+  if(body) obs.observe(body, { childList: true, subtree: true });
+});
 </script>
 </body>
 </html>
