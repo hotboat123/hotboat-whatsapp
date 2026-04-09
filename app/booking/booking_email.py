@@ -132,9 +132,14 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
     website = ctx.get("business_website", "#")
     biz     = ctx.get("business_name", "HotBoat")
     wa_num  = phone.replace(" ", "").replace("+", "")
-    # Logo: use dedicated EMAIL_LOGO_URL setting if configured, otherwise no img
+    # Logo: EMAIL_LOGO_URL env var > auto-detect Railway domain > text fallback
+    import os as _os
     settings = get_settings()
     logo_url = (getattr(settings, "email_logo_url", "") or "").strip()
+    if not logo_url:
+        railway_domain = _os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+        if railway_domain:
+            logo_url = f"https://{railway_domain}/static/Logo%20sin%20Fondo%20y%20sin%20CHILE.png"
 
     ref    = ctx.get("booking_ref", "")
     date   = ctx.get("booking_date", "")
