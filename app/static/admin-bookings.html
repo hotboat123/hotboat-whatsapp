@@ -737,6 +737,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
+      <!-- ── Precios por persona HotBoat ───────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem" id="prices-config-card">
+        <div class="chart-title">💰 Precios HotBoat por persona</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Precio base por persona según el tamaño del grupo. Se usa en la app de reservas, WhatsApp y para auto-completar el precio al crear una reserva manualmente.
+        </p>
+        <div id="prices-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem;margin-bottom:1rem"></div>
+        <button class="sync-btn" onclick="savePricesConfig()" style="background:var(--green)">Guardar precios</button>
+      </div>
+
       <!-- ── Horarios HotBoat ─────────────────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">🕐 Horarios HotBoat</div>
@@ -1835,6 +1845,43 @@ async function saveOpHours(){
   }catch(e){ showToast('Error: '+e.message); }
 }
 
+let _pricesConfig = {2:69990,3:54990,4:44990,5:38990,6:32990,7:29990};
+
+function renderPricesGrid(){
+  const grid = document.getElementById('prices-grid');
+  if(!grid) return;
+  grid.innerHTML = Object.entries(_pricesConfig).sort((a,b)=>+a[0]-+b[0]).map(([n,p])=>`
+    <div style="background:var(--surface2,#1a1a2e);border:1px solid var(--border);border-radius:10px;padding:.75rem">
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.35rem">${n} personas</div>
+      <div style="display:flex;align-items:center;gap:.4rem">
+        <span style="color:var(--muted);font-size:.85rem">$</span>
+        <input type="number" class="price-pp-input" data-n="${n}" value="${p}" min="0" step="1000"
+          style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .5rem;font-size:.9rem;width:100%">
+      </div>
+    </div>`).join('');
+}
+
+async function loadPricesConfig(){
+  try{
+    const d = await api('/api/admin/prices-config');
+    if(d.prices){ _pricesConfig = d.prices; renderPricesGrid(); }
+  }catch(e){ console.warn('loadPricesConfig:', e.message); renderPricesGrid(); }
+}
+
+async function savePricesConfig(){
+  const inputs = document.querySelectorAll('.price-pp-input');
+  const prices = {};
+  inputs.forEach(inp => { prices[inp.dataset.n] = +inp.value||0; });
+  try{
+    await api('/api/admin/prices-config',{method:'PUT',body:JSON.stringify({prices})});
+    _pricesConfig = prices;
+    showToast('Precios guardados ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+// Returns price for N persons from loaded config
+function getPriceForPersons(n){ return _pricesConfig[n] || _pricesConfig[String(n)] || 0; }
+
 async function loadSettings(){
   try{
     const [d, ms, oh] = await Promise.all([
@@ -1842,6 +1889,7 @@ async function loadSettings(){
       api('/api/admin/menu-settings'),
       api('/api/admin/operating-hours'),
     ]);
+    loadPricesConfig();
     const cb = document.getElementById('urgency-toggle');
     if(cb){ cb.checked = d.urgency_mode; updateUrgencyLabel(d.urgency_mode); }
     if(d.urgency_config){ _urgencyCfg = d.urgency_config; renderUrgencyConfig(); }
@@ -2419,7 +2467,7 @@ function openNewReservaModal(prefillDate){
       <div class="form-group"><label>Email</label>
         <input id="nr-email" placeholder="email@..."></div>
       <div class="form-group"><label>Personas</label>
-        <input type="number" id="nr-personas" min="1" value="2"></div>
+        <input type="number" id="nr-personas" min="1" value="2" oninput="nrAutoFillPrice(this.value)"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Servicio</label>
@@ -2434,10 +2482,18 @@ function openNewReservaModal(prefillDate){
       </div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Ingreso reserva ($)</label>
-        <input type="number" id="nr-ingreso" min="0" value="0" oninput="document.getElementById('nr-total').value=this.value"></div>
+      <div class="form-group">
+        <label>Ingreso reserva ($) <span id="nr-price-hint" style="font-weight:400;color:var(--muted);font-size:.78rem"></span></label>
+        <input type="number" id="nr-ingreso" min="0" value="0" oninput="document.getElementById('nr-total').value=this.value">
+      </div>
       <div class="form-group"><label>Total ($)</label>
         <input type="number" id="nr-total" min="0" value="0" style="color:var(--gold);font-weight:700"></div>
+    </div>
+    <div style="margin-bottom:.8rem">
+      <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem">
+        <input type="checkbox" id="nr-send-email" style="width:16px;height:16px">
+        Enviar email de confirmación al cliente (si tiene email)
+      </label>
     </div>
     <div id="nr-err" style="color:var(--red);font-size:.8rem;display:none;margin-bottom:.5rem"></div>
     <div class="modal-actions">
@@ -2445,7 +2501,20 @@ function openNewReservaModal(prefillDate){
       <button class="btn-save" onclick="submitNewReserva()">Crear reserva</button>
     </div>`;
   document.getElementById('overlay').classList.add('show');
-  setTimeout(()=>document.getElementById('nr-nombre')?.focus(), 100);
+  setTimeout(()=>{ document.getElementById('nr-nombre')?.focus(); nrAutoFillPrice(2); }, 100);
+}
+
+function nrAutoFillPrice(nStr){
+  const n = +nStr;
+  const price = getPriceForPersons(n);
+  const total = price * n;
+  const ingresoEl = document.getElementById('nr-ingreso');
+  const totalEl   = document.getElementById('nr-total');
+  const hintEl    = document.getElementById('nr-price-hint');
+  if(ingresoEl) ingresoEl.value = total;
+  if(totalEl)   totalEl.value   = total;
+  if(hintEl && price) hintEl.textContent = `→ $${price.toLocaleString('es-CL')}/p × ${n}p`;
+  else if(hintEl) hintEl.textContent = '';
 }
 
 async function submitNewReserva(){
@@ -2457,6 +2526,7 @@ async function submitNewReserva(){
     if(errEl){ errEl.textContent='Fecha y nombre son obligatorios'; errEl.style.display=''; }
     return;
   }
+  const sendEmail = document.getElementById('nr-send-email')?.checked || false;
   try{
     const d = await api('/api/admin/reservas', {method:'POST', body: JSON.stringify({
       fecha, hora: gv('nr-hora')||null,
@@ -2467,6 +2537,7 @@ async function submitNewReserva(){
       ingreso_reserva: +gv('nr-ingreso')||0,
       ingreso_total: +gv('nr-total')||0,
       status: gv('nr-status')||'confirmed',
+      send_confirmation: sendEmail,
     })});
     showToast(`Reserva creada (ID ${d.id}) ✓`);
     closeModal();
@@ -2814,35 +2885,18 @@ function syncCiudadOrigenHidden(){
 
 function lookupBasePrice(nStr){
   const n = +nStr;
-  if(!n || !EXTRAS_CATALOG.length) return;
-
-  // Try exact slug matches: hotboat_Np, hotboat_N_p, hotbot_N, etc.
-  const targets = [
-    `hotboat_${n}p`,
-    `hotboat_${n}_p`,
-    `hotboat_${n}`,
-    `hotbot_${n}p`,
-  ];
-  let match = EXTRAS_CATALOG.find(e => targets.includes(e.key));
-
-  // Fallback: any catalog entry whose name contains the number and 'hotboat'/'hotbot'
-  if(!match){
-    match = EXTRAS_CATALOG.find(e => {
-      const k = e.key.toLowerCase();
-      return (k.includes('hotboat')||k.includes('hotbot')) && k.includes(String(n));
-    });
-  }
-
+  if(!n) return;
+  const pricePerPerson = getPriceForPersons(n);
+  const total = pricePerPerson * n;
   const hint = document.getElementById('e-precio-hint');
   const inp  = document.getElementById('e-ingreso_reserva');
-  if(match && inp){
-    inp.value = match.price;
-    if(hint) hint.textContent = `→ ${match.name} (${fmtMoney(match.price)})`;
-    // Recalculate totals
+  if(pricePerPerson && inp){
+    inp.value = total;
+    if(hint) hint.textContent = `→ $${pricePerPerson.toLocaleString('es-CL')}/p × ${n}p = ${fmtMoney(total)}`;
     updateExtrasTotals();
     syncPagoFaltante();
   } else {
-    if(hint) hint.textContent = n ? `sin precio para ${n}p en catálogo` : '';
+    if(hint) hint.textContent = n ? `sin precio configurado para ${n}p` : '';
   }
 }
 

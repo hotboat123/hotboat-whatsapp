@@ -292,6 +292,33 @@ async def create_reserva(x_admin_key: str = Header(""), request: Request = None)
                       body.get("status") or "confirmed"))
                 new_id = cur.fetchone()[0]
                 conn.commit()
+
+        # Optionally send confirmation email using raw data
+        send_confirmation = body.get("send_confirmation", False)
+        customer_email = (body.get("email") or "").strip()
+        if send_confirmation and customer_email:
+            try:
+                from app.booking.booking_email import send_email_for_trigger_with_data
+                row_data = {
+                    "id": new_id,
+                    "booking_ref": f"MANUAL-{new_id}",
+                    "customer_name": nombre,
+                    "customer_phone": body.get("telefono") or "",
+                    "customer_email": customer_email,
+                    "booking_date": str(fecha),
+                    "booking_time": str(hora or ""),
+                    "num_people": body.get("num_personas") or "",
+                    "subtotal": float(body.get("ingreso_reserva") or 0),
+                    "extras_total": 0,
+                    "total_price": float(body.get("ingreso_total") or body.get("ingreso_reserva") or 0),
+                    "status": body.get("status") or "confirmed",
+                    "source": "manual",
+                }
+                em = send_email_for_trigger_with_data("booking_created", customer_email, row_data)
+                logger.info(f"Manual booking confirmation email: {em}")
+            except Exception as em_err:
+                logger.warning(f"Manual booking confirmation email failed: {em_err}")
+
         return {"ok": True, "id": new_id}
     except HTTPException:
         raise
@@ -1786,3 +1813,54 @@ async def admin_put_menu_settings(body: MenuSettingsBody, x_admin_key: str = Hea
     from app.booking.operator_settings import set_menu_settings
     set_menu_settings(body.dict())
     return {"ok": True}
+
+
+# ── HotBoat prices per person ──────────────────────────────────────────────────
+
+PRICES_DEFAULT = {2: 69990, 3: 54990, 4: 44990, 5: 38990, 6: 32990, 7: 29990}
+
+
+@admin_router.get("/api/admin/prices-config")
+async def get_prices_config(x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    raw = get_setting("prices_per_person", "")
+    if raw:
+        try:
+            stored = json.loads(raw)
+            # Merge with defaults so all people counts are present
+            prices = {**PRICES_DEFAULT, **{int(k): int(v) for k, v in stored.items()}}
+        except Exception:
+            prices = PRICES_DEFAULT.copy()
+    else:
+        prices = PRICES_DEFAULT.copy()
+    return {"prices": prices}
+
+
+@admin_router.put("/api/admin/prices-config")
+async def put_prices_config(request: Request, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    body = await request.json()
+    prices = body.get("prices", {})
+    if not isinstance(prices, dict):
+        raise HTTPException(status_code=400, detail="prices debe ser un objeto")
+    # Validate: keys 2-7, values positive numbers
+    validated = {}
+    for k, v in prices.items():
+        try:
+            ki = int(k)
+            vi = int(v)
+            if 1 <= ki <= 20 and vi >= 0:
+                validated[ki] = vi
+        except (ValueError, TypeError):
+            pass
+    if not validated:
+        raise HTTPException(status_code=400, detail="Sin precios válidos")
+    set_setting("prices_per_person", json.dumps(validated))
+    # Refresh live PRICES constant used by the booking engine
+    try:
+        from app.booking import db as booking_db
+        booking_db.PRICES.clear()
+        booking_db.PRICES.update(validated)
+    except Exception as e:
+        logger.warning(f"Could not refresh live PRICES: {e}")
+    return {"ok": True, "prices": validated}

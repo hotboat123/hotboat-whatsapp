@@ -10,6 +10,19 @@ logger = logging.getLogger(__name__)
 PRICES = {2: 69990, 3: 54990, 4: 44990, 5: 38990, 6: 32990, 7: 29990}
 
 
+def load_prices_from_db() -> None:
+    """Load prices per person from hotboat_settings into the live PRICES dict."""
+    import json as _json
+    try:
+        from app.booking.operator_settings import get_setting
+        raw = get_setting("prices_per_person", "")
+        if raw:
+            stored = _json.loads(raw)
+            PRICES.update({int(k): int(v) for k, v in stored.items()})
+    except Exception as e:
+        logger.warning(f"load_prices_from_db: {e}")
+
+
 def generate_booking_ref() -> str:
     year = datetime.now(CHILE_TZ).year
     suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))

@@ -337,6 +337,11 @@ async def lifespan(app: FastAPI):
         CartManager.refresh_prices_from_db()
     except Exception as _e:
         logger.warning(f"Cart price refresh skipped: {_e}")
+    try:
+        from app.booking.db import load_prices_from_db
+        load_prices_from_db()
+    except Exception as _e:
+        logger.warning(f"Booking prices refresh skipped: {_e}")
     sync_task = asyncio.create_task(_run_auto_sync())
     email_task = asyncio.create_task(_run_email_sweeps_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
