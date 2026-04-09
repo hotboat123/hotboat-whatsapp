@@ -1,0 +1,3431 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HotBoat Admin · Reservas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0f;--surface:#13131a;--card:#1a1a24;--border:#2a2a38;
+  --text:#f0f0f8;--muted:#7070a0;--gold:#f5c842;--blue:#4a9eff;
+  --green:#2ecc71;--red:#e74c3c;--orange:#f39c12;--purple:#9b59b6;
+  --sidebar:220px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:14px}
+a{color:inherit;text-decoration:none}
+input,select,textarea{font-family:inherit;font-size:inherit}
+
+/* Sidebar */
+#sidebar{width:var(--sidebar);background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;
+  transition:transform .3s}
+#sidebar.hidden{transform:translateX(-100%)}
+.sb-logo{padding:1.2rem 1rem;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:.6rem}
+.sb-logo span{font-size:1.3rem;font-weight:700;color:var(--gold)}
+.sb-logo small{font-size:.7rem;color:var(--muted);display:block}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:.7rem;padding:.65rem 1.2rem;
+  cursor:pointer;color:var(--muted);border-left:3px solid transparent;
+  transition:all .15s;font-size:.85rem}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.nav-item.active{color:var(--gold);border-left-color:var(--gold);background:rgba(245,200,66,.06)}
+.nav-item .ni{width:18px;text-align:center;font-size:.95rem}
+.sb-footer{padding:1rem;border-top:1px solid var(--border)}
+.sb-footer small{color:var(--muted);font-size:.75rem}
+
+/* Main */
+#main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh}
+#topbar{background:var(--surface);border-bottom:1px solid var(--border);
+  padding:.8rem 1.4rem;display:flex;align-items:center;gap:1rem;position:sticky;top:0;z-index:50}
+#topbar h1{font-size:1rem;font-weight:600;flex:1}
+.sync-btn{background:var(--gold);color:#000;border:none;border-radius:8px;
+  padding:.45rem 1rem;font-size:.8rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:.4rem}
+.sync-btn:hover{opacity:.9}
+.sync-btn.loading{opacity:.6;cursor:wait}
+#content{padding:1.4rem;flex:1}
+
+/* Cards */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1rem;margin-bottom:1.4rem}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem 1.2rem}
+.stat-card .sc-label{font-size:.75rem;color:var(--muted);margin-bottom:.3rem;text-transform:uppercase;letter-spacing:.05em}
+.stat-card .sc-value{font-size:1.6rem;font-weight:700;color:var(--text)}
+.stat-card .sc-sub{font-size:.78rem;color:var(--muted);margin-top:.2rem}
+
+/* Filter bar */
+.filter-bar{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem}
+.filter-bar input,.filter-bar select{
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:.5rem .8rem;outline:none;font-size:.82rem}
+.filter-bar input:focus,.filter-bar select:focus{border-color:var(--gold)}
+.filter-bar input{flex:1;min-width:160px}
+.btn-primary{background:var(--gold);color:#000;border:none;border-radius:8px;
+  padding:.5rem 1.1rem;font-size:.82rem;font-weight:600;cursor:pointer}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--muted);
+  border-radius:8px;padding:.5rem 1.1rem;font-size:.82rem;cursor:pointer}
+.btn-ghost:hover{border-color:var(--text);color:var(--text)}
+
+/* Table */
+.tbl-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{background:var(--surface);padding:.6rem 1rem;text-align:left;
+  font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
+  white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{color:var(--text)}
+td{padding:.65rem 1rem;border-top:1px solid var(--border);font-size:.82rem;vertical-align:middle}
+tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
+.no-data{text-align:center;padding:3rem;color:var(--muted)}
+
+/* Status badges */
+.badge{display:inline-block;padding:.2rem .55rem;border-radius:6px;font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.badge-confirmed,.badge-aprobado,.badge-approved{background:rgba(46,204,113,.15);color:var(--green)}
+.badge-pending,.badge-pendiente,.badge-pending_payment{background:rgba(243,156,18,.15);color:var(--orange)}
+.badge-cancelled,.badge-cancelada,.badge-rejected,.badge-rechazada{background:rgba(231,76,60,.15);color:var(--red)}
+.badge-solicitud{background:rgba(74,158,255,.15);color:var(--blue)}
+.badge-paid{background:rgba(155,89,182,.15);color:var(--purple)}
+
+/* Calendar */
+.cal-nav{display:flex;align-items:center;gap:1rem;margin-bottom:1rem}
+.cal-nav h2{flex:1;font-size:1.1rem;font-weight:600}
+.cal-nav button{background:var(--card);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:.4rem .8rem;cursor:pointer;font-size:1rem}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-hdr{background:var(--surface);padding:.5rem;text-align:center;font-size:.73rem;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.cal-day{background:var(--card);border:1px solid var(--border);border-radius:6px;
+  min-height:90px;padding:.4rem;position:relative;cursor:pointer;transition:border-color .15s}
+.cal-day:hover{border-color:var(--gold)}
+.cal-day.empty{background:transparent;border-color:transparent;cursor:default}
+.cal-day.today{border-color:var(--gold)}
+.cal-day-num{font-size:.72rem;color:var(--muted);margin-bottom:.2rem}
+.cal-day.today .cal-day-num{color:var(--gold);font-weight:700}
+.cal-pill{font-size:.62rem;padding:.18rem .38rem;border-radius:5px;margin:.12rem 0;
+  cursor:pointer;line-height:1.35;overflow:hidden}
+.cal-pill-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.cal-pill-sub{display:flex;align-items:center;gap:.25rem;font-size:.58rem;opacity:.85;margin-top:.05rem;flex-wrap:nowrap;overflow:hidden}
+.cal-pill-icons{letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:clip}
+
+/* Client history cards */
+.ch-header{display:flex;flex-direction:column;gap:.2rem;margin-bottom:1.2rem;padding-bottom:.9rem;border-bottom:1px solid var(--border)}
+.ch-name{font-size:1.15rem;font-weight:700}
+.ch-meta{font-size:.8rem;color:var(--muted)}
+.ch-kpis{display:flex;gap:1rem;margin-top:.5rem;flex-wrap:wrap}
+.ch-kpi{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:.35rem .7rem;text-align:center}
+.ch-kpi .v{font-weight:700;font-size:.95rem;color:var(--gold)}
+.ch-kpi .l{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.rsv-card{border:1px solid var(--border);border-radius:10px;margin-bottom:.8rem;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.rsv-card:hover{border-color:var(--gold)}
+.rsv-card-hdr{display:flex;align-items:center;gap:.5rem;padding:.6rem .85rem;background:rgba(255,255,255,.03);flex-wrap:wrap}
+.rsv-card-hdr .rdate{font-weight:700;font-size:.88rem}
+.rsv-card-hdr .rtime{font-size:.82rem;color:var(--muted)}
+.rsv-card-body{padding:.7rem .85rem;display:grid;grid-template-columns:1fr 1fr;gap:.35rem .8rem;font-size:.8rem}
+.rsv-row{display:flex;align-items:flex-start;gap:.3rem;color:var(--muted);line-height:1.4}
+.rsv-row strong{color:var(--text);font-weight:500}
+.rsv-row-full{grid-column:1/-1;display:flex;align-items:flex-start;gap:.3rem;color:var(--muted);line-height:1.4}
+.rsv-row-full strong{color:var(--text);font-weight:500}
+.rsv-tag-row{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.3rem;margin:.1rem 0}
+.rsv-tag{background:rgba(255,255,255,.06);border-radius:4px;padding:.1rem .45rem;font-size:.75rem}
+
+/* Modal */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;
+  align-items:center;justify-content:center;padding:1rem}
+#overlay.show{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  width:100%;max-width:640px;max-height:90vh;overflow-y:auto;padding:1.5rem;position:relative}
+.modal-close{position:absolute;top:1rem;right:1rem;background:none;border:none;
+  color:var(--muted);font-size:1.3rem;cursor:pointer}
+.modal-close:hover{color:var(--text)}
+.modal h2{font-size:1.1rem;font-weight:700;margin-bottom:1rem}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:.8rem}
+.form-group{display:flex;flex-direction:column;gap:.3rem}
+.form-group label{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.form-group input,.form-group select,.form-group textarea{
+  background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:.55rem .8rem;outline:none;font-size:.85rem}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--gold)}
+.modal-actions{display:flex;gap:.6rem;margin-top:1.2rem;justify-content:flex-end}
+.modal-actions .btn-save{background:var(--gold);color:#000;border:none;border-radius:8px;
+  padding:.55rem 1.2rem;font-weight:600;cursor:pointer;font-size:.85rem}
+.modal-actions .btn-del{background:rgba(231,76,60,.15);color:var(--red);border:1px solid rgba(231,76,60,.3);
+  border-radius:8px;padding:.55rem 1.2rem;font-size:.85rem;cursor:pointer}
+
+/* Client cards */
+.client-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem}
+.client-card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:1rem;cursor:pointer;transition:border-color .15s}
+.client-card:hover{border-color:var(--gold)}
+.cc-name{font-weight:600;font-size:.95rem;margin-bottom:.2rem}
+.cc-phone{color:var(--muted);font-size:.8rem}
+.cc-stats{display:flex;gap:1rem;margin-top:.7rem}
+.cc-stat{text-align:center}
+.cc-stat .v{font-size:1rem;font-weight:700;color:var(--gold)}
+.cc-stat .l{font-size:.68rem;color:var(--muted)}
+
+/* Chart (simple CSS bars) */
+.chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.2rem;margin-bottom:1rem}
+.chart-title{font-size:.85rem;font-weight:600;margin-bottom:1rem;color:var(--muted)}
+.bar-chart{display:flex;align-items:flex-end;gap:.5rem;height:130px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.bar{background:var(--gold);border-radius:4px 4px 0 0;width:100%;min-height:2px;transition:height .3s}
+.bar-lbl{font-size:.65rem;color:var(--muted);text-align:center}
+.bar-val{font-size:.65rem;color:var(--text);text-align:center}
+
+/* Login screen */
+#login-screen{display:flex;align-items:center;justify-content:center;
+  min-height:100vh;width:100%;background:var(--bg)}
+.login-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:2rem;width:320px;text-align:center}
+.login-card h1{font-size:1.3rem;font-weight:700;margin:.8rem 0 .3rem;color:var(--gold)}
+.login-card p{color:var(--muted);font-size:.85rem;margin-bottom:1.5rem}
+.login-card input{width:100%;background:var(--surface);border:1px solid var(--border);
+  color:var(--text);border-radius:8px;padding:.7rem;font-size:.9rem;outline:none;
+  text-align:center;margin-bottom:1rem}
+.login-card input:focus{border-color:var(--gold)}
+.login-card button{width:100%;background:var(--gold);color:#000;border:none;
+  border-radius:8px;padding:.7rem;font-weight:700;cursor:pointer;font-size:.9rem}
+
+/* Toggle switch */
+.form-group-adm{margin-bottom:.75rem}.form-group-adm label{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.3rem}.form-group-adm input,.form-group-adm textarea,.form-group-adm select{width:100%;background:var(--deep);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem .7rem;font-family:inherit;font-size:.88rem;outline:none}.form-group-adm textarea{resize:vertical}
+.item-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;display:flex;align-items:flex-start;gap:.75rem}
+.item-card .item-thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--deep)}
+.item-card .item-body{flex:1;min-width:0}
+.item-card .item-actions{display:flex;flex-direction:column;gap:.4rem;flex-shrink:0}
+.status-badge{display:inline-block;padding:.15rem .55rem;border-radius:20px;font-size:.72rem;font-weight:700;text-transform:uppercase}
+.badge-on{background:#00c05533;color:#00c055}.badge-off{background:#ff444433;color:#ff4444}
+.toggle-wrap{position:relative;display:inline-block;width:48px;height:26px;cursor:pointer}
+.toggle-wrap input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:var(--border);border-radius:26px;transition:.3s}
+.toggle-slider:before{content:'';position:absolute;width:20px;height:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s}
+.toggle-wrap input:checked + .toggle-slider{background:var(--gold)}
+.toggle-wrap input:checked + .toggle-slider:before{transform:translateX(22px)}
+/* Vacation day */
+.cal-day.vacation{background:rgba(231,76,60,.18);border-color:rgba(231,76,60,.4)}
+.cal-day.vacation .cal-day-num{color:var(--red)}
+/* Payment rows */
+.pago-row{display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem}
+.pago-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:.45rem .7rem;outline:none;font-size:.83rem}
+.pago-row input:focus{border-color:var(--gold)}
+.pago-row .p-amount{width:120px;flex-shrink:0}
+.pago-row .p-method{flex:1}
+.pago-row .p-date{width:130px;flex-shrink:0}
+.pago-row .p-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;padding:.2rem .4rem;border-radius:6px;flex-shrink:0}
+.pago-row .p-del:hover{background:rgba(231,76,60,.1)}
+/* Discount rows */
+.desc-row{display:flex;gap:.4rem;align-items:center;margin-bottom:.4rem;flex-wrap:wrap}
+.desc-row input,.desc-row select{background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:.45rem .7rem;outline:none;font-size:.83rem}
+.desc-row input:focus,.desc-row select:focus{border-color:var(--gold)}
+.desc-row .d-amount{width:110px;flex-shrink:0}
+.desc-row .d-type{width:100px;flex-shrink:0}
+.desc-row .d-note{flex:1;min-width:120px}
+.desc-row .d-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;padding:.2rem .4rem;border-radius:6px;flex-shrink:0}
+.desc-row .d-del:hover{background:rgba(231,76,60,.1)}
+/* Extras editor */
+.extras-row{display:grid;grid-template-columns:1fr 64px 90px 80px 28px;gap:.4rem;align-items:center;
+  border-bottom:1px solid var(--border);padding:.4rem 0}
+.extras-row:first-child{border-top:1px solid var(--border)}
+.extras-row .ex-name{font-size:.82rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.extras-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:6px;padding:.3rem .5rem;outline:none;font-size:.82rem;text-align:right;width:100%}
+.extras-row input:focus{border-color:var(--gold)}
+.extras-row .ex-sub{font-size:.82rem;color:var(--gold);text-align:right;font-weight:600}
+.extras-row .ex-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:.9rem;padding:.1rem .3rem;border-radius:4px}
+.extras-row .ex-del:hover{background:rgba(231,76,60,.1)}
+.extras-hdr{display:grid;grid-template-columns:1fr 64px 90px 80px 28px;gap:.4rem;
+  font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding-bottom:.3rem}
+.extras-add-row{display:flex;gap:.5rem;margin-top:.5rem;align-items:center}
+.extras-add-row select{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:.4rem .7rem;font-size:.82rem;outline:none}
+.extras-add-row select:focus{border-color:var(--gold)}
+.extras-add-row button{background:var(--gold);color:#000;border:none;border-radius:8px;
+  padding:.4rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap}
+.extras-total-row{display:flex;justify-content:flex-end;gap:.5rem;align-items:center;
+  padding-top:.4rem;font-size:.82rem;font-weight:600}
+.extras-total-row span{color:var(--gold)}
+/* Extras catalog table */
+.ec-table{width:100%;border-collapse:collapse}
+.ec-table th{background:var(--surface);padding:.55rem .9rem;text-align:left;
+  font-size:.73rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.ec-table td{padding:.5rem .9rem;border-top:1px solid var(--border);font-size:.83rem;vertical-align:middle}
+.ec-table tr:hover td{background:rgba(255,255,255,.02)}
+.ec-input{background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none;width:100%;text-align:right}
+.ec-input:focus{border-color:var(--gold)}
+.ec-name-input{text-align:left}
+.ec-util{font-weight:600}
+.ec-util.pos{color:var(--green)}.ec-util.neg{color:var(--red)}
+.ec-save-btn{background:var(--gold);color:#000;border:none;border-radius:7px;
+  padding:.3rem .75rem;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.ec-save-btn:hover{opacity:.85}
+.ec-save-btn.saved{background:var(--green);color:#fff}
+.ec-del-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:.2rem .4rem;border-radius:5px}
+.ec-del-btn:hover{color:var(--red);background:rgba(231,76,60,.1)}
+/* Misc */
+.section{display:none}.section.active{display:block}
+.chip{display:inline-block;background:rgba(255,255,255,.07);border-radius:20px;
+  padding:.2rem .6rem;font-size:.72rem;color:var(--muted);margin-right:.3rem}
+.loading-msg{text-align:center;padding:3rem;color:var(--muted)}
+@media(max-width:768px){
+  #sidebar{transform:translateX(-100%)}
+  #sidebar.open{transform:translateX(0)}
+  #main{margin-left:0}
+  .form-row{grid-template-columns:1fr}
+  .bar-lbl{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div style="font-size:2.5rem">🚤</div>
+    <h1>HotBoat Admin</h1>
+    <p>Ingresa tu contraseña para continuar</p>
+    <input type="password" id="pw-input" placeholder="Contraseña" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()">Entrar</button>
+    <p id="pw-err" style="color:var(--red);font-size:.8rem;margin-top:.6rem;display:none">Contraseña incorrecta</p>
+  </div>
+</div>
+
+<!-- DASHBOARD (hidden until login) -->
+<div id="dashboard" style="display:none;width:100%;display:none">
+
+<nav id="sidebar">
+  <div class="sb-logo">
+    <span>🚤</span>
+    <div><strong>HotBoat</strong><small>Panel Admin</small></div>
+  </div>
+  <div class="sb-nav">
+    <div class="nav-item active" onclick="showSection('calendar')" id="nav-calendar">
+      <span class="ni">📅</span> Calendario
+    </div>
+    <div class="nav-item" onclick="showSection('lista')" id="nav-lista">
+      <span class="ni">📋</span> Reservas
+    </div>
+    <div class="nav-item" onclick="showSection('clientes')" id="nav-clientes">
+      <span class="ni">👥</span> Clientes
+    </div>
+    <div class="nav-item" onclick="showSection('stats')" id="nav-stats">
+      <span class="ni">📊</span> Estadisticas
+    </div>
+    <div class="nav-item" onclick="showSection('extras-cat')" id="nav-extras-cat">
+      <span class="ni">🏷️</span> Precios Extras
+    </div>
+    <div class="nav-item" onclick="showSection('emails')" id="nav-emails">
+      <span class="ni">✉️</span> Emails reservas
+    </div>
+    <div class="nav-item" onclick="showSection('alojamientos-admin')" id="nav-alojamientos-admin">
+      <span class="ni">🏠</span> Alojamientos
+    </div>
+    <div class="nav-item" onclick="showSection('experiencias')" id="nav-experiencias">
+      <span class="ni">🏔️</span> Experiencias
+    </div>
+    <div class="nav-item" onclick="showSection('packs-admin')" id="nav-packs-admin">
+      <span class="ni">🎁</span> Packs Completos
+    </div>
+    <div class="nav-item" onclick="showSection('cal-extras')" id="nav-cal-extras">
+      <span class="ni">🗓️</span> Calendario Extras
+    </div>
+    <div class="nav-item" onclick="showSection('settings')" id="nav-settings">
+      <span class="ni">⚙️</span> Configuracion
+    </div>
+  </div>
+  <div class="sb-footer">
+    <small id="sync-status">Sin sincronizar</small>
+  </div>
+</nav>
+
+<div id="main">
+  <div id="topbar">
+    <button onclick="toggleSidebar()" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;display:none" id="menu-btn">☰</button>
+    <h1 id="section-title">Calendario de Reservas</h1>
+    <input type="number" id="year-sel" value="2026" min="2024" max="2030"
+      style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;width:80px;font-size:.85rem;outline:none"
+      onchange="reloadAll()">
+    <button class="sync-btn" onclick="openNewReservaModal()" style="background:var(--green);margin-right:.3rem">+ Nueva reserva</button>
+    <button class="sync-btn" onclick="doSync()" id="sync-btn">🔄 Sincronizar</button>
+  </div>
+
+  <div id="content">
+
+    <!-- CALENDAR -->
+    <div id="section-calendar" class="section active">
+      <div class="cal-nav">
+        <h2 id="cal-title">Cargando...</h2>
+        <button onclick="calPrev()">‹</button>
+        <button onclick="calNext()">›</button>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+
+    <!-- LISTA -->
+    <div id="section-lista" class="section">
+      <div class="filter-bar">
+        <input type="text" id="f-search" placeholder="Buscar cliente, tel, email..." oninput="debounce(loadLista,400)()">
+        <input type="date" id="f-desde" onchange="loadLista()">
+        <input type="date" id="f-hasta" onchange="loadLista()">
+        <select id="f-status" onchange="loadLista()">
+          <option value="all">Todos los estados</option>
+          <option value="confirmed">Confirmada</option>
+          <option value="pending">Pendiente</option>
+          <option value="cancelled">Cancelada</option>
+          <option value="solicitud">Solicitud</option>
+        </select>
+        <select id="f-source" onchange="loadLista()">
+          <option value="all">Todas las fuentes</option>
+          <option value="sheets">Historial (sheets)</option>
+          <option value="booknetic">Booknetic</option>
+          <option value="hotboat_web">Web HotBoat</option>
+        </select>
+        <button class="btn-ghost" onclick="clearFilters()">Limpiar</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortBy('fecha')">Fecha ⇅</th>
+              <th>Hora</th>
+              <th onclick="sortBy('nombre_cliente')">Cliente ⇅</th>
+              <th>Telefono</th>
+              <th>Personas</th>
+              <th onclick="sortBy('ingreso_total')">Total ⇅</th>
+              <th>Estado</th>
+              <th>Fuente</th>
+            </tr>
+          </thead>
+          <tbody id="lista-tbody"><tr><td colspan="8" class="loading-msg">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+      <p style="color:var(--muted);font-size:.78rem;margin-top:.5rem" id="lista-count"></p>
+    </div>
+
+    <!-- CLIENTES -->
+    <div id="section-clientes" class="section">
+      <div class="filter-bar">
+        <input type="text" id="c-search" placeholder="Buscar por nombre, telefono..." oninput="debounce(loadClients,400)()">
+        <button class="btn-primary" onclick="loadClients()">Buscar</button>
+      </div>
+      <div class="client-grid" id="client-grid"><div class="loading-msg">Cargando...</div></div>
+    </div>
+
+    <!-- STATS -->
+    <div id="section-stats" class="section">
+      <div class="stat-grid" id="stat-cards"></div>
+      <div class="chart-wrap">
+        <div class="chart-title">Ingresos por mes</div>
+        <div class="bar-chart" id="bar-chart"></div>
+        <div class="bar-chart" id="bar-labels" style="height:auto;margin-top:.2rem"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div class="chart-wrap" id="status-chart"></div>
+        <div class="chart-wrap" id="source-chart"></div>
+      </div>
+    </div>
+
+    <!-- PRECIOS EXTRAS -->
+    <div id="section-extras-cat" class="section">
+      <div style="display:flex;gap:.6rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+        <input type="text" id="ec-search" placeholder="Buscar extra..." oninput="filterExtrasCat()"
+          style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.5rem .8rem;font-size:.82rem;outline:none;flex:1;min-width:160px">
+        <button class="btn-primary" onclick="openNewExtraModal()" style="white-space:nowrap">+ Nuevo extra</button>
+        <span id="ec-count" style="color:var(--muted);font-size:.78rem"></span>
+      </div>
+      <div class="tbl-wrap">
+        <table class="ec-table">
+          <thead>
+            <tr>
+              <th style="text-align:center">Orden</th>
+              <th>Ícono</th>
+              <th>Nombre extra</th>
+              <th>Descripción (app)</th>
+              <th style="text-align:center">Mostrar en<br>reservas</th>
+              <th style="text-align:right">Precio venta</th>
+              <th style="text-align:right">Costo</th>
+              <th style="text-align:right">Utilidad</th>
+              <th style="text-align:right">Margen</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ec-tbody"><tr><td colspan="10" class="loading-msg">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- EMAILS RESERVAS (Resend / Booknetic-style multi-trigger) -->
+    <div id="section-emails" class="section">
+
+      <!-- Header + env info -->
+      <div class="chart-wrap" style="margin-bottom:1.2rem">
+        <div class="chart-title">✉️ Workflows de email (Resend)</div>
+        <p style="color:var(--muted);font-size:.83rem;line-height:1.65;margin-bottom:.6rem">
+          Configura qué correos se envían automáticamente al cliente según lo que ocurre
+          en la reserva. El remitente y el BCC se definen en el servidor:
+          <code style="font-size:.75rem">RESEND_FROM_CONFIRMATIONS</code> ·
+          <code style="font-size:.75rem">RESEND_BCC_BOOKING</code> ·
+          <code style="font-size:.75rem">RESEND_API_KEY</code>.
+        </p>
+        <p id="email-env-hint" style="font-size:.78rem;color:var(--muted);margin:0"></p>
+      </div>
+
+      <!-- Variables disponibles -->
+      <div class="chart-wrap" style="margin-bottom:1.2rem">
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.05em">Variables disponibles en asunto y HTML</div>
+        <div style="display:flex;flex-wrap:wrap;gap:.35rem">
+          <!-- chips rendered by JS -->
+          <div id="email-var-chips"></div>
+        </div>
+      </div>
+
+      <!-- Workflow cards (rendered by JS) -->
+      <div id="email-workflows-list" style="display:flex;flex-direction:column;gap:1rem"></div>
+    </div>
+
+    <!-- EXPERIENCIAS -->
+    <!-- ALOJAMIENTOS ADMIN -->
+    <div id="section-alojamientos-admin" class="section">
+      <div style="display:flex;gap:.75rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center">
+        <button class="sync-btn" style="background:var(--green)" onclick="openAlojModal()">+ Nuevo Alojamiento</button>
+        <span style="color:var(--muted);font-size:.82rem">Gestiona los alojamientos que aparecen en la app de reservas y WhatsApp.</span>
+      </div>
+      <div id="aloj-list" style="display:flex;flex-direction:column;gap:.75rem"></div>
+
+      <!-- Aloj Modal -->
+      <div id="aloj-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+        <div style="max-width:580px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
+          <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem" id="aloj-modal-title">Nuevo Alojamiento</div>
+          <input type="hidden" id="aloj-id">
+          <div class="form-group-adm"><label>Nombre *</label><input id="aloj-name" placeholder="Ej: Open Sky – Domo con Tina de Baño"></div>
+          <div class="form-group-adm"><label>Grupo (para agrupar en el bot)</label><input id="aloj-group" placeholder="Ej: Open Sky o Raíces de Relikura"></div>
+          <div class="form-group-adm"><label>Slug (identificador único)</label><input id="aloj-slug" placeholder="Ej: open-sky-domo-tina"></div>
+          <div class="form-group-adm"><label>Descripción</label><input id="aloj-desc" placeholder="Domo transparente con tina de baño interior..."></div>
+          <div class="form-group-adm">
+            <label>WhatsApp administrador del alojamiento</label>
+            <input id="aloj-owner-wa" placeholder="+56 9 XXXX XXXX" style="font-family:monospace">
+            <small style="color:var(--muted);font-size:.72rem">Se usa para generar el enlace wa.me en los emails de consulta de disponibilidad</small>
+          </div>
+          <div style="display:grid;grid-template-columns:60px 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Icono</label><input id="aloj-icon" placeholder="🏠"></div>
+            <div class="form-group-adm"><label>Capacidad (personas)</label><input id="aloj-capacity" type="number" min="1" value="2"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Precio/noche ($)</label><input id="aloj-price" type="number" min="0" value="0"></div>
+            <div class="form-group-adm"><label>Costo/noche ($)</label><input id="aloj-cost" type="number" min="0" value="0"></div>
+            <div class="form-group-adm"><label>Orden</label><input id="aloj-order" type="number" min="0" value="0"></div>
+            <div style="display:flex;align-items:flex-end;padding-bottom:.6rem">
+              <label class="toggle-wrap" style="flex-shrink:0"><input type="checkbox" id="aloj-active" checked><span class="toggle-slider"></span></label>
+              <span style="font-size:.8rem;margin-left:.5rem">Activo</span>
+            </div>
+          </div>
+          <div class="form-group-adm" id="aloj-img-wrap" style="display:none;margin-top:.8rem">
+            <label>Foto actual</label>
+            <img id="aloj-img-preview" src="" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:contain;margin-top:.4rem">
+          </div>
+          <div class="form-group-adm">
+            <label>Subir foto</label>
+            <input type="file" id="aloj-img-file" accept="image/*">
+          </div>
+          <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+            <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveAloj()">Guardar</button>
+            <button class="sync-btn" style="flex:1" onclick="closeAlojModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="section-experiencias" class="section">
+      <div style="display:flex;gap:.75rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center">
+        <button class="sync-btn" style="background:var(--green)" onclick="openExpModal()">+ Nueva Experiencia</button>
+        <span style="color:var(--muted);font-size:.82rem">Gestiona las experiencias que aparecen en la app de reservas y WhatsApp.</span>
+      </div>
+      <div id="exp-list" style="display:flex;flex-direction:column;gap:.75rem"></div>
+
+      <!-- Exp Modal -->
+      <div id="exp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+        <div style="max-width:520px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
+          <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem" id="exp-modal-title">Nueva Experiencia</div>
+          <input type="hidden" id="exp-id">
+          <div class="form-group-adm"><label>Nombre *</label><input id="exp-name" placeholder="Rafting, Cabalgata..."></div>
+          <div class="form-group-adm"><label>Slug (identificador único)</label><input id="exp-slug" placeholder="rafting"></div>
+          <div class="form-group-adm"><label>Icono</label><input id="exp-icon" placeholder="🚣" style="width:80px"></div>
+          <div class="form-group-adm"><label>Descripción</label><input id="exp-desc" placeholder="Rio Trancura · Bajo o Alto"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Precio/persona ($)</label><input id="exp-price" type="number" min="0" value="0"></div>
+            <div class="form-group-adm"><label>Costo/persona ($)</label><input id="exp-cost" type="number" min="0" value="0"></div>
+          </div>
+          <div class="form-group-adm"><label>Orden de display</label><input id="exp-order" type="number" min="0" value="0"></div>
+          <div style="display:flex;align-items:center;gap:.75rem;margin:.8rem 0">
+            <label class="toggle-wrap"><input type="checkbox" id="exp-active" checked><span class="toggle-slider"></span></label>
+            <span style="font-size:.85rem">Activa (visible en app y WhatsApp)</span>
+          </div>
+          <div class="form-group-adm" id="exp-img-wrap" style="display:none">
+            <label>Foto actual</label>
+            <img id="exp-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
+          </div>
+          <div class="form-group-adm">
+            <label>Subir nueva foto</label>
+            <input type="file" id="exp-img-file" accept="image/*">
+          </div>
+          <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+            <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveExp()">Guardar</button>
+            <button class="sync-btn" style="flex:1" onclick="closeExpModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PACKS ADMIN -->
+    <div id="section-packs-admin" class="section">
+      <div style="display:flex;gap:.75rem;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center">
+        <button class="sync-btn" style="background:var(--green)" onclick="openPackModal()">+ Nuevo Pack</button>
+        <span style="color:var(--muted);font-size:.82rem">Gestiona los packs completos disponibles.</span>
+      </div>
+      <div id="pack-list" style="display:flex;flex-direction:column;gap:.75rem"></div>
+
+      <!-- Pack Modal -->
+      <div id="pack-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+        <div style="max-width:560px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
+          <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem" id="pack-modal-title">Nuevo Pack</div>
+          <input type="hidden" id="pack-id">
+          <div class="form-group-adm"><label>Nombre *</label><input id="pack-name" placeholder="Pack Romántico"></div>
+          <div class="form-group-adm"><label>Slug</label><input id="pack-slug" placeholder="romantico"></div>
+          <div style="display:grid;grid-template-columns:60px 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Icono</label><input id="pack-icon" placeholder="💕"></div>
+            <div class="form-group-adm"><label>Personas</label><input id="pack-personas" placeholder="2 personas"></div>
+          </div>
+          <div class="form-group-adm"><label>Descripción</label><input id="pack-desc" placeholder="Escapada romántica..."></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Precio desde ($)</label><input id="pack-price" type="number" min="0" value="0"></div>
+            <div class="form-group-adm"><label>Costo desde ($)</label><input id="pack-cost" type="number" min="0" value="0"></div>
+          </div>
+          <div class="form-group-adm"><label>Incluye (uno por línea)</label>
+            <textarea id="pack-includes" rows="5" placeholder="Open Sky Domo (1 noche)&#10;Paseo en HotBoat&#10;..."></textarea>
+          </div>
+          <div class="form-group-adm"><label>Orden</label><input id="pack-order" type="number" min="0" value="0"></div>
+          <div style="display:flex;align-items:center;gap:.75rem;margin:.8rem 0">
+            <label class="toggle-wrap"><input type="checkbox" id="pack-active" checked><span class="toggle-slider"></span></label>
+            <span style="font-size:.85rem">Activo (visible en app y WhatsApp)</span>
+          </div>
+          <div class="form-group-adm" id="pack-img-wrap" style="display:none">
+            <label>Foto actual</label>
+            <img id="pack-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
+          </div>
+          <div class="form-group-adm">
+            <label>Subir nueva foto</label>
+            <input type="file" id="pack-img-file" accept="image/*">
+          </div>
+          <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+            <button class="sync-btn" style="background:var(--green);flex:1" onclick="savePack()">Guardar</button>
+            <button class="sync-btn" style="flex:1" onclick="closePackModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CALENDARIO EXTRAS -->
+    <div id="section-cal-extras" class="section">
+      <div class="cal-nav">
+        <h2 id="ce-title">Cargando...</h2>
+        <button onclick="ceCalPrev()">‹</button>
+        <button onclick="ceCalNext()">›</button>
+        <button class="sync-btn" style="background:var(--green);padding:.35rem .9rem;font-size:.8rem;margin-left:.75rem" onclick="openExtrasBookingModal()">+ Nueva Reserva</button>
+      </div>
+      <div class="cal-grid" id="ce-cal-grid" style="margin-bottom:1.5rem"></div>
+      <div id="cal-extras-list" style="display:flex;flex-direction:column;gap:.75rem"></div>
+
+      <!-- Extras Booking Modal -->
+      <div id="eb-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+        <div style="max-width:520px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
+          <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem" id="eb-modal-title">Nueva Reserva Extra</div>
+          <input type="hidden" id="eb-id">
+          <div class="form-group-adm"><label>Cliente *</label><input id="eb-name" placeholder="Nombre del cliente"></div>
+          <div class="form-group-adm"><label>Teléfono</label><input id="eb-phone" placeholder="+56 9 xxxx xxxx"></div>
+          <div class="form-group-adm"><label>Tipo</label>
+            <select id="eb-type" style="width:100%;background:var(--deep);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem;font-family:inherit">
+              <option value="experience">Experiencia</option>
+              <option value="pack">Pack Completo</option>
+              <option value="alojamiento">Alojamiento</option>
+            </select>
+          </div>
+          <div class="form-group-adm"><label>Item (nombre)</label><input id="eb-item-name" placeholder="Rafting, Pack Romántico..."></div>
+          <div class="form-group-adm"><label>Slug / ID</label><input id="eb-slug" placeholder="rafting, romantico..."></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Fecha inicio *</label><input type="date" id="eb-start"></div>
+            <div class="form-group-adm"><label>Fecha fin</label><input type="date" id="eb-end"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem">
+            <div class="form-group-adm"><label>Personas</label><input type="number" id="eb-people" min="1" value="2"></div>
+            <div class="form-group-adm"><label>Total ($)</label><input type="number" id="eb-total" min="0" value="0"></div>
+            <div class="form-group-adm"><label>Depósito ($)</label><input type="number" id="eb-deposit" min="0" value="0"></div>
+          </div>
+          <div class="form-group-adm"><label>Estado</label>
+            <select id="eb-status" style="width:100%;background:var(--deep);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem;font-family:inherit">
+              <option value="pendiente">Pendiente</option>
+              <option value="confirmado">Confirmado</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+          <div class="form-group-adm"><label>Notas</label><textarea id="eb-notes" rows="2"></textarea></div>
+          <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+            <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveExtrasBooking()">Guardar</button>
+            <button class="sync-btn" style="flex:1" onclick="closeEbModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="section-settings" class="section">
+
+      <!-- ── Visibilidad del Menú ────────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">📋 Visibilidad del Menú</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1.2rem;line-height:1.6">
+          Activa o desactiva secciones completas en el menú de WhatsApp y en la app de reservas.<br>
+          Al desactivar, la opción desaparece del menú y de la página web.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:.9rem">
+          <div style="display:flex;align-items:center;gap:1rem">
+            <label class="toggle-wrap">
+              <input type="checkbox" id="ms-experiencias" onchange="saveMenuSettings()">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:.9rem;font-weight:600">6️⃣ Otras Experiencias</div>
+              <div style="font-size:.77rem;color:var(--muted)">Rafting · Cabalgata · Velerismo — aparece en WhatsApp y en la web</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            <label class="toggle-wrap">
+              <input type="checkbox" id="ms-alojamientos" onchange="saveMenuSettings()">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:.9rem;font-weight:600">7️⃣ Alojamientos</div>
+              <div style="font-size:.77rem;color:var(--muted)">Domos · Cabañas · Hostal — aparece en WhatsApp y en la web</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            <label class="toggle-wrap">
+              <input type="checkbox" id="ms-packs" onchange="saveMenuSettings()">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:.9rem;font-weight:600">7️⃣ Packs Completos</div>
+              <div style="font-size:.77rem;color:var(--muted)">Romántico · Familiar · Amigos — aparece en WhatsApp y en la web</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            <label class="toggle-wrap">
+              <input type="checkbox" id="ms-armapack" onchange="saveMenuSettings()">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:.9rem;font-weight:600">🛒 Arma tu Pack</div>
+              <div style="font-size:.77rem;color:var(--muted)">Constructor de pack personalizado — solo en la web</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Horarios HotBoat ─────────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">🕐 Horarios HotBoat</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Horarios disponibles para reservar el HotBoat (aplica en WhatsApp y en la web).<br>
+          El <strong>Modo Genera Urgencia</strong> usará estos mismos horarios como base para filtrar.
+        </p>
+        <div id="oh-chips" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.8rem"></div>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <input type="time" id="oh-new-input" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.85rem">
+          <button onclick="addOpHour()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer;font-weight:600">+ Agregar</button>
+        </div>
+      </div>
+
+      <!-- ── Urgency Mode ─────────────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">⚡ Modo Genera Urgencia</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Muestra solo los <strong>horarios semilla</strong> para crear sensación de escasez.<br>
+          Sin reservas: muestra los horarios semilla. Con reservas: agrega horarios ± diferencia de horas cerca de cada reserva.
+        </p>
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="urgency-toggle" onchange="setUrgency(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+          <span id="urgency-label" style="font-size:.9rem;color:var(--muted)">Desactivado</span>
+        </div>
+
+        <!-- Urgency config -->
+        <div style="border-top:1px solid var(--border);padding-top:1rem;display:flex;flex-direction:column;gap:1rem">
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">Horarios semilla (Prioridad 1)</label>
+            <div id="seed-chips" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem"></div>
+            <div style="display:flex;gap:.5rem;align-items:center">
+              <input type="time" id="new-seed-input" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.85rem">
+              <button onclick="addSeedTime()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer;font-weight:600">+ Agregar</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:.8rem">
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">Diferencia entre slots (horas)</label>
+            <input type="number" id="gap-hours-input" min="1" max="12" step="0.5" value="3"
+              style="width:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.9rem;text-align:center">
+          </div>
+          <div>
+            <button onclick="saveUrgencyConfig()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Guardar configuracion</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Push Notifications ─────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">🔔 Notificaciones Push (Expo Go)</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Diagnóstico de notificaciones push hacia tu celular.
+          Si no llegan, re-abre la app de Expo Go y pulsa <strong>Registrar dispositivo</strong>.
+        </p>
+        <div style="display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:1rem">
+          <button onclick="checkPushStatus()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Ver dispositivos registrados</button>
+          <button onclick="sendTestPush()" style="background:var(--border);color:var(--text);border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Enviar notificación de prueba</button>
+        </div>
+        <div id="push-status-box" style="display:none;font-size:.82rem;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;line-height:1.7"></div>
+      </div>
+
+      <!-- ── Dynamic Pricing ──────────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">💰 Precios Dinamicos</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          El precio base se multiplica automaticamente segun 3 factores:<br>
+          <strong>Ocupacion del dia</strong> · <strong>Dias de anticipacion</strong> · <strong>Dia de semana</strong>.<br>
+          El cliente ve el precio ajustado al elegir su fecha.
+        </p>
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem">
+          <label class="toggle-wrap">
+            <input type="checkbox" id="dp-toggle" onchange="setDpEnabled(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+          <span id="dp-label" style="font-size:.9rem;color:var(--muted)">Desactivado</span>
+          <span id="dp-preview" style="font-size:.8rem;color:var(--muted);margin-left:auto"></span>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:1rem;display:flex;flex-direction:column;gap:1.4rem">
+
+          <!-- Fill rate table -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.6rem">📊 Por ocupacion del dia</label>
+            <div style="font-size:.75rem;color:var(--muted);margin-bottom:.4rem">Si ya hay N o mas reservas ese dia, aplicar este multiplicador.</div>
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem" id="dp-fill-table">
+              <thead><tr style="color:var(--muted);font-size:.75rem">
+                <th style="text-align:left;padding:.3rem .4rem">Reservas (min)</th>
+                <th style="text-align:left;padding:.3rem .4rem">Multiplicador</th>
+                <th style="text-align:left;padding:.3rem .4rem">Efecto</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="dp-fill-body"></tbody>
+            </table>
+            <button onclick="addFillRule()" style="margin-top:.4rem;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">+ Agregar regla</button>
+          </div>
+
+          <!-- Advance booking table -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.6rem">⏰ Por dias de anticipacion</label>
+            <div style="font-size:.75rem;color:var(--muted);margin-bottom:.4rem">Segun cuantos dias antes reserva el cliente. Se aplica la primera regla que coincida (de mayor a menor).</div>
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem" id="dp-adv-table">
+              <thead><tr style="color:var(--muted);font-size:.75rem">
+                <th style="text-align:left;padding:.3rem .4rem">Dias minimos</th>
+                <th style="text-align:left;padding:.3rem .4rem">Multiplicador</th>
+                <th style="text-align:left;padding:.3rem .4rem">Etiqueta</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="dp-adv-body"></tbody>
+            </table>
+            <button onclick="addAdvRule()" style="margin-top:.4rem;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">+ Agregar regla</button>
+          </div>
+
+          <!-- Day of week -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.6rem">📅 Por dia de semana</label>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem" id="dp-weekday-grid"></div>
+          </div>
+
+          <!-- Min/max clamp -->
+          <div style="display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap">
+            <div>
+              <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.3rem">Multiplicador minimo</label>
+              <div style="display:flex;align-items:center;gap:.4rem">
+                <input type="number" id="dp-min-mult" step="0.05" min="0.5" max="1.0" style="width:70px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .5rem;font-size:.9rem;text-align:center">
+                <span id="dp-min-pct" style="font-size:.78rem;color:var(--muted)"></span>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.3rem">Multiplicador maximo</label>
+              <div style="display:flex;align-items:center;gap:.4rem">
+                <input type="number" id="dp-max-mult" step="0.05" min="1.0" max="3.0" style="width:70px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .5rem;font-size:.9rem;text-align:center">
+                <span id="dp-max-pct" style="font-size:.78rem;color:var(--muted)"></span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <button onclick="saveDpConfig()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Guardar precios dinamicos</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Vacation days ────────────────────────────────────────────── -->
+      <div class="chart-wrap">
+        <div class="chart-title">🏖️ Dias de Vacaciones / Cierre</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem">
+          Los dias marcados no aparecen disponibles en la pagina web de reservas.
+        </p>
+        <div class="cal-nav" style="margin-bottom:.5rem">
+          <h2 id="vac-cal-title" style="font-size:.95rem"></h2>
+          <button onclick="vacCalPrev()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">‹</button>
+          <button onclick="vacCalNext()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">›</button>
+        </div>
+        <div class="cal-grid" id="vac-cal-grid" style="gap:2px"></div>
+        <div style="display:flex;gap:1rem;margin-top:.8rem;font-size:.75rem;color:var(--muted)">
+          <span><span style="background:var(--red);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Vacaciones</span>
+          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Hoy</span>
+        </div>
+        <div id="vac-list" style="margin-top:1rem"></div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /main -->
+
+</div><!-- /dashboard -->
+
+<!-- MODAL -->
+<div id="overlay" onclick="closeModal(event)">
+<div class="modal" id="modal-box">
+  <div style="display:flex;align-items:flex-start;gap:.6rem;margin-bottom:1rem">
+    <h2 id="modal-title" style="flex:1;margin-bottom:0">Reserva</h2>
+    <a id="wa-contact-btn" href="#" target="_blank" rel="noopener"
+      style="display:none;background:#25d366;color:#fff;border:none;border-radius:8px;
+             padding:.38rem .85rem;font-size:.82rem;font-weight:700;text-decoration:none;
+             white-space:nowrap;line-height:1.5;flex-shrink:0">
+      💬 Contactar
+    </a>
+    <button class="modal-close" onclick="closeModal()" style="position:static;top:auto;right:auto">✕</button>
+  </div>
+  <div id="modal-body"></div>
+</div>
+</div>
+
+<script>
+const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+// Lunes = primer columna, domingo = última (ISO / Chile)
+const DAYS_SHORT=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+function calLeadDaysMonFirst(jsGetDay){ return (jsGetDay + 6) % 7; }
+let KEY='', allReservas=[], calYear=new Date().getFullYear(), calMonth=new Date().getMonth();
+let sortCol='fecha', sortDir=-1;
+let EXTRAS_CATALOG=[];   // loaded once after login
+let _extrasItems=[];     // working copy for current modal: [{key,name,qty,unit_price}]
+let _descuentos=[];      // working copy for current modal: [{amount,type,note}]
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+function doLogin(){
+  const pw = document.getElementById('pw-input').value;
+  const err = document.getElementById('pw-err');
+  // Quick check via API
+  fetch('/api/admin/stats?year=2026', {headers:{'x-admin-key':pw}}).then(r=>{
+    if(r.ok){
+      KEY = pw;
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('dashboard').style.display='flex';
+      document.getElementById('menu-btn').style.display='';
+      loadExtrasCatalog();
+      reloadAll();
+    } else {
+      err.style.display='';
+    }
+  }).catch(()=>{ err.style.display=''; });
+}
+
+// ── Navigation ───────────────────────────────────────────────────────────────
+function showSection(name){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('section-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  // En mobile, cerrar el sidebar automáticamente al elegir una sección
+  document.getElementById('sidebar').classList.remove('open');
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras'};
+  document.getElementById('section-title').textContent = titles[name]||name;
+  if(name==='calendar') renderCal();
+  if(name==='lista') loadLista();
+  if(name==='clientes') loadClients();
+  if(name==='stats') loadStats();
+  if(name==='extras-cat') loadExtrasCat();
+  if(name==='emails') loadEmailBookingConfig();
+  if(name==='settings'){ loadSettings(); loadVacationDays(); }
+  if(name==='alojamientos-admin') loadAlojamientos();
+  if(name==='experiencias') loadExperiencias();
+  if(name==='packs-admin') loadPacksAdmin();
+  if(name==='cal-extras') loadCalExtras();
+}
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ── API helpers ──────────────────────────────────────────────────────────────
+async function api(url, opts={}){
+  const r = await fetch(url, {headers:{'x-admin-key':KEY,'Content-Type':'application/json'},...opts});
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+
+// ── Load all ─────────────────────────────────────────────────────────────────
+async function reloadAll(){
+  const yr = +document.getElementById('year-sel').value;
+  calYear = yr;
+  await Promise.all([loadReservas(), loadStats()]);
+  renderCal();
+}
+async function loadReservas(){
+  const yr = +document.getElementById('year-sel').value;
+  const data = await api(`/api/admin/reservas?desde=${yr}-01-01&hasta=${yr}-12-31&limit=2000`);
+  allReservas = data.reservas;
+  renderCal();
+}
+
+// ── Calendar ─────────────────────────────────────────────────────────────────
+function calPrev(){ calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCal(); }
+function calNext(){ calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCal(); }
+
+function renderCal(){
+  document.getElementById('cal-title').textContent = `${MONTHS[calMonth]} ${calYear}`;
+  const grid = document.getElementById('cal-grid');
+  const firstDayJs = new Date(calYear,calMonth,1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
+  const daysInMonth = new Date(calYear,calMonth+1,0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Group reservas by date
+  const byDate={};
+  allReservas.forEach(r=>{
+    const d = r.fecha?.substring(0,10);
+    const [y,m] = d?d.split('-').map(Number):[];
+    if(y===calYear && m===calMonth+1){
+      if(!byDate[d]) byDate[d]=[];
+      byDate[d].push(r);
+    }
+  });
+
+  let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
+  for(let i=0;i<leadDays;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt=new Date(calYear,calMonth,d);
+    const isToday = dt.getTime()===today.getTime();
+    const rsvs=byDate[dateStr]||[];
+    const pills = rsvs.slice().sort((a,b)=>(a.hora||'').localeCompare(b.hora||'')).slice(0,3).map(r=>{
+      const col = statusColor(r.status);
+      const firstName = (r.nombre_cliente||'Sin nombre').trim().split(/\s+/)[0];
+      const hora = r.hora ? r.hora.substring(0,5) : '';
+      const personas = r.num_personas ? `👥${r.num_personas}` : '';
+      const icons = extrasIcons(r.extras_json);
+      const paid = Array.isArray(r.pagos) ? r.pagos.reduce((s,p)=>s+(+p.amount||0),0) : 0;
+      const falt = (+r.ingreso_total||0) - paid;
+      const faltHtml = falt > 0
+        ? `<span style="color:#e74c3c;font-size:.56rem;font-weight:700">💸${Math.round(falt/1000)}k</span>` : '';
+      return `<div class="cal-pill" style="background:${col}22;color:${col};border-left:2px solid ${col}"
+        onclick="event.stopPropagation();openModal(${r.id})">
+        <div class="cal-pill-name">${firstName}${hora?' · '+hora:''}</div>
+        ${(personas||icons||faltHtml)?`<div class="cal-pill-sub">${personas?`<span>${personas}</span>`:''}${icons?`<span class="cal-pill-icons">${icons}</span>`:''}${faltHtml}</div>`:''}
+      </div>`;
+    }).join('');
+    const more = rsvs.length>3?`<div style="font-size:.6rem;color:var(--muted)">+${rsvs.length-3} más</div>`:'';
+    html+=`<div class="cal-day${isToday?' today':''}" onclick="${rsvs.length?`showDayReservas('${dateStr}')`:`openNewReservaModal('${dateStr}')`}">
+      <div class="cal-day-num">${d}${rsvs.length?` <span style="color:var(--gold);font-size:.6rem">(${rsvs.length})</span>`:''}</div>
+      ${pills}${more}
+    </div>`;
+  }
+  grid.innerHTML=html;
+}
+
+function showDayReservas(dateStr){
+  const rsvs=(allReservas||[]).filter(r=>r.fecha?.startsWith(dateStr));
+  if(!rsvs.length) return;
+  if(rsvs.length===1){ openModal(rsvs[0].id); return; }
+  const rows=rsvs.map(r=>`
+    <tr onclick="openModal(${r.id})" style="cursor:pointer">
+      <td>${r.hora||''}</td>
+      <td>${r.nombre_cliente||'-'}</td>
+      <td>${r.num_personas||'-'}</td>
+      <td>${fmtMoney(r.ingreso_total)}</td>
+      <td>${badge(r.status)}</td>
+    </tr>`).join('');
+  document.getElementById('modal-title').textContent = `Reservas ${dateStr}`;
+  document.getElementById('modal-body').innerHTML=`
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>${['Hora','Cliente','Pers','Total','Estado'].map(h=>`<th style="text-align:left;padding:.5rem;font-size:.75rem;color:var(--muted)">${h}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  document.getElementById('overlay').classList.add('show');
+}
+
+// ── Lista ─────────────────────────────────────────────────────────────────────
+async function loadLista(){
+  const search=document.getElementById('f-search').value;
+  const desde=document.getElementById('f-desde').value;
+  const hasta=document.getElementById('f-hasta').value;
+  const status=document.getElementById('f-status').value;
+  const source=document.getElementById('f-source').value;
+  let url=`/api/admin/reservas?limit=500`;
+  if(search) url+=`&search=${encodeURIComponent(search)}`;
+  if(desde) url+=`&desde=${desde}`;
+  if(hasta) url+=`&hasta=${hasta}`;
+  if(status&&status!=='all') url+=`&status=${status}`;
+  if(source&&source!=='all') url+=`&source=${source}`;
+  const tbody=document.getElementById('lista-tbody');
+  tbody.innerHTML=`<tr><td colspan="8" class="loading-msg">Cargando...</td></tr>`;
+  try{
+    const data=await api(url);
+    let rows=data.reservas;
+    rows=sortRows(rows);
+    tbody.innerHTML=rows.length?rows.map(r=>`
+      <tr onclick="openModal(${r.id})">
+        <td>${r.fecha||'-'}</td>
+        <td>${r.hora||'-'}</td>
+        <td><strong>${r.nombre_cliente||'-'}</strong></td>
+        <td>${r.telefono||'-'}</td>
+        <td>${r.num_personas||'-'}</td>
+        <td style="color:var(--gold);font-weight:600">
+          ${fmtMoney(r.ingreso_total)}
+          ${pagoBadge(r.pagos,r.ingreso_total)}
+        </td>
+        <td>${badge(r.status)}</td>
+        <td><span class="chip">${r.source||'-'}</span></td>
+      </tr>`).join(''):`<tr><td colspan="8" class="no-data">Sin resultados</td></tr>`;
+    document.getElementById('lista-count').textContent=`${rows.length} reservas`;
+  }catch(e){
+    tbody.innerHTML=`<tr><td colspan="8" class="no-data">Error: ${e.message}</td></tr>`;
+  }
+}
+function sortBy(col){
+  if(sortCol===col) sortDir*=-1; else { sortCol=col; sortDir=-1; }
+  loadLista();
+}
+function sortRows(rows){
+  return [...rows].sort((a,b)=>{
+    let va=a[sortCol]||'', vb=b[sortCol]||'';
+    if(typeof va==='number'||!isNaN(+va)){va=+va;vb=+vb;}
+    return va<vb?-sortDir:va>vb?sortDir:0;
+  });
+}
+function clearFilters(){
+  ['f-search','f-desde','f-hasta'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-status').value='all';
+  document.getElementById('f-source').value='all';
+  loadLista();
+}
+
+// ── Clients ───────────────────────────────────────────────────────────────────
+async function loadClients(){
+  const search=document.getElementById('c-search').value;
+  let url=`/api/admin/clients?limit=200`;
+  if(search) url+=`&search=${encodeURIComponent(search)}`;
+  const grid=document.getElementById('client-grid');
+  grid.innerHTML=`<div class="loading-msg">Cargando...</div>`;
+  try{
+    const data=await api(url);
+    grid.innerHTML=data.clients.length?data.clients.map(c=>`
+      <div class="client-card" onclick="openClientModal('${c.telefono}')">
+        <div class="cc-name">${c.nombre||'Sin nombre'}</div>
+        <div class="cc-phone">${c.telefono||'-'} · ${c.email||'-'}</div>
+        <div class="cc-stats">
+          <div class="cc-stat"><div class="v">${c.total_reservas}</div><div class="l">Reservas</div></div>
+          <div class="cc-stat"><div class="v">${fmtMoney(c.total_gastado)}</div><div class="l">Total</div></div>
+          <div class="cc-stat"><div class="v">${c.ultima_reserva||'-'}</div><div class="l">Última</div></div>
+        </div>
+      </div>`).join(''):`<div class="loading-msg">Sin clientes</div>`;
+  }catch(e){
+    grid.innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
+  }
+}
+async function openClientModal(tel){
+  // Show loading state first
+  const waBtn = document.getElementById('wa-contact-btn');
+  if(waBtn) waBtn.style.display='none';
+  document.getElementById('modal-title').textContent = 'Cargando...';
+  document.getElementById('modal-body').innerHTML = '<div class="loading-msg">Cargando historial...</div>';
+  document.getElementById('overlay').classList.add('show');
+
+  // Fetch ALL reservations for this phone (no year filter)
+  let rsvs;
+  try{
+    const data = await api(`/api/admin/reservas?search=${encodeURIComponent(tel)}&limit=500`);
+    rsvs = (data.reservas || [])
+      .filter(r => r.telefono === tel)   // exact match to avoid partial collisions
+      .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  }catch(e){
+    document.getElementById('modal-body').innerHTML = `<div class="loading-msg">Error: ${e.message}</div>`;
+    return;
+  }
+  if(!rsvs.length){
+    document.getElementById('modal-body').innerHTML = '<div class="loading-msg">Sin reservas encontradas</div>';
+    return;
+  }
+  const c = rsvs[0];
+
+  const totalGastado = rsvs.reduce((s,r)=>s+(+r.ingreso_total||0),0);
+  const totalPersonas = rsvs.reduce((s,r)=>s+(+r.num_personas||0),0);
+
+  const cards = rsvs.map(r=>{
+    const hora = r.hora ? r.hora.substring(0,5) : '-';
+
+    // Extras
+    const extrasHtml = (()=>{
+      const ej = r.extras_json;
+      if(!ej || typeof ej!=='object' || !Object.keys(ej).length) return '';
+      const tags = Object.entries(ej).map(([k,v])=>{
+        const qty = typeof v==='object'&&v!==null ? (+v.qty||1) : (+v||1);
+        const cat = EXTRAS_CATALOG.find(e=>e.key===k);
+        const icon = cat ? (cat.icon||defaultExtraIcon(k)) : defaultExtraIcon(k);
+        const name = cat ? cat.name : k.replace(/_/g,' ');
+        return `<span class="rsv-tag">${icon} ${name}${qty>1?' x'+qty:''}</span>`;
+      }).join('');
+      return `<div class="rsv-tag-row">${tags}</div>`;
+    })();
+
+    // Descuentos
+    const descHtml = (()=>{
+      const ds = r.descuentos;
+      if(!Array.isArray(ds)||!ds.length) return '';
+      const tags = ds.map(d=>`<span class="rsv-tag" style="color:var(--orange)">🏷 ${d.tipo||''} ${fmtMoney(d.amount)}${d.observacion?' · '+d.observacion:''}</span>`).join('');
+      return `<div class="rsv-tag-row">${tags}</div>`;
+    })();
+
+    // Pagos
+    const pagosHtml = (()=>{
+      const ps = r.pagos;
+      if(!Array.isArray(ps)||!ps.length) return '';
+      const tags = ps.map(p=>`<span class="rsv-tag" style="color:#4caf50">💳 ${p.method||p.tipo||''} ${fmtMoney(p.amount)}</span>`).join('');
+      return `<div class="rsv-tag-row">${tags}</div>`;
+    })();
+
+    const row = (icon,label,val) => val
+      ? `<div class="rsv-row"><span>${icon}</span><span><strong>${label}</strong> ${val}</span></div>` : '';
+
+    return `<div class="rsv-card" onclick="openModal(${r.id})">
+      <div class="rsv-card-hdr">
+        <span class="rdate">📅 ${r.fecha||'-'}</span>
+        <span class="rtime">⏰ ${hora}</span>
+        ${badge(r.status)}
+        <span style="margin-left:auto;font-weight:700;color:var(--gold)">${fmtMoney(r.ingreso_total)}</span>
+      </div>
+      <div class="rsv-card-body">
+        ${row('👥','Personas:',r.num_personas||'')}
+        ${row('🌤','Clima:',r.clima_del_dia||'')}
+        ${row('📍','Ciudad:',r.ciudad_origen||'')}
+        ${row('💬','Cómo supieron:',r.como_supieron||'')}
+        ${row('🙋','Atendió:',r.quien_atendio||'')}
+        ${extrasHtml}
+        ${descHtml}
+        ${pagosHtml}
+        ${r.observaciones?`<div class="rsv-row-full">📝 <strong>Obs:</strong> ${r.observaciones}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('modal-title').textContent = c.nombre_cliente||c.telefono;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="ch-header">
+      <div class="ch-meta">📱 ${c.telefono||'-'}${c.email?' · 📧 '+c.email:''}</div>
+      <div class="ch-kpis">
+        <div class="ch-kpi"><div class="v">${rsvs.length}</div><div class="l">Reservas</div></div>
+        <div class="ch-kpi"><div class="v">${fmtMoney(totalGastado)}</div><div class="l">Total gastado</div></div>
+        <div class="ch-kpi"><div class="v">${totalPersonas}</div><div class="l">Personas total</div></div>
+        <div class="ch-kpi"><div class="v">${rsvs[rsvs.length-1]?.fecha||'-'}</div><div class="l">Primera reserva</div></div>
+      </div>
+    </div>
+    <div>${cards}</div>`;
+  document.getElementById('overlay').classList.add('show');
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function loadStats(){
+  const yr=+document.getElementById('year-sel').value;
+  try{
+    const d=await api(`/api/admin/stats?year=${yr}`);
+    // Summary cards
+    document.getElementById('stat-cards').innerHTML=`
+      <div class="stat-card"><div class="sc-label">Reservas ${yr}</div>
+        <div class="sc-value">${d.total_reservas}</div></div>
+      <div class="stat-card"><div class="sc-label">Ingresos totales</div>
+        <div class="sc-value">${fmtMoney(d.total_ingresos)}</div></div>
+      <div class="stat-card"><div class="sc-label">Promedio por reserva</div>
+        <div class="sc-value">${fmtMoney(d.avg_reserva)}</div></div>
+      <div class="stat-card"><div class="sc-label">Promedio personas</div>
+        <div class="sc-value">${(+d.avg_personas||0).toFixed(1)}</div></div>`;
+    // Bar chart
+    const maxIng=Math.max(...d.monthly.map(m=>m.ingresos),1);
+    const bars=d.monthly.map(m=>`
+      <div class="bar-col">
+        <div class="bar-val">${m.ingresos>=1000?Math.round(m.ingresos/1000)+'k':Math.round(m.ingresos)}</div>
+        <div class="bar" style="height:${Math.round(m.ingresos/maxIng*110)}px" title="${MONTHS[m.mes-1]}: ${fmtMoney(m.ingresos)}"></div>
+        <div class="bar-lbl">${MONTHS[m.mes-1].substring(0,3)}</div>
+      </div>`).join('');
+    document.getElementById('bar-chart').innerHTML=bars||'<div class="no-data" style="width:100%">Sin datos</div>';
+    // Status
+    const statusHtml=Object.entries(d.by_status).map(([s,n])=>`
+      <div style="display:flex;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.82rem">
+        <span>${badge(s)} ${s||'sin estado'}</span><strong>${n}</strong>
+      </div>`).join('');
+    document.getElementById('status-chart').innerHTML=`<div class="chart-title">Por estado</div>${statusHtml}`;
+    // Source
+    const srcHtml=Object.entries(d.by_source).map(([s,n])=>`
+      <div style="display:flex;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.82rem">
+        <span class="chip">${s}</span><strong>${n}</strong>
+      </div>`).join('');
+    document.getElementById('source-chart').innerHTML=`<div class="chart-title">Por fuente</div>${srcHtml}`;
+  }catch(e){
+    document.getElementById('stat-cards').innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+async function openModal(id){
+  document.getElementById('modal-title').textContent='Cargando...';
+  document.getElementById('modal-body').innerHTML='<div class="loading-msg">Cargando...</div>';
+  document.getElementById('overlay').classList.add('show');
+  try{
+    const r=await api(`/api/admin/reservas/${id}`);
+    document.getElementById('modal-title').textContent=`${r.nombre_cliente||'Reserva'} · ${r.fecha}`;
+    document.getElementById('modal-body').innerHTML=`
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+        ${badge(r.status)}
+        <span class="chip" style="background:${sourceColor(r.source)}22;color:${sourceColor(r.source)}">${sourceLabel(r.source)}</span>
+        <span class="chip">ID: ${r.appointment_id||r.source_id||r.id}</span>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Fecha</label><input value="${r.fecha||''}" disabled></div>
+        <div class="form-group"><label>Hora</label><input value="${r.hora||''}" disabled></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Cliente
+          ${r.telefono?`<button onclick="openClientModal('${r.telefono}')" title="Ver historial del cliente"
+            style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:.8rem;padding:0 .3rem;vertical-align:middle">👤 historial</button>`:''}
+        </label>
+          <input id="e-nombre" value="${r.nombre_cliente||''}"></div>
+        <div class="form-group"><label>Telefono</label>
+          <input id="e-telefono" value="${r.telefono||''}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Email</label>
+          <input id="e-email" value="${r.email||''}"></div>
+        <div class="form-group"><label>Personas</label>
+          <input type="number" min="1" id="e-num_personas" value="${r.num_personas||''}"
+            oninput="lookupBasePrice(this.value)"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Precio experiencia
+            <span id="e-precio-hint" style="color:var(--muted);font-size:.7rem;font-weight:400;margin-left:.4rem"></span>
+          </label>
+          <input id="e-ingreso_reserva" value="${r.ingreso_reserva||0}"></div>
+        <div class="form-group"><label>Ingreso extras</label>
+          <input id="e-ingreso_extras" value="${r.ingreso_extras||0}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Total ingresos</label>
+          <input id="e-ingreso_total" value="${r.ingreso_total||0}" style="color:var(--gold);font-weight:700"
+            oninput="syncCostoTotal();syncPagoFaltante()"></div>
+      </div>
+      <input type="hidden" id="e-costo_operativo_fijo" value="${r.costo_operativo_fijo??0}">
+      <div class="form-row">
+        <div class="form-group"><label>Costos extra</label>
+          <input id="e-costo_operativo_variable" value="${r.costo_operativo_variable||0}" oninput="syncCostoTotal()"></div>
+        <div class="form-group"><label>Costo operativo total</label>
+          <input id="e-costo_operativo_total" value="${r.costo_operativo_total||0}" style="color:var(--orange)" readonly></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Estado</label>
+          <select id="e-status">
+            ${['confirmed','pending','cancelled','solicitud','paid','aprobado','pendiente','cancelada'].map(s=>`<option value="${s}"${r.status===s?' selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <input type="hidden" id="e-tiene_cruce" value="${r.tiene_cruce?'true':'false'}">
+      <div class="form-row">
+        <div class="form-group"><label>Ciudad origen <span style="color:var(--muted);font-size:.72rem;font-weight:400">(varias)</span></label>
+          ${(()=>{
+            const CIUDADES=['Santiago','Concepción','Temuco','Valdivia','Pucón','Otro'];
+            const saved = (r.ciudad_origen||'').split(',').map(s=>s.trim()).filter(Boolean);
+            const hasOtroVal = saved.find(s=>!CIUDADES.slice(0,-1).includes(s));
+            const otroTxt = hasOtroVal || '';
+            const normalSaved = saved.filter(s=>CIUDADES.includes(s));
+            if(hasOtroVal && !normalSaved.includes('Otro')) normalSaved.push('Otro');
+            return `<div id="e-ciudad-origen-checkboxes" style="display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.4rem">
+              ${CIUDADES.map(c=>`<label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;cursor:pointer;font-weight:400">
+                <input type="checkbox" value="${c}" ${normalSaved.includes(c)?'checked':''}
+                  onchange="syncCiudadOrigenHidden()" style="accent-color:var(--gold)">
+                ${c}
+              </label>`).join('')}
+            </div>
+            <input id="e-ciudad_origen_otro_txt" placeholder="Especificar otra ciudad..."
+              value="${otroTxt}"
+              oninput="syncCiudadOrigenHidden()"
+              style="display:${normalSaved.includes('Otro')?'block':'none'};margin-top:.3rem">
+            <input type="hidden" id="e-ciudad_origen" value="${r.ciudad_origen||''}">`;
+          })()}
+        </div>
+        <div class="form-group"><label>Como supieron</label>
+          ${(()=>{
+            const CANALES=['Instagram','Google','TikTok','Boca a boca','Otro'];
+            const cur = r.como_supieron||'';
+            const isOtro = cur && !CANALES.slice(0,-1).includes(cur);
+            const selVal = isOtro ? 'Otro' : cur;
+            return `<select id="e-como_supieron_sel" onchange="
+              const v=this.value;
+              const inp=document.getElementById('e-como_supieron_txt');
+              inp.style.display=v==='Otro'?'block':'none';
+              document.getElementById('e-como_supieron').value=v==='Otro'?inp.value:v;">
+              <option value="">— seleccionar —</option>
+              ${CANALES.map(c=>`<option value="${c}"${selVal===c?' selected':''}>${c}</option>`).join('')}
+            </select>
+            <input id="e-como_supieron_txt" placeholder="Especificar..."
+              value="${isOtro?cur:''}"
+              oninput="document.getElementById('e-como_supieron').value=this.value"
+              style="margin-top:.4rem;display:${isOtro?'block':'none'}">
+            <input type="hidden" id="e-como_supieron" value="${cur}">`;
+          })()}
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:.8rem">
+        <label>Clima del día <span style="color:var(--muted);font-size:.72rem;font-weight:400">(selecciona varios)</span></label>
+        ${(()=>{
+          const CLIMAS=['Sol','Lluvia','Nublado','Nieve','Mucho viento','Noche','Amanecer','Atardecer','Otro'];
+          const saved = (r.clima_del_dia||'').split(',').map(s=>s.trim()).filter(Boolean);
+          const hasOtroVal = saved.find(s=>!CLIMAS.slice(0,-1).includes(s));
+          const otroTxt = hasOtroVal || '';
+          const normalSaved = saved.filter(s=>CLIMAS.includes(s));
+          if(hasOtroVal && !normalSaved.includes('Otro')) normalSaved.push('Otro');
+          return `<div id="e-clima-checkboxes" style="display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.4rem">
+            ${CLIMAS.map(c=>`<label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;cursor:pointer;font-weight:400">
+              <input type="checkbox" value="${c}" ${normalSaved.includes(c)?'checked':''}
+                onchange="syncClimaHidden()" style="accent-color:var(--gold)">
+              ${c}
+            </label>`).join('')}
+          </div>
+          <input id="e-clima_otro_txt" placeholder="Especificar otro clima..."
+            value="${otroTxt}"
+            oninput="syncClimaHidden()"
+            style="display:${normalSaved.includes('Otro')?'block':'none'};margin-top:.3rem">
+          <input type="hidden" id="e-clima_del_dia" value="${r.clima_del_dia||''}">`;
+        })()}
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Nº Adultos</label>
+          <input type="number" min="0" id="e-num_adultos" value="${r.num_adultos||''}"></div>
+        <div class="form-group"><label>Nº Niños</label>
+          <input type="number" min="0" id="e-num_ninos" value="${r.num_ninos||''}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Nombres adultos</label>
+          <input id="e-nombre_adultos" placeholder="Ej: Juan, María..." value="${r.nombre_adultos||''}"></div>
+        <div class="form-group"><label>Nombres niños</label>
+          <input id="e-nombre_ninos" placeholder="Ej: Sofía (8), Lucas (5)..." value="${r.nombre_ninos||''}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Tipo cliente</label>
+          ${(()=>{
+            const TIPOS=['Trabajador','Empresario','Otro'];
+            const cur = r.tipo_clientes||'';
+            const isOtro = cur && !TIPOS.slice(0,-1).includes(cur);
+            const selVal = isOtro ? 'Otro' : cur;
+            return `<select id="e-tipo_clientes_sel" onchange="
+              const v=this.value;
+              const inp=document.getElementById('e-tipo_clientes_txt');
+              inp.style.display=v==='Otro'?'block':'none';
+              if(v!=='Otro') document.getElementById('e-tipo_clientes').value=v; else document.getElementById('e-tipo_clientes').value=inp.value;">
+              <option value="">— seleccionar —</option>
+              ${TIPOS.map(t=>`<option value="${t}"${selVal===t?' selected':''}>${t}</option>`).join('')}
+            </select>
+            <input id="e-tipo_clientes_txt" placeholder="Especificar tipo..."
+              value="${isOtro?cur:''}"
+              oninput="document.getElementById('e-tipo_clientes').value=this.value"
+              style="margin-top:.4rem;display:${isOtro?'block':'none'}">
+            <input type="hidden" id="e-tipo_clientes" value="${cur}">`;
+          })()}
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:.8rem"><label>Categoria cliente</label>
+        ${(()=>{
+          const CATS=['Familia','Pareja','Grupo de Parejas','Grupo de amigas','Grupo de Amigos','Pareja de amigos','Otro'];
+          const cur = r.categoria_clientes||'';
+          const isOtro = cur && !CATS.slice(0,-1).includes(cur);
+          const selVal = isOtro ? 'Otro' : cur;
+          return `<select id="e-categoria_clientes_sel" onchange="
+            const v=this.value;
+            const inp=document.getElementById('e-categoria_clientes_txt');
+            inp.style.display=v==='Otro'?'block':'none';
+            if(v!=='Otro') document.getElementById('e-categoria_clientes').value=v; else document.getElementById('e-categoria_clientes').value=inp.value;">
+            <option value="">— seleccionar —</option>
+            ${CATS.map(c=>`<option value="${c}"${selVal===c?' selected':''}>${c}</option>`).join('')}
+          </select>
+          <input id="e-categoria_clientes_txt" placeholder="Especificar categoría..."
+            value="${isOtro?cur:''}"
+            oninput="document.getElementById('e-categoria_clientes').value=this.value"
+            style="margin-top:.4rem;display:${isOtro?'block':'none'}">
+          <input type="hidden" id="e-categoria_clientes" value="${cur}">`;
+        })()}
+      </div>
+      <div class="form-group" style="margin-bottom:.8rem">
+        <label>Quién los atendió <span style="color:var(--muted);font-size:.72rem;font-weight:400">(selecciona varios)</span></label>
+        ${(()=>{
+          const ATEND=['Nestor','Axel','Tomás','Panchini','Otro'];
+          const saved = (r.quien_atendio||'').split(',').map(s=>s.trim()).filter(Boolean);
+          const hasOtroVal = saved.find(s=>!ATEND.slice(0,-1).includes(s));
+          const otroTxt = hasOtroVal || '';
+          const normalSaved = saved.filter(s=>ATEND.includes(s));
+          if(hasOtroVal && !normalSaved.includes('Otro')) normalSaved.push('Otro');
+          return `<div id="e-quien-atendio-checkboxes" style="display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.4rem">
+            ${ATEND.map(t=>`<label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;cursor:pointer;font-weight:400">
+              <input type="checkbox" value="${t}" ${normalSaved.includes(t)?'checked':''}
+                onchange="syncQuienAtendioHidden()" style="accent-color:var(--gold)">
+              ${t}
+            </label>`).join('')}
+          </div>
+          <input id="e-quien_atendio_otro_txt" placeholder="Especificar otro..."
+            value="${otroTxt}"
+            oninput="syncQuienAtendioHidden()"
+            style="display:${normalSaved.includes('Otro')?'block':'none'};margin-top:.3rem">
+          <input type="hidden" id="e-quien_atendio" value="${r.quien_atendio||''}">`;
+        })()}
+      </div>
+      <div class="form-group" style="margin-bottom:.8rem">
+        <label>Observaciones del admin</label>
+        <textarea id="e-observaciones" rows="3" placeholder="Notas internas sobre esta reserva...">${r.observaciones||''}</textarea>
+      </div>
+      <div style="margin-bottom:.8rem">
+        <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.4rem">
+          Extras
+          <span id="extras-total-label" style="color:var(--gold);font-weight:700;margin-left:.5rem"></span>
+        </label>
+        <div class="extras-hdr">
+          <div>Extra</div><div style="text-align:right">Cant.</div>
+          <div style="text-align:right">P. unitario</div><div style="text-align:right">Subtotal</div><div></div>
+        </div>
+        <div id="extras-list"></div>
+        <div class="extras-add-row">
+          <select id="extras-catalog-sel">
+            <option value="">— Seleccionar del catálogo —</option>
+          </select>
+          <button type="button" onclick="addExtraFromSelect()">+ Agregar</button>
+        </div>
+      </div>
+      <div style="margin-top:1rem">
+        <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
+          Pagos recibidos
+          <span id="pagos-total" style="color:var(--gold);font-weight:700;margin-left:.5rem"></span>
+        </label>
+        <div id="pagos-list"></div>
+        <button type="button" onclick="addPago()" style="background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.4rem .8rem;font-size:.8rem;cursor:pointer;width:100%;margin-top:.4rem;transition:border-color .2s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+          + Agregar pago
+        </button>
+      </div>
+      <div id="pago-faltante-wrap" style="margin-top:.6rem;padding:.55rem .8rem;border-radius:8px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);display:none;align-items:center;justify-content:space-between">
+        <span style="font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">💸 Pago faltante</span>
+        <span id="pago-faltante-val" style="font-weight:700;color:#e74c3c;font-size:1rem"></span>
+      </div>
+      <div style="margin-top:1rem">
+        <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
+          Descuentos aplicados
+          <span id="desc-total" style="color:var(--red);font-weight:700;margin-left:.5rem"></span>
+        </label>
+        <div id="desc-list"></div>
+        <button type="button" onclick="addDescuento()" style="background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.4rem .8rem;font-size:.8rem;cursor:pointer;width:100%;margin-top:.4rem;transition:border-color .2s" onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--border)'">
+          + Agregar descuento
+        </button>
+      </div>
+      <div id="modal-save-err" style="color:var(--red);font-size:.8rem;display:none;margin-top:.5rem"></div>
+      <div class="modal-actions">
+        <button class="btn-del" onclick="deleteReserva(${id},'${(r.nombre_cliente||'esta reserva').replace(/'/g,"\\'")}')">🗑 Eliminar</button>
+        <button onclick="sendPaymentLink(${id})" title="Crear orden WooCommerce y enviar link de pago por WhatsApp"
+          style="background:rgba(37,211,102,.15);color:#25d366;border:1px solid rgba(37,211,102,.35);border-radius:8px;padding:.5rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">
+          💳 Solicitar Pago
+        </button>
+        <button class="btn-del" onclick="closeModal()" style="margin-left:auto">Cerrar</button>
+        <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
+      </div>`;
+    // WhatsApp contact button
+    const waBtn = document.getElementById('wa-contact-btn');
+    if(waBtn){
+      const phone = (r.telefono||'').replace(/[^\d]/g,'');
+      if(phone){
+        const firstName = (r.nombre_cliente||'').trim().split(/\s+/)[0];
+        const hora = (r.hora||'').substring(0,5);  // "HH:MM"
+        const msg = `Hola ${firstName}! Cómo estas? Tomás de HotBoat por Aquí😊. Hoy tienes reserva a las ${hora}. Cualquier duda aquí estamos para ayudar, nos vemos!`;
+        waBtn.href = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+        waBtn.style.display = '';
+      } else {
+        waBtn.style.display = 'none';
+      }
+    }
+
+    // Call these AFTER setting innerHTML
+    initPagos(r.pagos||[]);
+    initDescuentos(r.descuentos||[]);
+    initExtrasEditor(r.extras_json||{});
+    if(r.num_personas) lookupBasePrice(r.num_personas);
+  }catch(e){
+    document.getElementById('modal-body').innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
+  }
+}
+function closeModal(e){
+  if(e&&e.target!==document.getElementById('overlay')) return;
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('modal-body').innerHTML='';
+  const waBtn = document.getElementById('wa-contact-btn');
+  if(waBtn) waBtn.style.display='none';
+}
+async function saveModal(id){
+  const g=id=>document.getElementById(id)?.value;
+  // Build extras_json from the editor
+  const extrasJson={};
+  let extrasTotal=0;
+  _extrasItems.forEach(item=>{
+    const qty=+item.qty||0;
+    const price=+item.unit_price||0;
+    if(qty>0){ extrasJson[item.key]=qty; extrasTotal+=qty*price; }
+  });
+  // Discounts total
+  const descTotal=_descuentos.reduce((s,d)=>s+(+d.amount||0),0);
+  const ingresoReserva=+g('e-ingreso_reserva')||0;
+  const costoFijo=+g('e-costo_operativo_fijo')||0;
+  const costoVar=+g('e-costo_operativo_variable')||0;
+  const body={
+    nombre_cliente:g('e-nombre'), telefono:g('e-telefono'), email:g('e-email'),
+    status:g('e-status'), observaciones:g('e-observaciones'),
+    ciudad_origen:(g('e-ciudad_origen')||'').trim(),
+    como_supieron:g('e-como_supieron'), clima_del_dia:g('e-clima_del_dia'),
+    categoria_clientes:g('e-categoria_clientes'), tipo_clientes:g('e-tipo_clientes'),
+    quien_atendio:(g('e-quien_atendio')||'').trim(),
+    num_personas: g('e-num_personas') ? +g('e-num_personas') : null,
+    num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
+    num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,
+    nombre_adultos: g('e-nombre_adultos')||null,
+    nombre_ninos:   g('e-nombre_ninos')||null,
+    ingreso_reserva:ingresoReserva,
+    ingreso_extras:extrasTotal,
+    ingreso_total:ingresoReserva+extrasTotal-descTotal,
+    costo_operativo_fijo:costoFijo,
+    costo_operativo_variable:costoVar,
+    costo_operativo_total:costoFijo+costoVar,
+    tiene_cruce:g('e-tiene_cruce')==='true',
+    extras_json:extrasJson,
+  };
+  // Pagos y descuentos
+  body.pagos = _pagos.filter(p=>p.amount||p.method);
+  body.descuentos = _descuentos.filter(d=>d.amount||d.type||d.note);
+  // Remove nulls/empty strings but keep jsonb fields
+  const keepAlways = new Set(['extras_json','descuentos','quien_atendio','ciudad_origen']);
+  Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
+  try{
+    await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
+    showToast('Guardado ✓');
+    closeModal();
+    await loadReservas();
+    loadLista();
+  }catch(e){
+    const el=document.getElementById('modal-save-err');
+    if(el){el.textContent='Error: '+e.message;el.style.display='';}
+  }
+}
+
+// ── Sync ──────────────────────────────────────────────────────────────────────
+async function doSync(){
+  const btn=document.getElementById('sync-btn');
+  btn.classList.add('loading'); btn.textContent='Sincronizando...';
+  try{
+    const d=await api('/api/admin/sync',{method:'POST'});
+    const total = (d.inserted_booknetic||0)+(d.inserted_hotboat||0);
+    document.getElementById('sync-status').textContent=`Sync OK · +${total} nuevas · ${d.status_updated||0} estados`;
+    showToast(`Sincronizado: +${d.inserted_booknetic||0} booknetic, +${d.inserted_hotboat||0} web, ${d.status_updated||0} estados`);
+    await reloadAll();
+  }catch(e){
+    showToast('Error sync: '+e.message);
+  }finally{
+    btn.classList.remove('loading'); btn.textContent='🔄 Sincronizar';
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtMoney(n){ if(!n&&n!==0) return '-'; return '$'+Math.round(+n).toLocaleString('es-CL'); }
+function sourceColor(s){ if(!s) return '#7070a0'; if(s==='sheets') return '#7070a0'; if(s==='booknetic') return '#4a9eff'; if(s==='hotboat_web') return '#f5c842'; return '#9b59b6'; }
+
+// Default emoji icon for an extra based on its slugified key
+function defaultExtraIcon(key){
+  const k = (key||'').toLowerCase();
+  if(k.includes('roman')||k.includes('rosas')||k.includes('flores')) return '🌹';
+  if(k.includes('foto'))            return '📸';
+  if(k.includes('gopro')||k.includes('video')||k.includes('camara')||k.includes('cam_')) return '🎥';
+  if(k.includes('buceo')||k.includes('dive')) return '🤿';
+  if(k.includes('snorkel'))         return '🤿';
+  if(k.includes('kayak'))           return '🛶';
+  if(k.includes('picot')||k.includes('tabla')) return '🧺';
+  if(k.includes('sup'))             return '🏄';
+  if(k.includes('traslado')||k.includes('transporte')||k.includes('transfer')) return '🚗';
+  if(k.includes('toalla')||k.includes('poncho')) return '🏖️';
+  if(k.includes('pizza')||k.includes('sanguchito')) return '🍕';
+  if(k.includes('espumante')||k.includes('champagne')||k.includes('botella')||k.includes('vino')) return '🍾';
+  if(k.includes('cocktail')||k.includes('trago')||k.includes('pisco')) return '🍹';
+  if(k.includes('cerveza'))         return '🍺';
+  if(k.includes('alojamiento')||k.includes('cabana')||k.includes('hospedaje')) return '🏠';
+  if(k.includes('pack'))            return '📦';
+  if(k.includes('musica')||k.includes('dj')) return '🎵';
+  if(k.includes('decoracion')||k.includes('deco')) return '🎊';
+  if(k.includes('seguro'))          return '🛡️';
+  if(k.includes('guia'))            return '🧭';
+  if(k.includes('nino')||k.includes('menor')) return '👦';
+  if(k.includes('flex'))            return '🔒';
+  return '⭐';
+}
+
+// Return emoji icons for a reservation's extras_json, using EXTRAS_CATALOG for saved icons
+function extrasIcons(extrasJson){
+  if(!extrasJson || typeof extrasJson !== 'object') return '';
+  return Object.keys(extrasJson)
+    .filter(k=> { const v=extrasJson[k]; return v && (+v.qty||+v.cantidad||1) > 0; })
+    .map(k=>{
+      const cat = EXTRAS_CATALOG.find(e=>e.key===k);
+      return cat ? (cat.icon || defaultExtraIcon(k)) : defaultExtraIcon(k);
+    }).join('');
+}
+function sourceLabel(s){ return {sheets:'Historial',booknetic:'Booknetic',hotboat_web:'Web HotBoat',manual:'Manual'}[s]||s; }
+function pagoBadge(pagos,total){
+  if(!pagos||!pagos.length) return '';
+  const paid=pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  if(!paid) return '';
+  const pct=Math.min(100,Math.round(paid/(+total||1)*100));
+  const col = pct>=100?'var(--green)':pct>=50?'var(--orange)':'var(--red)';
+  return `<span style="font-size:.7rem;color:${col};margin-left:.4rem">● ${pct}%</span>`;
+}
+function statusColor(s){
+  if(!s) return '#7070a0';
+  s=s.toLowerCase();
+  if(s.includes('confirm')||s.includes('aprobado')) return '#2ecc71';
+  if(s.includes('cancel')||s.includes('rechaz')) return '#e74c3c';
+  if(s.includes('paid')) return '#9b59b6';
+  if(s.includes('solicitud')) return '#4a9eff';
+  return '#f39c12';
+}
+function badge(s){
+  const col=statusColor(s);
+  return `<span class="badge" style="background:${col}22;color:${col}">${s||'sin estado'}</span>`;
+}
+// ── Settings & Vacation ───────────────────────────────────────────────────────
+let vacYear = new Date().getFullYear(), vacMonth = new Date().getMonth();
+let vacationDates = new Set();
+
+// Working copies for settings editors
+let _urgencyCfg = {seed_times:['10:00','18:00'], gap_hours:3};
+let _dpCfg = null;
+const DAY_NAMES_SHORT = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+// ── Operating Hours ───────────────────────────────────────────────────────────
+let _opHours = ['10:00','18:00','21:00'];
+
+function renderOpHours(){
+  const el = document.getElementById('oh-chips');
+  if(!el) return;
+  el.innerHTML = _opHours.map(h =>
+    `<div style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(255,200,0,.15);border:1px solid rgba(255,200,0,.3);border-radius:20px;padding:.25rem .7rem;font-size:.85rem;font-weight:600">
+      ${h}
+      <span onclick="removeOpHour('${h}')" style="cursor:pointer;color:var(--muted);font-size:.9rem;line-height:1;margin-left:.1rem" title="Eliminar">✕</span>
+    </div>`
+  ).join('');
+}
+
+function addOpHour(){
+  const inp = document.getElementById('oh-new-input');
+  const val = inp ? inp.value.trim() : '';
+  if(!val){ showToast('Selecciona un horario'); return; }
+  const [h,m] = val.split(':');
+  const hhmm = h.padStart(2,'0')+':'+(m||'00').padStart(2,'0');
+  if(_opHours.includes(hhmm)){ showToast('Horario ya existe'); inp.value=''; return; }
+  _opHours = [..._opHours, hhmm].sort();
+  inp.value = '';
+  renderOpHours();
+  saveOpHours();
+}
+
+function removeOpHour(h){
+  if(_opHours.length <= 1){ showToast('Debe haber al menos un horario'); return; }
+  _opHours = _opHours.filter(x => x !== h);
+  renderOpHours();
+  saveOpHours();
+}
+
+async function saveOpHours(){
+  try{
+    await api('/api/admin/operating-hours',{method:'PUT',body:JSON.stringify({hours:_opHours})});
+    showToast('Horarios guardados ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function loadSettings(){
+  try{
+    const [d, ms, oh] = await Promise.all([
+      api('/api/admin/settings'),
+      api('/api/admin/menu-settings'),
+      api('/api/admin/operating-hours'),
+    ]);
+    const cb = document.getElementById('urgency-toggle');
+    if(cb){ cb.checked = d.urgency_mode; updateUrgencyLabel(d.urgency_mode); }
+    if(d.urgency_config){ _urgencyCfg = d.urgency_config; renderUrgencyConfig(); }
+    if(d.dynamic_pricing){ _dpCfg = d.dynamic_pricing; renderDpConfig(); }
+    // Operating hours
+    if(oh && oh.hours){ _opHours = oh.hours; renderOpHours(); }
+    // Menu visibility toggles
+    const msExp  = document.getElementById('ms-experiencias');
+    const msAloj = document.getElementById('ms-alojamientos');
+    const msPack = document.getElementById('ms-packs');
+    const msArma = document.getElementById('ms-armapack');
+    if(msExp)  msExp.checked  = ms.show_experiencias !== false;
+    if(msAloj) msAloj.checked = ms.show_alojamientos !== false;
+    if(msPack) msPack.checked = ms.show_packs        !== false;
+    if(msArma) msArma.checked = ms.show_arma_pack    !== false;
+  }catch(e){ console.error(e); }
+}
+
+async function saveMenuSettings(){
+  try{
+    const body = {
+      show_experiencias:  document.getElementById('ms-experiencias')?.checked  ?? true,
+      show_alojamientos:  document.getElementById('ms-alojamientos')?.checked  ?? true,
+      show_packs:         document.getElementById('ms-packs')?.checked          ?? true,
+      show_arma_pack:     document.getElementById('ms-armapack')?.checked       ?? true,
+    };
+    // Do NOT pass a custom headers object — api() already includes x-admin-key + Content-Type
+    await api('/api/admin/menu-settings',{method:'PUT',body:JSON.stringify(body)});
+    showToast('Visibilidad del menú guardada ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Email workflows (Booknetic-style) ────────────────────────────────────────
+const EMAIL_VARS = ['booking_ref','customer_name','customer_email','customer_phone',
+  'booking_date','booking_time','num_people','total_price_fmt','subtotal_fmt',
+  'extras_total_fmt','status','business_name','business_phone','business_website'];
+
+let _emailWorkflowsData = null;
+
+async function loadEmailBookingConfig(){ await loadEmailWorkflows(); }
+
+async function loadEmailWorkflows(){
+  try{
+    const d = await api('/api/admin/email-workflows');
+    _emailWorkflowsData = d;
+    // env hint
+    const hint = document.getElementById('email-env-hint');
+    if(hint){
+      let t = 'Remitente: <strong>' + (d.from_hint || '<em>configura RESEND_FROM_CONFIRMATIONS o EMAIL_FROM</em>') + '</strong>';
+      if(d.bcc_configured) t += ' &nbsp;·&nbsp; BCC activo ✓';
+      if(!d.has_resend_key) t += ' &nbsp;<span style="color:var(--red)">⚠ Falta RESEND_API_KEY</span>';
+      hint.innerHTML = t;
+    }
+    // variable chips
+    const chips = document.getElementById('email-var-chips');
+    if(chips) chips.innerHTML = EMAIL_VARS.map(v=>
+      `<span onclick="copyVar('${v}')" title="Click para copiar" style="display:inline-block;background:rgba(255,200,0,.1);border:1px solid rgba(255,200,0,.25);border-radius:20px;padding:.18rem .55rem;font-size:.72rem;font-family:ui-monospace,monospace;cursor:pointer;color:var(--gold)">{{${v}}}</span>`
+    ).join(' ');
+    // render cards
+    renderWorkflowCards(d);
+  }catch(e){ console.error(e); showToast('Error cargando workflows: '+e.message); }
+}
+
+function copyVar(v){
+  navigator.clipboard.writeText('{{'+v+'}}').then(()=>showToast('Copiado: {{'+v+'}}')).catch(()=>{});
+}
+
+function renderWorkflowCards(d){
+  const list = document.getElementById('email-workflows-list');
+  if(!list) return;
+  const wf = d.workflows || {};
+  const meta = d.trigger_meta || {};
+  list.innerHTML = '';
+  for(const [trigger, m] of Object.entries(meta)){
+    const cfg = wf[trigger] || {};
+    const enabled = !!cfg.enabled;
+    const isSoon = !!m.coming_soon;
+
+    // Extra fields HTML (e.g. days_after for booking_followup)
+    let extraFieldsHtml = '';
+    for(const ef of (m.extra_fields||[])){
+      const val = cfg[ef.key] !== undefined ? cfg[ef.key] : ef.default;
+      extraFieldsHtml += `
+        <div style="margin-bottom:.85rem;display:flex;align-items:center;gap:.8rem;flex-wrap:wrap">
+          <label style="font-size:.74rem;color:var(--muted);text-transform:uppercase;
+                         letter-spacing:.05em;white-space:nowrap">${ef.label}</label>
+          <input type="${ef.type||'text'}" id="wf-ef-${trigger}-${ef.key}"
+            value="${val}" ${ef.min!==undefined?'min="'+ef.min+'"':''} ${ef.max!==undefined?'max="'+ef.max+'"':''}
+            style="width:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);
+                   border-radius:8px;padding:.38rem .5rem;font-size:.9rem;text-align:center">
+          <span style="font-size:.74rem;color:var(--muted)">${trigger==='booking_followup'?'días después de la fecha de la reserva':''}</span>
+        </div>`;
+    }
+
+    // Manual run buttons for scheduled triggers
+    const runBtnMap = {
+      'booking_followup': `<button onclick="runWorkflowSweep('booking_followup')"
+        style="background:var(--card);border:1px solid var(--border);color:var(--text);
+               border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer">⚙️ Ejecutar ahora</button>`,
+      'customer_birthday': `<button onclick="runWorkflowSweep('customer_birthday')"
+        style="background:var(--card);border:1px solid var(--border);color:var(--text);
+               border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer">⚙️ Ejecutar ahora</button>`,
+    };
+    const runBtn = runBtnMap[trigger] || '';
+
+    const card = document.createElement('div');
+    card.className = 'chart-wrap';
+    card.id = 'wf-card-' + trigger;
+    card.style.cssText = 'padding:0;overflow:hidden;' + (isSoon ? 'opacity:.55;' : '');
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:.8rem;padding:1rem 1.2rem;
+                  cursor:${isSoon?'default':'pointer'};border-bottom:1px solid var(--border);user-select:none"
+           onclick="${isSoon?'':("toggleWorkflowCard('"+trigger+"')")}">
+        <span style="font-size:1.1rem">${m.icon||'✉️'}</span>
+        <div style="flex:1">
+          <div style="font-size:.9rem;font-weight:600;color:var(--text)">${m.label}
+            ${isSoon?'<span style="font-size:.7rem;background:rgba(255,200,0,.15);color:var(--gold);border-radius:20px;padding:.1rem .45rem;margin-left:.4rem">próximamente</span>':''}
+          </div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.1rem">${m.description}</div>
+        </div>
+        ${!isSoon?`<label class="toggle-wrap" onclick="event.stopPropagation()">
+          <input type="checkbox" id="wf-en-${trigger}" ${enabled?'checked':''}
+            onchange="saveWorkflowEnabled('${trigger}',this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+        <span id="wf-arrow-${trigger}" style="color:var(--muted);font-size:.8rem;margin-left:.3rem;transition:transform .2s">▼</span>`:''}
+      </div>
+      ${!isSoon?`<div id="wf-body-${trigger}" style="display:none;padding:1rem 1.2rem;border-top:1px solid var(--border)">
+        ${extraFieldsHtml}
+        <div style="margin-bottom:.85rem">
+          <label style="font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.35rem">Asunto</label>
+          <input type="text" id="wf-sub-${trigger}" value="${(cfg.subject||'').replace(/"/g,'&quot;')}"
+            placeholder="${(m.default_subject||'').replace(/"/g,'&quot;')}"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+                   border-radius:8px;padding:.4rem .6rem;font-size:.86rem">
+        </div>
+        <div style="margin-bottom:.85rem">
+          <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.35rem;flex-wrap:wrap">
+            <label style="font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex:1">Cuerpo HTML</label>
+            <button type="button" onclick="loadDefaultHtml('${trigger}')"
+              style="background:none;border:1px solid var(--border);color:var(--muted);
+                     border-radius:7px;padding:.18rem .55rem;font-size:.72rem;cursor:pointer;
+                     white-space:nowrap;line-height:1.5">↩ Cargar plantilla por defecto</button>
+          </div>
+          <textarea id="wf-html-${trigger}" rows="16"
+            placeholder="HTML personalizado. Usa variables {{booking_ref}}, {{customer_name}}…&#10;O haz clic en 'Cargar plantilla por defecto' para partir desde el diseño base."
+            style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+                   border-radius:8px;padding:.45rem .6rem;font-size:.78rem;
+                   font-family:ui-monospace,monospace;line-height:1.45;resize:vertical"
+          >${escHtml(cfg.body_html||'')}</textarea>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+          <button onclick="saveWorkflowFull('${trigger}')"
+            style="background:var(--gold);color:#000;border:none;border-radius:9px;
+                   padding:.42rem 1.1rem;font-size:.83rem;font-weight:700;cursor:pointer">Guardar</button>
+          <input type="email" id="wf-test-to-${trigger}" placeholder="correo de prueba (opcional)"
+            style="background:var(--bg);border:1px solid var(--border);color:var(--text);
+                   border-radius:8px;padding:.38rem .6rem;font-size:.8rem;flex:1;min-width:160px">
+          <button onclick="sendWorkflowTest('${trigger}')"
+            style="background:var(--card);border:1px solid var(--border);color:var(--text);
+                   border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer">Enviar prueba</button>
+          ${runBtn}
+        </div>
+      </div>`:''}`;
+    list.appendChild(card);
+  }
+}
+
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function toggleWorkflowCard(trigger){
+  const body = document.getElementById('wf-body-'+trigger);
+  const arrow = document.getElementById('wf-arrow-'+trigger);
+  if(!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if(arrow) arrow.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+async function saveWorkflowEnabled(trigger, enabled){
+  try{
+    await api('/api/admin/email-workflows/'+trigger,{method:'PUT',body:JSON.stringify({enabled})});
+    showToast(enabled ? `✅ Workflow "${trigger}" activado` : `Workflow "${trigger}" desactivado`);
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function saveWorkflowFull(trigger){
+  try{
+    const en = document.getElementById('wf-en-'+trigger);
+    const sub = document.getElementById('wf-sub-'+trigger);
+    const html = document.getElementById('wf-html-'+trigger);
+    const payload = {
+      enabled: !!(en&&en.checked),
+      subject: sub ? sub.value.trim() : '',
+      body_html: html ? html.value : ''
+    };
+    // Collect extra_fields
+    const meta = (_emailWorkflowsData&&_emailWorkflowsData.trigger_meta)||{};
+    for(const ef of (meta[trigger]||{}).extra_fields||[]){
+      const inp = document.getElementById('wf-ef-'+trigger+'-'+ef.key);
+      if(inp) payload[ef.key] = ef.type==='number' ? Number(inp.value) : inp.value;
+    }
+    await api('/api/admin/email-workflows/'+trigger,{method:'PUT',body:JSON.stringify(payload)});
+    showToast('Workflow guardado ✓');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function loadDefaultHtml(trigger){
+  try{
+    const r = await api('/api/admin/email-workflows/'+trigger+'/default-html');
+    const ta = document.getElementById('wf-html-'+trigger);
+    if(ta){ ta.value = r.html || ''; ta.focus(); }
+    showToast('Plantilla cargada — edítala y guarda ✓');
+  }catch(e){ showToast('Error cargando plantilla: '+(e.message||e)); }
+}
+
+async function runWorkflowSweep(trigger){
+  try{
+    showToast('Ejecutando sweep…');
+    const r = await api('/api/admin/email-workflows/'+trigger+'/run',{method:'POST',body:JSON.stringify({})});
+    showToast(`Sweep ${trigger}: ${r.sent||0} enviados, ${r.checked||0} revisados`);
+  }catch(e){ showToast('Error sweep: '+(e.message||e)); }
+}
+
+async function sendWorkflowTest(trigger){
+  try{
+    const inp = document.getElementById('wf-test-to-'+trigger);
+    const to = inp && inp.value.trim();
+    const r = await api('/api/admin/email-workflows/'+trigger+'/test',
+      {method:'POST',body:JSON.stringify({to:to||null})});
+    showToast(r.sent ? `Prueba "${trigger}" enviada ✓` : 'Estado: '+(r.reason||''));
+  }catch(e){ showToast('Error prueba: '+(e.message||e)); }
+}
+
+async function setUrgency(val){
+  try{
+    await api('/api/admin/settings',{method:'PUT',body:JSON.stringify({urgency_mode:val})});
+    updateUrgencyLabel(val);
+    showToast(val ? '⚡ Modo urgencia ACTIVADO' : 'Modo urgencia desactivado');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function updateUrgencyLabel(on){
+  const el = document.getElementById('urgency-label');
+  if(el){ el.textContent = on ? '✅ Activado' : 'Desactivado'; el.style.color = on ? 'var(--green)' : 'var(--muted)'; }
+}
+
+async function loadVacationDays(){
+  try{
+    const d = await api('/api/admin/vacation-days');
+    vacationDates = new Set(d.vacation_days.map(v=>v.date));
+    renderVacCal();
+    renderVacList(d.vacation_days);
+  }catch(e){}
+}
+
+function vacCalPrev(){ vacMonth--; if(vacMonth<0){vacMonth=11;vacYear--;} renderVacCal(); }
+function vacCalNext(){ vacMonth++; if(vacMonth>11){vacMonth=0;vacYear++;} renderVacCal(); }
+
+function renderVacCal(){
+  const grid = document.getElementById('vac-cal-grid');
+  const title = document.getElementById('vac-cal-title');
+  if(!grid) return;
+  title.textContent = `${MONTHS[vacMonth]} ${vacYear}`;
+  const firstDayJs = new Date(vacYear,vacMonth,1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
+  const daysInMonth = new Date(vacYear,vacMonth+1,0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
+  for(let i=0;i<leadDays;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${vacYear}-${String(vacMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt=new Date(vacYear,vacMonth,d);
+    const isToday=dt.getTime()===today.getTime();
+    const isVac=vacationDates.has(dateStr);
+    html+=`<div class="cal-day${isVac?' vacation':''}${isToday?' today':''}" onclick="toggleVacDay('${dateStr}',${isVac})" title="${isVac?'Click para quitar vacaciones':'Click para marcar vacaciones'}">
+      <div class="cal-day-num">${d}</div>
+      ${isVac?`<div style="font-size:.6rem;color:var(--red)">🏖️</div>`:''}
+    </div>`;
+  }
+  grid.innerHTML=html;
+}
+
+async function toggleVacDay(dateStr, isVac){
+  try{
+    if(isVac){
+      await api(`/api/admin/vacation-days/${dateStr}`,{method:'DELETE'});
+      vacationDates.delete(dateStr);
+      showToast(`Dia ${dateStr} disponible nuevamente`);
+    } else {
+      await api('/api/admin/vacation-days',{method:'POST',body:JSON.stringify({date:dateStr,reason:'Vacaciones'})});
+      vacationDates.add(dateStr);
+      showToast(`Dia ${dateStr} marcado como vacaciones 🏖️`);
+    }
+    renderVacCal();
+    await loadVacationDays();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Urgency config UI ─────────────────────────────────────────────────────────
+
+function renderUrgencyConfig(){
+  const seeds = _urgencyCfg.seed_times || [];
+  const wrap = document.getElementById('seed-chips');
+  if(!wrap) return;
+  wrap.innerHTML = seeds.map((t,i)=>`
+    <div style="display:flex;align-items:center;gap:.3rem;background:rgba(255,200,0,.12);border:1px solid rgba(255,200,0,.3);border-radius:20px;padding:.25rem .6rem;font-size:.82rem">
+      ${t}
+      <button onclick="_urgencyCfg.seed_times.splice(${i},1);renderUrgencyConfig()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;line-height:1;padding:0">✕</button>
+    </div>`).join('');
+  const gapEl = document.getElementById('gap-hours-input');
+  if(gapEl) gapEl.value = _urgencyCfg.gap_hours || 3;
+}
+
+function addSeedTime(){
+  const inp = document.getElementById('new-seed-input');
+  if(!inp||!inp.value) return;
+  if(!_urgencyCfg.seed_times.includes(inp.value)){
+    _urgencyCfg.seed_times.push(inp.value);
+    _urgencyCfg.seed_times.sort();
+  }
+  inp.value='';
+  renderUrgencyConfig();
+}
+
+async function saveUrgencyConfig(){
+  const gapEl = document.getElementById('gap-hours-input');
+  if(gapEl) _urgencyCfg.gap_hours = parseFloat(gapEl.value)||3;
+  try{
+    await api('/api/admin/urgency-config',{method:'PUT',body:JSON.stringify({
+      seed_times: _urgencyCfg.seed_times,
+      gap_hours: _urgencyCfg.gap_hours,
+    })});
+    showToast('Configuracion de urgencia guardada ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Push notification diagnostics ─────────────────────────────────────────────
+
+async function checkPushStatus(){
+  const box = document.getElementById('push-status-box');
+  box.style.display='block';
+  box.innerHTML='<span style="color:var(--muted)">Cargando...</span>';
+  try{
+    const data = await api('/api/push/status');
+    if(data.total === 0){
+      box.innerHTML='<span style="color:#f87171">⚠️ No hay dispositivos registrados. Abre la app de Expo Go y registra tu dispositivo.</span>';
+      return;
+    }
+    let html=`<strong>${data.total} dispositivo(s) registrado(s):</strong><br><br>`;
+    data.tokens.forEach((t,i)=>{
+      const ago = t.last_used_at ? new Date(t.last_used_at).toLocaleString('es-CL') : '?';
+      const badge = t.active
+        ? '<span style="color:#4ade80;font-weight:700">✅ Activo</span>'
+        : '<span style="color:#f87171;font-weight:700">❌ Expirado (>90d)</span>';
+      html+=`<div style="margin-bottom:.5rem">${badge} — Token: <code>${t.token_suffix}</code> — Último uso: ${ago}</div>`;
+    });
+    box.innerHTML=html;
+  }catch(e){
+    box.innerHTML=`<span style="color:#f87171">Error: ${e.message}</span>`;
+  }
+}
+
+async function sendTestPush(){
+  const box = document.getElementById('push-status-box');
+  box.style.display='block';
+  box.innerHTML='<span style="color:var(--muted)">Enviando notificación de prueba...</span>';
+  try{
+    const res = await fetch('/api/push/test',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({title:'🔔 Prueba HotBoat', body:'Las notificaciones funcionan correctamente ✅'})
+    });
+    const data = await res.json();
+    if(data.status==='success'){
+      box.innerHTML='<span style="color:#4ade80">✅ Notificación enviada. Revisa tu celular.</span>';
+    } else {
+      box.innerHTML=`<span style="color:#f87171">⚠️ ${data.message}. Puede que no haya dispositivos registrados.</span>`;
+    }
+  }catch(e){
+    box.innerHTML=`<span style="color:#f87171">Error: ${e.message}</span>`;
+  }
+}
+
+// ── Dynamic pricing UI ────────────────────────────────────────────────────────
+
+function pctLabel(mult){
+  const p = Math.round((parseFloat(mult)-1)*100);
+  if(p===0) return '<span style="color:var(--muted)">sin cambio</span>';
+  const col = p>0?'var(--red)':'var(--green)';
+  return `<span style="color:${col}">${p>0?'+':''}${p}%</span>`;
+}
+
+function renderDpConfig(){
+  if(!_dpCfg) return;
+  const dpToggle = document.getElementById('dp-toggle');
+  if(dpToggle){ dpToggle.checked = !!_dpCfg.enabled; updateDpLabel(!!_dpCfg.enabled); }
+
+  // Fill rate rows
+  const fillBody = document.getElementById('dp-fill-body');
+  if(fillBody){
+    const rules = _dpCfg.fill_rate || [];
+    fillBody.innerHTML = rules.map((r,i)=>`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.35rem .4rem"><input type="number" min="1" max="10" value="${r.min_bookings}" style="width:60px;${tblInputStyle()}" oninput="_dpCfg.fill_rate[${i}].min_bookings=+this.value"></td>
+      <td style="padding:.35rem .4rem"><input type="number" min="0.5" max="3" step="0.01" value="${r.multiplier}" style="width:70px;${tblInputStyle()}" oninput="_dpCfg.fill_rate[${i}].multiplier=+this.value;this.closest('tr').querySelector('.pct').innerHTML=pctLabel(this.value)"></td>
+      <td style="padding:.35rem .4rem" class="pct">${pctLabel(r.multiplier)}</td>
+      <td style="padding:.35rem .4rem"><button onclick="_dpCfg.fill_rate.splice(${i},1);renderDpConfig()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem">✕</button></td>
+    </tr>`).join('');
+  }
+
+  // Advance booking rows
+  const advBody = document.getElementById('dp-adv-body');
+  if(advBody){
+    const rules = _dpCfg.advance_booking || [];
+    advBody.innerHTML = rules.map((r,i)=>`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.35rem .4rem"><input type="number" min="0" max="365" value="${r.min_days}" style="width:60px;${tblInputStyle()}" oninput="_dpCfg.advance_booking[${i}].min_days=+this.value"></td>
+      <td style="padding:.35rem .4rem"><input type="number" min="0.5" max="3" step="0.01" value="${r.multiplier}" style="width:70px;${tblInputStyle()}" oninput="_dpCfg.advance_booking[${i}].multiplier=+this.value;this.closest('tr').querySelector('.pct').innerHTML=pctLabel(this.value)"></td>
+      <td style="padding:.35rem .4rem"><input value="${r.label||''}" placeholder="ej: Última hora" style="width:140px;${tblInputStyle()}" oninput="_dpCfg.advance_booking[${i}].label=this.value"></td>
+      <td style="padding:.35rem .4rem"><button onclick="_dpCfg.advance_booking.splice(${i},1);renderDpConfig()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem">✕</button></td>
+    </tr>`).join('');
+  }
+
+  // Day of week grid
+  const wkGrid = document.getElementById('dp-weekday-grid');
+  if(wkGrid){
+    const wk = _dpCfg.weekday || {};
+    wkGrid.innerHTML = DAY_NAMES_SHORT.map((name,i)=>{
+      const val = parseFloat(wk[String(i)]||1);
+      const pct = Math.round((val-1)*100);
+      const col = pct>0?'var(--red)':pct<0?'var(--green)':'var(--muted)';
+      return `<div style="text-align:center">
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:.25rem">${name}</div>
+        <input type="number" min="0.5" max="3" step="0.01" value="${val}"
+          style="width:100%;${tblInputStyle()};text-align:center"
+          oninput="_dpCfg.weekday['${i}']=+this.value;this.nextElementSibling.textContent=(Math.round((+this.value-1)*100)||0)+'%';this.nextElementSibling.style.color=(+this.value>1)?'var(--red)':(+this.value<1?'var(--green)':'var(--muted)')">
+        <div style="font-size:.7rem;color:${col};margin-top:.15rem">${pct===0?'—':(pct>0?'+':'')+pct+'%'}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Min/max
+  const minEl = document.getElementById('dp-min-mult');
+  const maxEl = document.getElementById('dp-max-mult');
+  if(minEl){ minEl.value=_dpCfg.min_mult||0.80; document.getElementById('dp-min-pct').textContent=pctLabelText(_dpCfg.min_mult||0.80); }
+  if(maxEl){ maxEl.value=_dpCfg.max_mult||1.60; document.getElementById('dp-max-pct').textContent=pctLabelText(_dpCfg.max_mult||1.60); }
+}
+
+function tblInputStyle(){ return 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .4rem;font-size:.82rem'; }
+function pctLabelText(mult){ const p=Math.round((parseFloat(mult)-1)*100); return p===0?'sin cambio':(p>0?'+':'')+p+'%'; }
+
+function addFillRule(){ _dpCfg.fill_rate.push({min_bookings:1,multiplier:1.10,label:''}); renderDpConfig(); }
+function addAdvRule(){ _dpCfg.advance_booking.push({min_days:0,multiplier:1.00,label:'nuevo'}); renderDpConfig(); }
+
+async function setDpEnabled(val){
+  if(!_dpCfg) return;
+  _dpCfg.enabled = val;
+  updateDpLabel(val);
+}
+
+function updateDpLabel(on){
+  const el = document.getElementById('dp-label');
+  if(el){ el.textContent = on ? '✅ Activado' : 'Desactivado'; el.style.color = on ? 'var(--green)' : 'var(--muted)'; }
+}
+
+async function saveDpConfig(){
+  if(!_dpCfg) return;
+  const minEl = document.getElementById('dp-min-mult');
+  const maxEl = document.getElementById('dp-max-mult');
+  if(minEl) _dpCfg.min_mult = parseFloat(minEl.value)||0.80;
+  if(maxEl) _dpCfg.max_mult = parseFloat(maxEl.value)||1.60;
+
+  // Sync weekday from grid inputs
+  document.querySelectorAll('#dp-weekday-grid input[type=number]').forEach((inp,i)=>{
+    _dpCfg.weekday[String(i)] = parseFloat(inp.value)||1.0;
+  });
+
+  try{
+    await api('/api/admin/dynamic-pricing',{method:'PUT',body:JSON.stringify(_dpCfg)});
+    showToast('Precios dinamicos guardados ✅');
+    renderDpConfig();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function renderVacList(vacDays){
+  const el = document.getElementById('vac-list');
+  if(!el) return;
+  if(!vacDays.length){ el.innerHTML='<p style="color:var(--muted);font-size:.82rem">No hay dias de vacaciones marcados.</p>'; return; }
+  el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem">
+    ${vacDays.map(v=>`
+      <div style="background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.3);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
+        🏖️ ${v.date}
+        <button onclick="toggleVacDay('${v.date}',true)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem">✕</button>
+      </div>`).join('')}
+  </div>`;
+}
+
+// ── Payment rows ──────────────────────────────────────────────────────────────
+const METODOS = ['transferencia','mercadopago','transbank','efectivo','cheque','otro'];
+let _pagos = [];   // working copy of pagos array for current modal
+
+function renderPagos(){
+  const list = document.getElementById('pagos-list');
+  const totEl = document.getElementById('pagos-total');
+  if(!list) return;
+  const total = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  if(totEl) totEl.textContent = total>0 ? fmtMoney(total) : '';
+  list.innerHTML = _pagos.map((p,i)=>`
+    <div class="pago-row">
+      <input class="p-amount" type="number" value="${p.amount||''}" placeholder="Monto $"
+        oninput="_pagos[${i}].amount=+this.value;renderPagosTotal()">
+      <select class="p-method" onchange="_pagos[${i}].method=this.value"
+        style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none;flex:1">
+        ${METODOS.map(m=>`<option value="${m}"${p.method===m?' selected':''}>${m}</option>`).join('')}
+      </select>
+      <input class="p-date" type="date" value="${p.date||''}"
+        oninput="_pagos[${i}].date=this.value">
+      <button class="p-del" onclick="_pagos.splice(${i},1);renderPagos()" title="Eliminar">✕</button>
+    </div>`).join('');
+}
+
+function renderPagosTotal(){
+  const totEl = document.getElementById('pagos-total');
+  if(!totEl) return;
+  const paid = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  totEl.textContent = paid>0 ? fmtMoney(paid) : '';
+  syncPagoFaltante();
+}
+
+function syncPagoFaltante(){
+  const wrap = document.getElementById('pago-faltante-wrap');
+  const valEl = document.getElementById('pago-faltante-val');
+  if(!wrap||!valEl) return;
+  const total = +(document.getElementById('e-ingreso_total')?.value||0);
+  const paid  = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  const falt  = total - paid;
+  if(falt > 0){
+    wrap.style.display = 'flex';
+    valEl.textContent  = fmtMoney(falt);
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function addPago(){
+  const today = new Date().toISOString().substring(0,10);
+  _pagos.push({amount:'',method:'transferencia',date:today});
+  renderPagos();
+}
+
+function initPagos(pagosArr){
+  _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p})) : [];
+  renderPagos();
+  syncPagoFaltante();
+}
+
+// ── Create / Delete reservas ──────────────────────────────────────────────────
+
+function openNewReservaModal(prefillDate){
+  document.getElementById('modal-title').textContent = 'Nueva reserva';
+  const today = new Date().toISOString().substring(0,10);
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Fecha *</label>
+        <input type="date" id="nr-fecha" value="${prefillDate||today}"></div>
+      <div class="form-group"><label>Hora</label>
+        <input type="time" id="nr-hora" value="10:00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Nombre cliente *</label>
+        <input id="nr-nombre" placeholder="Nombre completo"></div>
+      <div class="form-group"><label>Teléfono</label>
+        <input id="nr-telefono" placeholder="+569..."></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Email</label>
+        <input id="nr-email" placeholder="email@..."></div>
+      <div class="form-group"><label>Personas</label>
+        <input type="number" id="nr-personas" min="1" value="2"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Servicio</label>
+        <input id="nr-servicio" value="HotBoat Trip"></div>
+      <div class="form-group"><label>Estado</label>
+        <select id="nr-status" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem .8rem;font-size:.85rem;outline:none">
+          <option value="confirmed">Confirmada</option>
+          <option value="pending">Pendiente</option>
+          <option value="solicitud">Solicitud</option>
+          <option value="cancelled">Cancelada</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Ingreso reserva ($)</label>
+        <input type="number" id="nr-ingreso" min="0" value="0" oninput="document.getElementById('nr-total').value=this.value"></div>
+      <div class="form-group"><label>Total ($)</label>
+        <input type="number" id="nr-total" min="0" value="0" style="color:var(--gold);font-weight:700"></div>
+    </div>
+    <div id="nr-err" style="color:var(--red);font-size:.8rem;display:none;margin-bottom:.5rem"></div>
+    <div class="modal-actions">
+      <button class="btn-del" onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="submitNewReserva()">Crear reserva</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('nr-nombre')?.focus(), 100);
+}
+
+async function submitNewReserva(){
+  const gv = id => document.getElementById(id)?.value || '';
+  const fecha = gv('nr-fecha');
+  const nombre = gv('nr-nombre').trim();
+  const errEl = document.getElementById('nr-err');
+  if(!fecha || !nombre){
+    if(errEl){ errEl.textContent='Fecha y nombre son obligatorios'; errEl.style.display=''; }
+    return;
+  }
+  try{
+    const d = await api('/api/admin/reservas', {method:'POST', body: JSON.stringify({
+      fecha, hora: gv('nr-hora')||null,
+      nombre_cliente: nombre, telefono: gv('nr-telefono')||null,
+      email: gv('nr-email')||null,
+      servicio: gv('nr-servicio')||'HotBoat Trip',
+      num_personas: +gv('nr-personas')||null,
+      ingreso_reserva: +gv('nr-ingreso')||0,
+      ingreso_total: +gv('nr-total')||0,
+      status: gv('nr-status')||'confirmed',
+    })});
+    showToast(`Reserva creada (ID ${d.id}) ✓`);
+    closeModal();
+    await reloadAll();
+    openModal(d.id);   // open the new reservation for editing
+  }catch(e){
+    if(errEl){ errEl.textContent='Error: '+e.message; errEl.style.display=''; }
+  }
+}
+
+async function deleteReserva(id, nombre){
+  if(!confirm(`¿Eliminar la reserva de "${nombre}"?\nEsta acción no se puede deshacer.`)) return;
+  try{
+    await api(`/api/admin/reservas/${id}`, {method:'DELETE'});
+    showToast(`Reserva de "${nombre}" eliminada`);
+    closeModal();
+    await reloadAll();
+    loadLista();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Precios Extras tab ────────────────────────────────────────────────────────
+
+let _extrasCatData = [];   // full list loaded from API
+
+async function loadExtrasCat(){
+  const tbody = document.getElementById('ec-tbody');
+  if(!tbody) return;
+  tbody.innerHTML='<tr><td colspan="6" class="loading-msg">Cargando...</td></tr>';
+  try{
+    const d = await api('/api/admin/precios-extras');
+    EXTRAS_CATALOG = d.extras||[];   // also refresh catalog for modal dropdowns
+    _extrasCatData = d.extras||[];
+    renderExtrasCat(_extrasCatData);
+  }catch(e){
+    tbody.innerHTML=`<tr><td colspan="6" class="no-data">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderExtrasCat(list){
+  const tbody = document.getElementById('ec-tbody');
+  const countEl = document.getElementById('ec-count');
+  if(!tbody) return;
+  if(countEl) countEl.textContent = `${list.length} extras`;
+  if(!list.length){
+    tbody.innerHTML='<tr><td colspan="6" class="no-data">Sin extras</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map((e,i)=>{
+    const util = (e.price||0)-(e.cost||0);
+    const margen = e.cost ? Math.round((e.price/e.cost-1)*100) : null;
+    const utilCls = util>0?'pos':util<0?'neg':'';
+    const icon = e.icon || defaultExtraIcon(e.key||'');
+    return `<tr id="ec-row-${e.id}" data-idx="${i}">
+      <td style="text-align:center;white-space:nowrap">
+        <button onclick="moveExtra(${i},-1)" title="Subir" style="background:none;border:1px solid var(--border);border-radius:5px;padding:.1rem .4rem;cursor:pointer;font-size:.85rem;color:var(--text)" ${i===0?'disabled':''}>↑</button>
+        <button onclick="moveExtra(${i},1)" title="Bajar" style="background:none;border:1px solid var(--border);border-radius:5px;padding:.1rem .4rem;cursor:pointer;font-size:.85rem;color:var(--text)" ${i===list.length-1?'disabled':''}>↓</button>
+      </td>
+      <td style="text-align:center">
+        <input class="ec-input" value="${escHtml(icon)}" data-field="icon"
+          oninput="ecMarkDirty('${e.id}')"
+          style="width:3rem;text-align:center;font-size:1.1rem;padding:.2rem">
+      </td>
+      <td>
+        <input class="ec-input ec-name-input" value="${escHtml(e.name)}"
+          oninput="ecMarkDirty('${e.id}')" data-field="name" style="min-width:180px">
+      </td>
+      <td>
+        <input class="ec-input" value="${escHtml(e.description||'')}" data-field="description"
+          placeholder="Texto informativo visible en la app"
+          oninput="ecMarkDirty('${e.id}')" style="min-width:220px;font-size:.8rem">
+      </td>
+      <td style="text-align:center">
+        <label class="toggle-wrap" title="Mostrar en app de reservas">
+          <input type="checkbox" ${e.show_in_booking!==false?'checked':''} data-field="show_in_booking"
+            onchange="saveExtraVisibility('${e.id}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+      <td>
+        <input class="ec-input" type="number" min="0" value="${e.price||0}"
+          oninput="ecMarkDirty('${e.id}');ecUpdateRow('${e.id}')" data-field="price">
+      </td>
+      <td>
+        <input class="ec-input" type="number" min="0" value="${e.cost||0}"
+          oninput="ecMarkDirty('${e.id}');ecUpdateRow('${e.id}')" data-field="cost">
+      </td>
+      <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
+      <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
+      <td style="display:flex;gap:.4rem;align-items:center;padding:.5rem .4rem">
+        <button class="ec-save-btn" id="ec-btn-${e.id}" onclick="saveExtra('${e.id}')">Guardar</button>
+        <button class="ec-del-btn" onclick="deleteExtra('${e.id}','${escHtml(e.name)}')" title="Eliminar">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function moveExtra(idx, dir){
+  const newIdx = idx + dir;
+  if(newIdx < 0 || newIdx >= _extrasCatData.length) return;
+  // Swap in local array
+  [_extrasCatData[idx], _extrasCatData[newIdx]] = [_extrasCatData[newIdx], _extrasCatData[idx]];
+  // Assign consecutive sort_order values
+  const payload = _extrasCatData.map((e, i) => ({ name_lower: e.name.toLowerCase(), sort_order: i + 1 }));
+  renderExtrasCat(_extrasCatData);
+  try{
+    await api('/api/admin/precios-extras/reorder', { method:'POST', body: JSON.stringify(payload) });
+    showToast('Orden guardado ✓');
+  }catch(err){ showToast('Error guardando orden: '+err.message); }
+}
+
+function filterExtrasCat(){
+  const q = document.getElementById('ec-search')?.value.toLowerCase()||'';
+  renderExtrasCat(q ? _extrasCatData.filter(e=>e.name.toLowerCase().includes(q)) : _extrasCatData);
+}
+
+function ecGetRow(id){
+  const row = document.getElementById(`ec-row-${id}`);
+  if(!row) return null;
+  const data = {};
+  row.querySelectorAll('.ec-input').forEach(inp=>{
+    data[inp.dataset.field] = inp.type==='number' ? +inp.value : inp.value;
+  });
+  // read checkbox for show_in_booking
+  const chk = row.querySelector('input[data-field="show_in_booking"]');
+  if(chk) data.show_in_booking = chk.checked;
+  return data;
+}
+
+function ecMarkDirty(id){
+  const btn = document.getElementById(`ec-btn-${id}`);
+  if(btn){ btn.textContent='Guardar'; btn.classList.remove('saved'); btn.style.background=''; }
+}
+
+function ecUpdateRow(id){
+  const d = ecGetRow(id);
+  if(!d) return;
+  const util = (d.price||0)-(d.cost||0);
+  const margen = d.cost ? Math.round((d.price/d.cost-1)*100) : null;
+  const utilEl = document.getElementById(`ec-util-${id}`);
+  const margenEl = document.getElementById(`ec-margen-${id}`);
+  if(utilEl){ utilEl.textContent=fmtMoney(util); utilEl.className='ec-util '+(util>0?'pos':util<0?'neg':''); }
+  if(margenEl) margenEl.textContent = margen!=null?margen+'%':'—';
+}
+
+async function saveExtra(id){
+  const d = ecGetRow(id);
+  if(!d||!d.name) return;
+  const btn = document.getElementById(`ec-btn-${id}`);
+  if(btn){ btn.textContent='...'; btn.disabled=true; }
+  try{
+    await api(`/api/admin/precios-extras/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify(d)});
+    if(btn){ btn.textContent='✓ Guardado'; btn.classList.add('saved'); btn.style.background='var(--green)'; btn.style.color='#fff'; btn.disabled=false; }
+    // Refresh list so ID reflects any rename
+    await loadExtrasCat();
+    showToast(`"${d.name}" guardado ✓`);
+    setTimeout(()=>{ if(btn){ btn.textContent='Guardar'; btn.classList.remove('saved'); btn.style.background=''; btn.style.color=''; } }, 2500);
+  }catch(e){
+    showToast('Error: '+e.message);
+    if(btn){ btn.textContent='Guardar'; btn.disabled=false; }
+  }
+}
+
+async function saveExtraVisibility(id, visible){
+  // Auto-save the show_in_booking toggle without requiring "Guardar"
+  const d = ecGetRow(id);
+  if(!d) return;
+  d.show_in_booking = visible;
+  try{
+    await api(`/api/admin/precios-extras/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify(d)});
+    const idx = _extrasCatData.findIndex(e=>e.id===id);
+    if(idx>=0) _extrasCatData[idx].show_in_booking = visible;
+    showToast(visible ? '✓ Extra visible en reservas' : '✓ Extra oculto en reservas');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function deleteExtra(id, name){
+  if(!confirm(`¿Eliminar "${name}"?`)) return;
+  try{
+    await api(`/api/admin/precios-extras/${encodeURIComponent(id)}`,{method:'DELETE'});
+    _extrasCatData = _extrasCatData.filter(e=>e.id!==id);
+    EXTRAS_CATALOG = _extrasCatData;
+    filterExtrasCat();
+    showToast(`"${name}" eliminado`);
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function openNewExtraModal(){
+  document.getElementById('modal-title').textContent='Nuevo extra';
+  document.getElementById('modal-body').innerHTML=`
+    <div class="form-row">
+      <div class="form-group"><label>Nombre del extra</label>
+        <input id="ne-name" placeholder="Ej: Modo Romántico" style="grid-column:1/-1"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="grid-column:1/-1"><label>Descripción (texto informativo en la app)</label>
+        <input id="ne-desc" placeholder="Ej: Decora el bote con rosas, velas y música romántica"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Precio venta ($)</label>
+        <input id="ne-price" type="number" min="0" value="0" oninput="neCalc()"></div>
+      <div class="form-group"><label>Costo ($)</label>
+        <input id="ne-cost" type="number" min="0" value="0" oninput="neCalc()"></div>
+    </div>
+    <div style="background:var(--surface);border-radius:8px;padding:.7rem 1rem;margin-bottom:.8rem;font-size:.83rem;display:flex;gap:1.5rem">
+      <span>Utilidad: <strong id="ne-util" style="color:var(--green)">$0</strong></span>
+      <span>Margen: <strong id="ne-margen" style="color:var(--muted)">—</strong></span>
+    </div>
+    <div id="ne-err" style="color:var(--red);font-size:.8rem;display:none;margin-bottom:.5rem"></div>
+    <div class="modal-actions">
+      <button class="btn-del" onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="createExtra()">Crear extra</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function neCalc(){
+  const p=+document.getElementById('ne-price')?.value||0;
+  const c=+document.getElementById('ne-cost')?.value||0;
+  const util=p-c;
+  const margen=c?Math.round((p/c-1)*100):null;
+  const uEl=document.getElementById('ne-util');
+  const mEl=document.getElementById('ne-margen');
+  if(uEl){ uEl.textContent=fmtMoney(util); uEl.style.color=util>=0?'var(--green)':'var(--red)'; }
+  if(mEl) mEl.textContent=margen!=null?margen+'%':'—';
+}
+
+async function createExtra(){
+  const name=(document.getElementById('ne-name')?.value||'').trim();
+  const description=(document.getElementById('ne-desc')?.value||'').trim();
+  const price=+document.getElementById('ne-price')?.value||0;
+  const cost=+document.getElementById('ne-cost')?.value||0;
+  const errEl=document.getElementById('ne-err');
+  if(!name){ if(errEl){errEl.textContent='El nombre es obligatorio';errEl.style.display='';} return; }
+  try{
+    const d=await api('/api/admin/precios-extras',{method:'POST',body:JSON.stringify({name,description,price,cost})});
+    showToast(`"${name}" creado ✓`);
+    closeModal();
+    loadExtrasCat();
+  }catch(e){
+    if(errEl){errEl.textContent='Error: '+e.message;errEl.style.display='';}
+  }
+}
+
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// ── Descuentos ────────────────────────────────────────────────────────────────
+const TIPOS_DESC = ['pack','cupon','otro'];
+
+function initDescuentos(arr){
+  _descuentos = Array.isArray(arr) ? arr.map(d=>({...d})) : [];
+  renderDescuentos();
+}
+
+function renderDescuentos(){
+  const list = document.getElementById('desc-list');
+  const totEl = document.getElementById('desc-total');
+  if(!list) return;
+  const total = _descuentos.reduce((s,d)=>s+(+d.amount||0),0);
+  if(totEl) totEl.textContent = total>0 ? '-'+fmtMoney(total) : '';
+  list.innerHTML = _descuentos.map((d,i)=>`
+    <div class="desc-row">
+      <input class="d-amount" type="number" value="${d.amount||''}" placeholder="Monto $"
+        oninput="_descuentos[${i}].amount=+this.value;renderDescuentos();updateExtrasTotals()">
+      <select class="d-type" onchange="_descuentos[${i}].type=this.value"
+        style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none">
+        ${TIPOS_DESC.map(t=>`<option value="${t}"${d.type===t?' selected':''}>${t}</option>`).join('')}
+      </select>
+      <input class="d-note" value="${d.note||''}" placeholder="Observación (ej: código VERANO20)"
+        oninput="_descuentos[${i}].note=this.value">
+      <button class="d-del" onclick="_descuentos.splice(${i},1);renderDescuentos();updateExtrasTotals()" title="Eliminar">✕</button>
+    </div>`).join('');
+}
+
+function addDescuento(){
+  _descuentos.push({amount:'',type:'pack',note:''});
+  renderDescuentos();
+}
+
+// Recalculate costo_operativo_total when fijo or variable changes
+function syncClimaHidden(){
+  const boxes = document.querySelectorAll('#e-clima-checkboxes input[type="checkbox"]');
+  const vals = [];
+  boxes.forEach(cb=>{
+    if(!cb.checked) return;
+    if(cb.value==='Otro'){
+      const txt = document.getElementById('e-clima_otro_txt');
+      const otroInp = document.getElementById('e-clima_del_dia_otro_toggle');
+      if(txt) txt.style.display='block';
+      const v = txt ? txt.value.trim() : '';
+      if(v) vals.push(v); else vals.push('Otro');
+    } else {
+      vals.push(cb.value);
+    }
+  });
+  // Hide Otro text if unchecked
+  const otroCb = [...boxes].find(cb=>cb.value==='Otro');
+  const otroTxt = document.getElementById('e-clima_otro_txt');
+  if(otroTxt) otroTxt.style.display = otroCb?.checked ? 'block':'none';
+  const hidden = document.getElementById('e-clima_del_dia');
+  if(hidden) hidden.value = vals.join(', ');
+}
+
+function syncQuienAtendioHidden(){
+  const boxes = document.querySelectorAll('#e-quien-atendio-checkboxes input[type="checkbox"]');
+  const vals = [];
+  boxes.forEach(cb=>{
+    if(!cb.checked) return;
+    if(cb.value==='Otro'){
+      const txt = document.getElementById('e-quien_atendio_otro_txt');
+      if(txt) txt.style.display='block';
+      const v = txt ? txt.value.trim() : '';
+      if(v) vals.push(v); else vals.push('Otro');
+    } else {
+      vals.push(cb.value);
+    }
+  });
+  const otroCb = [...boxes].find(cb=>cb.value==='Otro');
+  const otroTxt = document.getElementById('e-quien_atendio_otro_txt');
+  if(otroTxt) otroTxt.style.display = otroCb?.checked ? 'block':'none';
+  const hidden = document.getElementById('e-quien_atendio');
+  if(hidden) hidden.value = vals.join(', ');
+}
+
+function syncCiudadOrigenHidden(){
+  const boxes = document.querySelectorAll('#e-ciudad-origen-checkboxes input[type="checkbox"]');
+  const vals = [];
+  boxes.forEach(cb=>{
+    if(!cb.checked) return;
+    if(cb.value==='Otro'){
+      const txt = document.getElementById('e-ciudad_origen_otro_txt');
+      if(txt) txt.style.display='block';
+      const v = txt ? txt.value.trim() : '';
+      if(v) vals.push(v); else vals.push('Otro');
+    } else {
+      vals.push(cb.value);
+    }
+  });
+  const otroCb = [...boxes].find(cb=>cb.value==='Otro');
+  const otroTxt = document.getElementById('e-ciudad_origen_otro_txt');
+  if(otroTxt) otroTxt.style.display = otroCb?.checked ? 'block':'none';
+  const hidden = document.getElementById('e-ciudad_origen');
+  if(hidden) hidden.value = vals.join(', ');
+}
+
+function lookupBasePrice(nStr){
+  const n = +nStr;
+  if(!n || !EXTRAS_CATALOG.length) return;
+
+  // Try exact slug matches: hotboat_Np, hotboat_N_p, hotbot_N, etc.
+  const targets = [
+    `hotboat_${n}p`,
+    `hotboat_${n}_p`,
+    `hotboat_${n}`,
+    `hotbot_${n}p`,
+  ];
+  let match = EXTRAS_CATALOG.find(e => targets.includes(e.key));
+
+  // Fallback: any catalog entry whose name contains the number and 'hotboat'/'hotbot'
+  if(!match){
+    match = EXTRAS_CATALOG.find(e => {
+      const k = e.key.toLowerCase();
+      return (k.includes('hotboat')||k.includes('hotbot')) && k.includes(String(n));
+    });
+  }
+
+  const hint = document.getElementById('e-precio-hint');
+  const inp  = document.getElementById('e-ingreso_reserva');
+  if(match && inp){
+    inp.value = match.price;
+    if(hint) hint.textContent = `→ ${match.name} (${fmtMoney(match.price)})`;
+    // Recalculate totals
+    updateExtrasTotals();
+    syncPagoFaltante();
+  } else {
+    if(hint) hint.textContent = n ? `sin precio para ${n}p en catálogo` : '';
+  }
+}
+
+function syncCostoTotal(){
+  const fijo = +document.getElementById('e-costo_operativo_fijo')?.value||0;
+  const varEl = document.getElementById('e-costo_operativo_variable');
+  const variable = varEl ? +varEl.value||0 : 0;
+  const totEl = document.getElementById('e-costo_operativo_total');
+  if(totEl) totEl.value = fijo + variable;
+}
+
+// ── Extras catalog & editor ────────────────────────────────────────────────────
+
+async function loadExtrasCatalog(){
+  try{
+    const d = await api('/api/admin/precios-extras');
+    EXTRAS_CATALOG = d.extras || [];
+  }catch(e){ console.warn('Could not load extras catalog:', e); }
+}
+
+function slugify(s){
+  return s.normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+}
+
+function initExtrasEditor(extrasJson){
+  // Build _extrasItems from existing extras_json, lookup catalog prices
+  _extrasItems = [];
+  const catalogByKey = {};
+  EXTRAS_CATALOG.forEach(e=>{ catalogByKey[e.key]=e; });
+  Object.entries(extrasJson||{}).forEach(([key, val])=>{
+    const cat = catalogByKey[key];
+    // val puede ser número (qty) o objeto {qty, unit_price}
+    const qty = (typeof val === 'object' && val !== null) ? (+val.qty||1) : (+val||1);
+    const saved_price = (typeof val === 'object' && val !== null && val.unit_price) ? +val.unit_price : null;
+    _extrasItems.push({
+      key,
+      name: cat ? cat.name : key.replace(/_/g,' '),
+      qty,
+      unit_price: saved_price ?? (cat ? cat.price : 0),
+      unit_cost:  cat ? (cat.cost||0) : 0,
+    });
+  });
+  renderExtrasEditor();
+  populateCatalogSelect();
+}
+
+function populateCatalogSelect(){
+  const sel = document.getElementById('extras-catalog-sel');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— Seleccionar del catálogo —</option>' +
+    EXTRAS_CATALOG.map(e=>`<option value="${e.key}" data-price="${e.price}">${e.name} — ${fmtMoney(e.price)}</option>`).join('');
+}
+
+function renderExtrasEditor(){
+  const list = document.getElementById('extras-list');
+  if(!list) return;
+  if(!_extrasItems.length){
+    list.innerHTML='<div style="color:var(--muted);font-size:.8rem;padding:.4rem 0">Sin extras agregados</div>';
+    updateExtrasTotals();
+    return;
+  }
+  list.innerHTML = _extrasItems.map((item,i)=>`
+    <div class="extras-row">
+      <div class="ex-name" title="${item.name}">${item.name}</div>
+      <input type="number" min="1" value="${item.qty}" title="Cantidad"
+        oninput="_extrasItems[${i}].qty=+this.value||1;updateExtrasTotals();updateExtraSubtotal(${i})">
+      <input type="number" min="0" value="${item.unit_price}" title="Precio unitario"
+        oninput="_extrasItems[${i}].unit_price=+this.value||0;updateExtrasTotals();updateExtraSubtotal(${i})">
+      <div class="ex-sub" id="ex-sub-${i}">${fmtMoney(item.qty*item.unit_price)}</div>
+      <button class="ex-del" onclick="removeExtraItem(${i})" title="Quitar">✕</button>
+    </div>`).join('');
+  updateExtrasTotals();
+}
+
+function updateExtraSubtotal(i){
+  const el = document.getElementById(`ex-sub-${i}`);
+  if(el) el.textContent = fmtMoney((_extrasItems[i]?.qty||0)*(_extrasItems[i]?.unit_price||0));
+}
+
+function updateExtrasTotals(){
+  const extrasTotal = _extrasItems.reduce((s,item)=>s+(+item.qty||0)*(+item.unit_price||0),0);
+  const costoTotal  = _extrasItems.reduce((s,item)=>s+(+item.qty||0)*(+item.unit_cost ||0),0);
+  const descTotal   = (_descuentos||[]).reduce((s,d)=>s+(+d.amount||0),0);
+  const lbl = document.getElementById('extras-total-label');
+  if(lbl) lbl.textContent = extrasTotal>0 ? fmtMoney(extrasTotal) : '';
+  // Auto-update ingreso_extras and ingreso_total fields
+  const extEl  = document.getElementById('e-ingreso_extras');
+  const totEl  = document.getElementById('e-ingreso_total');
+  const resEl  = document.getElementById('e-ingreso_reserva');
+  const varEl  = document.getElementById('e-costo_operativo_variable');
+  if(extEl) extEl.value = extrasTotal;
+  if(totEl && resEl) totEl.value = (+resEl.value||0) + extrasTotal - descTotal;
+  // Update variable cost and recalculate total cost
+  if(varEl && costoTotal > 0){ varEl.value = costoTotal; syncCostoTotal(); }
+  syncPagoFaltante();
+}
+
+function removeExtraItem(i){
+  _extrasItems.splice(i,1);
+  renderExtrasEditor();
+}
+
+function addExtraFromSelect(){
+  const sel = document.getElementById('extras-catalog-sel');
+  if(!sel||!sel.value) return;
+  const key = sel.value;
+  const opt = sel.options[sel.selectedIndex];
+  const price = +(opt.dataset.price||0);
+  const cat = EXTRAS_CATALOG.find(e=>e.key===key);
+  // Check if already in list
+  const existing = _extrasItems.find(e=>e.key===key);
+  if(existing){
+    existing.qty += 1;
+  } else {
+    _extrasItems.push({
+      key,
+      name: cat ? cat.name : key.replace(/_/g,' '),
+      qty: 1,
+      unit_price: price,
+      unit_cost: cat ? (cat.cost||0) : 0,
+    });
+  }
+  sel.value='';
+  renderExtrasEditor();
+}
+
+async function sendPaymentLink(id){
+  if(!confirm('¿Enviar link de pago por WhatsApp al cliente?')) return;
+  try{
+    showToast('Creando orden y enviando link...');
+    const d = await api(`/api/admin/reservas/${id}/send-payment-link`, {method:'POST'});
+    showToast(`✓ Link enviado a ${d.message_sent_to}`);
+    // Show the payment URL so admin can also share manually
+    setTimeout(()=>{
+      const copy = confirm(`Link de pago:\n${d.payment_url}\n\n¿Copiar al portapapeles?`);
+      if(copy) navigator.clipboard?.writeText(d.payment_url);
+    }, 500);
+  }catch(e){
+    showToast('Error: '+e.message);
+  }
+}
+
+function showToast(msg){
+  let t=document.getElementById('_toast');
+  if(!t){ t=document.createElement('div'); t.id='_toast';
+    t.style.cssText='position:fixed;bottom:1.5rem;right:1.5rem;background:#222;color:#fff;padding:.7rem 1.2rem;border-radius:8px;font-size:.85rem;z-index:999;transition:opacity .3s';
+    document.body.appendChild(t); }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity='0',3000);
+}
+
+// helper: return current admin key (KEY is set by doLogin)
+function getKey(){ return KEY; }
+
+// ═══════════════════════════════════════════════════════════════
+// EXPERIENCIAS admin
+// ═══════════════════════════════════════════════════════════════
+let _exps = [];
+
+// ═══════════════════════════════════════════════════════════════
+// ALOJAMIENTOS ADMIN
+// ═══════════════════════════════════════════════════════════════
+let _alojs = [];
+
+async function loadAlojamientos(){
+  try{
+    const r = await fetch('/api/admin/alojamientos',{headers:{'x-admin-key':getKey()}});
+    const d = await r.json();
+    _alojs = d.alojamientos||[];
+    renderAlojList();
+  }catch(e){ showToast('Error cargando alojamientos: '+e.message); }
+}
+
+function renderAlojList(){
+  const el = document.getElementById('aloj-list');
+  if(!_alojs.length){ el.innerHTML='<p style="color:var(--muted)">No hay alojamientos aún. Haz click en &quot;+ Nuevo Alojamiento&quot;.</p>'; return; }
+
+  // Group by group_name for display
+  const groups = {};
+  _alojs.forEach(a=>{ (groups[a.group_name||'Sin grupo'] = groups[a.group_name||'Sin grupo']||[]).push(a); });
+
+  el.innerHTML = Object.entries(groups).map(([grp, items])=>`
+    <div style="margin-bottom:.5rem">
+      <div style="font-size:.72rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.4rem;padding:.2rem .5rem;background:rgba(255,200,0,.08);border-radius:6px">${grp}</div>
+      ${items.map(a=>`<div class="item-card" style="margin-bottom:.5rem">
+        ${a.image_path ? `<img class="item-thumb" src="${a.image_path}" onerror="this.style.display='none'" style="object-fit:cover">` : `<div class="item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:2rem">${a.icon||'🏠'}</div>`}
+        <div class="item-body" style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:.93rem">${a.icon||'🏠'} ${a.name}</div>
+          <div style="color:var(--muted);font-size:.76rem;margin:.1rem 0">${a.description||''}</div>
+          <div style="font-size:.8rem;margin:.2rem 0">
+            <strong style="color:var(--gold)">$${Number(a.price_from||0).toLocaleString('es-CL')}/noche</strong>
+            &nbsp;·&nbsp; ${a.capacity||1} persona${(a.capacity||1)>1?'s':''}
+            ${a.cost_from ? `&nbsp;·&nbsp; <span style="color:var(--muted)">costo $${Number(a.cost_from).toLocaleString('es-CL')}</span>` : ''}
+          </div>
+          ${a.owner_whatsapp ? `<div style="font-size:.75rem;color:var(--muted);margin:.1rem 0">📱 Admin: <a href="https://wa.me/${(a.owner_whatsapp).replace(/[^0-9]/g,'')}" target="_blank" style="color:#25D366">${a.owner_whatsapp}</a></div>` : '<div style="font-size:.75rem;color:#ff6b6b;margin:.1rem 0">⚠️ Sin WhatsApp admin</div>'}
+          <span class="status-badge ${a.is_active?'badge-on':'badge-off'}">${a.is_active?'Activo':'Inactivo'}</span>
+        </div>
+        <div class="item-actions">
+          <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem" onclick="openAlojModal(${a.id})">Editar</button>
+          <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:${a.is_active?'#ff444433':'#00c05533'};color:${a.is_active?'#ff4444':'#00c055'}" onclick="toggleAloj(${a.id},${!a.is_active})">${a.is_active?'Desactivar':'Activar'}</button>
+          <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:#ff444422;color:#ff4444" onclick="deleteAloj(${a.id})">Eliminar</button>
+        </div>
+      </div>`).join('')}
+    </div>`
+  ).join('');
+}
+
+function openAlojModal(id){
+  const a = id ? _alojs.find(x=>x.id===id) : null;
+  document.getElementById('aloj-modal-title').textContent = a ? 'Editar Alojamiento' : 'Nuevo Alojamiento';
+  document.getElementById('aloj-id').value = a ? a.id : '';
+  document.getElementById('aloj-name').value = a ? a.name : '';
+  document.getElementById('aloj-group').value = a ? (a.group_name||'') : '';
+  document.getElementById('aloj-slug').value = a ? a.slug : '';
+  document.getElementById('aloj-icon').value = a ? (a.icon||'🏠') : '🏠';
+  document.getElementById('aloj-desc').value = a ? (a.description||'') : '';
+  document.getElementById('aloj-owner-wa').value = a ? (a.owner_whatsapp||'') : '';
+  document.getElementById('aloj-capacity').value = a ? (a.capacity||2) : 2;
+  document.getElementById('aloj-price').value = a ? (a.price_from||0) : 0;
+  document.getElementById('aloj-cost').value = a ? (a.cost_from||0) : 0;
+  document.getElementById('aloj-order').value = a ? (a.display_order||0) : 0;
+  document.getElementById('aloj-active').checked = a ? a.is_active : true;
+  const wrap = document.getElementById('aloj-img-wrap');
+  if(a && a.image_path){ wrap.style.display=''; document.getElementById('aloj-img-preview').src=a.image_path; }
+  else { wrap.style.display='none'; }
+  document.getElementById('aloj-img-file').value='';
+  document.getElementById('aloj-modal').style.display='';
+}
+function closeAlojModal(){ document.getElementById('aloj-modal').style.display='none'; }
+
+async function saveAloj(){
+  const id = document.getElementById('aloj-id').value;
+  const name = document.getElementById('aloj-name').value.trim();
+  let slug = document.getElementById('aloj-slug').value.trim();
+  if(!name){ showToast('El nombre es obligatorio'); return; }
+  if(!slug){ slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); document.getElementById('aloj-slug').value=slug; }
+  const body = {
+    slug,
+    name,
+    group_name: document.getElementById('aloj-group').value.trim(),
+    icon: document.getElementById('aloj-icon').value.trim()||'🏠',
+    description: document.getElementById('aloj-desc').value.trim(),
+    owner_whatsapp: document.getElementById('aloj-owner-wa').value.trim(),
+    capacity: +document.getElementById('aloj-capacity').value||2,
+    price_from: +document.getElementById('aloj-price').value||0,
+    cost_from: +document.getElementById('aloj-cost').value||0,
+    display_order: +document.getElementById('aloj-order').value||0,
+    is_active: document.getElementById('aloj-active').checked,
+    image_path: id ? (_alojs.find(x=>x.id==id)?.image_path||null) : null,
+  };
+  try{
+    const url = id ? `/api/admin/alojamientos/${id}` : '/api/admin/alojamientos';
+    const method = id ? 'PUT' : 'POST';
+    const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+    const d = await r.json();
+    const savedId = id || d.id;
+    const file = document.getElementById('aloj-img-file').files[0];
+    if(file && savedId){
+      const fd = new FormData(); fd.append('file',file);
+      await fetch(`/api/admin/alojamientos/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+    }
+    closeAlojModal(); await loadAlojamientos(); showToast('Alojamiento guardado ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function toggleAloj(id, active){
+  const a = _alojs.find(x=>x.id===id);
+  if(!a) return;
+  const body = {
+    slug:a.slug, name:a.name, group_name:a.group_name||'', icon:a.icon||'🏠',
+    description:a.description||'', owner_whatsapp:a.owner_whatsapp||'', capacity:a.capacity||2,
+    price_from:a.price_from||0, cost_from:a.cost_from||0,
+    display_order:a.display_order||0, is_active:active, image_path:a.image_path||null,
+  };
+  await fetch(`/api/admin/alojamientos/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+  await loadAlojamientos(); showToast(active?'Alojamiento activado ✅':'Alojamiento desactivado');
+}
+
+async function deleteAloj(id){
+  if(!confirm('¿Eliminar este alojamiento?')) return;
+  await fetch(`/api/admin/alojamientos/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
+  await loadAlojamientos(); showToast('Eliminado');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXPERIENCIAS ADMIN
+// ═══════════════════════════════════════════════════════════════
+async function loadExperiencias(){
+  try{
+    const r = await fetch('/api/admin/experiencias',{headers:{'x-admin-key':getKey()}});
+    const d = await r.json();
+    _exps = d.experiences||[];
+    renderExpList();
+  }catch(e){ showToast('Error cargando experiencias: '+e.message); }
+}
+
+function renderExpList(){
+  const el = document.getElementById('exp-list');
+  if(!_exps.length){ el.innerHTML='<p style="color:var(--muted)">No hay experiencias aún. Haz click en "+ Nueva Experiencia".</p>'; return; }
+  el.innerHTML = _exps.map(e=>`
+    <div class="item-card">
+      ${e.image_path ? `<img class="item-thumb" src="${e.image_path}" onerror="this.style.display='none'">` : `<div class="item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:2rem">${e.icon}</div>`}
+      <div class="item-body">
+        <div style="font-weight:700;font-size:.95rem">${e.icon} ${e.name}</div>
+        <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${e.description||''}</div>
+        <div style="font-size:.8rem">Precio: <strong>$${Number(e.price_per_person).toLocaleString('es-CL')}/persona</strong> · Costo: $${Number(e.cost_per_person).toLocaleString('es-CL')}</div>
+        <span class="status-badge ${e.is_active?'badge-on':'badge-off'}" style="margin-top:.35rem">${e.is_active?'Activa':'Inactiva'}</span>
+      </div>
+      <div class="item-actions">
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem" onclick="openExpModal(${e.id})">Editar</button>
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:${e.is_active?'#ff444433':'#00c05533'};color:${e.is_active?'#ff4444':'#00c055'}" onclick="toggleExp(${e.id},${!e.is_active})">${e.is_active?'Desactivar':'Activar'}</button>
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:#ff444422;color:#ff4444" onclick="deleteExp(${e.id})">Eliminar</button>
+      </div>
+    </div>`).join('');
+}
+
+function openExpModal(id){
+  const e = id ? _exps.find(x=>x.id===id) : null;
+  document.getElementById('exp-modal-title').textContent = e ? 'Editar Experiencia' : 'Nueva Experiencia';
+  document.getElementById('exp-id').value = e ? e.id : '';
+  document.getElementById('exp-name').value = e ? e.name : '';
+  document.getElementById('exp-slug').value = e ? e.slug : '';
+  document.getElementById('exp-icon').value = e ? e.icon : '🚣';
+  document.getElementById('exp-desc').value = e ? (e.description||'') : '';
+  document.getElementById('exp-price').value = e ? e.price_per_person : 0;
+  document.getElementById('exp-cost').value = e ? e.cost_per_person : 0;
+  document.getElementById('exp-order').value = e ? e.display_order : 0;
+  document.getElementById('exp-active').checked = e ? e.is_active : true;
+  const wrap = document.getElementById('exp-img-wrap');
+  if(e && e.image_path){ wrap.style.display=''; document.getElementById('exp-img-preview').src=e.image_path; }
+  else { wrap.style.display='none'; }
+  document.getElementById('exp-img-file').value='';
+  document.getElementById('exp-modal').style.display='';
+}
+function closeExpModal(){ document.getElementById('exp-modal').style.display='none'; }
+
+async function saveExp(){
+  const id = document.getElementById('exp-id').value;
+  const body = {
+    slug: document.getElementById('exp-slug').value.trim(),
+    name: document.getElementById('exp-name').value.trim(),
+    icon: document.getElementById('exp-icon').value.trim()||'🚣',
+    description: document.getElementById('exp-desc').value.trim(),
+    price_per_person: +document.getElementById('exp-price').value||0,
+    cost_per_person: +document.getElementById('exp-cost').value||0,
+    display_order: +document.getElementById('exp-order').value||0,
+    is_active: document.getElementById('exp-active').checked,
+    image_path: id ? (_exps.find(x=>x.id==id)?.image_path||null) : null,
+  };
+  if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
+  try{
+    const url = id ? `/api/admin/experiencias/${id}` : '/api/admin/experiencias';
+    const method = id ? 'PUT' : 'POST';
+    const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+    const d = await r.json();
+    const savedId = id || d.id;
+    // Upload image if selected
+    const file = document.getElementById('exp-img-file').files[0];
+    if(file && savedId){
+      const fd = new FormData(); fd.append('file',file);
+      await fetch(`/api/admin/experiencias/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+    }
+    closeExpModal(); await loadExperiencias(); showToast('Experiencia guardada ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function toggleExp(id, active){
+  const e = _exps.find(x=>x.id===id);
+  if(!e) return;
+  const body = {...e, is_active:active, image_path:e.image_path||null};
+  delete body.id; delete body.created_at; delete body.updated_at;
+  await fetch(`/api/admin/experiencias/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+  await loadExperiencias(); showToast(active?'Experiencia activada ✅':'Experiencia desactivada');
+}
+
+async function deleteExp(id){
+  if(!confirm('¿Eliminar esta experiencia?')) return;
+  await fetch(`/api/admin/experiencias/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
+  await loadExperiencias(); showToast('Eliminada');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PACKS ADMIN
+// ═══════════════════════════════════════════════════════════════
+let _packs = [];
+
+async function loadPacksAdmin(){
+  try{
+    const r = await fetch('/api/admin/packs',{headers:{'x-admin-key':getKey()}});
+    const d = await r.json();
+    _packs = d.packs||[];
+    renderPackList();
+  }catch(e){ showToast('Error cargando packs: '+e.message); }
+}
+
+function renderPackList(){
+  const el = document.getElementById('pack-list');
+  if(!_packs.length){ el.innerHTML='<p style="color:var(--muted)">No hay packs. Haz click en "+ Nuevo Pack".</p>'; return; }
+  el.innerHTML = _packs.map(p=>`
+    <div class="item-card">
+      ${p.image_path ? `<img class="item-thumb" src="${p.image_path}" onerror="this.style.display='none'">` : `<div class="item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:2rem">${p.icon}</div>`}
+      <div class="item-body">
+        <div style="font-weight:700;font-size:.95rem">${p.icon} ${p.name}</div>
+        <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${p.personas} · ${p.description||''}</div>
+        <div style="font-size:.8rem">Desde: <strong>$${Number(p.price_from).toLocaleString('es-CL')}</strong> · Costo: $${Number(p.cost_from).toLocaleString('es-CL')}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:.2rem">${(p.includes||[]).slice(0,3).map(i=>'✓ '+i).join(' · ')}</div>
+        <span class="status-badge ${p.is_active?'badge-on':'badge-off'}" style="margin-top:.35rem">${p.is_active?'Activo':'Inactivo'}</span>
+      </div>
+      <div class="item-actions">
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem" onclick="openPackModal(${p.id})">Editar</button>
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:${p.is_active?'#ff444433':'#00c05533'};color:${p.is_active?'#ff4444':'#00c055'}" onclick="togglePack(${p.id},${!p.is_active})">${p.is_active?'Desactivar':'Activar'}</button>
+        <button class="sync-btn" style="font-size:.78rem;padding:.35rem .7rem;background:#ff444422;color:#ff4444" onclick="deletePack(${p.id})">Eliminar</button>
+      </div>
+    </div>`).join('');
+}
+
+function openPackModal(id){
+  const p = id ? _packs.find(x=>x.id===id) : null;
+  document.getElementById('pack-modal-title').textContent = p ? 'Editar Pack' : 'Nuevo Pack';
+  document.getElementById('pack-id').value = p ? p.id : '';
+  document.getElementById('pack-name').value = p ? p.name : '';
+  document.getElementById('pack-slug').value = p ? p.slug : '';
+  document.getElementById('pack-icon').value = p ? p.icon : '🎁';
+  document.getElementById('pack-personas').value = p ? p.personas : '2 personas';
+  document.getElementById('pack-desc').value = p ? (p.description||'') : '';
+  document.getElementById('pack-price').value = p ? p.price_from : 0;
+  document.getElementById('pack-cost').value = p ? p.cost_from : 0;
+  document.getElementById('pack-includes').value = p ? (p.includes||[]).join('\n') : '';
+  document.getElementById('pack-order').value = p ? p.display_order : 0;
+  document.getElementById('pack-active').checked = p ? p.is_active : true;
+  const wrap = document.getElementById('pack-img-wrap');
+  if(p && p.image_path){ wrap.style.display=''; document.getElementById('pack-img-preview').src=p.image_path; }
+  else { wrap.style.display='none'; }
+  document.getElementById('pack-img-file').value='';
+  document.getElementById('pack-modal').style.display='';
+}
+function closePackModal(){ document.getElementById('pack-modal').style.display='none'; }
+
+async function savePack(){
+  const id = document.getElementById('pack-id').value;
+  const includesTxt = document.getElementById('pack-includes').value;
+  const includes = includesTxt.split('\n').map(s=>s.trim()).filter(Boolean);
+  const body = {
+    slug: document.getElementById('pack-slug').value.trim(),
+    name: document.getElementById('pack-name').value.trim(),
+    icon: document.getElementById('pack-icon').value.trim()||'🎁',
+    description: document.getElementById('pack-desc').value.trim(),
+    personas: document.getElementById('pack-personas').value.trim()||'2 personas',
+    price_from: +document.getElementById('pack-price').value||0,
+    cost_from: +document.getElementById('pack-cost').value||0,
+    display_order: +document.getElementById('pack-order').value||0,
+    is_active: document.getElementById('pack-active').checked,
+    includes,
+    image_path: id ? (_packs.find(x=>x.id==id)?.image_path||null) : null,
+  };
+  if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
+  try{
+    const url = id ? `/api/admin/packs/${id}` : '/api/admin/packs';
+    const method = id ? 'PUT' : 'POST';
+    const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+    const d = await r.json();
+    const savedId = id || d.id;
+    const file = document.getElementById('pack-img-file').files[0];
+    if(file && savedId){
+      const fd = new FormData(); fd.append('file',file);
+      await fetch(`/api/admin/packs/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+    }
+    closePackModal(); await loadPacksAdmin(); showToast('Pack guardado ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function togglePack(id, active){
+  const p = _packs.find(x=>x.id===id);
+  if(!p) return;
+  const body = {...p, is_active:active, image_path:p.image_path||null};
+  delete body.id; delete body.created_at; delete body.updated_at;
+  await fetch(`/api/admin/packs/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+  await loadPacksAdmin(); showToast(active?'Pack activado ✅':'Pack desactivado');
+}
+
+async function deletePack(id){
+  if(!confirm('¿Eliminar este pack?')) return;
+  await fetch(`/api/admin/packs/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
+  await loadPacksAdmin(); showToast('Eliminado');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CALENDARIO EXTRAS
+// ═══════════════════════════════════════════════════════════════
+let _extrasBookings = [];
+const STATUS_COLORS = {pendiente:'#f0a500',confirmado:'#00c055',cancelado:'#ff4444'};
+const TYPE_ICON = {experience:'🏔️',pack:'🎁',alojamiento:'🏠'};
+let ceYear = new Date().getFullYear(), ceMonth = new Date().getMonth();
+
+function ceCalPrev(){ ceMonth--; if(ceMonth<0){ceMonth=11;ceYear--;} renderCalExtras(); }
+function ceCalNext(){ ceMonth++; if(ceMonth>11){ceMonth=0;ceYear++;} renderCalExtras(); }
+
+async function loadCalExtras(){
+  try{
+    const r = await fetch(`/api/admin/extras-bookings`,{headers:{'x-admin-key':getKey()}});
+    const d = await r.json();
+    _extrasBookings = d.bookings||[];
+    ceYear = new Date().getFullYear();
+    ceMonth = new Date().getMonth();
+    renderCalExtras();
+  }catch(e){ showToast('Error cargando extras: '+e.message); }
+}
+
+function renderCalExtras(){
+  // ── Calendar grid ─────────────────────────────────────────────
+  document.getElementById('ce-title').textContent = `${MONTHS[ceMonth]} ${ceYear}`;
+  const grid = document.getElementById('ce-cal-grid');
+  const firstDayJs = new Date(ceYear, ceMonth, 1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
+  const daysInMonth = new Date(ceYear, ceMonth+1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Build a map: dateStr → list of extras that overlap that date
+  const byDate = {};
+  _extrasBookings.forEach(b=>{
+    if(!b.start_date) return;
+    const start = new Date(b.start_date+'T00:00:00');
+    const end   = b.end_date ? new Date(b.end_date+'T00:00:00') : start;
+    for(let dt=new Date(start); dt<=end; dt.setDate(dt.getDate()+1)){
+      const y=dt.getFullYear(), m=dt.getMonth(), d=dt.getDate();
+      if(y===ceYear && m===ceMonth){
+        const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        if(!byDate[key]) byDate[key]=[];
+        byDate[key].push(b);
+      }
+    }
+  });
+
+  let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
+  for(let i=0;i<leadDays;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${ceYear}-${String(ceMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt=new Date(ceYear,ceMonth,d);
+    const isToday = dt.getTime()===today.getTime();
+    const bks = byDate[dateStr]||[];
+    const pills = bks.slice(0,3).map(b=>{
+      const col = STATUS_COLORS[b.status]||'#8899bb';
+      const icon = TYPE_ICON[b.item_type]||'📌';
+      const nm = b.customer_name?.split(' ')[0]||'?';
+      return `<div class="cal-pill" style="background:${col}22;color:${col};border-left:2px solid ${col}"
+        onclick="event.stopPropagation();openExtrasBookingModal(${b.id})">
+        <div class="cal-pill-name">${icon} ${nm}</div>
+        <div class="cal-pill-sub">${b.item_name?.split(' ').slice(0,2).join(' ')}</div>
+      </div>`;
+    }).join('');
+    const more = bks.length>3?`<div style="font-size:.6rem;color:var(--muted)">+${bks.length-3} más</div>`:'';
+    html+=`<div class="cal-day${isToday?' today':''}" onclick="openExtrasBookingModal(null,'${dateStr}')">
+      <div class="cal-day-num">${d}${bks.length?` <span style="color:var(--gold);font-size:.6rem">(${bks.length})</span>`:''}</div>
+      ${pills}${more}
+    </div>`;
+  }
+  grid.innerHTML = html;
+
+  // ── List view below calendar ───────────────────────────────────
+  const el = document.getElementById('cal-extras-list');
+  // Show current month's bookings in the list
+  const monthBks = _extrasBookings.filter(b=>{
+    if(!b.start_date) return false;
+    const [y,m] = b.start_date.split('-').map(Number);
+    return y===ceYear && m===ceMonth+1;
+  });
+
+  if(!_extrasBookings.length){
+    el.innerHTML='<p style="color:var(--muted);text-align:center;margin-top:1rem">No hay reservas de extras aún. Haz click en "+ Nueva Reserva".</p>';
+    return;
+  }
+  if(!monthBks.length){
+    el.innerHTML='<p style="color:var(--muted);text-align:center;margin-top:.5rem;font-size:.83rem">Sin reservas este mes.</p>';
+    return;
+  }
+
+  el.innerHTML = monthBks.map(b=>`
+    <div style="background:var(--card);border:1px solid var(--border);border-left:4px solid ${STATUS_COLORS[b.status]||'var(--border)'};border-radius:10px;padding:.85rem;display:flex;align-items:flex-start;gap:.75rem">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:.92rem">${TYPE_ICON[b.item_type]||'📌'} ${b.item_name}</div>
+        <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${b.customer_name}${b.customer_phone?' · '+b.customer_phone:''} · ${b.num_people}p</div>
+        <div style="font-size:.8rem">📅 ${b.start_date}${b.end_date&&b.end_date!==b.start_date?' → '+b.end_date:''}</div>
+        ${b.total_price?`<div style="font-size:.8rem;color:var(--gold)">Total: $${Number(b.total_price).toLocaleString('es-CL')} · Depósito: $${Number(b.deposit_paid).toLocaleString('es-CL')}</div>`:''}
+        ${b.notes?`<div style="font-size:.75rem;color:var(--muted);margin-top:.25rem">${b.notes}</div>`:''}
+        <span class="status-badge" style="margin-top:.3rem;background:${STATUS_COLORS[b.status]||'#888'}22;color:${STATUS_COLORS[b.status]||'#888'}">${b.status}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.3rem;flex-shrink:0">
+        <button class="sync-btn" style="font-size:.75rem;padding:.3rem .6rem" onclick="openExtrasBookingModal(${b.id})">Editar</button>
+        <button class="sync-btn" style="font-size:.75rem;padding:.3rem .6rem;background:#ff444422;color:#ff4444" onclick="deleteExtrasBooking(${b.id})">Borrar</button>
+      </div>
+    </div>`).join('');
+}
+
+function openExtrasBookingModal(id, prefillDate){
+  const b = id ? _extrasBookings.find(x=>x.id===id) : null;
+  document.getElementById('eb-modal-title').textContent = b ? 'Editar Reserva Extra' : 'Nueva Reserva Extra';
+  document.getElementById('eb-id').value = b ? b.id : '';
+  document.getElementById('eb-name').value = b ? b.customer_name : '';
+  document.getElementById('eb-phone').value = b ? (b.customer_phone||'') : '';
+  document.getElementById('eb-type').value = b ? b.item_type : 'experience';
+  document.getElementById('eb-item-name').value = b ? b.item_name : '';
+  document.getElementById('eb-slug').value = b ? b.item_slug : '';
+  document.getElementById('eb-start').value = b ? b.start_date : (prefillDate||'');
+  document.getElementById('eb-end').value = b ? (b.end_date||'') : (prefillDate||'');
+  document.getElementById('eb-people').value = b ? b.num_people : 2;
+  document.getElementById('eb-total').value = b ? b.total_price : 0;
+  document.getElementById('eb-deposit').value = b ? b.deposit_paid : 0;
+  document.getElementById('eb-status').value = b ? b.status : 'pendiente';
+  document.getElementById('eb-notes').value = b ? (b.notes||'') : '';
+  document.getElementById('eb-modal').style.display='';
+}
+function closeEbModal(){ document.getElementById('eb-modal').style.display='none'; }
+
+async function saveExtrasBooking(){
+  const id = document.getElementById('eb-id').value;
+  const body = {
+    customer_name: document.getElementById('eb-name').value.trim(),
+    customer_phone: document.getElementById('eb-phone').value.trim()||null,
+    item_type: document.getElementById('eb-type').value,
+    item_name: document.getElementById('eb-item-name').value.trim(),
+    item_slug: document.getElementById('eb-slug').value.trim()||'custom',
+    start_date: document.getElementById('eb-start').value,
+    end_date: document.getElementById('eb-end').value||null,
+    num_people: +document.getElementById('eb-people').value||1,
+    total_price: +document.getElementById('eb-total').value||0,
+    deposit_paid: +document.getElementById('eb-deposit').value||0,
+    status: document.getElementById('eb-status').value,
+    notes: document.getElementById('eb-notes').value.trim()||null,
+  };
+  if(!body.customer_name||!body.item_name||!body.start_date){ showToast('Cliente, item y fecha inicio son obligatorios'); return; }
+  try{
+    const url = id ? `/api/admin/extras-bookings/${id}` : '/api/admin/extras-bookings';
+    const method = id ? 'PUT' : 'POST';
+    await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+    closeEbModal(); await loadCalExtras(); showToast('Reserva guardada ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function deleteExtrasBooking(id){
+  if(!confirm('¿Eliminar esta reserva?')) return;
+  await fetch(`/api/admin/extras-bookings/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
+  await loadCalExtras(); showToast('Eliminada');
+}
+</script>
+</body>
+</html>

@@ -1,7 +1,10 @@
 """
 WhatsApp webhook handler
 """
+import asyncio
 import logging
+import os
+from datetime import datetime
 from typing import Dict, Any, Optional
 
 from app.whatsapp.client import whatsapp_client
@@ -9,6 +12,56 @@ from app.db.queries import save_conversation
 from app.db.leads import increment_unread_count
 
 logger = logging.getLogger(__name__)
+
+# ── Menu follow-up: send nudge if user doesn't reply within FOLLOWUP_DELAY_S ──
+FOLLOWUP_DELAY_S = 120  # 2 minutes
+
+_pending_followups: dict[str, asyncio.Task] = {}
+
+
+async def _menu_followup_task(phone_number: str, contact_name: str) -> None:
+    """Wait FOLLOWUP_DELAY_S then send a friendly nudge if still pending."""
+    try:
+        await asyncio.sleep(FOLLOWUP_DELAY_S)
+        logger.info(f"⏰ Sending menu follow-up to {phone_number}")
+        msg1 = "¿Todo bien? 😊"
+        msg2 = "¿Quieres que te ayude con algo? 🙌"
+        await whatsapp_client.send_text_message(phone_number, msg1)
+        await asyncio.sleep(1.5)
+        await whatsapp_client.send_text_message(phone_number, msg2)
+        # Persist both messages
+        for msg in (msg1, msg2):
+            try:
+                await save_conversation(
+                    phone_number=phone_number,
+                    customer_name=contact_name,
+                    message_text="",
+                    response_text=msg,
+                    message_type="text",
+                    direction="outgoing",
+                )
+            except Exception:
+                pass
+    except asyncio.CancelledError:
+        logger.debug(f"Follow-up cancelled for {phone_number} (user replied)")
+    except Exception as e:
+        logger.error(f"Error in menu follow-up for {phone_number}: {e}")
+    finally:
+        _pending_followups.pop(phone_number, None)
+
+
+def _cancel_followup(phone_number: str) -> None:
+    """Cancel any pending follow-up for this user (they replied)."""
+    task = _pending_followups.pop(phone_number, None)
+    if task and not task.done():
+        task.cancel()
+
+
+def _schedule_followup(phone_number: str, contact_name: str) -> None:
+    """Schedule a menu follow-up, replacing any existing one."""
+    _cancel_followup(phone_number)
+    task = asyncio.create_task(_menu_followup_task(phone_number, contact_name))
+    _pending_followups[phone_number] = task
 
 
 def verify_webhook(mode: Optional[str], token: Optional[str], expected_token: str) -> bool:
@@ -136,6 +189,9 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     logger.warning(f"Could not save conversation: {e}")
                 return  # Exit early, no bot response
             
+            # Cancel any pending follow-up — user is replying
+            _cancel_followup(from_number)
+
             # Process the message with conversation manager
             try:
                 response = await conversation_manager.process_message(
@@ -150,7 +206,13 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 traceback.print_exc()
                 # Send error message to user
                 response = "🥬 ¡Ahoy, grumete! ⚓ Disculpa, estoy teniendo problemas técnicos. ¿Podrías intentar de nuevo en un momento?"
-            
+
+            # Check if the bot just sent the welcome menu → schedule a follow-up
+            _conv = conversation_manager.conversations.get(from_number, {})
+            if _conv.get("metadata", {}).pop("schedule_followup", False):
+                _schedule_followup(from_number, contact_name)
+                logger.info(f"⏰ Follow-up scheduled for {from_number} in {FOLLOWUP_DELAY_S}s")
+
             response_text = None
             manual_handover_only = False
             
@@ -158,6 +220,170 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             if isinstance(response, dict) and response.get("type") == "manual_override":
                 logger.info(f"Manual handover active for {from_number}; skipping bot reply")
                 manual_handover_only = True
+            elif isinstance(response, dict) and response.get("type") == "accommodations_pdf":
+                # Send accommodations images instead of PDF
+                logger.info("Sending accommodations response with images")
+                
+                # First send the text introduction
+                await whatsapp_client.send_text_message(from_number, response["text"])
+                
+                # Then send all images from alojamientos folder
+                from app.utils.media_handler import get_alojamientos_images
+                image_paths = get_alojamientos_images()
+                
+                if image_paths:
+                    for idx, image_path in enumerate(image_paths, 1):
+                        try:
+                            logger.info(f"Uploading alojamiento image {idx}/{len(image_paths)}: {image_path}")
+                            media_id = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                            
+                            if media_id:
+                                # Only add caption to the first image
+                                caption = "📄 Información completa de alojamientos" if idx == 1 else None
+                                await whatsapp_client.send_image_message(
+                                    to=from_number,
+                                    media_id=media_id,
+                                    caption=caption
+                                )
+                                logger.info(f"✅ Alojamiento image {idx} sent successfully")
+                            else:
+                                logger.error(f"❌ Could not upload alojamiento image {idx}")
+                        except Exception as e:
+                            logger.error(f"❌ Error sending alojamiento image {idx}: {e}")
+                else:
+                    logger.warning("❌ No alojamiento images found")
+                    await whatsapp_client.send_text_message(
+                        from_number,
+                        "⚠️ Lo siento, las imágenes no están disponibles en este momento. Por favor escribe 'alojamiento' y te envío la información por texto."
+                    )
+                
+                # Store text response for database
+                response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "experiences_pdf":
+                logger.info("Sending experiences response (PDF opcional + imágenes)")
+                
+                await whatsapp_client.send_text_message(from_number, response["text"])
+                
+                from app.utils.media_handler import (
+                    get_experiences_delivery_items,
+                    get_experiences_pdf_path,
+                    guess_image_mime,
+                )
+                
+                pdf_path = get_experiences_pdf_path()
+                if pdf_path:
+                    try:
+                        media_id_pdf = await whatsapp_client.upload_media(pdf_path, mime_type="application/pdf")
+                        if media_id_pdf:
+                            await whatsapp_client.send_document_message(
+                                to=from_number,
+                                media_id=media_id_pdf,
+                                filename="Experiencias_Pucon_HotBoat.pdf",
+                                caption="📄 Resumen PDF — Rafting, Cabalgata y Navegación",
+                            )
+                            logger.info("✅ Experiences PDF sent")
+                    except Exception as e:
+                        logger.error(f"❌ Error sending experiences PDF: {e}")
+                
+                delivery = get_experiences_delivery_items()
+                if delivery:
+                    for idx, (image_path, caption) in enumerate(delivery, 1):
+                        try:
+                            mime = guess_image_mime(image_path)
+                            logger.info(f"Uploading experience image {idx}/{len(delivery)}: {image_path} ({mime})")
+                            media_id = await whatsapp_client.upload_media(image_path, mime_type=mime)
+                            if media_id:
+                                await whatsapp_client.send_image_message(
+                                    to=from_number,
+                                    media_id=media_id,
+                                    caption=caption,
+                                )
+                                logger.info(f"✅ Experience image {idx} sent")
+                            else:
+                                logger.error(f"❌ Could not upload experience image {idx}")
+                        except Exception as e:
+                            logger.error(f"❌ Error sending experience image {idx}: {e}")
+                elif not pdf_path:
+                    logger.warning("❌ No experience images or PDF")
+                    await whatsapp_client.send_text_message(
+                        from_number,
+                        "⚠️ Lo siento, las imágenes no están disponibles en este momento. Por favor escribe 'experiencias' y te envío la información por texto."
+                    )
+                
+                response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "package_pdf":
+                # Send package images (one or more per pack)
+                logger.info(f"Sending package images: {response.get('pdf_name')}")
+                
+                # First send the text introduction
+                await whatsapp_client.send_text_message(from_number, response["text"])
+                
+                # Then send all images from the pack folder
+                from app.utils.media_handler import get_pack_images
+                # Convert image name to folder name (e.g., "pack_romantico.jpg" -> "pack_romantico")
+                image_name = response.get("pdf_name", "pack_romantico.jpg")
+                pack_name = image_name.replace(".jpg", "").replace(".pdf", "")
+                image_paths = get_pack_images(pack_name)
+                
+                if image_paths:
+                    for idx, image_path in enumerate(image_paths, 1):
+                        try:
+                            logger.info(f"Uploading pack image {idx}/{len(image_paths)}: {image_path}")
+                            media_id = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                            
+                            if media_id:
+                                # Only add caption to the first image
+                                caption = "📦 Información completa del pack" if idx == 1 else None
+                                await whatsapp_client.send_image_message(
+                                    to=from_number,
+                                    media_id=media_id,
+                                    caption=caption
+                                )
+                                logger.info(f"✅ Pack image {idx} sent successfully")
+                            else:
+                                logger.error(f"❌ Could not upload pack image {idx}")
+                        except Exception as e:
+                            logger.error(f"❌ Error sending pack image {idx}: {e}")
+                else:
+                    logger.warning(f"❌ No pack images found for: {pack_name}")
+                    await whatsapp_client.send_text_message(
+                        from_number,
+                        "⚠️ Lo siento, las imágenes no están disponibles en este momento. El Capitán Tomás te contactará con la información."
+                    )
+                
+                # Store text response for database
+                response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "image_with_text":
+                # Send single image with text (for packs summary)
+                logger.info("Sending image with text response")
+                
+                image_path = response.get("image_path")
+                text = response.get("text")
+                caption = response.get("caption")
+                
+                if image_path and os.path.exists(image_path):
+                    try:
+                        # Upload and send image
+                        logger.info(f"Uploading image: {image_path}")
+                        media_id = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                        
+                        if media_id:
+                            await whatsapp_client.send_image_message(
+                                to=from_number,
+                                media_id=media_id,
+                                caption=caption
+                            )
+                            logger.info("✅ Image sent successfully")
+                        else:
+                            logger.error("❌ Could not upload image")
+                    except Exception as e:
+                        logger.error(f"❌ Error sending image: {e}")
+                
+                # Then send the text
+                await whatsapp_client.send_text_message(from_number, text)
+                
+                # Store text response for database
+                response_text = text
             elif isinstance(response, dict) and response.get("type") == "accommodations":
                 # Send accommodations with images
                 logger.info("Sending accommodations response with images")
@@ -220,6 +446,29 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 
                 # Store text response for database
                 response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "sequence":
+                # Send each message separately with a delay, saving each one to DB individually
+                import asyncio
+                messages = response.get("messages", [])
+                delay = response.get("delay", 1.5)
+                for i, msg in enumerate(messages):
+                    if i > 0:
+                        await asyncio.sleep(delay)
+                    await whatsapp_client.send_text_message(from_number, msg)
+                    try:
+                        await save_conversation(
+                            phone_number=from_number,
+                            customer_name=contact_name,
+                            message_text=text_body if i == 0 else "",
+                            response_text=msg,
+                            message_type="text",
+                            message_id=message_id if i == 0 else None,
+                            direction="incoming"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not save sequence message {i}: {e}")
+                await increment_unread_count(from_number)
+                response_text = None  # Already saved above, skip the default save block
             elif response:
                 # Regular text response
                 await whatsapp_client.send_text_message(from_number, response)
@@ -251,6 +500,18 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             
             logger.info(f"🔘 Interactive message: button={button_reply}, list={list_reply}")
             
+            # Send push for interactive (button/list) responses
+            reply_text = (button_reply.get("title") or list_reply.get("title") or "Respuesta interactiva")
+            try:
+                from app.notifications import push_notifier
+                await push_notifier.send_new_message_notification(
+                    contact_name=contact_name,
+                    phone_number=from_number,
+                    message_preview=reply_text
+                )
+            except Exception as push_error:
+                logger.warning(f"Could not send push for interactive: {push_error}")
+            
             # TODO: Handle interactive responses
             await whatsapp_client.send_text_message(
                 from_number,
@@ -258,6 +519,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             )
         
         elif message_type == "image":
+            _cancel_followup(from_number)
             image_obj = message.get("image", {}) or {}
             caption = (image_obj.get("caption") or "").strip()
             media_id = image_obj.get("id")
@@ -292,6 +554,18 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 display_url = media_url
             
             text_body = caption if caption else "[Imagen sin texto]"
+            
+            # Send push notification for incoming images (like text messages)
+            try:
+                from app.notifications import push_notifier
+                preview = caption[:80] if caption else "📷 Imagen"
+                await push_notifier.send_new_message_notification(
+                    contact_name=contact_name,
+                    phone_number=from_number,
+                    message_preview=preview
+                )
+            except Exception as push_error:
+                logger.warning(f"Could not send push notification for image: {push_error}")
             
             # ALWAYS send email notification for incoming images (even if bot is disabled)
             try:
@@ -347,6 +621,32 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             if isinstance(response, dict) and response.get("type") == "manual_override":
                 logger.info(f"Manual handover active for {from_number}; skipping bot reply (image)")
                 manual_handover_only = True
+            elif isinstance(response, dict) and response.get("type") == "accommodations_pdf":
+                # Send accommodations PDF (triggered by image message)
+                logger.info("Sending accommodations response with PDF (triggered by image message)")
+                
+                await whatsapp_client.send_text_message(from_number, response["text"])
+                
+                from app.utils.media_handler import get_accommodations_pdf_path
+                pdf_path = get_accommodations_pdf_path()
+                
+                if pdf_path:
+                    try:
+                        logger.info(f"Uploading PDF from: {pdf_path}")
+                        media_id = await whatsapp_client.upload_media(pdf_path, mime_type="application/pdf")
+                        
+                        if media_id:
+                            await whatsapp_client.send_document_message(
+                                to=from_number,
+                                media_id=media_id,
+                                filename="Alojamientos_Pucon_HotBoat.pdf",
+                                caption="📄 Información completa de alojamientos"
+                            )
+                            logger.info("✅ PDF sent successfully")
+                    except Exception as e:
+                        logger.error(f"❌ Error sending PDF: {e}")
+                
+                response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "accommodations":
                 logger.info("Sending accommodations response with images (triggered by image message)")
                 
@@ -404,6 +704,27 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         await asyncio.sleep(0.5)
                 
                 response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "sequence":
+                messages = response.get("messages", [])
+                delay = response.get("delay", 1.5)
+                for i, msg in enumerate(messages):
+                    if i > 0:
+                        await asyncio.sleep(delay)
+                    await whatsapp_client.send_text_message(from_number, msg)
+                    try:
+                        await save_conversation(
+                            phone_number=from_number,
+                            customer_name=contact_name,
+                            message_text=text_body if i == 0 else "",
+                            response_text=msg,
+                            message_type="image" if i == 0 else "text",
+                            message_id=message_id if i == 0 else None,
+                            direction="incoming"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not save sequence message {i}: {e}")
+                await increment_unread_count(from_number)
+                response_text = None
             elif response:
                 await whatsapp_client.send_text_message(from_number, response)
                 response_text = response
@@ -428,6 +749,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     logger.warning(f"Could not save image conversation: {e}")
         
         elif message_type == "audio":
+            _cancel_followup(from_number)
             audio_obj = message.get("audio", {}) or {}
             media_id = audio_obj.get("id")
             mime_type = audio_obj.get("mime_type", "audio/ogg")
@@ -472,6 +794,17 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 display_url = media_url
             
             text_body = "[Audio recibido]"
+            
+            # Send push notification for incoming audio (like text messages)
+            try:
+                from app.notifications import push_notifier
+                await push_notifier.send_new_message_notification(
+                    contact_name=contact_name,
+                    phone_number=from_number,
+                    message_preview="🎤 Audio"
+                )
+            except Exception as push_error:
+                logger.warning(f"Could not send push notification for audio: {push_error}")
             
             # ALWAYS send email notification for incoming audios (even if bot is disabled)
             try:
@@ -529,6 +862,32 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             if isinstance(response, dict) and response.get("type") == "manual_override":
                 logger.info(f"Manual handover active for {from_number}; skipping bot reply (audio)")
                 manual_handover_only = True
+            elif isinstance(response, dict) and response.get("type") == "accommodations_pdf":
+                # Send accommodations PDF (triggered by audio message)
+                logger.info("Sending accommodations response with PDF (triggered by audio message)")
+                
+                await whatsapp_client.send_text_message(from_number, response["text"])
+                
+                from app.utils.media_handler import get_accommodations_pdf_path
+                pdf_path = get_accommodations_pdf_path()
+                
+                if pdf_path:
+                    try:
+                        logger.info(f"Uploading PDF from: {pdf_path}")
+                        media_id = await whatsapp_client.upload_media(pdf_path, mime_type="application/pdf")
+                        
+                        if media_id:
+                            await whatsapp_client.send_document_message(
+                                to=from_number,
+                                media_id=media_id,
+                                filename="Alojamientos_Pucon_HotBoat.pdf",
+                                caption="📄 Información completa de alojamientos"
+                            )
+                            logger.info("✅ PDF sent successfully")
+                    except Exception as e:
+                        logger.error(f"❌ Error sending PDF: {e}")
+                
+                response_text = response["text"]
             elif isinstance(response, dict) and response.get("type") == "accommodations":
                 logger.info("Sending accommodations response with images (triggered by audio message)")
                 
@@ -581,6 +940,27 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         await asyncio.sleep(0.5)
                 
                 response_text = response["text"]
+            elif isinstance(response, dict) and response.get("type") == "sequence":
+                messages = response.get("messages", [])
+                delay = response.get("delay", 1.5)
+                for i, msg in enumerate(messages):
+                    if i > 0:
+                        await asyncio.sleep(delay)
+                    await whatsapp_client.send_text_message(from_number, msg)
+                    try:
+                        await save_conversation(
+                            phone_number=from_number,
+                            customer_name=contact_name,
+                            message_text=text_body if i == 0 else "",
+                            response_text=msg,
+                            message_type="audio" if i == 0 else "text",
+                            message_id=message_id if i == 0 else None,
+                            direction="incoming"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not save sequence message {i}: {e}")
+                await increment_unread_count(from_number)
+                response_text = None
             elif response:
                 await whatsapp_client.send_text_message(from_number, response)
                 response_text = response

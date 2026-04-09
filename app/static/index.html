@@ -47,7 +47,13 @@
                 </div>
                 
                 <div class="search-box">
-                    <input type="text" id="searchConversations" placeholder="Search conversations..." onkeyup="filterConversations()">
+                    <input type="text" id="searchConversations" placeholder="🔍 Buscar por nombre, número o mensaje..." oninput="debouncedFilterConversations()">
+                    <div class="search-options">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;" title="Marca esta casilla y escribe una palabra para buscar en todos los mensajes">
+                            <input type="checkbox" id="searchInMessages" onchange="debouncedFilterConversations()">
+                            <span><strong>✓ Buscar en todo</strong> (mensajes, nombre, notas del lead)</span>
+                        </label>
+                    </div>
                 </div>
 
                 <div class="conversations-list" id="conversationsList">
@@ -153,6 +159,9 @@
                             <div class="quick-reply-section">
                                 <label class="quick-reply-label">Respuesta rápida:</label>
                                 <div class="quick-reply-buttons">
+                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(0)" title="Saludo de Tomás (secuencia 4 mensajes)">
+                                        0️⃣
+                                    </button>
                                     <button type="button" class="quick-reply-btn" onclick="sendQuickReply(1)" title="Disponibilidad y horarios">
                                         1️⃣
                                     </button>
@@ -167,6 +176,12 @@
                                     </button>
                                     <button type="button" class="quick-reply-btn" onclick="sendQuickReply(5)" title="Ubicación y reseñas">
                                         5️⃣
+                                    </button>
+                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(8)" title="Packs Completos (menú 7→1)" style="font-size:.75rem;font-weight:700;letter-spacing:-.5px">
+                                        7.1 📦
+                                    </button>
+                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(9)" title="Solo Alojamientos (menú 7→2)" style="font-size:.75rem;font-weight:700;letter-spacing:-.5px">
+                                        7.2 🏠
                                     </button>
                                 </div>
                             </div>

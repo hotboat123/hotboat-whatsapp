@@ -52,6 +52,8 @@ class PushNotifier:
                 logger.warning("No push tokens registered. Skipping push notification.")
                 return False
             
+            logger.info(f"📤 Sending push to {len(tokens)} device(s): {title[:50]}...")
+            
             # Prepare notification messages
             messages = []
             for token in tokens:
@@ -249,7 +251,7 @@ class PushNotifier:
                 with conn.cursor() as cur:
                     cur.execute("""
                         SELECT token FROM push_tokens 
-                        WHERE last_used_at > NOW() - INTERVAL '30 days'
+                        WHERE last_used_at > NOW() - INTERVAL '90 days'
                         ORDER BY last_used_at DESC
                     """)
                     

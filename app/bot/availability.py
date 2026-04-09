@@ -158,11 +158,12 @@ class AvailabilityChecker:
         end_date = normalized.replace(hour=23, minute=59, second=59, microsecond=999999)
         return await self.get_available_slots(start_date, end_date)
     
-    def _generate_time_slots_for_date(self, date: datetime) -> List[datetime]:
+    def _generate_time_slots_for_date(self, date: datetime, override_hours: list = None) -> List[datetime]:
         """Generate all possible time slots for a given date"""
         slots = []
         date_obj = date.date() if isinstance(date, datetime) else date
-        for hour in self.config.operating_hours:
+        hours = override_hours if override_hours is not None else self.config.operating_hours
+        for hour in hours:
             dt_naive = datetime.combine(date_obj, time(hour, 0))
             slot = CHILE_TZ.localize(dt_naive)
             slots.append(slot)
@@ -217,14 +218,66 @@ class AvailabilityChecker:
                         'date': dt.date()
                     })
             
+            # Load vacation days and settings once
+            try:
+                from app.booking.operator_settings import (
+                    get_vacation_days, is_urgency_mode, apply_urgency_filter,
+                    get_operating_hours_as_ints
+                )
+                vacation_dates = {
+                    v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
+                }
+                urgency = is_urgency_mode()
+                db_operating_hours = get_operating_hours_as_ints()
+            except Exception as se:
+                logger.warning(f"Could not load operator settings: {se}")
+                vacation_dates = set()
+                urgency = False
+                db_operating_hours = None
+
             # Generate all possible slots and check availability
             available_slots = []
+            # For urgency: track booked times per day from booknetic
+            booked_times_by_day: dict = {}
+            if urgency:
+                for slot in booked_slots:
+                    if slot.get("starts_at"):
+                        try:
+                            dt = slot["starts_at"]
+                            if isinstance(dt, str):
+                                dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+                            dk = str(dt.date())
+                            t = dt.strftime("%H:%M")
+                            booked_times_by_day.setdefault(dk, []).append(t)
+                        except Exception:
+                            pass
+
+            # In urgency mode generate a full hourly range so the filter can find
+            # slots at booking ± gap_hours (e.g. 18:00 booked → 15:00 candidate).
+            # Outside urgency, use only the configured operating hours.
+            if urgency and db_operating_hours:
+                from app.booking.operator_settings import get_urgency_config
+                _gap = int(get_urgency_config().get("gap_hours", 3))
+                _min_h = max(8,  min(db_operating_hours) - _gap)
+                _max_h = min(22, max(db_operating_hours) + _gap)
+                hours_to_generate = list(range(_min_h, _max_h + 1))
+            else:
+                hours_to_generate = db_operating_hours
+
+            # Group raw available slots by date (before urgency filter)
+            by_date: dict = {}
             current_date = start_date.date()
             end_date_only = end_date.date()
             
             while current_date <= end_date_only:
+                # Skip vacation days
+                if str(current_date) in vacation_dates:
+                    current_date += timedelta(days=1)
+                    continue
+
                 date_slots = self._generate_time_slots_for_date(
-                    datetime.combine(current_date, time(0, 0))
+                    datetime.combine(current_date, time(0, 0)),
+                    override_hours=hours_to_generate
                 )
                 
                 for slot_datetime in date_slots:
@@ -237,38 +290,42 @@ class AvailabilityChecker:
                     slot_end = slot_datetime + timedelta(hours=self.config.duration_hours)
                     slot_end_with_buffer = slot_end + timedelta(hours=self.config.buffer_hours)
                     
-                    # Check if slot overlaps with any booked appointment
+                    # Check if slot overlaps with any booked appointment (in-memory, fast)
+                    # get_booked_slots already loaded both booknetic + hotboat_appointments,
+                    # so no need for a second per-slot DB query (check_slot_availability).
                     overlaps = False
                     for booked_range in booked_ranges:
-                        # Only check appointments on the same date
                         if booked_range['date'] != slot_datetime.date():
                             continue
-                        
-                        # Check for overlap: slot overlaps if it starts before appointment ends
-                        # AND slot ends after appointment starts
                         if (slot_start_with_buffer < booked_range['end'] and 
                             slot_end_with_buffer > booked_range['start']):
                             overlaps = True
                             break
                     
                     if not overlaps:
-                        # Double check with database query for accuracy
-                        is_available = await check_slot_availability(
-                            slot_datetime,
-                            duration_hours=self.config.duration_hours,
-                            buffer_hours=self.config.buffer_hours
-                        )
-                        
-                        if is_available:
-                            available_slots.append({
-                                'datetime': slot_datetime,
-                                'date': slot_datetime.date(),
-                                'time': slot_datetime.strftime('%H:%M'),
-                                'date_str': slot_datetime.strftime('%d/%m/%Y'),
-                                'weekday': slot_datetime.strftime('%A')
-                            })
+                        slot_info = {
+                            'datetime': slot_datetime,
+                            'date': slot_datetime.date(),
+                            'time': slot_datetime.strftime('%H:%M'),
+                            'date_str': slot_datetime.strftime('%d/%m/%Y'),
+                            'weekday': slot_datetime.strftime('%A')
+                        }
+                        dk = str(slot_datetime.date())
+                        by_date.setdefault(dk, []).append(slot_info)
                 
                 current_date += timedelta(days=1)
+
+            # Apply urgency filter per day if enabled
+            if urgency:
+                for dk, day_slots in by_date.items():
+                    times = [s["time"] for s in day_slots]
+                    booked = booked_times_by_day.get(dk, [])
+                    allowed = set(apply_urgency_filter(times, booked))
+                    by_date[dk] = [s for s in day_slots if s["time"] in allowed]
+
+            # Flatten back to list
+            available_slots = [s for day_slots in by_date.values() for s in day_slots]
+            available_slots.sort(key=lambda s: s["datetime"])
             
             return available_slots
             

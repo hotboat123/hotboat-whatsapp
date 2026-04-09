@@ -69,11 +69,13 @@ Puedes preguntarme por:
 
 5️⃣ *Ubicación y Reseñas HotBoat*
 
-6️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*
+6️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*
 
-7️⃣ *Alojamientos y Packs Pucón*
+7️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*
 
-Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *8️⃣* 👨‍✈️🌿
+8️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*
+
+Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *9️⃣* 👨‍✈️🌿
 
 ¿Listo para zarpar, grumete? ⛵
 
@@ -102,11 +104,13 @@ You can ask me about:
 
 5️⃣ *HotBoat Location and reviews*
 
-6️⃣ *Other Pucón Experiences (Rafting, horseback riding, sailing)*
+6️⃣ *Pucón Accommodations (Domes · Cabins · Hostel)*
 
-7️⃣ *Pucón Accommodations and Packages*
+7️⃣ *Other Pucón Experiences (Rafting, horseback riding, sailing)*
 
-If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *8️⃣* 👨‍✈️🌿
+8️⃣ *Complete Packages Pucón (Romantic · Family · Friends · Build Your Pack)*
+
+If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *9️⃣* 👨‍✈️🌿
 
 Ready to set sail, sailor? ⛵
 
@@ -135,11 +139,13 @@ Você pode me perguntar sobre:
 
 5️⃣ *Localização e avaliações HotBoat*
 
-6️⃣ *Outras Experiências Pucón (Rafting, cavalgadas, vela)*
+6️⃣ *Hospedagens Pucón (Domos · Cabanas · Hostel)*
 
-7️⃣ *Hospedagens e Pacotes Pucón*
+7️⃣ *Outras Experiências Pucón (Rafting, cavalgadas, vela)*
 
-Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *8️⃣* 👨‍✈️🌿
+8️⃣ *Pacotes Completos Pucón (Romântico · Familiar · Amigos · Monte seu Pacote)*
+
+Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *9️⃣* 👨‍✈️🌿
 
 Pronto para zarpar, marujo? ⛵
 
@@ -366,7 +372,7 @@ Digite o idioma que deseja usar:
 🎥 Video cinematográfico de tu aventura disponible
 🍹 ¡Disfruta bebestibles a bordo del HotBoat! Se mantendrán fríos en el cooler.
 🧺 Opción de tablas de picoteo a bordo
-🧼 Se limpia antes de cada uso, siempre impecable
+🧼 Se limpia y se cambia el agua antes de cada uso, siempre impecable
 
 ¿Te gustaría reservar tu experiencia?""",
         
@@ -380,7 +386,7 @@ Digite o idioma que deseja usar:
 🎥 Cinematic video of your adventure available
 🍹 Enjoy drinks on board the HotBoat! They'll stay cold in the cooler.
 🧺 Charcuterie board option on board
-🧼 Cleaned before each use, always immaculate
+🧼 Cleaned and the water is changed before each use, always immaculate
 
 Would you like to book your experience?""",
         
@@ -394,7 +400,7 @@ Would you like to book your experience?""",
 🎥 Vídeo cinematográfico da sua aventura disponível
 🍹 Desfrute de bebidas a bordo do HotBoat! Ficarão geladas no cooler.
 🧺 Opção de tábua de frios a bordo
-🧼 Limpo antes de cada uso, sempre impecável
+🧼 Limpo e a água é trocada antes de cada uso, sempre impecável
 
 Gostaria de reservar sua experiência?"""
     },
@@ -900,65 +906,544 @@ Need more information?""",
 Precisa de mais informações?"""
     },
     
-    # ===== EXPERIENCES MENU =====
+    # ===== ACCOMMODATION MESSAGES =====
     
-    "experiences_menu": {
-        "es": """🚣🐴⛵ *Otras Experiencias en Pucón*
+    "accommodations_and_packages_menu": {
+        "es": """📦 *Packs Completos Pucón*
 
-Además del HotBoat, te ofrecemos estas increíbles experiencias en Pucón:
+¡Perfecto grumete! Te ofrezco varias opciones:
 
-🌊 *Rafting*
-Desciende los rápidos del río en una aventura llena de adrenalina
+1️⃣ *Packs Completos* 🎁
+   Experiencias todo incluido con alojamiento y actividades
 
-🐴 *Cabalgatas*
-Explora la naturaleza a caballo por hermosos senderos
+2️⃣ *Arma tu Pack* 🛒
+   Personaliza: elige actividades y agrega alojamiento
 
-⛵ *Velerismo*
-Navega por el lago Villarrica con el viento como motor
+📲 Escribe el número que prefieras (1 o 2)
 
-📲 *¿Te interesa alguna?*
-Escríbeme y te daré más detalles sobre fechas, precios y disponibilidad 🚤
-
-O escribe *"menú"* para volver al menú principal ⚓""",
+💡 *Recuerda:* Escribe *"Menu"* en cualquier momento para volver al *Menú HotBoat* principal 🚤""",
         
-        "en": """🚣🐴⛵ *Other Experiences in Pucón*
+        "en": """📦 *Complete Packages Pucón*
 
-Besides HotBoat, we offer these amazing experiences in Pucón:
+Perfect sailor! I offer you several options:
 
-🌊 *Rafting*
-Descend the river rapids in an adrenaline-filled adventure
+1️⃣ *Complete Packages* 🎁
+   All-inclusive experiences with accommodation and activities
 
-🐴 *Horseback Riding*
-Explore nature on horseback through beautiful trails
+2️⃣ *Build Your Package* 🛒
+   Customize: choose activities and add accommodation
 
-⛵ *Sailing*
-Sail Lake Villarrica with the wind as your motor
+📲 Type the number you prefer (1 or 2)
 
-📲 *Interested in any?*
-Write to me and I'll give you more details about dates, prices and availability 🚤
-
-Or write *"menu"* to return to the main menu ⚓""",
+💡 *Remember:* Type *"Menu"* anytime to return to the main *HotBoat Menu* 🚤""",
         
-        "pt": """🚣🐴⛵ *Outras Experiências em Pucón*
+        "pt": """📦 *Pacotes Completos Pucón*
 
-Além do HotBoat, oferecemos estas experiências incríveis em Pucón:
+Perfeito marinheiro! Ofereço várias opções:
 
-🌊 *Rafting*
-Desça as corredeiras do rio em uma aventura cheia de adrenalina
+1️⃣ *Pacotes Completos* 🎁
+   Experiências tudo incluído com acomodação e atividades
 
-🐴 *Cavalgadas*
-Explore a natureza a cavalo por belas trilhas
+2️⃣ *Monte seu Pacote* 🛒
+   Personalize: escolha atividades e adicione acomodação
 
-⛵ *Vela*
-Navegue pelo lago Villarrica com o vento como motor
+📲 Digite o número que preferir (1 ou 2)
 
-📲 *Interessado em alguma?*
-Escreva-me e darei mais detalhes sobre datas, preços e disponibilidade 🚤
-
-Ou escreva *"menu"* para voltar ao menu principal ⚓"""
+💡 *Lembre-se:* Digite *"Menu"* a qualquer momento para voltar ao *Menu HotBoat* principal 🚤"""
     },
     
-    # ===== ACCOMMODATION MESSAGES =====
+    "accommodations_only_intro": {
+        "es": """🏠 *Alojamientos en Pucón*
+
+Te envío imágenes con toda la información detallada de nuestros alojamientos recomendados ⬇️
+
+📸 Después de revisar las imágenes, respóndeme:
+
+*¿Qué alojamiento te interesa?*
+
+1️⃣ *Open Sky* - Domos románticos con vista a las estrellas 🌌
+2️⃣ *Raíces de Relikura* - Cabañas y hostal junto al río 🌿
+
+Escribe *1* o *2*, o el nombre del alojamiento 👍
+
+💡 *Tip:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """🏠 *Accommodations in Pucón*
+
+I'm sending you images with all the detailed information about our recommended accommodations ⬇️
+
+📸 After reviewing the images, tell me:
+
+*Which accommodation interests you?*
+
+1️⃣ *Open Sky* - Romantic domes with starry views 🌌
+2️⃣ *Raíces de Relikura* - Cabins and hostel by the river 🌿
+
+Type *1* or *2*, or the accommodation name 👍
+
+💡 *Tip:* Type *"Menu"* to return to the *HotBoat Menu* 🚤""",
+        
+        "pt": """🏠 *Acomodações em Pucón*
+
+Estou enviando imagens com todas as informações detalhadas sobre nossas acomodações recomendadas ⬇️
+
+📸 Depois de revisar as imagens, me diga:
+
+*Qual acomodação te interessa?*
+
+1️⃣ *Open Sky* - Domos românticos com vista para as estrelas 🌌
+2️⃣ *Raíces de Relikura* - Cabanas e albergue à beira do rio 🌿
+
+Digite *1* ou *2*, ou o nome da acomodação 👍
+
+💡 *Dica:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    "accommodations_open_sky_rooms": {
+        "es": """⭐ *Open Sky - Domos Románticos*
+
+Perfecto! Tenemos dos opciones de domos transparentes:
+
+1️⃣ *Domo con Tina de Baño* 🛁
+   💰 $100.000 / noche
+   👥 2 personas (máximo 3)
+
+2️⃣ *Domo con Hidromasaje* 💆
+   💰 $120.000 / noche
+   👥 2 personas (máximo 3)
+
+¿Cuál prefieres? Escribe *1* o *2* 🌟""",
+        
+        "en": """⭐ *Open Sky - Romantic Domes*
+
+Perfect! We have two transparent dome options:
+
+1️⃣ *Dome with Bathtub* 🛁
+   💰 $100,000 CLP / night
+   👥 2 people (max 3)
+
+2️⃣ *Dome with Hydromassage* 💆
+   💰 $120,000 CLP / night
+   👥 2 people (max 3)
+
+Which do you prefer? Type *1* or *2* 🌟""",
+        
+        "pt": """⭐ *Open Sky - Domos Românticos*
+
+Perfeito! Temos duas opções de domos transparentes:
+
+1️⃣ *Domo com Banheira* 🛁
+   💰 $100.000 CLP / noite
+   👥 2 pessoas (máximo 3)
+
+2️⃣ *Domo com Hidromassagem* 💆
+   💰 $120.000 CLP / noite
+   👥 2 pessoas (máximo 3)
+
+Qual você prefere? Digite *1* ou *2* 🌟"""
+    },
+    
+    "accommodations_relikura_rooms": {
+        "es": """🌿 *Raíces de Relikura - Junto al Río*
+
+Excelente elección! Tenemos varias opciones:
+
+1️⃣ *Cabaña para 2 personas*
+   💰 $60.000 / noche
+
+2️⃣ *Cabaña para 4 personas*
+   💰 $80.000 / noche
+
+3️⃣ *Cabaña para 6 personas*
+   💰 $100.000 / noche
+
+4️⃣ *Hostal* (por persona)
+   💰 $20.000 / noche
+
+¿Qué opción prefieres? Escribe el número 🏡""",
+        
+        "en": """🌿 *Raíces de Relikura - By the River*
+
+Excellent choice! We have several options:
+
+1️⃣ *Cabin for 2 people*
+   💰 $60,000 CLP / night
+
+2️⃣ *Cabin for 4 people*
+   💰 $80,000 CLP / night
+
+3️⃣ *Cabin for 6 people*
+   💰 $100,000 CLP / night
+
+4️⃣ *Hostel* (per person)
+   💰 $20,000 CLP / night
+
+Which option do you prefer? Type the number 🏡""",
+        
+        "pt": """🌿 *Raíces de Relikura - À Beira do Rio*
+
+Excelente escolha! Temos várias opções:
+
+1️⃣ *Cabana para 2 pessoas*
+   💰 $60.000 CLP / noite
+
+2️⃣ *Cabana para 4 pessoas*
+   💰 $80.000 CLP / noite
+
+3️⃣ *Cabana para 6 pessoas*
+   💰 $100.000 CLP / noite
+
+4️⃣ *Albergue* (por pessoa)
+   💰 $20.000 CLP / noite
+
+Qual opção você prefere? Digite o número 🏡"""
+    },
+    
+    "accommodations_ask_guests": {
+        "es": """👥 *¿Para cuántas personas?*
+
+Por favor indícame el número de huéspedes.
+
+Ejemplo: *2*, *4*, *6*, etc.
+
+📲 Escribe solo el número 👍""",
+        
+        "en": """👥 *For how many people?*
+
+Please tell me the number of guests.
+
+Example: *2*, *4*, *6*, etc.
+
+📲 Just type the number 👍""",
+        
+        "pt": """👥 *Para quantas pessoas?*
+
+Por favor me diga o número de hóspedes.
+
+Exemplo: *2*, *4*, *6*, etc.
+
+📲 Digite apenas o número 👍"""
+    },
+    
+    "accommodations_ask_checkin_date": {
+        "es": """📅 *¿Qué fecha tienes pensada?* (Check-in)
+
+Por favor indícame la fecha de **entrada**.
+
+Ejemplos válidos:
+• "15 de febrero"
+• "25/02/2026"
+• "Febrero 15"
+• "próximo sábado"
+
+📲 Escribe la fecha de entrada 🗓️""",
+        
+        "en": """📅 *What date are you thinking?* (Check-in)
+
+Please tell me your **check-in** date.
+
+Valid examples:
+• "February 15"
+• "02/25/2026"
+• "Feb 15"
+• "next Saturday"
+
+📲 Type the check-in date 🗓️""",
+        
+        "pt": """📅 *Que data você está pensando?* (Check-in)
+
+Por favor me diga a data de **entrada**.
+
+Exemplos válidos:
+• "15 de fevereiro"
+• "25/02/2026"
+• "Fev 15"
+• "próximo sábado"
+
+📲 Digite a data de entrada 🗓️"""
+    },
+    
+    "accommodations_ask_checkout_date": {
+        "es": """📅 *¿En qué fecha te vas?* (Check-out)
+
+Por favor indícame la fecha de **salida**.
+
+Ejemplos válidos:
+• "18 de febrero"
+• "28/02/2026"
+• "Febrero 18"
+• "próximo domingo"
+
+📲 Escribe la fecha de salida 🗓️""",
+        
+        "en": """📅 *What date will you leave?* (Check-out)
+
+Please tell me your **check-out** date.
+
+Valid examples:
+• "February 18"
+• "02/28/2026"
+• "Feb 18"
+• "next Sunday"
+
+📲 Type the check-out date 🗓️""",
+        
+        "pt": """📅 *Em que data você vai embora?* (Check-out)
+
+Por favor me diga a data de **saída**.
+
+Exemplos válidos:
+• "18 de fevereiro"
+• "28/02/2026"
+• "Fev 18"
+• "próximo domingo"
+
+📲 Digite a data de saída 🗓️"""
+    },
+    
+    "accommodations_awaiting_confirmation": {
+        "es": """✅ *Perfecto, grumete!*
+
+He recibido tu solicitud de alojamiento:
+
+📋 *Resumen:*
+{summary}
+
+⏳ Déjame verificar la disponibilidad con el establecimiento y te confirmo lo antes posible.
+
+El *Capitán Tomás* revisará tu solicitud y te contactará para confirmar 👨‍✈️
+
+📲 Te responderemos pronto. ¡Gracias por tu paciencia! ⚓""",
+        
+        "en": """✅ *Perfect, sailor!*
+
+I've received your accommodation request:
+
+📋 *Summary:*
+{summary}
+
+⏳ Let me check availability with the establishment and I'll confirm as soon as possible.
+
+*Captain Tomás* will review your request and contact you to confirm 👨‍✈️
+
+📲 We'll get back to you soon. Thanks for your patience! ⚓""",
+        
+        "pt": """✅ *Perfeito, marujo!*
+
+Recebi sua solicitação de acomodação:
+
+📋 *Resumo:*
+{summary}
+
+⏳ Deixa eu verificar a disponibilidade com o estabelecimento e confirmo o mais rápido possível.
+
+O *Capitão Tomás* revisará sua solicitação e entrará em contato para confirmar 👨‍✈️
+
+📲 Responderemos em breve. Obrigado pela paciência! ⚓"""
+    },
+    
+    "complete_packages_menu": {
+        "es": """🎁 *Packs Completos - Todo Incluido*
+
+Elige tu pack ideal según tu tipo de viaje:
+
+1️⃣ 💕 *Pack Romántico*
+Escapada para 2 con Open Sky, HotBoat y velero
+
+2️⃣ 👨‍👩‍👧‍👦 *Pack Familiar*
+Aventura para 4 con Relikura, HotBoat, rafting y cabalgata
+
+3️⃣ 👥 *Pack Amigos*
+Experiencia grupal para 6 con Relikura, HotBoat y rafting
+
+📸 Te enviaré la imagen con todos los detalles del pack que elijas.
+
+*¿Qué pack prefieres?*
+Escribe *1*, *2*, *3* o el nombre (*Romántico*, *Familiar*, *Amigos*) 🎒
+
+💡 *Tip:* Cada pack tiene versión básica y premium. Te preguntaré después 😉
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """🎁 *Complete Packages - All Inclusive*
+
+Choose your ideal package according to your trip type:
+
+1️⃣ 💕 *Romantic Package*
+Getaway for 2 with Open Sky, HotBoat and sailboat
+
+2️⃣ 👨‍👩‍👧‍👦 *Family Package*
+Adventure for 4 with Relikura, HotBoat, rafting and horseback riding
+
+3️⃣ 👥 *Friends Package*
+Group experience for 6 with Relikura, HotBoat and rafting
+
+📸 I'll send you the image with all the details of your chosen package.
+
+*What package do you prefer?*
+Type *1*, *2*, *3* or the name (*Romantic*, *Family*, *Friends*) 🎒
+
+💡 *Tip:* Each package has basic and premium versions. I'll ask you later 😉
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤""",
+        
+        "pt": """🎁 *Pacotes Completos - Tudo Incluído*
+
+Escolha seu pacote ideal de acordo com seu tipo de viagem:
+
+1️⃣ 💕 *Pacote Romântico*
+Escapada para 2 com Open Sky, HotBoat e veleiro
+
+2️⃣ 👨‍👩‍👧‍👦 *Pacote Familiar*
+Aventura para 4 com Relikura, HotBoat, rafting e cavalgada
+
+3️⃣ 👥 *Pacote Amigos*
+Experiência em grupo para 6 com Relikura, HotBoat e rafting
+
+📸 Enviarei a imagem com todos os detalhes do pacote escolhido.
+
+*Que pacote você prefere?*
+Digite *1*, *2*, *3* ou o nome (*Romântico*, *Familiar*, *Amigos*) 🎒
+
+💡 *Dica:* Cada pacote tem versão básica e premium. Perguntarei depois 😉
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    "build_your_package_intro": {
+        "es": """🛒 *Arma tu Pack Personalizado*
+
+¡Perfecto! Puedes elegir las actividades que quieras y luego agregar alojamiento.
+
+📋 *Actividades Disponibles:*
+
+1️⃣ 🚤 *HotBoat* - Experiencia flotante única
+2️⃣ 🚣 *Rafting* - Adrenalina en el río
+3️⃣ 🌋 *Subida al Volcán* - Trek inolvidable
+4️⃣ 🐴 *Cabalgata* - Naturaleza a caballo
+5️⃣ 🚗 *Arriendo de Vehículo* - Suzuki New Baleno o similar ($50.000/día)
+
+Puedes elegir *varias opciones*. Escribe los números que te interesan separados por comas.
+
+Ejemplo: "1, 2, 4" para HotBoat + Rafting + Cabalgata
+
+O escribe *"Terminar"* cuando estés listo para continuar.
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """🛒 *Build Your Custom Package*
+
+Perfect! You can choose the activities you want and then add accommodation.
+
+📋 *Available Activities:*
+
+1️⃣ 🚤 *HotBoat* - Unique floating experience
+2️⃣ 🚣 *Rafting* - River adrenaline
+3️⃣ 🌋 *Volcano Climb* - Unforgettable trek
+4️⃣ 🐴 *Horseback Riding* - Nature on horseback
+5️⃣ 🚗 *Vehicle Rental* - Suzuki New Baleno or similar ($50,000 CLP/day)
+
+You can choose *multiple options*. Type the numbers you're interested in separated by commas.
+
+Example: "1, 2, 4" for HotBoat + Rafting + Horseback Riding
+
+Or type *"Done"* when you're ready to continue.
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤""",
+        
+        "pt": """🛒 *Monte seu Pacote Personalizado*
+
+Perfeito! Você pode escolher as atividades que quiser e depois adicionar acomodação.
+
+📋 *Atividades Disponíveis:*
+
+1️⃣ 🚤 *HotBoat* - Experiência flutuante única
+2️⃣ 🚣 *Rafting* - Adrenalina no rio
+3️⃣ 🌋 *Subida ao Vulcão* - Trekking inesquecível
+4️⃣ 🐴 *Cavalgada* - Natureza a cavalo
+5️⃣ 🚗 *Aluguel de Veículo* - Suzuki New Baleno ou similar ($50.000 CLP/dia)
+
+Você pode escolher *várias opções*. Digite os números que te interessam separados por vírgulas.
+
+Exemplo: "1, 2, 4" para HotBoat + Rafting + Cavalgada
+
+Ou digite *"Terminar"* quando estiver pronto para continuar.
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    "build_package_ask_accommodation": {
+        "es": """✅ *Actividades Seleccionadas:*
+{activities}
+
+¿Quieres agregar *alojamiento* a tu pack? 🏠
+
+1️⃣ Sí, agregar alojamiento
+2️⃣ No, solo actividades
+
+Escribe *1* o *2* 👍
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """✅ *Selected Activities:*
+{activities}
+
+Do you want to add *accommodation* to your package? 🏠
+
+1️⃣ Yes, add accommodation
+2️⃣ No, only activities
+
+Type *1* or *2* 👍
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤""",
+        
+        "pt": """✅ *Atividades Selecionadas:*
+{activities}
+
+Quer adicionar *acomodação* ao seu pacote? 🏠
+
+1️⃣ Sim, adicionar acomodação
+2️⃣ Não, apenas atividades
+
+Digite *1* ou *2* 👍
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    "build_package_confirmation": {
+        "es": """✅ *Pack Personalizado Recibido*
+
+📋 *Tu Selección:*
+{package_summary}
+
+El *Capitán Tomás* revisará tu solicitud y te contactará para coordinar fechas, disponibilidad y pago 👨‍✈️⚓
+
+📲 Te responderemos pronto para confirmar todo!
+
+💡 *Mientras tanto*, escribe *"Menu"* para explorar más opciones del *Menú HotBoat* 🚤""",
+        
+        "en": """✅ *Custom Package Received*
+
+📋 *Your Selection:*
+{package_summary}
+
+*Captain Tomás* will review your request and contact you to coordinate dates, availability and payment 👨‍✈️⚓
+
+📲 We'll get back to you soon to confirm everything!
+
+💡 *Meanwhile*, type *"Menu"* to explore more *HotBoat Menu* options 🚤""",
+        
+        "pt": """✅ *Pacote Personalizado Recebido*
+
+📋 *Sua Seleção:*
+{package_summary}
+
+O *Capitão Tomás* revisará sua solicitação e entrará em contato para coordenar datas, disponibilidade e pagamento 👨‍✈️⚓
+
+📲 Responderemos em breve para confirmar tudo!
+
+💡 *Enquanto isso*, digite *"Menu"* para explorar mais opções do *Menu HotBoat* 🚤"""
+    },
     
     "accommodations": {
         "es": """🌊🔥 *HotBoat + Alojamiento en Pucón*
@@ -1160,6 +1645,372 @@ Obrigado por escolher HotBoat! 🚤🌊"""
         "es": "⏳ Procesando...",
         "en": "⏳ Processing...",
         "pt": "⏳ Processando..."
+    },
+    
+    # ========== EXPERIENCES FLOW ==========
+    
+    "experiences_menu": {
+        "es": """📋 *Experiencias y Actividades*
+
+¡Explora las mejores aventuras en Pucón! 🏔️
+
+📋 *Experiencias Disponibles:*
+
+1️⃣ 🚣 *Rafting* - Adrenalina en el río
+2️⃣ 🐴 *Cabalgata* - Naturaleza a caballo
+3️⃣ ⛵ *Navegación* - Explora lagos y ríos
+
+*¿Qué experiencia te interesa?*
+
+Escribe el número de tu elección (1, 2 o 3)
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """📋 *Experiences and Activities*
+
+Explore the best adventures in Pucón! 🏔️
+
+📋 *Available Experiences:*
+
+1️⃣ 🚣 *Rafting* - River adrenaline
+2️⃣ 🐴 *Horseback Riding* - Nature on horseback
+3️⃣ ⛵ *Navigation* - Explore lakes and rivers
+
+*Which experience interests you?*
+
+Type the number of your choice (1, 2 or 3)
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """📋 *Experiências e Atividades*
+
+Explore as melhores aventuras em Pucón! 🏔️
+
+📋 *Experiências Disponíveis:*
+
+1️⃣ 🚣 *Rafting* - Adrenalina no rio
+2️⃣ 🐴 *Cavalgada* - Natureza a cavalo
+3️⃣ ⛵ *Navegação* - Explore lagos e rios
+
+*Qual experiência te interessa?*
+
+Digite o número da sua escolha (1, 2 ou 3)
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Rafting Options
+    "rafting_options": {
+        "es": """🚣 *Rafting - Elige tu Nivel*
+
+📍 Vive la adrenalina del río en Pucón
+
+*Opciones Disponibles:*
+
+1️⃣ *Rafting Bajo* - Nivel principiante
+   💰 $30.000 por persona
+   ⏱️ Duración: 2-3 horas
+   🌊 Dificultad: Baja (ideal para familias)
+
+2️⃣ *Rafting Alto* - Nivel avanzado
+   💰 $40.000 por persona
+   ⏱️ Duración: 3-4 horas
+   🌊 Dificultad: Alta (más adrenalina)
+
+*¿Qué nivel prefieres?*
+
+Escribe 1 para Bajo o 2 para Alto
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """🚣 *Rafting - Choose Your Level*
+
+📍 Experience the river adrenaline in Pucón
+
+*Available Options:*
+
+1️⃣ *Low Rafting* - Beginner level
+   💰 $30,000 CLP per person
+   ⏱️ Duration: 2-3 hours
+   🌊 Difficulty: Low (ideal for families)
+
+2️⃣ *High Rafting* - Advanced level
+   💰 $40,000 CLP per person
+   ⏱️ Duration: 3-4 hours
+   🌊 Difficulty: High (more adrenaline)
+
+*Which level do you prefer?*
+
+Type 1 for Low or 2 for High
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """🚣 *Rafting - Escolha Seu Nível*
+
+📍 Viva a adrenalina do rio em Pucón
+
+*Opções Disponíveis:*
+
+1️⃣ *Rafting Baixo* - Nível iniciante
+   💰 $30.000 CLP por pessoa
+   ⏱️ Duração: 2-3 horas
+   🌊 Dificuldade: Baixa (ideal para famílias)
+
+2️⃣ *Rafting Alto* - Nível avançado
+   💰 $40.000 CLP por pessoa
+   ⏱️ Duração: 3-4 horas
+   🌊 Dificuldade: Alta (mais adrenalina)
+
+*Qual nível você prefere?*
+
+Digite 1 para Baixo ou 2 para Alto
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Horseback Riding Options
+    "horseback_options": {
+        "es": """🐴 *Cabalgata - Opciones Disponibles*
+
+📍 Explora la naturaleza a caballo
+
+*Opciones Disponibles:*
+
+1️⃣ *Cabalgata Parque Ojos del Caburguá*
+   💰 $50.000 por persona
+   ⏱️ Duración: 3-4 horas
+   🌲 Incluye: Guía, equipo completo y snack
+
+*¿Te interesa esta cabalgata?*
+
+Escribe 1 para confirmar o "Menu" para volver
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """🐴 *Horseback Riding - Available Options*
+
+📍 Explore nature on horseback
+
+*Available Options:*
+
+1️⃣ *Horseback Riding Ojos del Caburguá Park*
+   💰 $50,000 CLP per person
+   ⏱️ Duration: 3-4 hours
+   🌲 Includes: Guide, complete equipment and snack
+
+*Are you interested in this ride?*
+
+Type 1 to confirm or "Menu" to go back
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """🐴 *Cavalgada - Opções Disponíveis*
+
+📍 Explore a natureza a cavalo
+
+*Opções Disponíveis:*
+
+1️⃣ *Cavalgada Parque Ojos del Caburguá*
+   💰 $50.000 CLP por pessoa
+   ⏱️ Duração: 3-4 horas
+   🌲 Inclui: Guia, equipamento completo e lanche
+
+*Você está interessado nesta cavalgada?*
+
+Digite 1 para confirmar ou "Menu" para voltar
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Navigation Options
+    "navigation_options": {
+        "es": """⛵ *Navegación - Elige tu Experiencia*
+
+📍 Explora lagos y ríos en embarcación
+
+*Opciones Disponibles:*
+
+1️⃣ *Travesía 30 minutos (2p)* - $300.000
+2️⃣ *Travesía 30 minutos (4p)* - $340.000
+3️⃣ *Travesía 30 minutos (6p)* - $360.000
+4️⃣ *Travesía 30 minutos (8p)* - $380.000
+5️⃣ *Travesía 30 minutos (10p)* - $400.000
+
+6️⃣ *Yave a vela Akimbo 2p (1.5hr)* - $120.000
+7️⃣ *Yave a vela Akimbo 3p (1.5hr)* - $130.000
+8️⃣ *Yave a vela Akimbo 4p (1.5hr)* - $140.000
+9️⃣ *Yave a vela Akimbo 5p (1.5hr)* - $150.000
+🔟 *Yave a vela Akimbo 5p (1.5hr)* - $160.000
+
+*¿Qué opción prefieres?*
+
+Escribe el número de tu elección (1-10)
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """⛵ *Navigation - Choose Your Experience*
+
+📍 Explore lakes and rivers by boat
+
+*Available Options:*
+
+1️⃣ *30-minute crossing (2p)* - $300,000 CLP
+2️⃣ *30-minute crossing (4p)* - $340,000 CLP
+3️⃣ *30-minute crossing (6p)* - $360,000 CLP
+4️⃣ *30-minute crossing (8p)* - $380,000 CLP
+5️⃣ *30-minute crossing (10p)* - $400,000 CLP
+
+6️⃣ *Sailboat Akimbo 2p (1.5hr)* - $120,000 CLP
+7️⃣ *Sailboat Akimbo 3p (1.5hr)* - $130,000 CLP
+8️⃣ *Sailboat Akimbo 4p (1.5hr)* - $140,000 CLP
+9️⃣ *Sailboat Akimbo 5p (1.5hr)* - $150,000 CLP
+🔟 *Sailboat Akimbo 5p (1.5hr)* - $160,000 CLP
+
+*Which option do you prefer?*
+
+Type the number of your choice (1-10)
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """⛵ *Navegação - Escolha Sua Experiência*
+
+📍 Explore lagos e rios de barco
+
+*Opções Disponíveis:*
+
+1️⃣ *Travessia 30 minutos (2p)* - $300.000 CLP
+2️⃣ *Travessia 30 minutos (4p)* - $340.000 CLP
+3️⃣ *Travessia 30 minutos (6p)* - $360.000 CLP
+4️⃣ *Travessia 30 minutos (8p)* - $380.000 CLP
+5️⃣ *Travessia 30 minutos (10p)* - $400.000 CLP
+
+6️⃣ *Veleiro Akimbo 2p (1.5hr)* - $120.000 CLP
+7️⃣ *Veleiro Akimbo 3p (1.5hr)* - $130.000 CLP
+8️⃣ *Veleiro Akimbo 4p (1.5hr)* - $140.000 CLP
+9️⃣ *Veleiro Akimbo 5p (1.5hr)* - $150.000 CLP
+🔟 *Veleiro Akimbo 5p (1.5hr)* - $160.000 CLP
+
+*Qual opção você prefere?*
+
+Digite o número da sua escolha (1-10)
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Ask for number of people
+    "experience_ask_people": {
+        "es": """👥 *¿Cuántas personas participarán?*
+
+Por favor escribe el número de personas
+
+(El precio se calculará automáticamente)
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """👥 *How many people will participate?*
+
+Please type the number of people
+
+(The price will be calculated automatically)
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """👥 *Quantas pessoas participarão?*
+
+Por favor digite o número de pessoas
+
+(O preço será calculado automaticamente)
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
+    },
+    
+    # Experience confirmation
+    "experience_added_to_cart": {
+        "es": """✅ *Experiencia Agregada al Carrito*
+
+🎯 *{name}*
+👥 {quantity}
+💰 ${total:,} CLP
+
+{cart}
+
+━━━━━━━━━━━━━━━━
+
+💡 *Opciones:*
+
+• Escribe *"Menu"* para agregar más experiencias o actividades
+• Escribe *"Carrito"* para ver tu carrito
+• Escribe *"Confirmar"* o *"Proceder con pago"* cuando estés listo
+
+🚤 ¡Seguimos construyendo tu aventura perfecta!""",
+        
+        "en": """✅ *Experience Added to Cart*
+
+🎯 *{name}*
+👥 {quantity}
+💰 ${total:,} CLP
+
+{cart}
+
+━━━━━━━━━━━━━━━━
+
+💡 *Options:*
+
+• Type *"Menu"* to add more experiences or activities
+• Type *"Cart"* to view your cart
+• Type *"Confirm"* or *"Proceed to payment"* when ready
+
+🚤 Let's keep building your perfect adventure!""",
+        
+        "pt": """✅ *Experiência Adicionada ao Carrinho*
+
+🎯 *{name}*
+👥 {quantity}
+💰 ${total:,} CLP
+
+{cart}
+
+━━━━━━━━━━━━━━━━
+
+💡 *Opções:*
+
+• Digite *"Menu"* para adicionar mais experiências ou atividades
+• Digite *"Carrinho"* para ver seu carrinho
+• Digite *"Confirmar"* ou *"Proceder ao pagamento"* quando estiver pronto
+
+🚤 Vamos continuar construindo sua aventura perfeita!"""
+    },
+    
+    "experience_confirmation": {
+        "es": """✅ *Solicitud de Experiencia Recibida*
+
+{summary}
+
+*El Capitán Tomás revisará tu solicitud y te contactará pronto para confirmar disponibilidad y coordinar detalles.* 👨‍✈️⚓
+
+🙏 ¡Gracias por elegir HotBoat Chile!
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤""",
+        
+        "en": """✅ *Experience Request Received*
+
+{summary}
+
+*Captain Tomás will review your request and contact you soon to confirm availability and coordinate details.* 👨‍✈️⚓
+
+🙏 Thank you for choosing HotBoat Chile!
+
+💡 *Remember:* Type *"Menu"* to return to *HotBoat Menu* 🚤""",
+        
+        "pt": """✅ *Pedido de Experiência Recebido*
+
+{summary}
+
+*O Capitão Tomás revisará seu pedido e te contatar\u00e1 em breve para confirmar disponibilidade e coordenar detalhes.* 👨‍✈️⚓
+
+🙏 Obrigado por escolher HotBoat Chile!
+
+💡 *Lembre-se:* Digite *"Menu"* para voltar ao *Menu HotBoat* 🚤"""
     }
 }
 

@@ -1,17 +1,22 @@
 """
-FastAPI main application - Updated 2026-03-09
+FastAPI main application - Updated 2026-03-08
 """
-from fastapi import FastAPI, Request, Response, HTTPException, Query, UploadFile, Form
+from fastapi import FastAPI, Request, Response, HTTPException, Query, UploadFile, Form, Header
 from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
+import asyncio
 import logging
 import httpx
 
+from app.booking.router import router as booking_router
+from app.booking.admin_router import admin_router
+from app.booking.content_router import content_router
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
 from app.bot.conversation import ConversationManager
-from app.db.queries import get_recent_conversations, get_appointments_between_dates, save_conversation
+from app.db.queries import get_recent_conversations, get_appointments_between_dates, save_conversation, search_conversations_by_phone, search_messages_in_all_conversations_sync
 from app.db.leads import (
     get_or_create_lead, 
     update_lead_status, 
@@ -41,11 +46,317 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # Get settings
 settings = get_settings()
 
+# ── Auto-sync background task ──────────────────────────────────────────────────
+SYNC_INTERVAL_MINUTES = 30
+
+async def _run_auto_sync():
+    """Run all_appointments sync every SYNC_INTERVAL_MINUTES minutes."""
+    from app.db.connection import get_connection
+    from app.booking.admin_router import TABLE
+    import re
+
+    await asyncio.sleep(60)  # Wait 1 min after startup before first sync
+    while True:
+        try:
+            logger.info(f"🔄 Auto-sync: sincronizando all_appointments...")
+            from psycopg.types.json import Jsonb as PgJson
+
+            def normalize_phone(ph):
+                if not ph: return None
+                ph = re.sub(r"[^\d+]", "", str(ph))
+                if ph.startswith("+"): return ph
+                if len(ph) == 9: return f"+56{ph}"
+                if len(ph) == 11 and ph.startswith("56"): return f"+{ph}"
+                return ph
+
+            inserted_reservas = 0
+            updated_reservas = 0
+            inserted_book = 0
+            inserted_hb = 0
+            status_updated = 0
+
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT MAX(fecha) FROM reservas_con_extras")
+                    cutoff = cur.fetchone()[0]
+                    if not cutoff:
+                        logger.warning("Auto-sync: reservas_con_extras is empty, skipping")
+                        await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
+                        continue
+
+                    # Sync reservas_con_extras → all_appointments (upsert)
+                    cur.execute("""
+                        SELECT id, appointment_id, fecha, hora, nombre_cliente, email, telefono,
+                               servicio, num_personas, num_adultos, num_ninos,
+                               ingreso_reserva, ingreso_extras, ingreso_total,
+                               costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
+                               ciudad_origen, como_supieron, clima_del_dia, categoria_clientes,
+                               tipo_clientes, tiene_cruce, status, extras_json, created_at
+                        FROM reservas_con_extras
+                        ORDER BY fecha
+                    """)
+                    for row in cur.fetchall():
+                        (rid, appt_id, fecha, hora, nombre, email, telefono,
+                         servicio, num_p, num_adultos, num_ninos,
+                         ing_res, ing_ext, ing_total, costo_fijo, costo_var, costo_total,
+                         ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
+                         status, extras, created) = row
+                        # Check existing: sheets source_id first, then any source by appointment_id
+                        existing = None
+                        cur.execute(f"SELECT id FROM {TABLE} WHERE source='sheets' AND source_id=%s", (str(rid),))
+                        existing = cur.fetchone()
+                        if not existing and appt_id:
+                            cur.execute(f"SELECT id FROM {TABLE} WHERE appointment_id=%s LIMIT 1", (str(appt_id),))
+                            existing = cur.fetchone()
+
+                        if existing:
+                            cur.execute(f"""
+                                UPDATE {TABLE}
+                                SET extras_json=COALESCE(%s, extras_json),
+                                    ingreso_extras=COALESCE(%s, ingreso_extras),
+                                    ingreso_total=COALESCE(%s, ingreso_total),
+                                    num_adultos=COALESCE(%s, num_adultos),
+                                    num_ninos=COALESCE(%s, num_ninos),
+                                    ciudad_origen=COALESCE(%s, ciudad_origen),
+                                    como_supieron=COALESCE(%s, como_supieron),
+                                    clima_del_dia=COALESCE(%s, clima_del_dia),
+                                    categoria_clientes=COALESCE(%s, categoria_clientes),
+                                    tipo_clientes=COALESCE(%s, tipo_clientes),
+                                    tiene_cruce=COALESCE(%s, tiene_cruce),
+                                    costo_operativo_variable=COALESCE(%s, costo_operativo_variable),
+                                    costo_operativo_total=COALESCE(%s, costo_operativo_total),
+                                    updated_at=NOW()
+                                WHERE id=%s
+                            """, (PgJson(extras) if extras else None,
+                                  float(ing_ext) if ing_ext else None,
+                                  float(ing_total) if ing_total else None,
+                                  num_adultos, num_ninos, ciudad, como_sup, clima, categoria,
+                                  tipo_cli, tiene_cruce,
+                                  float(costo_var) if costo_var else None,
+                                  float(costo_total) if costo_total else None,
+                                  existing[0]))
+                            updated_reservas += 1
+                        else:
+                            cur.execute(f"""
+                                INSERT INTO {TABLE}
+                                (source, source_id, appointment_id, fecha, hora,
+                                 nombre_cliente, email, telefono, servicio, num_personas,
+                                 num_adultos, num_ninos,
+                                 ingreso_reserva, ingreso_extras, ingreso_total,
+                                 costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
+                                 ciudad_origen, como_supieron, clima_del_dia,
+                                 categoria_clientes, tipo_clientes, tiene_cruce,
+                                 status, extras_json, created_at, updated_at)
+                                VALUES ('sheets',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                                ON CONFLICT DO NOTHING
+                            """, (str(rid), str(appt_id) if appt_id else None,
+                                  fecha, hora, nombre, email,
+                                  re.sub(r"[^\d+]", "", str(telefono)) if telefono else None,
+                                  servicio or "HotBoat", str(num_p) if num_p else None,
+                                  num_adultos, num_ninos,
+                                  float(ing_res or 0), float(ing_ext or 0), float(ing_total or 0),
+                                  float(costo_fijo or 0), float(costo_var or 0), float(costo_total or 0),
+                                  ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
+                                  status, PgJson(extras or {}), created))
+                            inserted_reservas += 1
+
+                    # Remove duplicates (old Reservas_Con_Extras_Sheets rows replaced by reservas_con_extras)
+                    cur.execute("""
+                        DELETE FROM all_appointments
+                        WHERE source = 'sheets' AND appointment_id IS NOT NULL
+                        AND id NOT IN (
+                            SELECT MAX(id) FROM all_appointments
+                            WHERE source = 'sheets' AND appointment_id IS NOT NULL
+                            GROUP BY appointment_id
+                        )
+                    """)
+                    dedup_deleted = cur.rowcount
+
+                    # Sync booknetic (do NOT filter by MAX(reservas_con_extras.fecha): that max is usually
+                    # a *future* date, which would skip all earlier Booknetic appointments e.g. April when June exists)
+                    cur.execute("""
+                        SELECT id, customer_name, customer_email, starts_at, status, raw, created_at
+                        FROM booknetic_appointments
+                        WHERE starts_at IS NOT NULL
+                          AND starts_at::date >= (CURRENT_DATE - INTERVAL '3 years')
+                          AND starts_at::date <= (CURRENT_DATE + INTERVAL '3 years')
+                    """)
+                    for row in cur.fetchall():
+                        bid, nombre, email, starts_at, status, raw, created = row
+                        raw = raw or {}
+                        sid = str(bid)
+                        cur.execute(
+                            f"""SELECT id, source, status FROM {TABLE}
+                                WHERE (source = 'booknetic' AND source_id = %s)
+                                   OR (appointment_id IS NOT NULL AND TRIM(appointment_id::text) = %s)
+                                LIMIT 1""",
+                            (sid, sid),
+                        )
+                        existing = cur.fetchone()
+                        if existing:
+                            ex_id, ex_src, ex_st = existing[0], existing[1], existing[2]
+                            if ex_src == "booknetic" and status and status != ex_st:
+                                cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s", (status, ex_id))
+                                status_updated += 1
+                            continue
+                        else:
+                            phone = normalize_phone(raw.get("phone") or raw.get("customer_phone") or raw.get("cf_phone"))
+                            fecha = starts_at.date() if hasattr(starts_at, 'date') else starts_at
+                            hora = starts_at.strftime("%H:%M") if hasattr(starts_at, 'strftime') else "10:00"
+                            num_p = raw.get("num_people") or raw.get("persons") or 2
+                            total = float(raw.get("total_price") or raw.get("total") or 0)
+                            cur.execute(f"""
+                                INSERT INTO {TABLE}
+                                (source,source_id,fecha,hora,nombre_cliente,email,telefono,
+                                 servicio,num_personas,ingreso_total,status,created_at)
+                                VALUES ('booknetic',%s,%s,%s,%s,%s,%s,'HotBoat Booknetic',%s,%s,%s,NOW())
+                                ON CONFLICT DO NOTHING
+                            """, (str(bid), fecha, hora, nombre, email, phone, str(num_p), total, status or "confirmed"))
+                            inserted_book += 1
+
+                    # Sync hotboat_web — exclude cancelled/rejected so deleted bookings stay deleted
+                    cur.execute("""
+                        SELECT booking_ref, customer_name, customer_email, customer_phone,
+                               booking_date, booking_time, num_people,
+                               subtotal, extras_total, total_price, extras, status,
+                               payment_id, payment_status, notes, created_at
+                        FROM hotboat_appointments
+                        WHERE booking_date IS NOT NULL
+                          AND booking_date >= (CURRENT_DATE - INTERVAL '3 years')
+                          AND booking_date <= (CURRENT_DATE + INTERVAL '3 years')
+                          AND status NOT IN ('solicitud', 'cancelled', 'rejected', 'cancelada', 'rechazada')
+                    """)
+                    for row in cur.fetchall():
+                        (ref, nombre, email, phone, fecha, hora, num_p,
+                         sub, ext, total, extras, status, pay_id, pay_st, notes, created) = row
+                        cur.execute(f"SELECT id, status FROM {TABLE} WHERE source='hotboat_web' AND source_id=%s", (ref,))
+                        existing = cur.fetchone()
+                        if existing:
+                            if status and status != existing[1]:
+                                cur.execute(f"UPDATE {TABLE} SET status=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
+                                            (status, pay_st, existing[0]))
+                                status_updated += 1
+                        else:
+                            cur.execute(f"""
+                                INSERT INTO {TABLE}
+                                (source,source_id,fecha,hora,nombre_cliente,email,telefono,
+                                 servicio,num_personas,ingreso_reserva,ingreso_extras,ingreso_total,
+                                 status,extras_json,observaciones,payment_id,payment_status,created_at)
+                                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                                ON CONFLICT DO NOTHING
+                            """, (ref, fecha, hora, nombre, email, normalize_phone(phone),
+                                  f"HotBoat Web ({num_p}p)", str(num_p),
+                                  float(sub or 0), float(ext or 0), float(total or 0),
+                                  status, PgJson(extras or {}), notes, pay_id, pay_st))
+                            inserted_hb += 1
+
+                    conn.commit()
+
+            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), +{inserted_book} booknetic, +{inserted_hb} web, {status_updated} estados")
+
+            # Clean up stale pending_payment web bookings (older than 45 min)
+            try:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            DELETE FROM hotboat_appointments
+                            WHERE status = 'pending_payment'
+                              AND created_at < NOW() - INTERVAL '10 minutes'
+                        """)
+                        deleted = cur.rowcount
+                        conn.commit()
+                if deleted:
+                    logger.info(f"🗑️ Auto-cleanup: {deleted} pending_payment booking(s) > 45 min eliminados")
+            except Exception as ce:
+                logger.warning(f"Cleanup pending_payment error: {ce}")
+
+        except Exception as e:
+            logger.error(f"❌ Auto-sync error: {e}")
+
+        await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
+
+
+async def _run_email_sweeps_scheduler():
+    """Run followup + birthday email sweeps every hour (DB flags ensure idempotency)."""
+    await asyncio.sleep(120)  # brief delay after startup
+    while True:
+        try:
+            from app.booking.booking_email import run_followup_email_sweep, run_birthday_email_sweep
+            for fn, name in ((run_followup_email_sweep, "followup"), (run_birthday_email_sweep, "birthday")):
+                try:
+                    result = await asyncio.to_thread(fn)
+                    if result.get("sent", 0) or result.get("errors"):
+                        logger.info("📧 %s email sweep: %s", name, result)
+                except Exception as _se:
+                    logger.error("Email sweep %s error: %s", name, _se)
+        except Exception as _fe:
+            logger.error("Email sweeps scheduler error: %s", _fe)
+        await asyncio.sleep(3600)  # re-check every hour
+
+
+def _ensure_extras_visibility_table():
+    """Create extras_visibility table if it doesn't exist (survives Sheets re-sync)."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS extras_visibility (
+                        extra_name_lower TEXT PRIMARY KEY,
+                        show_in_booking  BOOLEAN NOT NULL DEFAULT FALSE,
+                        sort_order       INTEGER NOT NULL DEFAULT 999,
+                        description      TEXT,
+                        precio_venta     INTEGER,
+                        costo            INTEGER,
+                        icon             TEXT,
+                        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                for col, definition in [
+                    ("sort_order",   "INTEGER NOT NULL DEFAULT 999"),
+                    ("description",  "TEXT"),
+                    ("precio_venta", "INTEGER"),
+                    ("costo",        "INTEGER"),
+                    ("icon",         "TEXT"),
+                    ("name",         "TEXT"),
+                ]:
+                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col} {definition}")
+
+                conn.commit()
+        logger.info("✅ extras_visibility table ready")
+    except Exception as e:
+        logger.error(f"extras_visibility table init error: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start background tasks on startup, cancel on shutdown."""
+    _ensure_extras_visibility_table()
+    try:
+        from app.bot.cart import CartManager
+        CartManager.refresh_prices_from_db()
+    except Exception as _e:
+        logger.warning(f"Cart price refresh skipped: {_e}")
+    sync_task = asyncio.create_task(_run_auto_sync())
+    email_task = asyncio.create_task(_run_email_sweeps_scheduler())
+    logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
+    logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 1 h)")
+    yield
+    for task in (sync_task, email_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    logger.info("🛑 Background tasks detenidos")
+
+
 # Create FastAPI app
 app = FastAPI(
     title="HotBoat WhatsApp Bot",
     description="Bot de WhatsApp para Hot Boat Chile",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Add middleware to prevent caching of static files
@@ -67,8 +378,17 @@ if os.path.exists(static_dir):
 else:
     logger.warning("⚠️ Static directory not found – Kia-Ai UI will not be served.")
 
+# Serve media files (images, PDFs, docs) for booking platform
+media_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media")
+if os.path.exists(media_dir):
+    app.mount("/media", StaticFiles(directory=media_dir), name="media")
+    logger.info("✅ Media directory mounted at /media")
+
 # Initialize conversation manager
 conversation_manager = ConversationManager()
+app.include_router(booking_router)
+app.include_router(admin_router)
+app.include_router(content_router)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -103,6 +423,55 @@ async def root():
             "environment": settings.environment,
             "environment_status": environment_status
         }
+
+
+@app.get("/pagar", response_class=HTMLResponse)
+async def pago_page():
+    """Serve branded payment landing page"""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    path = os.path.join(static_dir, "pagar.html")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse("<h1>Página no encontrada</h1>", status_code=404)
+
+
+@app.get("/api/pago/order/{order_id}")
+async def pago_order_proxy(order_id: int):
+    """
+    Proxy that fetches order details from WooCommerce and returns
+    friendly data for the /pagar page.
+    """
+    try:
+        from app.payment.woocommerce import get_order, WOO_URL
+        data = await get_order(order_id)
+        # Extract HotBoat-specific meta
+        meta_map = {m["key"]: m["value"] for m in data.get("meta_data", [])}
+        fee_lines = data.get("fee_lines", [])
+        # Parse fecha / personas from fee_line name e.g.
+        # "Reserva HotBoat – 4 personas (2026-05-31)"
+        import re
+        fee_name = fee_lines[0]["name"] if fee_lines else ""
+        match_p = re.search(r'(\d+)\s*persona', fee_name)
+        match_f = re.search(r'\((\d{4}-\d{2}-\d{2})\)', fee_name)
+        extras_names = [fl["name"] for fl in fee_lines[1:]] if len(fee_lines) > 1 else []
+        return {
+            "order_id":   order_id,
+            "status":     data.get("status"),
+            "total":      data.get("total"),
+            "payment_url": data.get("payment_url") or
+                f"{WOO_URL}/checkout/order-pay/{order_id}/?pay_for_order=true&key={data.get('order_key','')}",
+            "billing":    data.get("billing", {}),
+            "meta": {
+                "fecha":    match_f.group(1) if match_f else meta_map.get("hotboat_fecha",""),
+                "personas": match_p.group(1) if match_p else "",
+                "extras":   ", ".join(extras_names) if extras_names else "",
+                "hora":     meta_map.get("hotboat_hora",""),
+            },
+        }
+    except Exception as e:
+        logger.warning(f"pago_order_proxy error for order {order_id}: {e}")
+        return {}
 
 
 @app.get("/health")
@@ -358,13 +727,11 @@ class QuickReplyRequest(BaseModel):
 async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
     """Send automatic menu response to conversation"""
     try:
-        # Import here to avoid circular imports
-        from app.bot.conversation import ConversationManager
         from app.bot.faq import FAQHandler
         from app.bot.translations import get_text
         
-        # Initialize managers
-        conv_manager = ConversationManager()
+        # Use the GLOBAL conversation_manager so metadata persists for the webhook
+        conv_manager = conversation_manager
         faq_handler = FAQHandler()
         
         # Get lead info first (without updating name)
@@ -378,8 +745,43 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         # Determine response based on menu option
         response_text = ""
         menu_option = request.menu_option
-        
-        if menu_option == 1:
+
+        if menu_option == 0:
+            # Saludo de Tomás — secuencia de 4 mensajes con pequeño delay entre cada uno
+            import asyncio
+            first_name = customer_name.split()[0] if customer_name else customer_name
+            sequence = [
+                f"Hola {first_name}! 👋",
+                "Cómo estas?",
+                "soy Tomás de Hotboat, soy humano 🙂",
+                "Cualquier duda aquí estamos para ayudar 🙌",
+            ]
+            for i, msg in enumerate(sequence):
+                if i > 0:
+                    await asyncio.sleep(1.5)
+                await whatsapp_client.send_text_message(to=phone_number, message=msg)
+                await save_conversation(
+                    phone_number=phone_number,
+                    customer_name=customer_name,
+                    message_text="",
+                    response_text=msg,
+                    message_type="text",
+                    direction="outgoing"
+                )
+                conversation["messages"].append({
+                    "role": "assistant",
+                    "content": msg,
+                    "timestamp": datetime.now(CHILE_TZ).isoformat()
+                })
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "menu_option": menu_option,
+                "message_sent": f"Secuencia de {len(sequence)} mensajes enviada",
+                "whatsapp_response": {}
+            }
+        elif menu_option == 1:
             # Disponibilidad y horarios
             response_text = conv_manager._ask_for_reservation_date(conversation, language)
         elif menu_option == 2:
@@ -395,8 +797,150 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         elif menu_option == 5:
             # Ubicación y reseñas
             response_text = faq_handler.get_response("ubicación", language)
+        elif menu_option == 6:
+            # Alojamientos — equivale al flujo menú 6
+            import asyncio
+            from app.utils.media_handler import get_alojamientos_images
+            text_intro = get_text("accommodations_only_intro", language)
+            await whatsapp_client.send_text_message(to=phone_number, message=text_intro)
+            await save_conversation(
+                phone_number=phone_number, customer_name=customer_name,
+                message_text="", response_text=text_intro,
+                message_type="text", direction="outgoing"
+            )
+            conversation["messages"].append({
+                "role": "assistant", "content": text_intro,
+                "timestamp": datetime.now(CHILE_TZ).isoformat()
+            })
+            image_paths = get_alojamientos_images()
+            for idx, image_path in enumerate(image_paths, 1):
+                try:
+                    media_id_img = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                    if media_id_img:
+                        caption = "📄 Información completa de alojamientos" if idx == 1 else None
+                        await whatsapp_client.send_image_message(
+                            to=phone_number, media_id=media_id_img, caption=caption
+                        )
+                        await asyncio.sleep(0.5)
+                except Exception as img_err:
+                    logger.warning(f"Could not send alojamiento image {idx}: {img_err}")
+            conversation["metadata"]["accommodation_flow"] = {
+                "step": "choosing_property", "property": None,
+                "room_type": None, "guests": None,
+                "checkin_date": None, "checkout_date": None,
+            }
+            for key in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
+                conversation["metadata"].pop(key, None)
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {
+                "status": "success", "phone_number": phone_number,
+                "menu_option": menu_option,
+                "message_sent": f"Alojamientos: texto + {len(image_paths)} imágenes enviadas",
+                "whatsapp_response": {}
+            }
+        elif menu_option == 8:
+            # Packs Completos — equivale al flujo menú 7 → 1
+            import asyncio, os
+            from app.utils.media_handler import PACKS_IMAGES_DIR
+            pack_text = get_text("complete_packages_menu", language)
+            resumen_path = os.path.join(PACKS_IMAGES_DIR, "resumen-packs.jpg")
+            if os.path.exists(resumen_path):
+                try:
+                    media_id_img = await whatsapp_client.upload_media(resumen_path, mime_type="image/jpeg")
+                    if media_id_img:
+                        await whatsapp_client.send_image_message(
+                            to=phone_number,
+                            media_id=media_id_img,
+                            caption="📦 Packs Completos HotBoat"
+                        )
+                        await asyncio.sleep(0.5)
+                except Exception as img_err:
+                    logger.warning(f"Could not send packs image: {img_err}")
+            # Send the packs menu text
+            await whatsapp_client.send_text_message(to=phone_number, message=pack_text)
+            await save_conversation(
+                phone_number=phone_number,
+                customer_name=customer_name,
+                message_text="",
+                response_text=pack_text,
+                message_type="text",
+                direction="outgoing"
+            )
+            conversation["messages"].append({
+                "role": "assistant",
+                "content": pack_text,
+                "timestamp": datetime.now(CHILE_TZ).isoformat()
+            })
+            # Set complete_packages_flow so the bot continues when user replies
+            conversation["metadata"]["complete_packages_flow"] = {"step": "selecting_type"}
+            # Clear any conflicting flows
+            for key in ("awaiting_packages_submenu", "accommodation_flow", "experience_flow", "build_package_flow"):
+                conversation["metadata"].pop(key, None)
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "menu_option": menu_option,
+                "message_sent": "Packs Completos: imagen + texto enviados",
+                "whatsapp_response": {}
+            }
+        elif menu_option == 9:
+            # Solo alojamientos — equivale al flujo menú 7 → 2
+            import asyncio
+            from app.utils.media_handler import get_alojamientos_images
+            text_intro = get_text("accommodations_only_intro", language)
+            # Send text intro
+            await whatsapp_client.send_text_message(to=phone_number, message=text_intro)
+            await save_conversation(
+                phone_number=phone_number,
+                customer_name=customer_name,
+                message_text="",
+                response_text=text_intro,
+                message_type="text",
+                direction="outgoing"
+            )
+            conversation["messages"].append({
+                "role": "assistant",
+                "content": text_intro,
+                "timestamp": datetime.now(CHILE_TZ).isoformat()
+            })
+            # Send accommodation images
+            image_paths = get_alojamientos_images()
+            for idx, image_path in enumerate(image_paths, 1):
+                try:
+                    media_id_img = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
+                    if media_id_img:
+                        caption = "📄 Información completa de alojamientos" if idx == 1 else None
+                        await whatsapp_client.send_image_message(
+                            to=phone_number,
+                            media_id=media_id_img,
+                            caption=caption
+                        )
+                        await asyncio.sleep(0.5)
+                except Exception as img_err:
+                    logger.warning(f"Could not send alojamiento image {idx}: {img_err}")
+            # Set accommodation_flow so the bot continues the flow when user replies
+            conversation["metadata"]["accommodation_flow"] = {
+                "step": "choosing_property",
+                "property": None,
+                "room_type": None,
+                "guests": None,
+                "checkin_date": None,
+                "checkout_date": None,
+            }
+            # Clear any conflicting flows
+            for key in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
+                conversation["metadata"].pop(key, None)
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "menu_option": menu_option,
+                "message_sent": f"Alojamientos: texto + {len(image_paths)} imágenes enviadas",
+                "whatsapp_response": {}
+            }
         else:
-            raise HTTPException(status_code=400, detail="Invalid menu option (must be 1-5)")
+            raise HTTPException(status_code=400, detail="Invalid menu option (must be 0-9)")
         
         # Send message via WhatsApp
         result = await whatsapp_client.send_text_message(
@@ -526,6 +1070,41 @@ async def send_test_notification(request: PushTestNotification):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/push/status")
+async def push_status(x_admin_key: str = Header(...)):
+    """Return registered push tokens with diagnostic info"""
+    settings = get_settings()
+    if x_admin_key != settings.admin_api_key:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT token, device_info, created_at, last_used_at
+                    FROM push_tokens
+                    ORDER BY last_used_at DESC
+                """)
+                rows = cur.fetchall()
+                tokens = []
+                for row in rows:
+                    token, device_info, created_at, last_used_at = row
+                    short = token[-12:] if token else "?"
+                    tokens.append({
+                        "token_suffix": f"...{short}",
+                        "device_info": device_info,
+                        "created_at": created_at.isoformat() if created_at else None,
+                        "last_used_at": last_used_at.isoformat() if last_used_at else None,
+                        "active": last_used_at is not None and (
+                            (datetime.now() - last_used_at.replace(tzinfo=None)).days < 90
+                        )
+                    })
+                return {"total": len(tokens), "tokens": tokens}
+    except Exception as e:
+        logger.error(f"Error getting push status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # MESSAGE REACTIONS ENDPOINT
 # ============================================================================
@@ -627,7 +1206,7 @@ async def import_conversations(data: ConversationImport):
 # Kia-Ai API Endpoints
 
 @app.get("/api/conversations")
-async def get_conversations_list(limit: int = 50):
+async def get_conversations_list(limit: int = Query(50, ge=1, le=1000)):
     """Get list of all conversations with latest messages"""
     try:
         conversations = await get_recent_conversations(limit=limit)
@@ -637,6 +1216,46 @@ async def get_conversations_list(limit: int = 50):
         }
     except Exception as e:
         logger.error(f"Error getting conversations: {e}")
+        return {
+            "conversations": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+
+@app.get("/api/conversations/search")
+async def search_conversations(q: str = Query(..., min_length=3)):
+    """Search conversations by phone number (partial match). Finds conversations even if not in recent list."""
+    try:
+        results = await search_conversations_by_phone(q, limit=20)
+        return {
+            "conversations": results,
+            "total": len(results)
+        }
+    except Exception as e:
+        logger.error(f"Error searching conversations: {e}")
+        return {
+            "conversations": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+
+@app.get("/api/conversations/search-messages")
+async def search_messages(q: str = Query(..., min_length=2)):
+    """Search for text across ALL messages in the database. Returns conversations that contain the search term."""
+    import asyncio
+    try:
+        logger.info(f"Searching messages for: '{q}'")
+        # Run blocking DB query in thread pool to avoid blocking event loop
+        results = await asyncio.to_thread(search_messages_in_all_conversations_sync, q, 50)
+        logger.info(f"Search found {len(results)} conversations")
+        return {
+            "conversations": results,
+            "total": len(results)
+        }
+    except Exception as e:
+        logger.error(f"Error searching messages: {e}", exc_info=True)
         return {
             "conversations": [],
             "total": 0,

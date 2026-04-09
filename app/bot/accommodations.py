@@ -1,5 +1,7 @@
 """
-Accommodations handler - manages accommodation information with images
+Accommodations handler - manages accommodation information with images.
+All accommodations are loaded dynamically from the `alojamientos` DB table.
+Each row is a single accommodation option (flat structure, no JSONB variants).
 """
 import logging
 from typing import Dict, List, Optional, Any
@@ -10,192 +12,159 @@ from app.utils.media_handler import get_accommodation_image_path
 
 logger = logging.getLogger(__name__)
 
+# Fallback data used if DB is unavailable at startup
+_FALLBACK_ROWS = [
+    {"slug": "open-sky-domo-tina",  "name": "Open Sky – Domo con Tina de Baño",
+     "group_name": "Open Sky",          "price_from": 100000, "cost_from": 0, "capacity": 2,
+     "description": "Domo transparente con tina de baño interior, vista a las estrellas.",
+     "image_path": None, "is_active": True, "display_order": 10},
+    {"slug": "open-sky-domo-hidro",  "name": "Open Sky – Domo con Hidromasaje",
+     "group_name": "Open Sky",          "price_from": 120000, "cost_from": 0, "capacity": 2,
+     "description": "Domo transparente con hidromasaje interior, la experiencia más exclusiva.",
+     "image_path": None, "is_active": True, "display_order": 11},
+    {"slug": "relikura-cabana-2",    "name": "Raíces de Relikura – Cabaña 2 personas",
+     "group_name": "Raíces de Relikura","price_from": 60000,  "cost_from": 0, "capacity": 2,
+     "description": "Cabaña junto al río con tinaja, ideal para parejas.",
+     "image_path": None, "is_active": True, "display_order": 20},
+    {"slug": "relikura-cabana-4",    "name": "Raíces de Relikura – Cabaña 4 personas",
+     "group_name": "Raíces de Relikura","price_from": 80000,  "cost_from": 0, "capacity": 4,
+     "description": "Cabaña espaciosa junto al río, ideal para familias.",
+     "image_path": None, "is_active": True, "display_order": 21},
+    {"slug": "relikura-cabana-6",    "name": "Raíces de Relikura – Cabaña 6 personas",
+     "group_name": "Raíces de Relikura","price_from": 100000, "cost_from": 0, "capacity": 6,
+     "description": "Cabaña grande junto al río, perfecta para grupos.",
+     "image_path": None, "is_active": True, "display_order": 22},
+    {"slug": "relikura-hostal",      "name": "Raíces de Relikura – Hostal",
+     "group_name": "Raíces de Relikura","price_from": 20000,  "cost_from": 0, "capacity": 1,
+     "description": "Hostal económico por persona, tinaja compartida.",
+     "image_path": None, "is_active": True, "display_order": 23},
+]
+
+# Legacy image-key mapping (for get_accommodation_image_path)
+_SLUG_TO_IMAGE_KEY = {
+    "open-sky-domo-tina":  "open_sky_domo_bath",
+    "open-sky-domo-hidro": "open_sky_domo_hydromassage",
+    "relikura-cabana-2":   "relikura_cabin_2",
+    "relikura-cabana-4":   "relikura_cabin_4",
+    "relikura-cabana-6":   "relikura_cabin_6",
+    "relikura-hostal":     "relikura_hostel",
+}
+
+
+def _load_db_rows() -> List[dict]:
+    """Load all active accommodations from DB as list of dicts."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT slug, name, group_name, price_from, cost_from, capacity,"
+                    "       description, image_path, is_active, display_order"
+                    " FROM alojamientos WHERE is_active=TRUE ORDER BY display_order, id"
+                )
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except Exception as e:
+        logger.warning(f"_load_db_rows failed, using fallback: {e}")
+        return []
+
 
 class AccommodationInfo:
-    """Information about an accommodation option"""
-    
-    def __init__(
-        self,
-        name: str,
-        description: str,
-        price_per_night: int,
-        capacity: int,
-        image_url: Optional[str] = None,
-        features: Optional[List[str]] = None
-    ):
-        self.name = name
-        self.description = description
-        self.price_per_night = price_per_night
-        self.capacity = capacity
-        self.image_url = image_url
-        self.features = features or []
+    """Information about a single accommodation option."""
+
+    def __init__(self, row: dict):
+        self.slug         = row["slug"]
+        self.name         = row["name"]
+        self.group_name   = row.get("group_name", "")
+        self.price_per_night = row.get("price_from", 0)
+        self.cost_per_night  = row.get("cost_from", 0)
+        self.capacity     = row.get("capacity", 2)
+        self.description  = row.get("description", "")
+        self.image_path_db = row.get("image_path")  # admin-uploaded image
+
+        # Resolve local image: prefer admin-uploaded, fall back to legacy path
+        img_key = _SLUG_TO_IMAGE_KEY.get(self.slug)
+        self.image_url  = ACCOMMODATION_IMAGES.get(img_key) if img_key else None
+        self._local_img = self.image_path_db or (
+            get_accommodation_image_path(img_key) if img_key else None
+        )
+
+    # Kept for backward compatibility
+    @property
+    def features(self) -> List[str]:
+        parts = []
+        if self.group_name:
+            parts.append(self.group_name)
+        if self.capacity:
+            parts.append(f"Hasta {self.capacity} persona{'s' if self.capacity > 1 else ''}")
+        return parts
 
 
 class AccommodationsHandler:
-    """Handle accommodation-related queries with images"""
-    
+    """Loads all active accommodations from DB and provides bot display methods."""
+
     def __init__(self):
-        # Open Sky - Para parejas románticas
-        self.open_sky_domo_bath = AccommodationInfo(
-            name="Open Sky - Domo con Tina de Baño",
-            description="Domo transparente con vista a las estrellas, perfecto para parejas románticas 🌌",
-            price_per_night=100000,
-            capacity=2,
-            image_url=ACCOMMODATION_IMAGES.get("open_sky_domo_bath"),
-            features=["Domo transparente", "Tina de baño interior", "Vista a las estrellas", "Experiencia romántica"]
-        )
-        
-        self.open_sky_domo_hydromassage = AccommodationInfo(
-            name="Open Sky - Domo con Hidromasaje",
-            description="Domo transparente con hidromasaje interior, la experiencia más exclusiva 🌟",
-            price_per_night=120000,
-            capacity=2,
-            image_url=ACCOMMODATION_IMAGES.get("open_sky_domo_hydromassage"),
-            features=["Domo transparente", "Hidromasaje interior", "Vista a las estrellas", "Experiencia premium"]
-        )
-        
-        # Raíces de Relikura - Familiar
-        self.relikura_cabin_2 = AccommodationInfo(
-            name="Raíces de Relikura - Cabaña 2 personas",
-            description="Cabaña junto al río, con tinaja y entorno natural perfecto para parejas 🌿",
-            price_per_night=60000,
-            capacity=2,
-            image_url=ACCOMMODATION_IMAGES.get("relikura_cabin_2"),
-            features=["Cabaña junto al río", "Tinaja exterior", "Entorno natural", "Ideal para parejas"]
-        )
-        
-        self.relikura_cabin_4 = AccommodationInfo(
-            name="Raíces de Relikura - Cabaña 4 personas",
-            description="Cabaña espaciosa junto al río, ideal para familias pequeñas 🏡",
-            price_per_night=80000,
-            capacity=4,
-            image_url=ACCOMMODATION_IMAGES.get("relikura_cabin_4"),
-            features=["Cabaña junto al río", "Tinaja exterior", "Entorno natural", "Ideal para familias"]
-        )
-        
-        self.relikura_cabin_6 = AccommodationInfo(
-            name="Raíces de Relikura - Cabaña 6 personas",
-            description="Cabaña grande junto al río, perfecta para grupos y familias grandes 👨‍👩‍👧‍👦",
-            price_per_night=100000,
-            capacity=6,
-            image_url=ACCOMMODATION_IMAGES.get("relikura_cabin_6"),
-            features=["Cabaña junto al río", "Tinaja exterior", "Entorno natural", "Ideal para grupos"]
-        )
-        
-        self.relikura_hostel = AccommodationInfo(
-            name="Raíces de Relikura - Hostal",
-            description="Hostal económico junto al río, con tinaja y actividades 🎒",
-            price_per_night=20000,
-            capacity=1,  # Por persona
-            image_url=ACCOMMODATION_IMAGES.get("relikura_hostel"),
-            features=["Hostal económico", "Tinaja compartida", "Entorno natural", "Actividades disponibles"]
-        )
-    
+        rows = _load_db_rows() or _FALLBACK_ROWS
+        self._accommodations: List[AccommodationInfo] = [AccommodationInfo(r) for r in rows]
+
+        # Build grouped dict: {group_name: [AccommodationInfo, ...]}
+        self._groups: Dict[str, List[AccommodationInfo]] = {}
+        for acc in self._accommodations:
+            self._groups.setdefault(acc.group_name, []).append(acc)
+
+    # ── public API ────────────────────────────────────────────────────────────
+
     def get_all_accommodations(self) -> List[AccommodationInfo]:
-        """Get all available accommodations"""
-        return [
-            self.open_sky_domo_bath,
-            self.open_sky_domo_hydromassage,
-            self.relikura_cabin_2,
-            self.relikura_cabin_4,
-            self.relikura_cabin_6,
-            self.relikura_hostel,
-        ]
-    
+        return list(self._accommodations)
+
     def get_text_response(self, language: str = "es") -> str:
-        """
-        Get text response about accommodations
-        
-        Args:
-            language: Language code (es, en, pt)
-        
-        Returns:
-            Accommodations text in specified language
-        """
         return get_text("accommodations", language)
-    
+
     def get_accommodations_with_images(self) -> List[Dict[str, Any]]:
         """
-        Get accommodations formatted for sending with images
-        
-        Returns:
-            List of dicts with text, image_url, and image_path for each accommodation
+        Format accommodations for WhatsApp: group headers + per-option image cards.
         """
-        # Mapping of accommodation names to their keys
-        name_to_key = {
-            "Open Sky - Domo con Tina de Baño": "open_sky_domo_bath",
-            "Open Sky - Domo con Hidromasaje": "open_sky_domo_hydromassage",
-            "Raíces de Relikura - Cabaña 2 personas": "relikura_cabin_2",
-            "Raíces de Relikura - Cabaña 4 personas": "relikura_cabin_4",
-            "Raíces de Relikura - Cabaña 6 personas": "relikura_cabin_6",
-            "Raíces de Relikura - Hostal": "relikura_hostel",
-        }
-        
-        accommodations = self.get_all_accommodations()
         result = []
-        
-        # Group by type
-        open_sky = [self.open_sky_domo_bath, self.open_sky_domo_hydromassage]
-        relikura_cabins = [self.relikura_cabin_2, self.relikura_cabin_4, self.relikura_cabin_6]
-        relikura_hostel = [self.relikura_hostel]
-        
-        # Open Sky header
-        result.append({
-            "type": "text",
-            "content": "⭐ *Open Sky* – Para parejas románticas\nDomos transparentes con vista a las estrellas 🌌"
-        })
-        
-        # Open Sky accommodations with images
-        for acc in open_sky:
-            price_text = f"💰 ${acc.price_per_night:,} / noche ({acc.capacity} pers.)"
-            acc_key = name_to_key.get(acc.name)
-            local_path = get_accommodation_image_path(acc_key) if acc_key else None
+
+        for group_name, accs in self._groups.items():
+            # Group header
+            icon = "⭐" if "sky" in group_name.lower() or "open" in group_name.lower() else "🌿"
             result.append({
-                "type": "image",
-                "image_url": acc.image_url,
-                "image_path": local_path,
-                "caption": f"*{acc.name}*\n\n{acc.description}\n\n{price_text}\n\n" + "\n".join([f"• {f}" for f in acc.features])
+                "type": "text",
+                "content": f"{icon} *{group_name}*"
             })
-        
-        # Raíces de Relikura header
+
+            for acc in accs:
+                price_text = f"💰 ${acc.price_per_night:,} / noche ({acc.capacity} pers.)"
+                caption = (
+                    f"*{acc.name}*\n\n"
+                    f"{acc.description}\n\n"
+                    f"{price_text}"
+                )
+                result.append({
+                    "type": "image",
+                    "image_url":  acc.image_url,
+                    "image_path": acc._local_img,
+                    "caption":    caption,
+                })
+
         result.append({
             "type": "text",
-            "content": "\n🌿 *Raíces de Relikura* – Familiar con actividades\nHostal y cabañas junto al río, con tinaja y entorno natural 🍃"
+            "content": (
+                "\n📌 *Cómo funciona:*\n"
+                "1. Me dices la fecha y la opción de alojamiento\n"
+                "2. Te confirmo disponibilidad\n"
+                "3. Pagas y quedas reservado\n\n"
+                "📲 Responde con la fecha y alojamiento que prefieras"
+            )
         })
-        
-        # Relikura cabins with images
-        for acc in relikura_cabins:
-            price_text = f"💰 ${acc.price_per_night:,} / noche ({acc.capacity} pers.)"
-            acc_key = name_to_key.get(acc.name)
-            local_path = get_accommodation_image_path(acc_key) if acc_key else None
-            result.append({
-                "type": "image",
-                "image_url": acc.image_url,
-                "image_path": local_path,
-                "caption": f"*{acc.name}*\n\n{acc.description}\n\n{price_text}\n\n" + "\n".join([f"• {f}" for f in acc.features])
-            })
-        
-        # Hostel with image
-        acc = self.relikura_hostel
-        price_text = f"💰 ${acc.price_per_night:,} / noche por persona"
-        acc_key = name_to_key.get(acc.name)
-        local_path = get_accommodation_image_path(acc_key) if acc_key else None
-        result.append({
-            "type": "image",
-            "image_url": acc.image_url,
-            "image_path": local_path,
-            "caption": f"*{acc.name}*\n\n{acc.description}\n\n{price_text}\n\n" + "\n".join([f"• {f}" for f in acc.features])
-        })
-        
-        # Footer
-        result.append({
-            "type": "text",
-            "content": "\n📌 *Cómo funciona:*\n1. Me dices la fecha y la opción de alojamiento\n2. Te confirmo disponibilidad\n3. Pagas todo en un solo link y quedas reservado\n\n📲 Responde este mensaje con la fecha y alojamiento que prefieras"
-        })
-        
         return result
 
 
-# Global instance
-accommodations_handler = AccommodationsHandler()
+def get_accommodations_handler() -> AccommodationsHandler:
+    """Return a fresh handler loaded from DB."""
+    return AccommodationsHandler()
 
+
+# Keep backward-compatible name
+accommodations_handler = AccommodationsHandler()

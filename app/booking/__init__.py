@@ -1,0 +1,1 @@
+"""HotBoat Booking Platform module"""

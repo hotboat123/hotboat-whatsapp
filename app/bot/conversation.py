@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS, CHILE_TZ
 from app.bot.faq import FAQHandler
-from app.bot.accommodations import accommodations_handler
+from app.bot.accommodations import accommodations_handler, get_accommodations_handler
 from app.bot.cart import CartManager, CartItem
 from app.bot.translations import (
     get_text,
@@ -167,7 +167,7 @@ class ConversationManager:
         except Exception as e:
             logger.error(f"Error checking repeated ad message: {e}")
     
-    async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation") -> None:
+    async def _notify_capitan_tomas(self, customer_name: str, customer_phone: str, cart: list, reason: str = "reservation", extra_info: str = None) -> None:
         """
         Send WhatsApp notification to Capitán Tomás
         
@@ -175,7 +175,8 @@ class ConversationManager:
             customer_name: Name of the customer
             customer_phone: Customer's phone number
             cart: Cart items
-            reason: 'reservation' or 'call_request'
+            reason: 'reservation', 'call_request', or 'accommodation_request'
+            extra_info: Additional information for the notification (used for accommodation requests)
         """
         try:
             email_subject: Optional[str] = None
@@ -248,6 +249,115 @@ class ConversationManager:
                 email_subject = f"Solicitud de contacto - {customer_name}"
                 email_body = self._format_plain_text(message)
                 email_priority = "critical"
+            
+            elif reason == "accommodation_request":
+                # Notification for accommodation request
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu solicitud de alojamiento. Te confirmo disponibilidad pronto! 🏠"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                message = f"🏠 *Solicitud de Alojamiento*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"{extra_info}\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Solicitud de alojamiento - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
+            
+            elif reason == "package_request":
+                # Notification for complete package request
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu interés en nuestro pack completo. Te confirmo disponibilidad pronto! 🎁"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                message = f"🎁 *Solicitud de Pack Completo*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"📦 *Pack:* {extra_info}\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Solicitud de pack completo - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
+            
+            elif reason == "custom_package_request":
+                # Notification for custom package request
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu pack personalizado. Te contacto pronto para coordinar! 🛒"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                message = f"🛒 *Solicitud de Pack Personalizado*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"{extra_info}\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Solicitud de pack personalizado - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
+            
+            elif reason == "experience_request":
+                # Notification for experience request (rafting, horseback, navigation)
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu solicitud de experiencia. Te confirmo disponibilidad pronto! 🚣"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                message = f"🚣 *Solicitud de Experiencia*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"{extra_info}\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Solicitud de experiencia - {customer_name}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
+            
+            elif reason == "cart_checkout":
+                # Notification for cart checkout (complete order with experiences/extras)
+                
+                # Create pre-filled message for WhatsApp link
+                import urllib.parse
+                prefilled_msg = f"Hola {customer_name}! 👋\n\nSoy Tomás, Capitán de HotBoat.\n\nVi tu pedido completo. Te confirmo disponibilidad y coordino el pago pronto! 🚤"
+                encoded_msg = urllib.parse.quote(prefilled_msg)
+                whatsapp_link = f"https://wa.me/{customer_phone}?text={encoded_msg}"
+                
+                total = self.cart_manager.calculate_total(cart)
+                
+                message = f"🛒 *Pedido Completo - Checkout*\n\n"
+                message += f"👤 *Cliente:* {customer_name}\n"
+                message += f"📱 *Teléfono:* +{customer_phone}\n\n"
+                if extra_info:
+                    message += f"{extra_info}\n\n"
+                else:
+                    message += f"💰 *Total:* ${total:,} CLP\n\n"
+                message += f"🔗 *Contactar al cliente:*\n"
+                message += whatsapp_link
+                
+                email_subject = f"Pedido completo - {customer_name} - ${total:,}"
+                email_body = self._format_plain_text(message)
+                email_priority = "high"
             
             else:
                 return
@@ -331,7 +441,7 @@ class ConversationManager:
                 return {"type": "manual_override"}
             
             if is_first:
-                self._schedule_conversation_summary_email(from_number, conversation)
+                pass  # Summary email on first contact disabled
             
             requested_language = get_language_code_from_text(message_text)
             if requested_language:
@@ -342,15 +452,45 @@ class ConversationManager:
                     logger.info(f"Unsupported language requested: {requested_language}")
                     response = self._language_not_supported_response(conversation)
             # Always show welcome message on first interaction
-            elif is_first:
+            # BUT skip if an active flow was already set (e.g. via quick reply from admin)
+            elif is_first and not any(metadata.get(k) for k in (
+                "accommodation_flow", "experience_flow", "complete_packages_flow",
+                "build_package_flow", "awaiting_packages_submenu",
+            )):
                 logger.info("First message - sending welcome menu")
                 metadata["language_selected"] = True
                 language = metadata.get("language", "es")
+                # Signal webhook to schedule a 2-min follow-up if user doesn't reply
+                metadata["schedule_followup"] = True
                 response = self._get_main_menu_message(language)
             elif self._is_thanks_message(message_text):
                 logger.info("Gratitude detected - sending friendly reply")
                 language = metadata.get("language", "es")
                 response = get_text("thanks_response", language)
+            # PRIORITY 0.65: Kids / niños question — always answer regardless of active flow
+            elif "niño" in message_text.lower() or "niña" in message_text.lower() or "nino" in message_text.lower() or "nina" in message_text.lower() or "menor" in message_text.lower() or "menores" in message_text.lower() or "niños" in message_text.lower() or "niñas" in message_text.lower():
+                logger.info("Kids question detected - sending children info sequence")
+                response = {
+                    "type": "sequence",
+                    "messages": [
+                        "Sí!, los niños lo pasan increíble 🎉",
+                        "Pagan desde los 6 años, a los menores no los consideres en el número de personas de la reserva 👍",
+                    ],
+                    "delay": 1.5
+                }
+            # PRIORITY 0.66: Safety / security question — always answer regardless of active flow
+            elif any(w in message_text.lower() for w in ["seguridad", "seguro", "segura", "peligro", "peligroso", "peligrosa", "riesgo", "accidente", "emergencia", "salvavidas", "chaleco", "ahog"]):
+                logger.info("Safety question detected - sending safety info sequence")
+                response = {
+                    "type": "sequence",
+                    "messages": [
+                        "Tenemos aro salvavidas y chalecos salvavidas en caso de emergencia 🦺",
+                        "Estamos comunicados todo el tiempo por radio 📻",
+                        "Tenemos un bote de emergencia y un kayak de apoyo por cualquier emergencia 🚣",
+                        "La laguna es super tranquila la verdad, hasta ahora no hemos tenido ningún problema 😊",
+                    ],
+                    "delay": 1.5
+                }
             # PRIORITY 0.7: Check if user wants to return to main menu
             elif self._is_menu_request(message_text):
                 logger.info("User requested main menu - clearing all flows")
@@ -368,7 +508,10 @@ class ConversationManager:
                 metadata.pop("awaiting_reservation_date", None)
                 metadata.pop("awaiting_reservation_time", None)
                 metadata.pop("awaiting_party_size", None)
-                metadata.pop("awaiting_accommodation_selection", None)
+                metadata.pop("pending_reservation", None)
+                metadata.pop("awaiting_date_time_selection", None)
+                metadata.pop("available_times_for_date", None)
+                # Return main menu
                 language = metadata.get("language", "es")
                 response = self._get_main_menu_message(language)
             # PRIORITY 0.8: Allow users to restart availability flow at any step
@@ -391,6 +534,29 @@ class ConversationManager:
             elif conversation.get("metadata", {}).get("awaiting_reservation_time"):
                 logger.info("User responding with reservation time")
                 response = await self._handle_reservation_time_response(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.3.5: Packages submenu selection
+            elif conversation.get("metadata", {}).get("awaiting_experience_menu"):
+                logger.info("User selecting from experiences menu")
+                response = await self._handle_experiences_menu(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.35: Experience flow (rafting, horseback, navigation)
+            elif conversation.get("metadata", {}).get("experience_flow"):
+                logger.info("User in experience flow")
+                response = await self._handle_experience_flow(message_text, from_number, contact_name, conversation)
+            elif conversation.get("metadata", {}).get("awaiting_packages_submenu"):
+                logger.info("User selecting from packages submenu")
+                response = await self._handle_packages_submenu(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.4: Accommodation flow - step by step
+            elif conversation.get("metadata", {}).get("accommodation_flow"):
+                logger.info("User in accommodation flow")
+                response = await self._handle_accommodation_flow(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.4.5: Complete packages flow
+            elif conversation.get("metadata", {}).get("complete_packages_flow"):
+                logger.info("User in complete packages flow")
+                response = await self._handle_complete_packages_flow(message_text, from_number, contact_name, conversation)
+            # PRIORITY 1.4.7: Build your package flow
+            elif conversation.get("metadata", {}).get("build_package_flow"):
+                logger.info("User in build your package flow")
+                response = await self._handle_build_package_flow(message_text, from_number, contact_name, conversation)
             # PRIORITY 1.5: Check if user is responding with ice cream flavor choice
             elif conversation.get("metadata", {}).get("awaiting_ice_cream_flavor"):
                 logger.info("User responding with ice cream flavor")
@@ -418,25 +584,6 @@ O elige:
 2️⃣0️⃣ Proceder con el pago
 
 ¿Qué número eliges? 🚤"""
-            # PRIORITY 1.7: Check if user is selecting an accommodation (after viewing accommodations menu)
-            elif conversation.get("metadata", {}).get("awaiting_accommodation_selection"):
-                logger.info(f"User awaiting accommodation selection, processing: {message_text}")
-                accommodation_response = await self._handle_accommodation_selection(message_text, from_number, contact_name, conversation)
-                if accommodation_response:
-                    response = accommodation_response
-                else:
-                    # If can't parse accommodation selection, ask them to clarify
-                    conversation["metadata"]["awaiting_accommodation_selection"] = False
-                    response = """❌ No entendí tu selección de alojamiento.
-
-Por favor, escríbeme de nuevo qué alojamiento te interesa y para qué fechas.
-
-Por ejemplo:
-• "Open Sky con tina para el 15 de marzo"
-• "Cabaña de 4 personas para el 20-22 de abril"
-• "Hostal para 2 noches desde el 10 de mayo"
-
-O escribe *"menú"* para volver al menú principal 🚤"""
             # PRIORITY 2: Check for global shortcuts (18, 19, 20) - work anywhere
             elif message_text.strip() == "18":
                 logger.info("Global shortcut 18: Ver extras")
@@ -533,26 +680,41 @@ O escribe *"menú"* para volver al menú principal 🚤"""
                     # Option 5: Ubicación y Reseñas HotBoat
                     response = self.faq_handler.get_response("ubicación", language)
                 elif menu_number == 6:
-                    # Option 6: Otras Experiencias Pucón (experiences/activities)
-                    # TODO: Implement experiences handler
-                    response = get_text("experiences_menu", language) if language in ["es", "en", "pt"] else "Próximamente disponible / Coming soon / Em breve"
+                    # Option 6: Alojamientos Pucón
+                    logger.info("User selected accommodations from menu")
+                    conversation["metadata"]["accommodation_flow"] = {
+                        "step": "choosing_property",
+                        "property": None,
+                        "room_type": None,
+                        "guests": None,
+                        "checkin_date": None,
+                        "checkout_date": None,
+                    }
+                    for k in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
+                        conversation["metadata"].pop(k, None)
+                    response = {
+                        "type": "accommodations_pdf",
+                        "text": get_text("accommodations_only_intro", language)
+                    }
                 elif menu_number == 7:
-                    # Option 7: Alojamientos y Packs Pucón
-                    # Set flag to await accommodation selection
-                    conversation["metadata"]["awaiting_accommodation_selection"] = True
-                    logger.info(f"Set awaiting_accommodation_selection=True for {from_number}")
-                    # Return special response for accommodations with images
-                    return {
-                        "type": "accommodations",
-                        "text": accommodations_handler.get_text_response(),
-                        "images": accommodations_handler.get_accommodations_with_images()
+                    # Option 7: Otras Experiencias Pucón
+                    logger.info("User selected experiences and activities from menu")
+                    conversation["metadata"]["awaiting_experience_menu"] = True
+                    response = {
+                        "type": "experiences_pdf",
+                        "text": get_text("experiences_menu", language)
                     }
                 elif menu_number == 8:
-                    # Option 8: Llamar al Capitán Tomás
+                    # Option 8: Packs Completos + Arma tu Pack
+                    logger.info("User selected packs from menu")
+                    conversation["metadata"]["awaiting_packages_submenu"] = True
+                    response = get_text("accommodations_and_packages_menu", language)
+                elif menu_number == 9:
+                    # Option 9: Llamar al Capitán Tomás
                     await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                     response = self.faq_handler.get_response("llamar a tomas", language)
                 else:
-                    response = "No entendí esa opción. Por favor elige un número del 1 al 8, grumete ⚓"
+                    response = "No entendí esa opción. Por favor elige un número del 1 al 9, grumete ⚓"
             # Check if asking about accommodations (special handling with images)
             elif self._is_accommodation_query(message_text):
                 logger.info("User asking about accommodations - will send with images")
@@ -560,7 +722,7 @@ O escribe *"menú"* para volver al menú principal 🚤"""
                 return {
                     "type": "accommodations",
                     "text": accommodations_handler.get_text_response(),
-                    "images": accommodations_handler.get_accommodations_with_images()
+                    "images": get_accommodations_handler().get_accommodations_with_images()
                 }
             # Check if user wants to make a reservation (but didn't specify date/time yet)
             # THIS MUST BE EARLY to catch "quiero reservar", "reservar" before other parsers
@@ -809,16 +971,63 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         return False
     
     def _get_main_menu_message(self, language: str = "es") -> str:
-        """
-        Return the standard main menu message in the specified language.
-        
-        Args:
-            language: Language code (es, en, pt)
-        
-        Returns:
-            Main menu message
-        """
-        return get_text("main_menu", language)
+        """Return the main menu, hiding options 6/7/8 if disabled in admin settings."""
+        try:
+            from app.booking.operator_settings import get_menu_settings
+            ms = get_menu_settings()
+            show_exp   = ms.get("show_experiencias", True)
+            show_aloj  = ms.get("show_alojamientos", True)
+            show_packs = ms.get("show_packs", True)
+        except Exception:
+            show_exp = show_aloj = show_packs = True
+
+        if show_exp and show_aloj and show_packs:
+            # All on → standard hardcoded menu (fastest path)
+            return get_text("main_menu", language)
+
+        # Build dynamic version (Spanish only; fallback for other langs)
+        if language != "es":
+            return get_text("main_menu", language)
+
+        # Dynamic Spanish menu — number options shift based on what is active
+        lines = [
+            "🥬 ¡Ahoy, grumete! ⚓",
+            "",
+            "Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥",
+            "",
+            "Puedes preguntarme por:",
+            "",
+            "1️⃣ *Disponibilidad y horarios HotBoat*",
+            "",
+            "2️⃣ *Precios por persona HotBoat*",
+            "",
+            "3️⃣ *Características Experiencia HotBoat*",
+            "",
+            "4️⃣ *Extras HotBoat (toallas, videos, tablas, etc.)*",
+            "",
+            "5️⃣ *Ubicación y Reseñas HotBoat*",
+        ]
+        next_num = 6
+        num_aloj = num_exp = num_packs = None
+        if show_aloj:
+            num_aloj = next_num; next_num += 1
+            lines += ["", f"{num_aloj}️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*"]
+        if show_exp:
+            num_exp = next_num; next_num += 1
+            lines += ["", f"{num_exp}️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*"]
+        if show_packs:
+            num_packs = next_num; next_num += 1
+            lines += ["", f"{num_packs}️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*"]
+        capitan_num = next_num
+        lines += [
+            "",
+            f"Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *{capitan_num}️⃣* 👨‍✈️🌿",
+            "",
+            "¿Listo para zarpar, grumete? ⛵",
+            "",
+            "*¿Qué número eliges?*",
+        ]
+        return "\n".join(lines)
     
     def _is_greeting_message(self, message: str) -> bool:
         """
@@ -1164,6 +1373,47 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         import re
         message_lower = message.lower().strip()
         
+        # Confirm/Checkout cart - Contact Capitán Tomás
+        if any(cmd in message_lower for cmd in ["confirmar", "proceder", "pago", "proceder con pago", "proceder con el pago", "checkout", "confirmar compra", "20"]):
+            cart = await self.cart_manager.get_cart(phone_number)
+            
+            if not cart:
+                return "🛒 Tu carrito está vacío. Agrega experiencias o reserva el HotBoat primero.\n\nEscribe *Menu* para ver las opciones."
+            
+            # Prepare cart summary for notification
+            cart_summary = self._format_cart_for_notification(cart)
+            total = self.cart_manager.calculate_total(cart)
+            
+            # Notify Capitán Tomás
+            await self._notify_capitan_tomas(
+                contact_name,
+                phone_number,
+                cart,
+                reason="cart_checkout",
+                extra_info=cart_summary
+            )
+            
+            # Confirmation message
+            confirmation = f"""✅ *¡Solicitud Enviada al Capitán Tomás!*
+
+{self.cart_manager.format_cart_message(cart)}
+
+━━━━━━━━━━━━━━━━
+
+👨‍✈️ *El Capitán Tomás revisará tu solicitud y te contactará pronto para:*
+
+• Confirmar disponibilidad
+• Coordinar fechas y horarios
+• Procesar el pago
+
+📲 Te responderemos a la brevedad!
+
+🙏 *¡Gracias por elegir HotBoat Chile!*
+
+💡 Tu carrito se mantendrá guardado. Escribe *Menu* para seguir explorando."""
+            
+            return confirmation
+        
         # View cart
         if any(cmd in message_lower for cmd in ["carrito", "ver carrito", "mi carrito", "qué tengo"]):
             cart = await self.cart_manager.get_cart(phone_number)
@@ -1184,23 +1434,12 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         # Clear cart
         if any(cmd in message_lower for cmd in ["vaciar", "limpiar", "borrar carrito", "eliminar todo"]):
             await self.cart_manager.clear_cart(phone_number)
-            return """🛒 *Carrito vaciado*, grumete ⚓
+            language = metadata.get("language", "es")
+            return f"""🛒 *Carrito vaciado*, grumete ⚓
 
-¿Listo para zarpar de nuevo? Elige una opción:
+¿Listo para zarpar de nuevo?
 
-1️⃣ *Disponibilidad y horarios*
-
-2️⃣ *Precios por persona*
-
-3️⃣ *Características del HotBoat*
-
-4️⃣ *Extras y promociones*
-
-5️⃣ *Ubicación y reseñas*
-
-6️⃣ *Hablar con el Capitán Tomás*
-
-¿Qué número eliges? 🚤"""
+{self._get_main_menu_message(language)}"""
 
         # Remove Reserva FLEX via text command
         if "quitar flex" in message_lower or "sacar flex" in message_lower or "remover flex" in message_lower:
@@ -1250,8 +1489,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         if has_extra_keywords and not has_action_words:
             # Check if it contains numbers (quantities) and extra keywords
             has_numbers = bool(re.search(r'\d+', message_lower))
-            # Make sure it's not just a simple menu number (1-6) or just "X helados" without other context
-            is_simple_menu_number = message_lower.strip() in ['1', '2', '3', '4', '5', '6']
+            # Make sure it's not just a simple menu number (1-9) or just "X helados" without other context
+            is_simple_menu_number = message_lower.strip() in ['1', '2', '3', '4', '5', '6', '7', '8', '9']
             # More strict check: must have number + "y" or comma (indicating multiple items)
             has_multiple_items_pattern = bool(re.search(r'\d+.*(y|,).*\d*', message_lower))
             if has_numbers and not is_simple_menu_number and has_multiple_items_pattern:
@@ -1430,9 +1669,6 @@ Escribe el número que prefieras 🚤"""
             return False
         if conversation and conversation.get("metadata", {}).get("awaiting_party_size"):
             return False
-        if conversation and conversation.get("metadata", {}).get("awaiting_accommodation_selection"):
-            logger.info("Not a cart option: awaiting_accommodation_selection is True")
-            return False
         
         # CRITICAL: If user just requested main menu, numbers are menu options, NOT cart options
         metadata = conversation.get("metadata", {}) if conversation else {}
@@ -1516,18 +1752,12 @@ Escribe el número que prefieras 🚤"""
             elif option == '4':
                 # Option 4: Vaciar el carrito
                 await self.cart_manager.clear_cart(phone_number)
-                return """🛒 *Carrito vaciado*, grumete ⚓
+                language = metadata.get("language", "es")
+                return f"""🛒 *Carrito vaciado*, grumete ⚓
 
-¿Listo para zarpar de nuevo? Elige una opción:
+¿Listo para zarpar de nuevo?
 
-1️⃣ *Disponibilidad y horarios*
-2️⃣ *Precios por persona*
-3️⃣ *Características del HotBoat*
-4️⃣ *Extras y promociones*
-5️⃣ *Ubicación y reseñas*
-6️⃣ *Hablar con el Capitán Tomás*
-
-¿Qué número eliges? 🚤"""
+{self._get_main_menu_message(language)}"""
         
         else:
             # Sin Reserva FLEX, opciones normales (1-3)
@@ -1539,18 +1769,12 @@ Escribe el número que prefieras 🚤"""
             elif option == '3':
                 # Option 3: Vaciar el carrito
                 await self.cart_manager.clear_cart(phone_number)
-                return """🛒 *Carrito vaciado*, grumete ⚓
+                language = metadata.get("language", "es")
+                return f"""🛒 *Carrito vaciado*, grumete ⚓
 
-¿Listo para zarpar de nuevo? Elige una opción:
+¿Listo para zarpar de nuevo?
 
-1️⃣ *Disponibilidad y horarios*
-2️⃣ *Precios por persona*
-3️⃣ *Características del HotBoat*
-4️⃣ *Extras y promociones*
-5️⃣ *Ubicación y reseñas*
-6️⃣ *Hablar con el Capitán Tomás*
-
-¿Qué número eliges? 🚤"""
+{self._get_main_menu_message(language)}"""
             
             # Option 2: Proceder con el pago (aplica para ambos casos)
         
@@ -1933,7 +2157,7 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
         Handle multiple menu number selections and return combined response.
         
         Args:
-            menu_numbers: List of menu numbers selected (1-6)
+            menu_numbers: List of menu numbers selected (1-9)
             conversation: Conversation context
             language: Language code
             from_number: User's phone number
@@ -1955,13 +2179,13 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             7: {"es": "🏠 ALOJAMIENTOS Y PACKS PUCÓN", "en": "🏠 PUCÓN ACCOMMODATIONS AND PACKAGES", "pt": "🏠 HOSPEDAGENS E PACOTES PUCÓN"},
             8: {"es": "📞 LLAMAR AL CAPITÁN TOMÁS", "en": "📞 CALL CAPTAIN TOMÁS", "pt": "📞 LIGAR PARA O CAPITÃO TOMÁS"}
         }
-
+        
         for menu_number in menu_numbers:
             # Add title separator
             if menu_number in option_titles:
                 title = option_titles[menu_number].get(language, option_titles[menu_number]["es"])
                 responses.append(f"\n{'='*40}\n{title}\n{'='*40}\n")
-
+            
             if menu_number == 1:
                 # Option 1: Disponibilidad y horarios HotBoat
                 responses.append(self._ask_for_reservation_date(conversation, language))
@@ -1979,14 +2203,22 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 # Option 5: Ubicación y Reseñas HotBoat
                 responses.append(self.faq_handler.get_response("ubicación", language))
             elif menu_number == 6:
-                # Option 6: Otras Experiencias Pucón
-                responses.append(get_text("experiences_menu", language) if language in ["es", "en", "pt"] else "Próximamente disponible / Coming soon / Em breve")
+                # Option 6: Alojamientos Pucón
+                conversation["metadata"]["accommodation_flow"] = {
+                    "step": "choosing_property", "property": None,
+                    "room_type": None, "guests": None,
+                    "checkin_date": None, "checkout_date": None,
+                }
+                responses.append(get_text("accommodations_only_intro", language))
             elif menu_number == 7:
-                # Option 7: Alojamientos y Packs Pucón
-                conversation["metadata"]["awaiting_accommodation_selection"] = True
-                responses.append(accommodations_handler.get_text_response())
+                # Option 7: Otras Experiencias Pucón
+                responses.append(get_text("experiences_menu", language))
             elif menu_number == 8:
-                # Option 8: Llamar al Capitán Tomás
+                # Option 8: Packs Completos + Arma tu Pack
+                conversation["metadata"]["awaiting_packages_submenu"] = True
+                responses.append(get_text("accommodations_and_packages_menu", language))
+            elif menu_number == 9:
+                # Option 9: Llamar al Capitán Tomás
                 await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                 responses.append(self.faq_handler.get_response("llamar a tomas", language))
         
@@ -2047,15 +2279,87 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                         confirm_message += f"   • {item.name}\n"
                     confirm_message += "\n"
                 confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
-                confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para confirmar y coordinar el pago* 👨‍✈️\n\n"
-                confirm_message += "Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
-                confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
+                # Try to generate WooCommerce payment link
+                payment_url = None
+                try:
+                    from app.payment.woocommerce import create_order
+                    fecha_res = reservation.metadata.get('date') if reservation else None
+                    order = await create_order(
+                        reservation_id=0,
+                        nombre=contact_name,
+                        telefono=phone_number,
+                        email=None,
+                        monto_reserva=total,
+                        monto_extras=0,
+                        fecha=fecha_res,
+                        num_personas=reservation.quantity if reservation else None,
+                    )
+                    payment_url = order.get("payment_url")
+                except Exception as _pe:
+                    logger.warning(f"WooCommerce payment link skip: {_pe}")
+
+                if payment_url:
+                    confirm_message += f"💳 *Paga tu reserva aquí:*\n{payment_url}\n\n"
+                    confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
+                else:
+                    confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para coordinar el pago* 👨‍✈️\n\n"
+                    confirm_message += "Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
+                    confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
                 await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
                 await self.cart_manager.clear_cart(phone_number)
                 self._reset_reservation_flow(conversation)
                 return confirm_message
             return f"{self.cart_manager.format_cart_message(cart)}\n\n{self._cart_needs_reservation_message(conversation)}"
-        
+
+        # If user sends a STANDALONE menu digit (1-8), escape the date flow and act as menu.
+        # Strict exact-match only: "4" → menu option 4, but "4 de abril" / "4o" → keep as date.
+        _MENU_EMOJIS = {"1️⃣": 1, "2️⃣": 2, "3️⃣": 3, "4️⃣": 4, "5️⃣": 5, "6️⃣": 6, "7️⃣": 7, "8️⃣": 8}
+        if message_clean in _MENU_EMOJIS:
+            menu_num = _MENU_EMOJIS[message_clean]
+        elif message_clean in {"1", "2", "3", "4", "5", "6", "7", "8"}:
+            menu_num = int(message_clean)
+        else:
+            menu_num = None
+        if menu_num is not None:
+            logger.info(f"Standalone menu digit '{message_clean}' detected during date flow - treating as menu option {menu_num}")
+            self._reset_reservation_flow(conversation)
+            language = conversation.get("metadata", {}).get("language", "es")
+            if menu_num == 1:
+                return self._ask_for_reservation_date(conversation, language)
+            elif menu_num == 2:
+                return self.faq_handler.get_response("precio", language)
+            elif menu_num == 3:
+                return self.faq_handler.get_response("caracteristicas", language)
+            elif menu_num == 4:
+                conversation["metadata"]["awaiting_extra_selection"] = True
+                return self.faq_handler.get_response("extras", language)
+            elif menu_num == 5:
+                return self.faq_handler.get_response("ubicación", language)
+            elif menu_num == 6:
+                conversation["metadata"]["accommodation_flow"] = {
+                    "step": "choosing_property", "property": None,
+                    "room_type": None, "guests": None,
+                    "checkin_date": None, "checkout_date": None,
+                }
+                for k in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
+                    conversation["metadata"].pop(k, None)
+                return {
+                    "type": "accommodations_pdf",
+                    "text": get_text("accommodations_only_intro", language)
+                }
+            elif menu_num == 7:
+                conversation["metadata"]["awaiting_experience_menu"] = True
+                return {
+                    "type": "experiences_pdf",
+                    "text": get_text("experiences_menu", language)
+                }
+            elif menu_num == 8:
+                conversation["metadata"]["awaiting_packages_submenu"] = True
+                return get_text("accommodations_and_packages_menu", language)
+            elif menu_num == 9:
+                await self._notify_capitan_tomas(contact_name, phone_number, [], reason="call_request")
+                return self.faq_handler.get_response("llamar a tomas", language)
+
         parsed_date = self._parse_reservation_date(message_lower)
         if not parsed_date:
             return """Necesito la fecha exacta para continuar ⚓
@@ -2334,6 +2638,51 @@ Horarios disponibles:
         plain = plain.replace("•", "-")
         return plain
     
+    def _format_cart_for_notification(self, cart: List) -> str:
+        """Format cart items for notification to Capitán Tomás"""
+        summary = ""
+        total = 0
+        
+        for item in cart:
+            if item.item_type == "reservation":
+                price = item.price * item.quantity
+                summary += f"📅 Reserva HotBoat\n"
+                summary += f"   Fecha: {item.metadata.get('date', 'N/A')}\n"
+                summary += f"   Horario: {item.metadata.get('time', 'N/A')}\n"
+                summary += f"   Personas: {item.quantity}\n"
+                summary += f"   Subtotal: ${price:,}\n\n"
+                total += price
+            elif item.item_type == "experience":
+                price = item.price * item.quantity
+                exp_type = item.metadata.get('experience_type', '')
+                icon = "🚣" if exp_type == "rafting" else "🐴" if exp_type == "horseback" else "⛵"
+                
+                summary += f"{icon} {item.name}\n"
+                if item.quantity > 1 and exp_type != "navigation":
+                    summary += f"   {item.quantity} personas x ${item.price:,}\n"
+                    summary += f"   Subtotal: ${price:,}\n\n"
+                else:
+                    summary += f"   Precio: ${price:,}\n\n"
+                total += price
+            elif item.item_type == "extra":
+                price = item.price * item.quantity
+                if item.name != "Reserva FLEX (+10%)":
+                    summary += f"✨ {item.name}\n"
+                    summary += f"   {item.quantity}x ${item.price:,} = ${price:,}\n\n"
+                    total += price
+        
+        # Add FLEX if present
+        if any(item.name == "Reserva FLEX (+10%)" for item in cart):
+            reservation_cost = sum(i.price * i.quantity for i in cart if i.item_type == "reservation")
+            flex_amount = int(reservation_cost * 0.1)
+            summary += f"🔒 Reserva FLEX (+10%)\n"
+            summary += f"   ${flex_amount:,}\n\n"
+            total += flex_amount
+        
+        summary += f"💰 TOTAL: ${total:,} CLP"
+        
+        return summary
+    
     async def _send_notification_email(self, subject: str, body: str, priority: str = "high") -> None:
         """Send email notification using Resend API (works on Railway/PaaS)."""
         if not getattr(self.settings, "email_enabled", False):
@@ -2371,6 +2720,125 @@ Horarios disponibles:
             logger.info(f"Email notification sent via Resend: {subject} (ID: {result.get('id', 'N/A')})")
         except Exception as e:
             logger.error(f"Error sending email notification via Resend: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    async def _send_accommodation_availability_email(
+        self,
+        customer_name: str,
+        customer_phone: str,
+        property_key: str,
+        accommodation_name: str,
+        guests: int,
+        checkin_date: str,
+        checkout_date: str
+    ) -> None:
+        """
+        Send email notification with WhatsApp link to check accommodation availability
+        
+        Args:
+            customer_name: Customer's name
+            customer_phone: Customer's phone number
+            property_key: "open_sky" or "relikura"
+            accommodation_name: Full accommodation name
+            guests: Number of guests
+            checkin_date: Check-in date
+            checkout_date: Check-out date
+        """
+        from app.bot.accommodations_contacts import get_accommodation_contact, generate_whatsapp_link
+        
+        try:
+            # Get accommodation contact
+            contact = get_accommodation_contact(property_key)
+            if not contact:
+                logger.error(f"No contact found for accommodation: {property_key}")
+                return
+            
+            # Generate WhatsApp message
+            whatsapp_message = f"""Hola! Tengo una consulta de disponibilidad:
+
+🏠 *Alojamiento:* {accommodation_name}
+👥 *Personas:* {guests}
+📅 *Check-in:* {checkin_date}
+📅 *Check-out:* {checkout_date}
+
+¿Tienen disponibilidad para estas fechas?
+
+Cliente: {customer_name} ({customer_phone})"""
+            
+            # Generate WhatsApp link
+            whatsapp_link = generate_whatsapp_link(contact["whatsapp"], whatsapp_message)
+            
+            # Email subject
+            subject = f"🏠 Nueva solicitud de alojamiento: {accommodation_name}"
+            
+            # Email body (HTML) - Simplified to match working emails
+            html_body = f"""
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <h2 style="color: #2563eb;">🏠 Nueva Solicitud de Alojamiento</h2>
+    
+    <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #1f2937;">Detalles de la Reserva</h3>
+        <p><strong>🏠 Alojamiento:</strong> {accommodation_name}</p>
+        <p><strong>👥 Personas:</strong> {guests}</p>
+        <p><strong>📅 Check-in:</strong> {checkin_date}</p>
+        <p><strong>📅 Check-out:</strong> {checkout_date}</p>
+    </div>
+    
+    <div style="background-color: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #1f2937;">👤 Cliente</h3>
+        <p><strong>Nombre:</strong> {customer_name}</p>
+        <p><strong>WhatsApp:</strong> {customer_phone}</p>
+    </div>
+    
+    <div style="background-color: #ecfdf5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #065f46;">📞 Contactar a {contact["name"]}</h3>
+        <p style="margin-bottom: 15px;">Haz clic en el botón para abrir WhatsApp con el mensaje pre-escrito:</p>
+        <a href="{whatsapp_link}" 
+           style="display: inline-block; background-color: #25D366; color: white; padding: 12px 24px; 
+                  text-decoration: none; border-radius: 6px; font-weight: bold;">
+            💬 Consultar Disponibilidad en WhatsApp
+        </a>
+    </div>
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+        <p>Este es un mensaje automático del sistema HotBoat WhatsApp Bot.</p>
+        <p>El cliente ha agregado este alojamiento a su carrito y está esperando confirmación de disponibilidad.</p>
+    </div>
+</div>
+"""
+            
+            # Use the same method as other working emails
+            if not RESEND_AVAILABLE:
+                logger.warning("Resend library not installed; cannot send accommodation email.")
+                return
+            
+            if not self.notification_email_recipients:
+                logger.warning("No notification emails configured. Skipping accommodation email.")
+                return
+            
+            resend_key = getattr(self.settings, "resend_api_key", "")
+            if not resend_key:
+                logger.warning("RESEND_API_KEY not configured; cannot send accommodation email.")
+                return
+            
+            # Configure Resend API key
+            resend.api_key = resend_key
+            
+            # Send email via Resend API using same format as working emails
+            result = resend.Emails.send({
+                "from": self.email_sender,
+                "to": self.notification_email_recipients,
+                "subject": subject,
+                "html": html_body,
+            })
+            
+            logger.info(f"✅ Accommodation availability email sent: {accommodation_name} (ID: {result.get('id', 'N/A')})")
+            logger.info(f"   📧 Sent to: {self.notification_email_recipients}")
+            logger.info(f"   📞 Contact: {contact['name']} - {contact['whatsapp']}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending accommodation availability email: {e}")
             import traceback
             traceback.print_exc()
     
@@ -2565,6 +3033,825 @@ Escribe el número que prefieras 🚤"""
             conversation["metadata"]["pending_ice_cream_quantity"] = None
             conversation["metadata"]["pending_extras"] = []
             return "Hubo un error agregando el helado. Por favor, intenta de nuevo."
+    
+    async def _handle_accommodation_flow(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle step-by-step accommodation booking flow"""
+        try:
+            flow = conversation["metadata"]["accommodation_flow"]
+            step = flow["step"]
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Step 1: Choosing property (Open Sky or Relikura)
+            if step == "choosing_property":
+                if any(word in message_clean for word in ["1", "open", "sky", "domo"]):
+                    flow["property"] = "open_sky"
+                    flow["step"] = "choosing_room"
+                    return get_text("accommodations_open_sky_rooms", language)
+                elif any(word in message_clean for word in ["2", "raices", "raíces", "relikura", "cabaña", "cabana", "hostal"]):
+                    flow["property"] = "relikura"
+                    flow["step"] = "choosing_room"
+                    return get_text("accommodations_relikura_rooms", language)
+                else:
+                    return get_text("accommodations_intro", language)
+            
+            # Step 2: Choosing room type
+            elif step == "choosing_room":
+                if flow["property"] == "open_sky":
+                    if "1" in message_clean or "tina" in message_clean or "baño" in message_clean:
+                        flow["room_type"] = "Domo con Tina de Baño"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    elif "2" in message_clean or "hidromasaje" in message_clean or "hidro" in message_clean:
+                        flow["room_type"] = "Domo con Hidromasaje"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    else:
+                        return get_text("accommodations_open_sky_rooms", language)
+                
+                elif flow["property"] == "relikura":
+                    if "1" in message_clean or ("2" in message_clean and "personas" in message_clean):
+                        flow["room_type"] = "Cabaña para 2 personas"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    elif "2" in message_clean or ("4" in message_clean and "personas" in message_clean):
+                        flow["room_type"] = "Cabaña para 4 personas"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    elif "3" in message_clean or ("6" in message_clean and "personas" in message_clean):
+                        flow["room_type"] = "Cabaña para 6 personas"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    elif "4" in message_clean or "hostal" in message_clean:
+                        flow["room_type"] = "Hostal"
+                        flow["step"] = "asking_guests"
+                        return get_text("accommodations_ask_guests", language)
+                    else:
+                        return get_text("accommodations_relikura_rooms", language)
+            
+            # Step 3: Number of guests
+            elif step == "asking_guests":
+                import re
+                numbers = re.findall(r'\d+', message_clean)
+                if numbers:
+                    flow["guests"] = int(numbers[0])
+                    flow["step"] = "asking_checkin"
+                    return get_text("accommodations_ask_checkin_date", language)
+                else:
+                    return get_text("accommodations_ask_guests", language)
+            
+            # Step 4: Check-in date
+            elif step == "asking_checkin":
+                flow["checkin_date"] = message.strip()
+                flow["step"] = "asking_checkout"
+                return get_text("accommodations_ask_checkout_date", language)
+            
+            # Step 5: Check-out date
+            elif step == "asking_checkout":
+                flow["checkout_date"] = message.strip()
+                
+                # Build summary
+                property_name = "Open Sky" if flow["property"] == "open_sky" else "Raíces de Relikura"
+                summary = f"""📍 *Alojamiento:* {property_name}
+🏠 *Habitación:* {flow["room_type"]}
+👥 *Personas:* {flow["guests"]}
+📅 *Check-in:* {flow["checkin_date"]}
+📅 *Check-out:* {flow["checkout_date"]}"""
+                
+                # Check if this is part of a custom package (has pending activities)
+                pending_activities = conversation["metadata"].get("pending_package_activities")
+                
+                if pending_activities:
+                    # This is a custom package with accommodation - notify Capitán Tomás
+                    activities_map = {
+                        "1": "🚤 HotBoat",
+                        "2": "🚣 Rafting",
+                        "3": "🌋 Subida al Volcán",
+                        "4": "🐴 Cabalgata",
+                        "5": "🚗 Arriendo de Vehículo (Suzuki New Baleno - $50.000/día)"
+                    }
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in pending_activities)
+                    
+                    # Add activities to summary
+                    summary = f"""🎒 *Actividades:*
+{activities_list}
+
+📍 *Alojamiento:* {property_name}
+🏠 *Habitación:* {flow["room_type"]}
+👥 *Personas:* {flow["guests"]}
+📅 *Check-in:* {flow["checkin_date"]}
+📅 *Check-out:* {flow["checkout_date"]}"""
+                    
+                    # Notify Capitán Tomás for custom packages
+                    await self._notify_capitan_tomas(
+                        contact_name,
+                        phone_number,
+                        [],
+                        reason="custom_package_request",
+                        extra_info=summary
+                    )
+                    
+                    # Clear pending activities and accommodation flow
+                    del conversation["metadata"]["pending_package_activities"]
+                    del conversation["metadata"]["accommodation_flow"]
+                    
+                    return get_text("build_package_confirmation", language).format(package_summary=summary)
+                
+                else:
+                    # This is a simple accommodation booking - add to cart instead of notifying
+                    logger.info(f"💰 Calculating price for accommodation: property={flow['property']}, room_type={flow['room_type']}")
+                    
+                    # Determine price based on property and room type
+                    if flow["property"] == "open_sky":
+                        if "Hidromasaje" in flow["room_type"]:
+                            price = 120000
+                            logger.info(f"   Price set to $120,000 (Open Sky Hidromasaje)")
+                        else:
+                            price = 100000
+                            logger.info(f"   Price set to $100,000 (Open Sky Tina de Baño)")
+                    else:  # relikura
+                        if "Hostal" in flow["room_type"]:
+                            price = 20000
+                            logger.info(f"   Price set to $20,000 (Relikura Hostal)")
+                        elif "6 personas" in flow["room_type"]:
+                            price = 100000
+                            logger.info(f"   Price set to $100,000 (Relikura 6 personas)")
+                        elif "4 personas" in flow["room_type"]:
+                            price = 80000
+                            logger.info(f"   Price set to $80,000 (Relikura 4 personas)")
+                        else:  # 2 personas
+                            price = 60000
+                            logger.info(f"   Price set to $60,000 (Relikura 2 personas)")
+                    
+                    logger.info(f"✅ Final accommodation price: ${price:,}")
+                    
+                    # Create accommodation cart item
+                    accommodation_item = CartItem(
+                        item_type="accommodation",
+                        name=f"{property_name} - {flow['room_type']}",
+                        price=price,
+                        quantity=1,
+                        metadata={
+                            "guests": flow['guests'],
+                            "checkin_date": flow['checkin_date'],
+                            "checkout_date": flow['checkout_date']
+                        }
+                    )
+                    
+                    logger.info(f"📦 CartItem created: name={accommodation_item.name}, price={accommodation_item.price}, type={accommodation_item.item_type}")
+                    
+                    # Add to cart
+                    await self.cart_manager.add_item(phone_number, contact_name, accommodation_item)
+                    cart = await self.cart_manager.get_cart(phone_number)
+                    
+                    logger.info(f"🛒 Cart after adding accommodation: {len(cart)} items, total=${self.cart_manager.calculate_total(cart):,}")
+                    
+                    # Send email notification with WhatsApp link to check availability
+                    asyncio.create_task(
+                        self._send_accommodation_availability_email(
+                            customer_name=contact_name,
+                            customer_phone=phone_number,
+                            property_key=flow["property"],
+                            accommodation_name=f"{property_name} - {flow['room_type']}",
+                            guests=flow['guests'],
+                            checkin_date=flow['checkin_date'],
+                            checkout_date=flow['checkout_date']
+                        )
+                    )
+                    
+                    # Clear accommodation flow
+                    del conversation["metadata"]["accommodation_flow"]
+                    
+                    # Return cart message with options
+                    return f"""✅ *Alojamiento agregado al carrito*
+
+{summary}
+
+{self.cart_manager.format_cart_message(cart)}
+
+📋 *¿Qué deseas hacer ahora?*
+
+• Escribe *"7"* para agregar más alojamientos
+• Escribe *"4"* para agregar extras (toallas, videos, etc.)
+• Escribe *"menú"* para ver el menú principal
+• Escribe *"carrito"* o *"20"* para proceder con el pago
+
+¿Qué opción eliges, grumete? ⚓"""
+            
+        except Exception as e:
+            logger.error(f"Error in accommodation flow: {e}")
+            if "accommodation_flow" in conversation.get("metadata", {}):
+                del conversation["metadata"]["accommodation_flow"]
+            return "Lo siento, hubo un error procesando tu solicitud de alojamiento. Por favor intenta de nuevo escribiendo 'menu'."
+    
+    async def _handle_experiences_menu(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> Union[str, Dict]:
+        """Handle user selection from the experiences menu"""
+        try:
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Check if user is in an experience flow already
+            if conversation.get("metadata", {}).get("experience_flow"):
+                return await self._handle_experience_flow(message, phone_number, contact_name, conversation)
+            
+            # Option 1: Rafting
+            if "1" in message_clean or "rafting" in message_clean:
+                logger.info("User selected rafting experience")
+                del conversation["metadata"]["awaiting_experience_menu"]
+                conversation["metadata"]["experience_flow"] = {
+                    "type": "rafting",
+                    "step": "selecting_level"
+                }
+                return get_text("rafting_options", language)
+            
+            # Option 2: Horseback Riding
+            elif "2" in message_clean or "cabalg" in message_clean or "horse" in message_clean or "cavalgada" in message_clean:
+                logger.info("User selected horseback riding experience")
+                del conversation["metadata"]["awaiting_experience_menu"]
+                conversation["metadata"]["experience_flow"] = {
+                    "type": "horseback",
+                    "step": "confirming",
+                    "price": 50000,
+                    "name": "Cabalgata Parque Ojos del Caburguá"
+                }
+                return get_text("horseback_options", language)
+            
+            # Option 3: Navigation
+            elif "3" in message_clean or "naveg" in message_clean or "navigation" in message_clean:
+                logger.info("User selected navigation experience")
+                del conversation["metadata"]["awaiting_experience_menu"]
+                conversation["metadata"]["experience_flow"] = {
+                    "type": "navigation",
+                    "step": "selecting_option"
+                }
+                return get_text("navigation_options", language)
+            
+            else:
+                # Invalid selection, show menu again
+                return get_text("experiences_menu", language)
+                
+        except Exception as e:
+            logger.error(f"Error in experiences menu: {e}")
+            if "awaiting_experience_menu" in conversation.get("metadata", {}):
+                del conversation["metadata"]["awaiting_experience_menu"]
+            return "Lo siento, hubo un error. Por favor intenta de nuevo escribiendo 'menu'."
+    
+    async def _handle_experience_flow(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle specific experience flow (rafting, horseback, navigation)"""
+        try:
+            flow = conversation["metadata"]["experience_flow"]
+            exp_type = flow.get("type")
+            step = flow.get("step")
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Rafting Flow
+            if exp_type == "rafting":
+                if step == "selecting_level":
+                    # User selects level (bajo or alto)
+                    if "1" in message_clean or "bajo" in message_clean or "low" in message_clean or "baixo" in message_clean:
+                        flow["level"] = "bajo"
+                        flow["price"] = 30000
+                        flow["name"] = "Rafting Bajo"
+                    elif "2" in message_clean or "alto" in message_clean or "high" in message_clean:
+                        flow["level"] = "alto"
+                        flow["price"] = 40000
+                        flow["name"] = "Rafting Alto"
+                    else:
+                        return get_text("rafting_options", language)
+                    
+                    # Ask for number of people
+                    flow["step"] = "asking_people"
+                    return get_text("experience_ask_people", language)
+                
+                elif step == "asking_people":
+                    # Parse number of people
+                    try:
+                        num_people = int(''.join(filter(str.isdigit, message_clean)))
+                        if num_people < 1 or num_people > 50:
+                            return "Por favor ingresa un número válido de personas (entre 1 y 50)."
+                        
+                        flow["num_people"] = num_people
+                        total = flow["price"] * num_people
+                        
+                        # Add to cart instead of notifying immediately
+                        experience_item = CartItem(
+                            item_type="experience",
+                            name=flow["name"],
+                            price=flow["price"],
+                            quantity=num_people,
+                            metadata={
+                                "experience_type": "rafting",
+                                "level": flow["level"]
+                            }
+                        )
+                        
+                        await self.cart_manager.add_item(phone_number, contact_name, experience_item)
+                        
+                        # Get updated cart
+                        cart = await self.cart_manager.get_cart(phone_number)
+                        cart_message = self.cart_manager.format_cart_message(cart)
+                        
+                        # Clear flow
+                        del conversation["metadata"]["experience_flow"]
+                        
+                        return get_text("experience_added_to_cart", language).format(
+                            name=flow["name"],
+                            quantity=num_people,
+                            total=total,
+                            cart=cart_message
+                        )
+                    
+                    except ValueError:
+                        return "Por favor escribe solo el número de personas. Ejemplo: 5"
+            
+            # Horseback Riding Flow
+            elif exp_type == "horseback":
+                if step == "confirming":
+                    # User confirms interest
+                    if "1" in message_clean or "si" in message_clean or "yes" in message_clean or "sim" in message_clean:
+                        flow["step"] = "asking_people"
+                        return get_text("experience_ask_people", language)
+                    else:
+                        # User is not interested or invalid, return to experiences menu
+                        del conversation["metadata"]["experience_flow"]
+                        return get_text("experiences_menu", language)
+                
+                elif step == "asking_people":
+                    # Parse number of people
+                    try:
+                        num_people = int(''.join(filter(str.isdigit, message_clean)))
+                        if num_people < 1 or num_people > 50:
+                            return "Por favor ingresa un número válido de personas (entre 1 y 50)."
+                        
+                        flow["num_people"] = num_people
+                        total = flow["price"] * num_people
+                        
+                        # Add to cart instead of notifying immediately
+                        experience_item = CartItem(
+                            item_type="experience",
+                            name=flow["name"],
+                            price=flow["price"],
+                            quantity=num_people,
+                            metadata={
+                                "experience_type": "horseback"
+                            }
+                        )
+                        
+                        await self.cart_manager.add_item(phone_number, contact_name, experience_item)
+                        
+                        # Get updated cart
+                        cart = await self.cart_manager.get_cart(phone_number)
+                        cart_message = self.cart_manager.format_cart_message(cart)
+                        
+                        # Clear flow
+                        del conversation["metadata"]["experience_flow"]
+                        
+                        return get_text("experience_added_to_cart", language).format(
+                            name=flow["name"],
+                            quantity=num_people,
+                            total=total,
+                            cart=cart_message
+                        )
+                    
+                    except ValueError:
+                        return "Por favor escribe solo el número de personas. Ejemplo: 5"
+            
+            # Navigation Flow
+            elif exp_type == "navigation":
+                if step == "selecting_option":
+                    # Define navigation options
+                    navigation_options = {
+                        "1": {"name": "Travesía 30 min (2p)", "price": 300000, "people": 2},
+                        "2": {"name": "Travesía 30 min (4p)", "price": 340000, "people": 4},
+                        "3": {"name": "Travesía 30 min (6p)", "price": 360000, "people": 6},
+                        "4": {"name": "Travesía 30 min (8p)", "price": 380000, "people": 8},
+                        "5": {"name": "Travesía 30 min (10p)", "price": 400000, "people": 10},
+                        "6": {"name": "Yave a vela Akimbo 2p (1.5hr)", "price": 120000, "people": 2},
+                        "7": {"name": "Yave a vela Akimbo 3p (1.5hr)", "price": 130000, "people": 3},
+                        "8": {"name": "Yave a vela Akimbo 4p (1.5hr)", "price": 140000, "people": 4},
+                        "9": {"name": "Yave a vela Akimbo 5p (1.5hr)", "price": 150000, "people": 5},
+                        "10": {"name": "Yave a vela Akimbo 5p (1.5hr)", "price": 160000, "people": 5}
+                    }
+                    
+                    # Parse user selection
+                    selected_option = None
+                    for key in navigation_options.keys():
+                        if key in message_clean:
+                            selected_option = key
+                            break
+                    
+                    if not selected_option:
+                        return get_text("navigation_options", language)
+                    
+                    option_data = navigation_options[selected_option]
+                    flow["name"] = option_data["name"]
+                    flow["price"] = option_data["price"]
+                    flow["people"] = option_data["people"]
+                    
+                    # Add to cart instead of notifying immediately
+                    experience_item = CartItem(
+                        item_type="experience",
+                        name=flow["name"],
+                        price=flow["price"],
+                        quantity=1,  # Navigation is a package price, not per person
+                        metadata={
+                            "experience_type": "navigation",
+                            "people_capacity": flow["people"]
+                        }
+                    )
+                    
+                    await self.cart_manager.add_item(phone_number, contact_name, experience_item)
+                    
+                    # Get updated cart
+                    cart = await self.cart_manager.get_cart(phone_number)
+                    cart_message = self.cart_manager.format_cart_message(cart)
+                    
+                    # Clear flow
+                    del conversation["metadata"]["experience_flow"]
+                    
+                    return get_text("experience_added_to_cart", language).format(
+                        name=flow["name"],
+                        quantity=f"{flow['people']} personas",
+                        total=flow["price"],
+                        cart=cart_message
+                    )
+            
+            return "Lo siento, hubo un error. Por favor intenta de nuevo escribiendo 'menu'."
+            
+        except Exception as e:
+            logger.error(f"Error in experience flow: {e}")
+            if "experience_flow" in conversation.get("metadata", {}):
+                del conversation["metadata"]["experience_flow"]
+            return "Lo siento, hubo un error procesando tu solicitud. Por favor intenta de nuevo escribiendo 'menu'."
+    
+    async def _handle_packages_submenu(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle user selection from the packages submenu"""
+        try:
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Option 1: Complete Packages
+            if "1" in message_clean or "pack" in message_clean and "complet" in message_clean:
+                logger.info("User selected complete packages")
+                del conversation["metadata"]["awaiting_packages_submenu"]
+                conversation["metadata"]["complete_packages_flow"] = {
+                    "step": "selecting_type"
+                }
+                # Build dynamic packs menu from DB
+                try:
+                    from app.booking.content_router import build_packs_menu_text_es, get_active_packs_db
+                    active_packs = get_active_packs_db()
+                    packs_text = build_packs_menu_text_es(active_packs) if language == "es" else get_text("complete_packages_menu", language)
+                    # Store active slugs so flow can resolve by index
+                    conversation["metadata"]["complete_packages_flow"]["active_slugs"] = [p["slug"] for p in active_packs]
+                except Exception:
+                    packs_text = get_text("complete_packages_menu", language)
+                # Send image with packs summary
+                from app.utils.media_handler import PACKS_IMAGES_DIR
+                import os
+                resumen_path = os.path.join(PACKS_IMAGES_DIR, "resumen-packs.jpg")
+                if os.path.exists(resumen_path):
+                    return {
+                        "type": "image_with_text",
+                        "image_path": resumen_path,
+                        "text": packs_text,
+                        "caption": "📦 Packs Completos HotBoat"
+                    }
+                else:
+                    return packs_text
+            
+            # Option 2: Arma tu Pack
+            elif "2" in message_clean or "arma" in message_clean or "build" in message_clean or "monte" in message_clean:
+                logger.info("User selected build your package")
+                del conversation["metadata"]["awaiting_packages_submenu"]
+                conversation["metadata"]["build_package_flow"] = {
+                    "step": "selecting_activities",
+                    "activities": []
+                }
+                return get_text("build_your_package_intro", language)
+            
+            else:
+                # Invalid selection, show menu again
+                return get_text("accommodations_and_packages_menu", language)
+                
+        except Exception as e:
+            logger.error(f"Error in packages submenu: {e}")
+            if "awaiting_packages_submenu" in conversation.get("metadata", {}):
+                del conversation["metadata"]["awaiting_packages_submenu"]
+            return "Lo siento, hubo un error. Por favor intenta de nuevo escribiendo 'menu'."
+    
+    async def _handle_complete_packages_flow(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle complete packages (romantic, family, friends) flow"""
+        try:
+            flow = conversation["metadata"]["complete_packages_flow"]
+            step = flow.get("step")
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            message_normalized = unicodedata.normalize('NFD', message_clean)
+            message_normalized = ''.join(c for c in message_normalized if unicodedata.category(c) != 'Mn')
+            
+            if step == "selecting_type":
+                # User selects pack type: 1/romantico, 2/familiar, or 3/amigos
+                if "romantico" in message_normalized or "romantic" in message_normalized or message_clean == "1":
+                    pack_type = "romantico"
+                    pack_name_es = "Romántico"
+                elif "familiar" in message_normalized or "family" in message_normalized or message_clean == "2":
+                    pack_type = "familiar"
+                    pack_name_es = "Familiar"
+                elif "amigos" in message_normalized or "friends" in message_normalized or "amigo" in message_normalized or message_clean == "3":
+                    pack_type = "amigos"
+                    pack_name_es = "Amigos"
+                else:
+                    return get_text("complete_packages_menu", language)
+                
+                # Store pack type
+                flow["pack_type"] = pack_type
+                flow["step"] = "selecting_version"
+                
+                # Ask if they want basic or premium
+                if language == "es":
+                    return f"""✅ *Pack {pack_name_es} Seleccionado*
+
+Tenemos 2 versiones:
+
+🎒 *Básico* - Experiencia completa de 1 noche
+💎 *Premium* - Todo incluido con actividades extra (2 o 3 noches)
+
+*¿Cuál prefieres?*
+Escribe *Básico* o *Premium* 💫
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤"""
+                else:
+                    return f"""✅ *{pack_name_es} Package Selected*
+
+We have 2 versions:
+
+🎒 *Basic* - Complete 1-night experience
+💎 *Premium* - All-inclusive with extra activities (2 or 3 nights)
+
+*Which do you prefer?*
+Type *Basic* or *Premium* 💫
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤"""
+            
+            elif step == "selecting_version":
+                # User selects basic or premium
+                pack_type = flow["pack_type"]
+                
+                if "basico" in message_normalized or "basic" in message_normalized:
+                    # Basic pack - send image and notify Capitán Tomás
+                    pdf_name = f"pack_{pack_type}.jpg"
+                    
+                    # Notify Capitán Tomás
+                    pack_name_display = pack_type.capitalize()
+                    await self._notify_capitan_tomas(
+                        contact_name,
+                        phone_number,
+                        [],
+                        reason="package_request",
+                        extra_info=f"Pack {pack_name_display} Básico"
+                    )
+                    
+                    # Clear flow
+                    del conversation["metadata"]["complete_packages_flow"]
+                    
+                    # Return response to send image
+                    response_text = f"""✅ *Pack {pack_name_display} Básico Seleccionado*
+
+Te enviaré la imagen con todos los detalles del pack ⬇️
+
+El *Capitán Tomás* revisará tu solicitud y te contactará para coordinar fechas y pago 👨‍✈️⚓
+
+💡 *Mientras tanto*, escribe *"Menu"* para explorar más del *Menú HotBoat* 🚤"""
+                    
+                    return {
+                        "type": "package_pdf",
+                        "pdf_name": pdf_name,
+                        "text": response_text
+                    }
+                
+                elif "premium" in message_normalized:
+                    # Premium pack - ask for number of nights (2 or 3)
+                    flow["step"] = "selecting_nights"
+                    
+                    if language == "es":
+                        return """💎 *Pack Premium Seleccionado*
+
+Los packs premium incluyen actividades extra y arriendo de vehículo.
+
+*¿Cuántas noches prefieres?*
+Escribe *2* o *3* 🌙
+
+2️⃣ noches = Más económico
+3️⃣ noches = Experiencia completa
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤"""
+                    else:
+                        return """💎 *Premium Package Selected*
+
+Premium packages include extra activities and vehicle rental.
+
+*How many nights do you prefer?*
+Type *2* or *3* 🌙
+
+2️⃣ nights = More affordable
+3️⃣ nights = Complete experience
+
+💡 *Remember:* Type *"Menu"* to return to the *HotBoat Menu* 🚤"""
+                else:
+                    # Invalid input
+                    return get_text("complete_packages_menu", language)
+            
+            elif step == "selecting_nights":
+                # User selects 2 or 3 nights for premium pack
+                pack_type = flow["pack_type"]
+                
+                if "2" in message_clean:
+                    nights = 2
+                    pdf_name = f"pack_{pack_type}_premium.jpg"
+                elif "3" in message_clean:
+                    nights = 3
+                    pdf_name = f"pack_{pack_type}_premium.jpg"
+                else:
+                    if language == "es":
+                        return """Por favor escribe *2* o *3* para las noches que prefieres 🌙"""
+                    else:
+                        return """Please type *2* or *3* for the nights you prefer 🌙"""
+                
+                # Notify Capitán Tomás
+                pack_name_display = pack_type.capitalize()
+                await self._notify_capitan_tomas(
+                    contact_name,
+                    phone_number,
+                    [],
+                    reason="package_request",
+                    extra_info=f"Pack {pack_name_display} Premium - {nights} noches"
+                )
+                
+                # Clear flow
+                del conversation["metadata"]["complete_packages_flow"]
+                
+                # Return response to send image
+                response_text = f"""✅ *Pack {pack_name_display} Premium ({nights} Noches) Seleccionado*
+
+Te enviaré la imagen con todos los detalles del pack ⬇️
+
+El *Capitán Tomás* revisará tu solicitud y te contactará para coordinar fechas y pago 👨‍✈️⚓
+
+💡 *Mientras tanto*, escribe *"Menu"* para explorar más del *Menú HotBoat* 🚤"""
+                
+                return {
+                    "type": "package_pdf",
+                    "pdf_name": pdf_name,
+                    "text": response_text
+                }
+        
+        except Exception as e:
+            logger.error(f"Error in complete packages flow: {e}")
+            if "complete_packages_flow" in conversation.get("metadata", {}):
+                del conversation["metadata"]["complete_packages_flow"]
+            return "Lo siento, hubo un error. Escribe *'Menu'* para volver al inicio."
+    
+    async def _handle_build_package_flow(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
+        """Handle build your own package flow"""
+        try:
+            flow = conversation["metadata"]["build_package_flow"]
+            step = flow.get("step")
+            language = conversation.get("metadata", {}).get("language", "es")
+            message_clean = message.strip().lower()
+            
+            # Activity mapping
+            activities_map = {
+                "1": "🚤 HotBoat",
+                "2": "🚣 Rafting",
+                "3": "🌋 Subida al Volcán",
+                "4": "🐴 Cabalgata",
+                "5": "🚗 Arriendo de Vehículo (Suzuki New Baleno - $50.000/día)"
+            }
+            
+            if step == "selecting_activities":
+                # Check if user wants to finish
+                if any(word in message_clean for word in ["terminar", "listo", "done", "finish"]):
+                    if not flow["activities"]:
+                        return get_text("build_your_package_intro", language)
+                    
+                    # Ask about accommodation
+                    flow["step"] = "asking_accommodation"
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return get_text("build_package_ask_accommodation", language).format(activities=activities_list)
+                
+                # Parse selected activities (e.g., "1, 2, 4" or "1 2 4")
+                import re
+                numbers = re.findall(r'[1-5]', message_clean)
+                
+                if numbers:
+                    # Add new activities (avoid duplicates)
+                    for num in numbers:
+                        if num not in flow["activities"]:
+                            flow["activities"].append(num)
+                    
+                    # Automatically move to next step: asking about more activities or accommodation
+                    flow["step"] = "asking_more_or_continue"
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return f"""✅ *Actividades agregadas a tu pack:*
+{activities_list}
+
+*¿Qué quieres hacer ahora?*
+
+1️⃣ Agregar más actividades
+2️⃣ Continuar (elegir si quieres alojamiento)
+
+Escribe *1* o *2* 🎒
+
+💡 *Recuerda:* Escribe *"Menu"* para volver al *Menú HotBoat* 🚤"""
+                else:
+                    return get_text("build_your_package_intro", language)
+            
+            elif step == "asking_more_or_continue":
+                # User chooses to add more activities or continue
+                if "1" in message_clean or any(word in message_clean for word in ["agregar", "más", "mas", "more", "add", "adicionar", "mais"]):
+                    # Go back to selecting activities
+                    flow["step"] = "selecting_activities"
+                    return get_text("build_your_package_intro", language)
+                elif "2" in message_clean or any(word in message_clean for word in ["continuar", "continue", "seguir", "continuar"]):
+                    # Ask about accommodation
+                    flow["step"] = "asking_accommodation"
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return get_text("build_package_ask_accommodation", language).format(activities=activities_list)
+                else:
+                    # Invalid response, ask again
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return f"""✅ *Actividades en tu pack:*
+{activities_list}
+
+*¿Qué quieres hacer ahora?*
+
+1️⃣ Agregar más actividades
+2️⃣ Continuar (elegir si quieres alojamiento)
+
+Escribe *1* o *2* 🎒"""
+            
+            elif step == "asking_accommodation":
+                # User answers yes/no for accommodation
+                if "1" in message_clean or any(word in message_clean for word in ["si", "sí", "yes", "sim"]):
+                    # User wants accommodation - start accommodation flow
+                    logger.info("User wants accommodation in build your package - starting accommodation flow")
+                    
+                    # Save activities in metadata for later
+                    conversation["metadata"]["pending_package_activities"] = flow["activities"]
+                    
+                    # Clear build package flow
+                    del conversation["metadata"]["build_package_flow"]
+                    
+                    # Start accommodation flow
+                    conversation["metadata"]["accommodation_flow"] = {
+                        "step": "choosing_property",
+                        "property": None,
+                        "room_type": None,
+                        "guests": None,
+                        "checkin_date": None,
+                        "checkout_date": None
+                    }
+                    
+                    # Return response to send PDF and start accommodation selection
+                    return {
+                        "type": "accommodations_pdf",
+                        "text": get_text("accommodations_only_intro", language)
+                    }
+                    
+                elif "2" in message_clean or any(word in message_clean for word in ["no", "não"]):
+                    # User doesn't want accommodation - just notify with activities
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    
+                    package_summary = f"""*Actividades:*
+{activities_list}
+
+(Sin alojamiento)"""
+                    
+                    # Notify Capitán Tomás
+                    await self._notify_capitan_tomas(
+                        contact_name,
+                        phone_number,
+                        [],
+                        reason="custom_package_request",
+                        extra_info=package_summary
+                    )
+                    
+                    # Clear flow
+                    del conversation["metadata"]["build_package_flow"]
+                    
+                    return get_text("build_package_confirmation", language).format(package_summary=package_summary)
+                else:
+                    # Invalid response, ask again
+                    activities_list = "\n".join(f"• {activities_map[a]}" for a in flow["activities"])
+                    return get_text("build_package_ask_accommodation", language).format(activities=activities_list)
+        
+        except Exception as e:
+            logger.error(f"Error in build package flow: {e}")
+            if "build_package_flow" in conversation.get("metadata", {}):
+                del conversation["metadata"]["build_package_flow"]
+            return "Lo siento, hubo un error. Escribe *'Menu'* para volver al inicio."
     
     async def _handle_extra_number_selection(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> Optional[str]:
         """Handle user's selection of an extra by number (supports multiple numbers like '5 y 7')"""
@@ -2899,114 +4186,7 @@ Precio: $3,500 c/u
             import traceback
             traceback.print_exc()
             return None
-
-    async def _handle_accommodation_selection(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> Optional[str]:
-        """
-        Handle user's selection of an accommodation.
-        The user might say something like:
-        - "Open Sky con tina para el 15 de marzo"
-        - "Cabaña de 4 personas del 20 al 22 de abril"
-        - "Hostal para 2 noches desde el 10 de mayo"
-        
-        We need to:
-        1. Parse which accommodation they want
-        2. Parse dates (check-in and duration/check-out)
-        3. Create a cart item
-        4. Add to cart
-        5. Ask if they want to add more items
-        
-        Returns:
-            Response message or None if couldn't parse
-        """
-        try:
-            import re
-            from datetime import datetime, timedelta
-            message_lower = message.lower().strip()
-            language = conversation.get("metadata", {}).get("language", "es")
-            
-            # Clear the flag
-            conversation["metadata"]["awaiting_accommodation_selection"] = False
-            
-            # For now, since parsing dates and accommodation types from free text is complex,
-            # we'll take a simpler approach: just add the accommodation inquiry to the cart
-            # as a special item that requires Capitán Tomás to contact them
-            
-            # Try to identify which accommodation they're interested in
-            accommodation_name = None
-            accommodation_price = None
-            
-            # Check for Open Sky Domo con Tina
-            if any(keyword in message_lower for keyword in ["open sky", "domo", "tina", "baño"]):
-                if any(keyword in message_lower for keyword in ["hidro", "jacuzzi"]):
-                    accommodation_name = "Open Sky - Domo con Hidromasaje"
-                    accommodation_price = 120000
-                else:
-                    accommodation_name = "Open Sky - Domo con Tina de Baño"
-                    accommodation_price = 100000
-            
-            # Check for Raíces de Relikura Cabañas
-            elif any(keyword in message_lower for keyword in ["cabaña", "cabana", "relikura"]):
-                if any(keyword in message_lower for keyword in ["6", "seis", "grande"]):
-                    accommodation_name = "Raíces de Relikura - Cabaña 6 personas"
-                    accommodation_price = 100000
-                elif any(keyword in message_lower for keyword in ["4", "cuatro"]):
-                    accommodation_name = "Raíces de Relikura - Cabaña 4 personas"
-                    accommodation_price = 80000
-                elif any(keyword in message_lower for keyword in ["2", "dos", "pareja"]):
-                    accommodation_name = "Raíces de Relikura - Cabaña 2 personas"
-                    accommodation_price = 60000
-                else:
-                    # Default to 4 personas if not specified
-                    accommodation_name = "Raíces de Relikura - Cabaña 4 personas"
-                    accommodation_price = 80000
-            
-            # Check for Hostal
-            elif any(keyword in message_lower for keyword in ["hostal", "económico", "economico"]):
-                accommodation_name = "Raíces de Relikura - Hostal"
-                accommodation_price = 20000
-            
-            if not accommodation_name:
-                logger.info("Could not identify accommodation type from message")
-                return None
-            
-            # Create a cart item for the accommodation
-            from app.cart.models import CartItem
-            accommodation_item = CartItem(
-                name=accommodation_name,
-                price=accommodation_price,
-                quantity=1,
-                item_type="accommodation",
-                notes=f"Fechas solicitadas: {message}"
-            )
-            
-            # Add to cart
-            await self.cart_manager.add_item(phone_number, contact_name, accommodation_item)
-            cart = await self.cart_manager.get_cart(phone_number)
-            
-            # Build response
-            response = f"""✅ *{accommodation_name} agregado al carrito*
-
-{self.cart_manager.format_cart_message(cart)}
-
-📋 *¿Qué deseas hacer ahora?*
-
-• Escribe *"7"* para agregar más alojamientos
-• Escribe *"4"* para agregar extras (toallas, videos, etc.)
-• Escribe *"menú"* para ver el menú principal
-• Escribe *"carrito"* o *"20"* para proceder con el pago
-
-¿Qué opción eliges, grumete? ⚓"""
-            
-            logger.info(f"Added accommodation to cart: {accommodation_name}")
-            return response
-            
-        except Exception as e:
-            logger.error(f"Error handling accommodation selection: {e}")
-            import traceback
-            traceback.print_exc()
-            conversation["metadata"]["awaiting_accommodation_selection"] = False
-            return None
-
+    
     async def _try_parse_extra_with_ai(self, message: str, phone_number: str, contact_name: str, conversation: dict = None) -> Optional[str]:
         """
         Deterministically parse a single extra from free text (e.g., '2 jugos', 'una tabla grande').
@@ -3355,8 +4535,7 @@ Precio: $3,500 c/u
             "awaiting_extra_selection",
             "awaiting_ice_cream_flavor",
             "awaiting_packages_submenu",
-            "awaiting_experience_menu",
-            "awaiting_accommodation_selection"
+            "awaiting_experience_menu"
         ]
         
         for flow in active_flows:

@@ -229,6 +229,38 @@ class WhatsAppClient:
             logger.error(f"❌ Error sending audio to {to}: {e}")
             raise
     
+    async def send_document_message(
+        self,
+        to: str,
+        media_id: str,
+        filename: str = "document.pdf",
+        caption: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Send a document (PDF, etc.) using media_id from upload_media."""
+        url = f"{self.BASE_URL}/{self.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "document",
+            "document": {
+                "id": media_id,
+                "filename": filename,
+            },
+        }
+        if caption:
+            payload["document"]["caption"] = caption
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, headers=self.headers, timeout=60)
+                response.raise_for_status()
+                result = response.json()
+                logger.info(f"✅ Document sent to {to}: {result}")
+                return result
+        except httpx.HTTPError as e:
+            logger.error(f"❌ Error sending document to {to}: {e}")
+            raise
+    
     async def get_media_url(self, media_id: str) -> Optional[str]:
         """
         Retrieve a temporary URL for a received media object.

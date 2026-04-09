@@ -8,6 +8,10 @@ const MAX_REFRESH_LIMIT = 500;
 const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
 let currentSearchTab = 'chats'; // 'chats' or 'messages'
 let allMessagesForSearch = []; // Cache for message search
+let conversationsLimit = 50; // Increments by 50 on each "Cargar más" (50 -> 100 -> 150 -> 200...)
+let conversationsHasMore = true; // True if API returned full page (may have more)
+let isLoadingMoreConversations = false;
+const CONVERSATIONS_LOAD_MORE_STEP = 50;
 
 function setViewportHeightVar() {
     const vh = window.innerHeight * 0.01;
@@ -223,10 +227,11 @@ function updateCharCount(inputId, counterId) {
 }
 
 // Load Conversations
-async function loadConversations() {
-    console.log('🔄 Loading conversations with unread badges...');
+async function loadConversations(limit = null) {
+    const useLimit = limit !== null ? limit : conversationsLimit;
+    console.log('🔄 Loading conversations (limit:', useLimit, ')...');
     try {
-        const response = await fetch(`${API_BASE}/api/conversations`);
+        const response = await fetch(`${API_BASE}/api/conversations?limit=${useLimit}`);
         if (!response.ok) throw new Error('Failed to load conversations');
         
         const data = await response.json();
@@ -278,12 +283,24 @@ async function loadConversations() {
             }
         });
 
-        conversations = Array.from(grouped.values()).sort(
+        const processed = Array.from(grouped.values()).sort(
             (a, b) => new Date(b.last_message_at) - new Date(a.last_message_at)
         );
 
-        renderConversations();
-        
+        // Update allConversations (used for search fallback and when search is cleared)
+        allConversations = [...processed];
+
+        // If user has search text, keep showing search results (like WhatsApp)
+        const searchInput = document.getElementById('searchConversations');
+        const hasSearch = searchInput && searchInput.value.trim().length > 0;
+        if (hasSearch) {
+            await filterConversations();
+        } else {
+            conversations = processed;
+            conversationsHasMore = rawConversations.length >= useLimit;
+            renderConversations();
+        }
+
         updateStatus('connected', 'Connected');
     } catch (error) {
         console.error('Error loading conversations:', error);
@@ -346,7 +363,34 @@ function renderConversations() {
             </div>
         </div>
     `;
-    }).join('');
+    }).join('') + (
+        // "Cargar más" button: only when NOT searching and may have more
+        (() => {
+            const searchInput = document.getElementById('searchConversations');
+            const hasSearch = searchInput && searchInput.value.trim().length > 0;
+            if (hasSearch || !conversationsHasMore) return '';
+            return `
+                <div class="load-more-conversations" style="padding: 1rem; text-align: center;">
+                    <button type="button" class="btn-secondary" onclick="loadMoreConversations()" style="width: 100%;" ${isLoadingMoreConversations ? 'disabled' : ''}>
+                        ${isLoadingMoreConversations ? 'Cargando...' : `Ver más conversaciones (${conversations.length} mostradas)`}
+                    </button>
+                </div>
+            `;
+        })()
+    );
+}
+
+// Load more conversations (50 more each click: 100, 150, 200...)
+async function loadMoreConversations() {
+    if (isLoadingMoreConversations) return;
+    isLoadingMoreConversations = true;
+    conversationsLimit += CONVERSATIONS_LOAD_MORE_STEP;
+    try {
+        await loadConversations(conversationsLimit);
+    } finally {
+        isLoadingMoreConversations = false;
+        renderConversations();
+    }
 }
 
 // Select Conversation
@@ -1781,11 +1825,13 @@ async function sendQuickReply(menuOption) {
     }
     
     const menuNames = {
+        0: 'Saludo Tomás',
         1: 'Disponibilidad',
         2: 'Precios',
         3: 'Características',
         4: 'Extras',
-        5: 'Ubicación'
+        5: 'Ubicación',
+        9: 'Alojamientos'
     };
     
     try {
@@ -1860,4 +1906,320 @@ async function sendReaction(messageId, emoji) {
 document.addEventListener('DOMContentLoaded', () => {
     attachReactionListeners();
     console.log('✅ Reaction listeners attached');
+    
+    // Initialize search
+    initializeSearch();
 });
+
+// ==================== SEARCH FUNCTIONALITY ====================
+
+let allConversations = []; // Store all conversations for search
+let searchCache = new Map(); // Cache for message searches
+let filterDebounceTimer = null;
+
+// Debounced filter - prevents excessive API calls while typing
+function debouncedFilterConversations() {
+    if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+    filterDebounceTimer = setTimeout(() => filterConversations(), 300);
+}
+
+// Initialize search functionality
+function initializeSearch() {
+    const searchInput = document.getElementById('searchConversations');
+    const searchInMessages = document.getElementById('searchInMessages');
+    
+    // Show search options when input is focused
+    searchInput.addEventListener('focus', () => {
+        const searchOptions = searchInput.parentElement.querySelector('.search-options');
+        if (searchOptions) {
+            searchOptions.style.display = 'block';
+        }
+    });
+    
+    // Store all conversations for filtering
+    allConversations = [...conversations];
+}
+
+// Main filter function
+async function filterConversations() {
+    const searchInput = document.getElementById('searchConversations');
+    const searchInMessages = document.getElementById('searchInMessages');
+    const query = searchInput.value.trim();
+    
+    // If empty, show all conversations
+    if (!query) {
+        conversations = [...allConversations];
+        renderConversations();
+        return;
+    }
+    
+    const queryLower = query.toLowerCase();
+    
+    // Check if searching in messages
+    const searchMessages = searchInMessages && searchInMessages.checked;
+    
+    // Check if query looks like a phone number (3+ digits)
+    const phoneOnly = query.replace(/\D/g, '');
+    const isPhoneSearch = phoneOnly.length >= 3;
+    
+    if (isPhoneSearch) {
+        // Search by phone number - use API to find in entire database
+        await searchByPhoneNumber(phoneOnly, queryLower, searchMessages);
+    } else if (searchMessages) {
+        // Search in ALL messages - use backend API (searches entire database)
+        await searchInAllMessages(queryLower);
+    } else {
+        // Quick search in contact info only (local)
+        searchInContactInfo(queryLower);
+    }
+}
+
+// Search by phone number - calls API to search entire database
+async function searchByPhoneNumber(phoneDigits, queryLower, searchInMessages) {
+    showSearching('Buscando por número...');
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/search?q=${encodeURIComponent(phoneDigits)}`);
+        const data = await response.json();
+        const apiResults = data.conversations || [];
+        
+        if (searchInMessages && apiResults.length > 0) {
+            // Also search in message content for these conversations
+            const merged = [];
+            for (const conv of apiResults) {
+                const convData = await fetchConversationData(conv.phone_number, { limit: 100 });
+                const matchCount = countMessageMatches(convData.messages || [], queryLower);
+                merged.push({ ...conv, matchType: 'phone', matchCount: matchCount + 1 });
+            }
+            merged.sort((a, b) => (b.matchCount || 0) - (a.matchCount || 0));
+            conversations = merged;
+        } else {
+            conversations = apiResults;
+        }
+        
+        renderConversations();
+        showSearchResults(conversations.length, conversations.length);
+    } catch (error) {
+        console.error('Error searching by phone:', error);
+        showToast('Error al buscar por número', 'error');
+        // Fallback to local search
+        searchInContactInfo(queryLower);
+    }
+}
+
+// Quick search: Filter by contact name or phone number (local only)
+function searchInContactInfo(query) {
+    conversations = allConversations.filter(conv => {
+        const name = (conv.customer_name || '').toLowerCase();
+        const phone = (conv.phone_number || '').toLowerCase();
+        const lastMessage = (conv.last_message || '').toLowerCase();
+        
+        return name.includes(query) || 
+               phone.includes(query) || 
+               lastMessage.includes(query);
+    });
+    
+    renderConversations();
+    
+    // Show result count
+    showSearchResults(conversations.length, allConversations.length);
+}
+
+// Search in ALL messages - calls backend API (entire database)
+async function searchInAllMessages(query) {
+    showSearching('Buscando en todo el historial... (puede tardar unos segundos)');
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/search-messages?q=${encodeURIComponent(query)}`);
+        
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error('Search API error:', response.status, errText);
+            throw new Error(`Error ${response.status}: ${errText}`);
+        }
+        
+        const data = await response.json();
+        const results = data.conversations || [];
+        
+        if (data.error) {
+            console.error('Search API returned error:', data.error);
+        }
+        console.log('[Buscar mensajes] Encontradas', results.length, 'conversaciones para "' + query + '"');
+        
+        conversations = results;
+        renderConversations();
+        showSearchResults(results.length, results.length);
+    } catch (error) {
+        console.error('Error searching messages:', error);
+        showToast('Error al buscar: ' + (error.message || 'Intenta de nuevo'), 'error');
+        // Fallback to local search
+        await searchInMessageContent(query);
+    }
+}
+
+// Search in message content (legacy - local only, used as fallback)
+async function searchInMessageContent(query) {
+    const results = [];
+    const searchPromises = [];
+    
+    // Show loading indicator
+    showSearching('Buscando en mensajes...');
+    
+    try {
+        // Search through each conversation
+        for (const conv of allConversations) {
+            // Check contact info first (instant)
+            const name = (conv.customer_name || '').toLowerCase();
+            const phone = (conv.phone_number || '').toLowerCase();
+            
+            if (name.includes(query) || phone.includes(query)) {
+                results.push({
+                    ...conv,
+                    matchType: 'contact',
+                    matchCount: 1
+                });
+                continue;
+            }
+            
+            // Check if we have cached messages for this conversation
+            const cacheKey = conv.phone_number;
+            let messages = searchCache.get(cacheKey);
+            
+            // If not cached or cache is old, fetch from API
+            if (!messages) {
+                searchPromises.push(
+                    fetchConversationData(conv.phone_number, { limit: 100 })
+                        .then(data => {
+                            messages = data.messages || [];
+                            searchCache.set(cacheKey, messages);
+                            return { conv, messages };
+                        })
+                        .catch(() => ({ conv, messages: [] }))
+                );
+            } else {
+                // Use cached messages
+                const matchCount = countMessageMatches(messages, query);
+                if (matchCount > 0) {
+                    results.push({
+                        ...conv,
+                        matchType: 'message',
+                        matchCount
+                    });
+                }
+            }
+        }
+        
+        // Wait for all API calls to complete
+        const fetchedResults = await Promise.all(searchPromises);
+        
+        // Process fetched messages
+        fetchedResults.forEach(({ conv, messages }) => {
+            const matchCount = countMessageMatches(messages, query);
+            if (matchCount > 0) {
+                results.push({
+                    ...conv,
+                    matchType: 'message',
+                    matchCount
+                });
+            }
+        });
+        
+        // Sort by relevance (match count, then date)
+        results.sort((a, b) => {
+            if (a.matchType === 'contact' && b.matchType !== 'contact') return -1;
+            if (a.matchType !== 'contact' && b.matchType === 'contact') return 1;
+            if (a.matchCount !== b.matchCount) return b.matchCount - a.matchCount;
+            return new Date(b.last_message_at || b.created_at) - new Date(a.last_message_at || a.created_at);
+        });
+        
+        conversations = results;
+        renderConversations();
+        showSearchResults(results.length, allConversations.length);
+        
+    } catch (error) {
+        console.error('Error searching messages:', error);
+        showToast('Error al buscar en mensajes', 'error');
+        // Fallback to contact search
+        searchInContactInfo(query);
+    }
+}
+
+// Count how many messages match the query
+function countMessageMatches(messages, query) {
+    if (!messages || !Array.isArray(messages)) return 0;
+    
+    const normalizeForSearch = (str) => {
+        return (str || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, ''); // Remove accents
+    };
+    const queryNorm = normalizeForSearch(query);
+    
+    let count = 0;
+    messages.forEach(msg => {
+        // API returns message_text, response_text; normalized uses content or message_text
+        const textToSearch = normalizeForSearch(
+            [msg.content, msg.message_text, msg.response_text, msg.text]
+                .filter(Boolean)
+                .join(' ')
+        );
+        if (textToSearch.includes(queryNorm)) {
+            count++;
+        }
+    });
+    return count;
+}
+
+// Show search results count
+function showSearchResults(found, total) {
+    const container = document.getElementById('conversationsList');
+    if (!container) return;
+    
+    // Remove existing result message
+    const existing = container.querySelector('.search-result-message');
+    if (existing) existing.remove();
+    
+    // Add result message
+    if (found === 0) {
+        container.insertAdjacentHTML('afterbegin', `
+            <div class="search-result-message" style="padding: 1rem; text-align: center; color: var(--text-secondary); background: var(--bg-light); margin-bottom: 0.5rem; border-radius: 8px;">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
+                <div>No se encontraron resultados</div>
+            </div>
+        `);
+    } else {
+        const msg = (found === total || typeof total !== 'number') 
+            ? `✓ ${found} conversación${found !== 1 ? 'es' : ''} encontrada${found !== 1 ? 's' : ''}`
+            : `✓ ${found} de ${total} conversaciones`;
+        container.insertAdjacentHTML('afterbegin', `
+            <div class="search-result-message" style="padding: 0.75rem; text-align: center; color: var(--primary); background: var(--bg-light); margin-bottom: 0.5rem; border-radius: 8px; font-size: 0.9rem;">
+                ${msg}
+            </div>
+        `);
+    }
+}
+
+// Show searching indicator
+function showSearching(message = 'Buscando...') {
+    const container = document.getElementById('conversationsList');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div style="padding: 3rem; text-align: center; color: var(--text-secondary);">
+            <div style="font-size: 2rem; margin-bottom: 1rem;">🔍</div>
+            <div>${message}</div>
+        </div>
+    `;
+}
+
+// Clear search and restore all conversations
+function clearSearch() {
+    const searchInput = document.getElementById('searchConversations');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    conversations = [...allConversations];
+    renderConversations();
+}
+

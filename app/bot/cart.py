@@ -165,7 +165,33 @@ class CartManager:
         "reserva flex": {"name": "Reserva FLEX (+10%)", "price": 0},  # Se calcula como % del total
         "flex": {"name": "Reserva FLEX (+10%)", "price": 0},
     }
-    
+
+    # Live prices loaded from extras_visibility (refreshed on startup and periodically)
+    _db_prices: dict = {}  # {name_lower: price}
+
+    @classmethod
+    def refresh_prices_from_db(cls):
+        """Load/refresh extra prices from extras_visibility (single source of truth)."""
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT LOWER(COALESCE(name, extra_name_lower)),
+                               COALESCE(precio_venta, 0)
+                        FROM extras_visibility
+                        WHERE precio_venta IS NOT NULL AND precio_venta > 0
+                    """)
+                    cls._db_prices = {row[0]: row[1] for row in cur.fetchall()}
+            logger.info(f"CartManager: loaded {len(cls._db_prices)} extra prices from extras_visibility")
+        except Exception as e:
+            logger.warning(f"CartManager: could not load prices from DB: {e}")
+
+    def get_extra_price(self, display_name: str, fallback_price: int) -> int:
+        """Get live price for an extra, preferring DB value over hardcoded."""
+        if not self.__class__._db_prices:
+            self.__class__.refresh_prices_from_db()
+        return self.__class__._db_prices.get(display_name.lower(), fallback_price)
+
     # Prices per person based on capacity
     PRICES_PER_PERSON = {
         2: 69990,
@@ -302,6 +328,35 @@ class CartManager:
         
         return total
     
+    def _calculate_nights(self, checkin: str, checkout: str) -> int:
+        """Calculate number of nights between two dates"""
+        try:
+            # Parse dates in format like "13 marzo", "18 marzo"
+            from datetime import datetime
+            import locale
+            
+            # Try to parse with Spanish month names
+            months_es = {
+                'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4,
+                'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8,
+                'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+            }
+            
+            # Parse checkin
+            day_in, month_in = checkin.lower().split()
+            checkin_date = datetime(2026, months_es.get(month_in, 1), int(day_in))
+            
+            # Parse checkout
+            day_out, month_out = checkout.lower().split()
+            checkout_date = datetime(2026, months_es.get(month_out, 1), int(day_out))
+            
+            # Calculate nights
+            nights = (checkout_date - checkin_date).days
+            return max(1, nights)  # At least 1 night
+        except Exception as e:
+            logger.warning(f"Error calculating nights from {checkin} to {checkout}: {e}")
+            return 1  # Default to 1 night if parsing fails
+    
     def format_cart_message(self, items: List[CartItem]) -> str:
         """Format cart as a readable message"""
         if not items:
@@ -321,6 +376,50 @@ class CartManager:
                 message += f"   Horario: {item.metadata.get('time', 'N/A')}\n"
                 message += f"   Personas: {item.quantity}\n"
                 message += f"   Precio: ${price:,}\n\n"
+                total += price
+            elif item.item_type == "experience":
+                price = item.price * item.quantity
+                exp_type = item.metadata.get('experience_type', '')
+                icon = "🚣" if exp_type == "rafting" else "🐴" if exp_type == "horseback" else "⛵"
+                
+                message += f"{icon} *{item.name}*\n"
+                if item.quantity > 1 and exp_type != "navigation":
+                    message += f"   {item.quantity} personas x ${item.price:,}\n"
+                    message += f"   Subtotal: ${price:,}\n\n"
+                else:
+                    message += f"   Precio: ${price:,}\n\n"
+                total += price
+            elif item.item_type == "accommodation":
+                # Calculate nights
+                checkin = item.metadata.get('checkin_date', '')
+                checkout = item.metadata.get('checkout_date', '')
+                nights = self._calculate_nights(checkin, checkout) if checkin and checkout else 1
+                guests = item.metadata.get('guests', 1)
+                
+                # Check if it's Hostal (price is per person per night)
+                is_hostal = "Hostal" in item.name
+                
+                if is_hostal:
+                    # Hostal: price per person per night
+                    price = item.price * guests * nights
+                    message += f"🏠 *{item.name}*\n"
+                    message += f"   Check-in: {checkin}\n"
+                    message += f"   Check-out: {checkout}\n"
+                    message += f"   Huéspedes: {guests}\n"
+                    message += f"   Noches: {nights}\n"
+                    message += f"   ${item.price:,} x {guests} personas x {nights} noches\n"
+                    message += f"   Precio: ${price:,}\n\n"
+                else:
+                    # Domos/Cabañas: price per night (not per person)
+                    price = item.price * nights
+                    message += f"🏠 *{item.name}*\n"
+                    message += f"   Check-in: {checkin}\n"
+                    message += f"   Check-out: {checkout}\n"
+                    message += f"   Huéspedes: {guests}\n"
+                    message += f"   Noches: {nights}\n"
+                    message += f"   ${item.price:,} x {nights} noches\n"
+                    message += f"   Precio: ${price:,}\n\n"
+                
                 total += price
             elif item.item_type == "extra":
                 price = item.price * item.quantity
@@ -358,13 +457,14 @@ class CartManager:
             if message_lower.startswith(prefix):
                 message_lower = message_lower[len(prefix):].strip()
         
-        # Try to match with catalog
+        # Try to match with catalog (use live DB price when available)
         for key, value in self.EXTRAS_CATALOG.items():
             if key in message_lower:
+                live_price = self.get_extra_price(value["name"], value["price"])
                 return CartItem(
                     item_type="extra",
                     name=value["name"],
-                    price=value["price"],
+                    price=live_price,
                     quantity=1
                 )
         
