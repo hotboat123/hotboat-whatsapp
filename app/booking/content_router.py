@@ -49,7 +49,8 @@ def list_extras():
                            pe.raw->>'Precio'      AS precio,
                            COALESCE(pe.raw->>'icon', '')        AS icon,
                            COALESCE(pe.raw->>'description', '') AS description,
-                           COALESCE(ev.show_in_booking, TRUE)   AS show_in_booking
+                           COALESCE(ev.show_in_booking, TRUE)   AS show_in_booking,
+                           COALESCE(ev.sort_order, 999)         AS sort_order
                     FROM "Precios Extras" pe
                     LEFT JOIN extras_visibility ev
                            ON ev.extra_name_lower = LOWER(pe.raw->>'Extra')
@@ -58,7 +59,7 @@ def list_extras():
                 """)
                 extras = []
                 seen: set = set()
-                for row_id, name, precio, icon, description, show_in_booking in cur.fetchall():
+                for row_id, name, precio, icon, description, show_in_booking, sort_order in cur.fetchall():
                     if not show_in_booking:
                         continue
                     key = _slugify_extra(name)
@@ -73,8 +74,9 @@ def list_extras():
                         "price": _parse_clp(precio),
                         "icon": resolved_icon,
                         "description": description or "",
+                        "sort_order": int(sort_order),
                     })
-        extras.sort(key=lambda x: x["name"])
+        extras.sort(key=lambda x: (x["sort_order"], x["name"]))
         return {"extras": extras}
     except Exception as e:
         logger.error(f"Error fetching public extras: {e}")

@@ -141,6 +141,7 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem;font-
     <span class="sub">CHILE</span>
   </div>
   <p class="tagline">Reserva tu experiencia única en Pucón</p>
+  <div id="lang-switcher" style="margin-top:.6rem;display:flex;justify-content:center;gap:.4rem"></div>
 </header>
 <main id="main-content"></main>
 <div id="toast" class="toast hidden"></div>
@@ -172,9 +173,137 @@ const S = {
   menuSettings: { show_experiencias: true, show_alojamientos: true, show_packs: true, show_arma_pack: true },
 };
 
-const DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+// ── i18n ──────────────────────────────────────────────────────────────────────
+const I18N = {
+  es: {
+    days: ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],
+    months: ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
+    loading: 'Cargando...',
+    steps: ['Fecha','Personas','Datos','Pago'],
+    // Menu
+    menuReservar: 'Reservar HotBoat', menuReservarDesc: 'Ver disponibilidad y fechas',
+    menuPrecios: 'Precios', menuPreciosDesc: 'Tarifas por persona',
+    menuCaract: 'Características', menuCaractDesc: 'Conoce la experiencia',
+    menuExp: 'Otras experiencias', menuExpDesc: 'Tours y aventura',
+    menuAloj: 'Alojamiento', menuAlojDesc: 'Cabañas y hospedaje',
+    menuPacks: 'Packs Completos', menuPacksDesc: 'Todo incluido',
+    menuArma: 'Arma tu Pack', menuArmaDesc: 'Crea tu experiencia',
+    // Calendar
+    calTitle: '📅 Elige tu fecha', calPrev: '‹ Anterior', calNext: 'Siguiente ›',
+    noAvail: 'Sin disponibilidad',
+    // Time
+    timeTitle: '🕐 Elige tu horario',
+    // People
+    peopleTitle: '👥 ¿Cuántas personas?',
+    personsLabel: 'personas',
+    nextExtras: 'Siguiente: Extras →',
+    // Extras
+    extrasTitle: '🎁 Extras opcionales',
+    nextData: 'Siguiente: Datos →',
+    back: 'Volver',
+    // Form
+    formTitle: '📋 Resumen de reserva',
+    labelDate: '📅 Fecha', labelPeople: '👥 Personas',
+    labelBase: '💰 Tarifa base', labelFlex: '🔒 FLEX',
+    labelTotal: 'TOTAL',
+    depositNote: 'Se cobra el 50% ahora para reservar. El resto se paga después de la experiencia HotBoat (efectivo, tarjeta o transferencia).',
+    labelName: 'Nombre completo', labelPhone: 'Teléfono (WhatsApp)', labelEmail: 'Email',
+    pay: 'Pagar',
+    // Flex
+    flexName: '🔒 Reserva FLEX', flexDesc: 'Cancela hasta 48h antes · +10% del valor',
+    // Success / failure
+    successTitle: '¡Reserva confirmada!',
+    failTitle: 'Pago no completado',
+    failMsg: (ref) => `Tu reserva (${ref}) fue guardada. Puedes intentar el pago nuevamente o contactarnos.`,
+    returnMenu: 'Volver',
+  },
+  en: {
+    days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+    months: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+    loading: 'Loading...',
+    steps: ['Date','People','Details','Payment'],
+    menuReservar: 'Book HotBoat', menuReservarDesc: 'Check availability & dates',
+    menuPrecios: 'Prices', menuPreciosDesc: 'Rates per person',
+    menuCaract: 'Features', menuCaractDesc: 'About the experience',
+    menuExp: 'Other Experiences', menuExpDesc: 'Tours & adventure',
+    menuAloj: 'Accommodation', menuAlojDesc: 'Cabins & lodging',
+    menuPacks: 'Full Packages', menuPacksDesc: 'All inclusive',
+    menuArma: 'Build your Pack', menuArmaDesc: 'Create your experience',
+    calTitle: '📅 Choose your date', calPrev: '‹ Previous', calNext: 'Next ›',
+    noAvail: 'No availability',
+    timeTitle: '🕐 Choose your time',
+    peopleTitle: '👥 How many people?',
+    personsLabel: 'people',
+    nextExtras: 'Next: Extras →',
+    extrasTitle: '🎁 Optional extras',
+    nextData: 'Next: Details →',
+    back: 'Back',
+    formTitle: '📋 Booking summary',
+    labelDate: '📅 Date', labelPeople: '👥 People',
+    labelBase: '💰 Base rate', labelFlex: '🔒 FLEX',
+    labelTotal: 'TOTAL',
+    depositNote: '50% charged now to secure your booking. The rest is paid after your HotBoat experience (cash, card or transfer).',
+    labelName: 'Full name', labelPhone: 'Phone (WhatsApp)', labelEmail: 'Email',
+    pay: 'Pay',
+    flexName: '🔒 FLEX Booking', flexDesc: 'Cancel up to 48h before · +10% of total',
+    successTitle: 'Booking confirmed!',
+    failTitle: 'Payment not completed',
+    failMsg: (ref) => `Your booking (${ref}) was saved. You can try again or contact us.`,
+    returnMenu: 'Back to menu',
+  },
+  pt: {
+    days: ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],
+    months: ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'],
+    loading: 'Carregando...',
+    steps: ['Data','Pessoas','Dados','Pagamento'],
+    menuReservar: 'Reservar HotBoat', menuReservarDesc: 'Ver disponibilidade e datas',
+    menuPrecios: 'Preços', menuPreciosDesc: 'Tarifas por pessoa',
+    menuCaract: 'Características', menuCaractDesc: 'Conheça a experiência',
+    menuExp: 'Outras experiências', menuExpDesc: 'Tours e aventura',
+    menuAloj: 'Hospedagem', menuAlojDesc: 'Cabanas e alojamento',
+    menuPacks: 'Pacotes Completos', menuPacksDesc: 'Tudo incluído',
+    menuArma: 'Monte seu Pacote', menuArmaDesc: 'Crie sua experiência',
+    calTitle: '📅 Escolha sua data', calPrev: '‹ Anterior', calNext: 'Próximo ›',
+    noAvail: 'Sem disponibilidade',
+    timeTitle: '🕐 Escolha seu horário',
+    peopleTitle: '👥 Quantas pessoas?',
+    personsLabel: 'pessoas',
+    nextExtras: 'Próximo: Extras →',
+    extrasTitle: '🎁 Extras opcionais',
+    nextData: 'Próximo: Dados →',
+    back: 'Voltar',
+    formTitle: '📋 Resumo da reserva',
+    labelDate: '📅 Data', labelPeople: '👥 Pessoas',
+    labelBase: '💰 Tarifa base', labelFlex: '🔒 FLEX',
+    labelTotal: 'TOTAL',
+    depositNote: '50% cobrado agora para garantir sua reserva. O restante é pago após a experiência HotBoat (dinheiro, cartão ou transferência).',
+    labelName: 'Nome completo', labelPhone: 'Telefone (WhatsApp)', labelEmail: 'E-mail',
+    pay: 'Pagar',
+    flexName: '🔒 Reserva FLEX', flexDesc: 'Cancele até 48h antes · +10% do valor',
+    successTitle: 'Reserva confirmada!',
+    failTitle: 'Pagamento não concluído',
+    failMsg: (ref) => `Sua reserva (${ref}) foi salva. Você pode tentar o pagamento novamente ou nos contatar.`,
+    returnMenu: 'Voltar',
+  },
+};
+let LANG = localStorage.getItem('hb_lang') || 'es';
+function t(key, ...args){ const v = I18N[LANG][key]; return typeof v === 'function' ? v(...args) : (v || I18N.es[key] || key); }
+function setLang(l){ LANG = l; localStorage.setItem('hb_lang', l); document.documentElement.lang = l; renderLangSwitcher(); renderMenu(); }
+function renderLangSwitcher(){
+  const el = document.getElementById('lang-switcher');
+  if(!el) return;
+  el.innerHTML = ['es','en','pt'].map(l =>
+    `<button onclick="setLang('${l}')" style="background:${LANG===l?'var(--coral)':'var(--deep)'};color:${LANG===l?'#fff':'var(--muted)'};border:1px solid ${LANG===l?'var(--coral)':'var(--border)'};border-radius:6px;padding:.2rem .6rem;font-size:.78rem;font-weight:700;cursor:pointer;text-transform:uppercase">${l}</button>`
+  ).join('');
+}
+
 function calLeadDaysMonFirst(jsGetDay){ return (jsGetDay + 6) % 7; }
-const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+// Dynamic day/month names — always read from current LANG
+function getDays(){ return I18N[LANG].days; }
+function getMonths(){ return I18N[LANG].months; }
+// Keep DAYS/MONTHS as proxied getters for legacy references
+const DAYS = new Proxy([], { get: (_, i) => typeof i==='number'||/^\d+$/.test(i) ? getDays()[+i] : getDays()[i] });
+const MONTHS = new Proxy([], { get: (_, i) => typeof i==='number'||/^\d+$/.test(i) ? getMonths()[+i] : getMonths()[i] });
 
 let EXTRAS_CATALOG = [];  // loaded from /api/content/extras
 
@@ -236,7 +365,7 @@ async function loadPricesAndAvail(){
 
 function stepsHtml(active){
   const steps = ['fecha','personas','datos','pago'];
-  const labels = ['Fecha','Personas','Datos','Pago'];
+  const labels = t('steps');
   let h = '<div class="steps">';
   steps.forEach((s,i)=>{
     const idx = steps.indexOf(active);
@@ -251,19 +380,20 @@ function stepsHtml(active){
 }
 
 function renderMenu(){
+  renderLangSwitcher();
   mc.innerHTML = `
   <div class="card" style="padding-top:.8rem;padding-bottom:.8rem">
     <div class="menu-grid">
       <button class="menu-btn" onclick="goReservar()">
-        <span class="icon">📅</span><span class="label">Reservar HotBoat</span>
-        <span class="desc">Ver disponibilidad y fechas</span>
+        <span class="icon">📅</span><span class="label">${t('menuReservar')}</span>
+        <span class="desc">${t('menuReservarDesc')}</span>
       </button>
       <button class="menu-btn" onclick="showPrices()">
-        <span class="icon">💰</span><span class="label">Precios</span>
-        <span class="desc">Tarifas por persona</span>
+        <span class="icon">💰</span><span class="label">${t('menuPrecios')}</span>
+        <span class="desc">${t('menuPreciosDesc')}</span>
       </button>
       <button class="menu-btn" onclick="showFeatures()">
-        <span class="icon">⚡</span><span class="label">Caracteristicas</span>
+        <span class="icon">⚡</span><span class="label">${t('menuCaract')}</span>
         <span class="desc">Que incluye la experiencia</span>
       </button>
       <button class="menu-btn" onclick="showUbicacion()">
@@ -272,23 +402,23 @@ function renderMenu(){
       </button>
       ${S.menuSettings.show_experiencias!==false?`
       <button class="menu-btn" onclick="showExperiencias()">
-        <span class="icon">🚣</span><span class="label">Otras Experiencias</span>
-        <span class="desc">Rafting · Cabalgata · Velero</span>
+        <span class="icon">🚣</span><span class="label">${t('menuExp')}</span>
+        <span class="desc">${t('menuExpDesc')}</span>
       </button>`:''}
       ${S.menuSettings.show_alojamientos!==false?`
       <button class="menu-btn" onclick="showAlojamientos()">
-        <span class="icon">🏠</span><span class="label">Alojamientos</span>
-        <span class="desc">Domos · Cabanas · Hostal</span>
+        <span class="icon">🏠</span><span class="label">${t('menuAloj')}</span>
+        <span class="desc">${t('menuAlojDesc')}</span>
       </button>`:''}
       ${S.menuSettings.show_packs!==false?`
       <button class="menu-btn" onclick="showPacks()">
-        <span class="icon">🎁</span><span class="label">Packs Completos</span>
-        <span class="desc">Romantico · Familiar · Amigos</span>
+        <span class="icon">🎁</span><span class="label">${t('menuPacks')}</span>
+        <span class="desc">${t('menuPacksDesc')}</span>
       </button>`:''}
       ${S.menuSettings.show_arma_pack!==false?`
       <button class="menu-btn" onclick="showArmaPack()">
-        <span class="icon">🛒</span><span class="label">Arma tu Pack</span>
-        <span class="desc">Elige tus actividades</span>
+        <span class="icon">🛒</span><span class="label">${t('menuArma')}</span>
+        <span class="desc">${t('menuArmaDesc')}</span>
       </button>`:''}
     </div>
   </div>`;
@@ -944,7 +1074,7 @@ function renderCal(){
   const today = new Date(); today.setHours(0,0,0,0);
 
   let cells = '';
-  DAYS.forEach(d=>{ cells += `<div class="cal-hdr">${d}</div>`; });
+  getDays().forEach(d=>{ cells += `<div class="cal-hdr">${d}</div>`; });
   for(let i=0;i<leadDays;i++) cells += `<div class="cal-day empty"></div>`;
   for(let d=1;d<=daysInMonth;d++){
     const dt = new Date(yr,mo,d);
@@ -960,18 +1090,18 @@ function renderCal(){
   mc.innerHTML = `
   ${stepsHtml('fecha')}
   <div class="card">
-    <div class="card-title">📅 Elige tu fecha</div>
+    <div class="card-title">${t('calTitle')}</div>
     <div class="cal-nav">
       <button onclick="prevMonth()">&#8249;</button>
-      <strong>${MONTHS[mo]} ${yr}</strong>
+      <strong>${getMonths()[mo]} ${yr}</strong>
       <button onclick="nextMonth()">&#8250;</button>
     </div>
     <div class="cal-grid">${cells}</div>
     <p style="margin-top:.8rem;font-size:.8rem;color:var(--muted)">
-      🟡 Dias disponibles &nbsp; Toca para seleccionar
+      🟡 ${LANG==='es'?'Días disponibles':'Available days'} &nbsp; ${LANG==='es'?'Toca para seleccionar':LANG==='pt'?'Toque para selecionar':'Tap to select'}
     </p>
   </div>
-  <button class="btn btn-secondary" onclick="renderMenu()">Volver</button>`;
+  <button class="btn btn-secondary" onclick="renderMenu()">${t('back')}</button>`;
 }
 
 function prevMonth(){
@@ -1000,31 +1130,31 @@ function renderTimeSelect(){
   const fake  = S.fakeBooked[S.selectedDate] || [];
 
   // Merge and sort all slots by time; never mark a slot grey if it's already available
-  const toMin = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
+  const toMin = s => { const [h,m]=s.split(':').map(Number); return h*60+m; };
   const availSet = new Set(avail);
-  const fakeSet = new Set(fake.filter(t => !availSet.has(t)));
+  const fakeSet = new Set(fake.filter(s => !availSet.has(s)));
   const allTimes = [...new Set([...avail, ...fakeSet])].sort((a,b)=>toMin(a)-toMin(b));
 
-  const btns = allTimes.map(t => {
-    if(fakeSet.has(t)){
-      return `<button class="time-btn" disabled style="opacity:.45;cursor:not-allowed;filter:grayscale(1);background:var(--border);color:var(--muted);border-color:var(--border)">${t} 🔒</button>`;
+  const btns = allTimes.map(s => {
+    if(fakeSet.has(s)){
+      return `<button class="time-btn" disabled style="opacity:.45;cursor:not-allowed;filter:grayscale(1);background:var(--border);color:var(--muted);border-color:var(--border)">${s} 🔒</button>`;
     }
-    return `<button class="time-btn ${S.selectedTime===t?'selected':''}" onclick="selectTime('${t}')">${t}</button>`;
+    return `<button class="time-btn ${S.selectedTime===s?'selected':''}" onclick="selectTime('${s}')">${s}</button>`;
   }).join('');
 
   const [yr,mo,dy] = S.selectedDate.split('-');
   const d = new Date(yr,mo-1,dy);
-  const dayStr = DAYS[(d.getDay()+6)%7]+' '+dy+'/'+mo+'/'+yr;
+  const dayStr = getDays()[(d.getDay()+6)%7]+' '+dy+'/'+mo+'/'+yr;
 
   mc.innerHTML = `
   ${stepsHtml('fecha')}
   <div class="card">
-    <div class="card-title">🕐 Elige tu horario</div>
+    <div class="card-title">${t('timeTitle')}</div>
     <p style="color:var(--muted);margin-bottom:.8rem">📅 ${dayStr}</p>
     <div class="time-grid">${btns}</div>
     
   </div>
-  <button class="btn btn-secondary" onclick="renderCal()">Cambiar fecha</button>`;
+  <button class="btn btn-secondary" onclick="renderCal()">${t('calTitle').replace('📅 ','')}</button>`;
 }
 
 function selectTime(t){
@@ -1060,8 +1190,8 @@ function renderPeopleSelect(){
   mc.innerHTML = `
   ${stepsHtml('personas')}
   <div class="card">
-    <div class="card-title">👥 Cuantas personas?</div>
-    <p style="color:var(--muted);margin-bottom:1rem">Min 2 · Max 7 personas</p>
+    <div class="card-title">${t('peopleTitle')}</div>
+    <p style="color:var(--muted);margin-bottom:1rem">Min 2 · Max 7 ${t('personsLabel')}</p>
     <div class="counter">
       <button class="counter-btn" onclick="changePeople(-1)">−</button>
       <div class="counter-val" id="pp-val">${S.numPeople}</div>
@@ -1070,11 +1200,11 @@ function renderPeopleSelect(){
     <div class="price-tag">
       <div class="price-big" id="pp-price"></div>
       <div id="dp-badge" style="margin-top:.3rem"></div>
-      <div class="price-sub">Incluye 2 horas en el lago</div>
+      <div class="price-sub">${LANG==='es'?'Incluye 2 horas en el lago':LANG==='pt'?'Inclui 2 horas no lago':'Includes 2 hours on the lake'}</div>
     </div>
   </div>
-  <button class="btn" onclick="goExtras()">Siguiente: Extras →</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderTimeSelect()">Volver</button>`;
+  <button class="btn" onclick="goExtras()">${t('nextExtras')}</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderTimeSelect()">${t('back')}</button>`;
   update();
 }
 
@@ -1101,17 +1231,17 @@ function renderExtras(){
   mc.innerHTML = `
   ${stepsHtml('personas')}
   <div class="card">
-    <div class="card-title">🎁 Extras opcionales</div>
+    <div class="card-title">${t('extrasTitle')}</div>
     <div class="extra-list">${items}</div>
     <div class="extra-item ${flexCls}" style="margin-top:.5rem" onclick="toggleFlex()">
-      <div><div class="extra-name">🔒 Reserva FLEX</div>
-        <div style="font-size:.75rem;color:var(--muted)">Cancela hasta 48h antes · +10% del valor</div>
+      <div><div class="extra-name">${t('flexName')}</div>
+        <div style="font-size:.75rem;color:var(--muted)">${t('flexDesc')}</div>
       </div>
       <div class="extra-price">+10%</div>
     </div>
   </div>
-  <button class="btn" onclick="renderForm()">Siguiente: Datos →</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderPeopleSelect()">Volver</button>`;
+  <button class="btn" onclick="renderForm()">${t('nextData')}</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderPeopleSelect()">${t('back')}</button>`;
 }
 
 function toggleExtra(id){
@@ -1140,35 +1270,34 @@ function renderForm(){
   mc.innerHTML = `
   ${stepsHtml('datos')}
   <div class="card">
-    <div class="card-title">📋 Resumen de reserva</div>
-    <div class="summary-row"><span>📅 Fecha</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
-    <div class="summary-row"><span>👥 Personas</span><span>${S.numPeople}</span></div>
-    <div class="summary-row"><span>💰 Tarifa base</span><span>$${sub.toLocaleString('es-CL')}${(()=>{if(S.dpEnabled&&mult!==1.0){const c=mult>1?'#e74c3c':'#2ecc71';const p=Math.round((mult-1)*100);const s=p>0?'+':'';return ` <span style="font-size:.72rem;color:${c}">(${s}${p}%)</span>`;}return '';})()}</span></div>
+    <div class="card-title">${t('formTitle')}</div>
+    <div class="summary-row"><span>${t('labelDate')}</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
+    <div class="summary-row"><span>${t('labelPeople')}</span><span>${S.numPeople}</span></div>
+    <div class="summary-row"><span>${t('labelBase')}</span><span>$${sub.toLocaleString('es-CL')}${(()=>{if(S.dpEnabled&&mult!==1.0){const c=mult>1?'#e74c3c':'#2ecc71';const p=Math.round((mult-1)*100);const s=p>0?'+':'';return ` <span style="font-size:.72rem;color:${c}">(${s}${p}%)</span>`;}return '';})()}</span></div>
     ${extRows}
-    ${flex ? `<div class="summary-row"><span>🔒 FLEX</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
-    <div class="summary-row total"><span>TOTAL</span><span>$${total.toLocaleString('es-CL')}</span></div>
+    ${flex ? `<div class="summary-row"><span>${t('labelFlex')}</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
+    <div class="summary-row total"><span>${t('labelTotal')}</span><span>$${total.toLocaleString('es-CL')}</span></div>
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
-      🚤 Se pide el <strong style="color:var(--gold)">50% del total ($${Math.round(total*0.5).toLocaleString('es-CL')})</strong> para reservar.<br>
-      El resto se paga después de la Experiencia HotBoat, con efectivo, tarjeta o transferencia.
+      🚤 <strong style="color:var(--gold)">50% ($${Math.round(total*0.5).toLocaleString('es-CL')})</strong> — ${t('depositNote')}
     </div>
   </div>
   <div class="card">
-    <div class="card-title">👤 Tus datos</div>
-    <div class="form-group"><label>Nombre completo *</label>
-      <input type="text" id="f-name" placeholder="Tu nombre" value="${S.customerName}">
+    <div class="card-title">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
+    <div class="form-group"><label>${t('labelName')} *</label>
+      <input type="text" id="f-name" placeholder="${t('labelName')}" value="${S.customerName}">
     </div>
-    <div class="form-group"><label>Telefono / WhatsApp *</label>
+    <div class="form-group"><label>${t('labelPhone')} *</label>
       <input type="tel" id="f-phone" placeholder="+56 9 xxxx xxxx" value="${S.customerPhone}">
     </div>
-    <div class="form-group"><label>Email (opcional)</label>
+    <div class="form-group"><label>${t('labelEmail')}</label>
       <input type="email" id="f-email" placeholder="tu@email.com" value="${S.customerEmail}">
     </div>
-    <div class="form-group"><label>Fecha de nacimiento <span style="font-weight:400;opacity:.65">(opcional — para saludarte en tu día 🎂)</span></label>
+    <div class="form-group"><label>${LANG==='es'?'Fecha de nacimiento':'Date of birth'} <span style="font-weight:400;opacity:.65">(${LANG==='es'?'opcional — para saludarte en tu día 🎂':LANG==='pt'?'opcional 🎂':'optional 🎂'})</span></label>
       <input type="date" id="f-birthday" max="${new Date().toISOString().split('T')[0]}" value="${S.customerBirthday||''}">
     </div>
   </div>
-  <button class="btn" onclick="submitBooking()">Ir a pagar 💳</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderExtras()">Volver</button>`;
+  <button class="btn" onclick="submitBooking()">${t('pay')} 💳</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderExtras()">${t('back')}</button>`;
 }
 
 async function submitBooking(){
@@ -1288,12 +1417,12 @@ function checkReturnFromPayment(){
     mc.innerHTML = `
     <div class="card" style="text-align:center">
       <div class="success-icon">❌</div>
-      <div class="card-title">Pago no completado</div>
+      <div class="card-title">${t('failTitle')}</div>
       <div class="info-box" style="margin-top:1rem">
-        Tu reserva (${ref}) fue guardada. Puedes intentar el pago nuevamente o contactarnos.
+        ${t('failMsg', ref)}
       </div>
     </div>
-    <button class="btn" style="margin-top:1rem" onclick="renderMenu()">Volver</button>`;
+    <button class="btn" style="margin-top:1rem" onclick="renderMenu()">${t('returnMenu')}</button>`;
     return true;
   }
   return false;
@@ -1301,7 +1430,8 @@ function checkReturnFromPayment(){
 
 async function init(){
   if(!checkReturnFromPayment()){
-    mc.innerHTML = `<div class="card" style="text-align:center"><p>Cargando...</p></div>`;
+    renderLangSwitcher();
+    mc.innerHTML = `<div class="card" style="text-align:center"><p>${t('loading')}</p></div>`;
     await Promise.all([loadPricesAndAvail(), loadDynamicContent()]);
     renderMenu();
 

@@ -439,6 +439,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <table class="ec-table">
           <thead>
             <tr>
+              <th style="text-align:center">Orden</th>
               <th>Ícono</th>
               <th>Nombre extra</th>
               <th>Descripción (app)</th>
@@ -450,7 +451,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th></th>
             </tr>
           </thead>
-          <tbody id="ec-tbody"><tr><td colspan="9" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="ec-tbody"><tr><td colspan="10" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -2453,12 +2454,16 @@ function renderExtrasCat(list){
     tbody.innerHTML='<tr><td colspan="6" class="no-data">Sin extras</td></tr>';
     return;
   }
-  tbody.innerHTML = list.map(e=>{
+  tbody.innerHTML = list.map((e,i)=>{
     const util = (e.price||0)-(e.cost||0);
     const margen = e.cost ? Math.round((e.price/e.cost-1)*100) : null;
     const utilCls = util>0?'pos':util<0?'neg':'';
     const icon = e.icon || defaultExtraIcon(e.key||'');
-    return `<tr id="ec-row-${e.id}">
+    return `<tr id="ec-row-${e.id}" data-idx="${i}">
+      <td style="text-align:center;white-space:nowrap">
+        <button onclick="moveExtra(${i},-1)" title="Subir" style="background:none;border:1px solid var(--border);border-radius:5px;padding:.1rem .4rem;cursor:pointer;font-size:.85rem;color:var(--text)" ${i===0?'disabled':''}>↑</button>
+        <button onclick="moveExtra(${i},1)" title="Bajar" style="background:none;border:1px solid var(--border);border-radius:5px;padding:.1rem .4rem;cursor:pointer;font-size:.85rem;color:var(--text)" ${i===list.length-1?'disabled':''}>↓</button>
+      </td>
       <td style="text-align:center">
         <input class="ec-input" value="${escHtml(icon)}" data-field="icon"
           oninput="ecMarkDirty('${e.id}')"
@@ -2496,6 +2501,20 @@ function renderExtrasCat(list){
       </td>
     </tr>`;
   }).join('');
+}
+
+async function moveExtra(idx, dir){
+  const newIdx = idx + dir;
+  if(newIdx < 0 || newIdx >= _extrasCatData.length) return;
+  // Swap in local array
+  [_extrasCatData[idx], _extrasCatData[newIdx]] = [_extrasCatData[newIdx], _extrasCatData[idx]];
+  // Assign consecutive sort_order values
+  const payload = _extrasCatData.map((e, i) => ({ name_lower: e.name.toLowerCase(), sort_order: i + 1 }));
+  renderExtrasCat(_extrasCatData);
+  try{
+    await api('/api/admin/precios-extras/reorder', { method:'POST', body: JSON.stringify(payload) });
+    showToast('Orden guardado ✓');
+  }catch(err){ showToast('Error guardando orden: '+err.message); }
 }
 
 function filterExtrasCat(){

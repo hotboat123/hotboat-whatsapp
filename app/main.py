@@ -304,8 +304,13 @@ def _ensure_extras_visibility_table():
                     CREATE TABLE IF NOT EXISTS extras_visibility (
                         extra_name_lower TEXT PRIMARY KEY,
                         show_in_booking  BOOLEAN NOT NULL DEFAULT TRUE,
+                        sort_order       INTEGER NOT NULL DEFAULT 999,
                         updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
+                """)
+                cur.execute("""
+                    ALTER TABLE extras_visibility
+                        ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 999
                 """)
                 conn.commit()
         logger.info("✅ extras_visibility table ready")

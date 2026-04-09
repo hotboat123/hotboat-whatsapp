@@ -933,7 +933,8 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                            pe.raw->>'costo' AS costo,
                            COALESCE(pe.raw->>'icon', '') AS icon,
                            COALESCE(pe.raw->>'description', '') AS description,
-                           COALESCE(ev.show_in_booking, TRUE) AS show_in_booking
+                           COALESCE(ev.show_in_booking, TRUE) AS show_in_booking,
+                           COALESCE(ev.sort_order, 999) AS sort_order
                     FROM "Precios Extras" pe
                     LEFT JOIN extras_visibility ev
                            ON ev.extra_name_lower = LOWER(pe.raw->>'Extra')
@@ -942,7 +943,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                 """)
                 extras = []
                 seen_keys: set = set()
-                for row_id, name, precio, costo, icon, description, show_in_booking in cur.fetchall():
+                for row_id, name, precio, costo, icon, description, show_in_booking, sort_order in cur.fetchall():
                     key = _slugify_extra(name)
                     if key in seen_keys:
                         continue
@@ -956,8 +957,9 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                         "icon": icon or "",
                         "description": description or "",
                         "show_in_booking": bool(show_in_booking),
+                        "sort_order": int(sort_order),
                     })
-        extras.sort(key=lambda x: x["name"])
+        extras.sort(key=lambda x: (x["sort_order"], x["name"]))
         return {"extras": extras}
     except Exception as e:
         logger.error(f"Error fetching precios extras: {e}")
@@ -1059,6 +1061,29 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
         raise
     except Exception as e:
         logger.error(f"Error creating extra: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.post("/api/admin/precios-extras/reorder")
+async def reorder_extras(x_admin_key: str = Header(""), request: Request = None):
+    """Save new sort order for all extras. Body: [{name_lower, sort_order}, ...]"""
+    _check_auth(x_admin_key)
+    try:
+        items = await request.json()  # list of {name_lower, sort_order}
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for item in items:
+                    cur.execute("""
+                        INSERT INTO extras_visibility (extra_name_lower, show_in_booking, sort_order, updated_at)
+                        VALUES (%s, TRUE, %s, NOW())
+                        ON CONFLICT (extra_name_lower) DO UPDATE
+                            SET sort_order = EXCLUDED.sort_order,
+                                updated_at = NOW()
+                    """, (item["name_lower"], item["sort_order"]))
+                conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Error reordering extras: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
