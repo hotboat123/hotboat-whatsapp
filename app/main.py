@@ -322,19 +322,6 @@ def _ensure_extras_visibility_table():
                 ]:
                     cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col} {definition}")
 
-                # Import ALL items from "Precios Extras" as HIDDEN (show_in_booking=FALSE)
-                # so they don't appear unless explicitly enabled.
-                # ON CONFLICT DO NOTHING preserves any existing row (e.g., ones already set TRUE).
-                try:
-                    cur.execute("""
-                        INSERT INTO extras_visibility (extra_name_lower, show_in_booking, updated_at)
-                        SELECT LOWER(raw->>'Extra'), FALSE, NOW()
-                        FROM "Precios Extras"
-                        WHERE raw->>'Extra' IS NOT NULL
-                        ON CONFLICT (extra_name_lower) DO NOTHING
-                    """)
-                except Exception:
-                    pass  # "Precios Extras" may not exist in all envs
                 conn.commit()
         logger.info("✅ extras_visibility table ready")
     except Exception as e:
