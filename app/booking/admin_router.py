@@ -923,19 +923,22 @@ async def get_precios_extras(x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Deduplicate by name keeping the most recently updated row; include id
+                # Join with extras_visibility for persistent show_in_booking flag
+                # (survives Google Sheets re-sync of "Precios Extras")
                 cur.execute("""
-                    SELECT DISTINCT ON (LOWER(raw->>'Extra'))
-                           id,
-                           raw->>'Extra' AS name,
-                           raw->>'Precio' AS precio,
-                           raw->>'costo' AS costo,
-                           COALESCE(raw->>'icon', '') AS icon,
-                           COALESCE(raw->>'description', '') AS description,
-                           COALESCE(raw->>'show_in_booking', 'true') AS show_in_booking
-                    FROM "Precios Extras"
-                    WHERE raw->>'Extra' IS NOT NULL
-                    ORDER BY LOWER(raw->>'Extra'), updated_at DESC
+                    SELECT DISTINCT ON (LOWER(pe.raw->>'Extra'))
+                           pe.id,
+                           pe.raw->>'Extra' AS name,
+                           pe.raw->>'Precio' AS precio,
+                           pe.raw->>'costo' AS costo,
+                           COALESCE(pe.raw->>'icon', '') AS icon,
+                           COALESCE(pe.raw->>'description', '') AS description,
+                           COALESCE(ev.show_in_booking, TRUE) AS show_in_booking
+                    FROM "Precios Extras" pe
+                    LEFT JOIN extras_visibility ev
+                           ON ev.extra_name_lower = LOWER(pe.raw->>'Extra')
+                    WHERE pe.raw->>'Extra' IS NOT NULL
+                    ORDER BY LOWER(pe.raw->>'Extra'), pe.updated_at DESC
                 """)
                 extras = []
                 seen_keys: set = set()
@@ -952,7 +955,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                         "cost": _parse_clp(costo) if costo else 0,
                         "icon": icon or "",
                         "description": description or "",
-                        "show_in_booking": show_in_booking != "false",
+                        "show_in_booking": bool(show_in_booking),
                     })
         extras.sort(key=lambda x: x["name"])
         return {"extras": extras}
@@ -971,8 +974,7 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         cost = int(body.get("cost") or 0)
         icon = body.get("icon", "").strip()
         description = body.get("description", "").strip()
-        show_in_booking = body.get("show_in_booking", True)
-        show_str = "false" if not show_in_booking else "true"
+        show_in_booking = bool(body.get("show_in_booking", True))
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
         margen = f"{round(price / cost * 100)}%" if cost else ""
@@ -988,11 +990,18 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                         || jsonb_build_object('margen', %s::text)
                         || jsonb_build_object('Utilidad', %s::text)
                         || jsonb_build_object('icon', %s::text)
-                        || jsonb_build_object('description', %s::text)
-                        || jsonb_build_object('show_in_booking', %s::text),
+                        || jsonb_build_object('description', %s::text),
                         updated_at = NOW()
                     WHERE id = %s
-                """, (name, str(price), str(cost), margen, str(utilidad), icon, description, show_str, extra_id))
+                """, (name, str(price), str(cost), margen, str(utilidad), icon, description, extra_id))
+                # Persist show_in_booking in extras_visibility (survives Sheets re-sync)
+                cur.execute("""
+                    INSERT INTO extras_visibility (extra_name_lower, show_in_booking, updated_at)
+                    VALUES (LOWER(%s), %s, NOW())
+                    ON CONFLICT (extra_name_lower) DO UPDATE
+                        SET show_in_booking = EXCLUDED.show_in_booking,
+                            updated_at = NOW()
+                """, (name, show_in_booking))
                 conn.commit()
         return {"ok": True}
     except HTTPException:
@@ -1044,18 +1053,19 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Get the extra name first so we can delete ALL rows with that name
-                cur.execute('SELECT raw->\'Extra\' FROM "Precios Extras" WHERE id = %s', (extra_id,))
+                # "Precios Extras" is synced from Google Sheets so physical deletes come back.
+                # We hide the entry persistently via extras_visibility instead.
+                cur.execute('SELECT raw->>\'Extra\' FROM "Precios Extras" WHERE id = %s', (extra_id,))
                 row = cur.fetchone()
                 if row and row[0]:
                     extra_name = row[0]
-                    # Delete ALL rows with the same name (case-insensitive) to catch capitalization variants
-                    cur.execute(
-                        'DELETE FROM "Precios Extras" WHERE LOWER(raw->>\'Extra\') = LOWER(%s)',
-                        (extra_name,)
-                    )
-                else:
-                    cur.execute('DELETE FROM "Precios Extras" WHERE id = %s', (extra_id,))
+                    cur.execute("""
+                        INSERT INTO extras_visibility (extra_name_lower, show_in_booking, updated_at)
+                        VALUES (LOWER(%s), FALSE, NOW())
+                        ON CONFLICT (extra_name_lower) DO UPDATE
+                            SET show_in_booking = FALSE,
+                                updated_at = NOW()
+                    """, (extra_name,))
                 conn.commit()
         return {"ok": True}
     except Exception as e:

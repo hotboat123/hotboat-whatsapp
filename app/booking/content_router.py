@@ -43,21 +43,23 @@ def list_extras():
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT DISTINCT ON (LOWER(raw->>'Extra'))
-                           id,
-                           raw->>'Extra'       AS name,
-                           raw->>'Precio'      AS precio,
-                           COALESCE(raw->>'icon', '')        AS icon,
-                           COALESCE(raw->>'description', '') AS description,
-                           COALESCE(raw->>'show_in_booking', 'true') AS show_in_booking
-                    FROM "Precios Extras"
-                    WHERE raw->>'Extra' IS NOT NULL
-                    ORDER BY LOWER(raw->>'Extra'), updated_at DESC
+                    SELECT DISTINCT ON (LOWER(pe.raw->>'Extra'))
+                           pe.id,
+                           pe.raw->>'Extra'       AS name,
+                           pe.raw->>'Precio'      AS precio,
+                           COALESCE(pe.raw->>'icon', '')        AS icon,
+                           COALESCE(pe.raw->>'description', '') AS description,
+                           COALESCE(ev.show_in_booking, TRUE)   AS show_in_booking
+                    FROM "Precios Extras" pe
+                    LEFT JOIN extras_visibility ev
+                           ON ev.extra_name_lower = LOWER(pe.raw->>'Extra')
+                    WHERE pe.raw->>'Extra' IS NOT NULL
+                    ORDER BY LOWER(pe.raw->>'Extra'), pe.updated_at DESC
                 """)
                 extras = []
                 seen: set = set()
                 for row_id, name, precio, icon, description, show_in_booking in cur.fetchall():
-                    if show_in_booking == "false":
+                    if not show_in_booking:
                         continue
                     key = _slugify_extra(name)
                     if key in seen:

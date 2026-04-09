@@ -294,9 +294,29 @@ async def _run_email_sweeps_scheduler():
         await asyncio.sleep(3600)  # re-check every hour
 
 
+def _ensure_extras_visibility_table():
+    """Create extras_visibility table if it doesn't exist (survives Sheets re-sync)."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS extras_visibility (
+                        extra_name_lower TEXT PRIMARY KEY,
+                        show_in_booking  BOOLEAN NOT NULL DEFAULT TRUE,
+                        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                conn.commit()
+        logger.info("✅ extras_visibility table ready")
+    except Exception as e:
+        logger.error(f"extras_visibility table init error: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
+    _ensure_extras_visibility_table()
     sync_task = asyncio.create_task(_run_auto_sync())
     email_task = asyncio.create_task(_run_email_sweeps_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
