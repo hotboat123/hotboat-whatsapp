@@ -933,6 +933,10 @@ let KEY='', allReservas=[], calYear=new Date().getFullYear(), calMonth=new Date(
 let sortCol='fecha', sortDir=-1;
 let EXTRAS_CATALOG=[];   // loaded once after login
 let _extrasItems=[];     // working copy for current modal: [{key,name,qty,unit_price}]
+let _alojAddon=[];       // [{key,name,entry_date,exit_date,nights,unit_price}]
+let _expAddon=[];        // [{key,name,date,qty,unit_price}]
+let ALOJ_CATALOG=[];     // loaded from /api/admin/alojamientos
+let EXP_CATALOG=[];      // loaded from /api/admin/experiencias
 let _descuentos=[];      // working copy for current modal: [{amount,type,note}]
 
 // ── Auth ────────────────────────────────────────────────────────────────────
@@ -947,6 +951,7 @@ function doLogin(){
       document.getElementById('dashboard').style.display='flex';
       document.getElementById('menu-btn').style.display='';
       loadExtrasCatalog();
+      loadAlojExpCatalogs();
       reloadAll();
     } else {
       err.style.display='';
@@ -1529,6 +1534,48 @@ async function openModal(id){
           <button type="button" onclick="addExtraFromSelect()">+ Agregar</button>
         </div>
       </div>
+
+      <!-- ── Alojamientos add-on ── -->
+      <div style="margin-bottom:.8rem">
+        <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.4rem">
+          🏠 Alojamientos
+          <span id="aloj-addon-total" style="color:var(--gold);font-weight:700;margin-left:.5rem"></span>
+        </label>
+        <div class="extras-hdr">
+          <div>Alojamiento / fechas</div><div style="text-align:right">Noches</div>
+          <div style="text-align:right">$/noche</div><div style="text-align:right">Subtotal</div><div></div>
+        </div>
+        <div id="aloj-addon-list"></div>
+        <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap;align-items:center">
+          <select id="aloj-addon-sel" style="flex:2;min-width:150px;font-size:.8rem;padding:.35rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px">
+            <option value="">— Seleccionar alojamiento —</option>
+          </select>
+          <input type="date" id="aloj-addon-entry" title="Fecha entrada" style="flex:1;min-width:120px;font-size:.8rem;padding:.35rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px">
+          <input type="date" id="aloj-addon-exit" title="Fecha salida" style="flex:1;min-width:120px;font-size:.8rem;padding:.35rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px">
+          <button type="button" onclick="addAlojAddon()" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">+ Agregar</button>
+        </div>
+      </div>
+
+      <!-- ── Experiencias add-on ── -->
+      <div style="margin-bottom:.8rem">
+        <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.4rem">
+          ⭐ Experiencias
+          <span id="exp-addon-total" style="color:var(--gold);font-weight:700;margin-left:.5rem"></span>
+        </label>
+        <div class="extras-hdr">
+          <div>Experiencia / fecha</div><div style="text-align:right">Pers.</div>
+          <div style="text-align:right">$/pers.</div><div style="text-align:right">Subtotal</div><div></div>
+        </div>
+        <div id="exp-addon-list"></div>
+        <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap;align-items:center">
+          <select id="exp-addon-sel" style="flex:2;min-width:150px;font-size:.8rem;padding:.35rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px">
+            <option value="">— Seleccionar experiencia —</option>
+          </select>
+          <input type="date" id="exp-addon-date" title="Fecha de la experiencia" style="flex:1;min-width:130px;font-size:.8rem;padding:.35rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px">
+          <button type="button" onclick="addExpAddon()" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">+ Agregar</button>
+        </div>
+      </div>
+
       <div style="margin-top:1rem">
         <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
           Pagos recibidos
@@ -1596,13 +1643,22 @@ function closeModal(e){
 }
 async function saveModal(id){
   const g=id=>document.getElementById(id)?.value;
-  // Build extras_json from the editor
+  // Build extras_json from editor + alojamientos + experiencias add-ons
   const extrasJson={};
   let extrasTotal=0;
   _extrasItems.forEach(item=>{
-    const qty=+item.qty||0;
-    const price=+item.unit_price||0;
-    if(qty>0){ extrasJson[item.key]=qty; extrasTotal+=qty*price; }
+    const qty=+item.qty||0; const price=+item.unit_price||0;
+    if(qty>0){ extrasJson[item.key]={qty, unit_price:price}; extrasTotal+=qty*price; }
+  });
+  (_alojAddon||[]).forEach(item=>{
+    const nights=+item.nights||1; const price=+item.unit_price||0;
+    extrasJson[item.key]={qty:nights, unit_price:price, entry_date:item.entry_date, exit_date:item.exit_date, name:item.name};
+    extrasTotal+=nights*price;
+  });
+  (_expAddon||[]).forEach(item=>{
+    const qty=+item.qty||1; const price=+item.unit_price||0;
+    extrasJson[item.key]={qty, unit_price:price, date:item.date, name:item.name};
+    extrasTotal+=qty*price;
   });
   // Discounts total
   const descTotal=_descuentos.reduce((s,d)=>s+(+d.amount||0),0);
@@ -2807,31 +2863,156 @@ async function loadExtrasCatalog(){
   }catch(e){ console.warn('Could not load extras catalog:', e); }
 }
 
+async function loadAlojExpCatalogs(){
+  try{
+    const [ar, er] = await Promise.all([
+      fetch('/api/admin/alojamientos',{headers:{'x-admin-key':getKey()}}).then(r=>r.json()),
+      fetch('/api/admin/experiencias',{headers:{'x-admin-key':getKey()}}).then(r=>r.json()),
+    ]);
+    ALOJ_CATALOG = ar.alojamientos || [];
+    EXP_CATALOG  = er.experiences  || [];
+  }catch(e){ console.warn('Could not load aloj/exp catalogs:', e); }
+}
+
+function populateAlojExpSelects(){
+  const as = document.getElementById('aloj-addon-sel');
+  const es = document.getElementById('exp-addon-sel');
+  if(as) as.innerHTML = '<option value="">— Seleccionar alojamiento —</option>' +
+    ALOJ_CATALOG.map(a=>`<option value="${a.slug}" data-price="${a.price_from||0}">${a.icon||'🏠'} ${a.name} — ${fmtMoney(a.price_from||0)}/noche</option>`).join('');
+  if(es) es.innerHTML = '<option value="">— Seleccionar experiencia —</option>' +
+    EXP_CATALOG.map(e=>`<option value="${e.slug}" data-price="${e.price_per_person||0}">${e.icon||'⭐'} ${e.name} — ${fmtMoney(e.price_per_person||0)}/pers.</option>`).join('');
+}
+
+function renderAlojAddon(){
+  const list = document.getElementById('aloj-addon-list');
+  if(!list) return;
+  if(!_alojAddon.length){
+    list.innerHTML='<div style="color:var(--muted);font-size:.8rem;padding:.4rem 0">Sin alojamientos agregados</div>';
+  } else {
+    list.innerHTML = _alojAddon.map((item,i)=>`
+      <div class="extras-row">
+        <div class="ex-name">🏠 ${item.name}<br>
+          <span style="font-size:.7rem;color:var(--muted)">${item.entry_date} → ${item.exit_date}</span></div>
+        <input type="number" min="1" value="${item.nights}" title="Noches"
+          oninput="_alojAddon[${i}].nights=Math.max(1,+this.value||1);renderAlojAddon();updateAllAddons()">
+        <input type="number" min="0" value="${item.unit_price}" title="$/noche"
+          oninput="_alojAddon[${i}].unit_price=+this.value||0;renderAlojAddon();updateAllAddons()">
+        <div>${fmtMoney(item.nights*item.unit_price)}</div>
+        <button class="ex-del" onclick="_alojAddon.splice(${i},1);renderAlojAddon();updateAllAddons()">✕</button>
+      </div>`).join('');
+  }
+  const total = _alojAddon.reduce((s,a)=>s+a.nights*a.unit_price,0);
+  const lbl = document.getElementById('aloj-addon-total');
+  if(lbl) lbl.textContent = total>0 ? fmtMoney(total) : '';
+}
+
+function renderExpAddon(){
+  const list = document.getElementById('exp-addon-list');
+  if(!list) return;
+  if(!_expAddon.length){
+    list.innerHTML='<div style="color:var(--muted);font-size:.8rem;padding:.4rem 0">Sin experiencias agregadas</div>';
+  } else {
+    list.innerHTML = _expAddon.map((item,i)=>`
+      <div class="extras-row">
+        <div class="ex-name">⭐ ${item.name}<br>
+          <span style="font-size:.7rem;color:var(--muted)">${item.date||'Sin fecha'}</span></div>
+        <input type="number" min="1" value="${item.qty}" title="Personas"
+          oninput="_expAddon[${i}].qty=Math.max(1,+this.value||1);renderExpAddon();updateAllAddons()">
+        <input type="number" min="0" value="${item.unit_price}" title="$/pers."
+          oninput="_expAddon[${i}].unit_price=+this.value||0;renderExpAddon();updateAllAddons()">
+        <div>${fmtMoney(item.qty*item.unit_price)}</div>
+        <button class="ex-del" onclick="_expAddon.splice(${i},1);renderExpAddon();updateAllAddons()">✕</button>
+      </div>`).join('');
+  }
+  const total = _expAddon.reduce((s,a)=>s+a.qty*a.unit_price,0);
+  const lbl = document.getElementById('exp-addon-total');
+  if(lbl) lbl.textContent = total>0 ? fmtMoney(total) : '';
+}
+
+function addAlojAddon(){
+  const sel   = document.getElementById('aloj-addon-sel');
+  const entry = document.getElementById('aloj-addon-entry').value;
+  const exit  = document.getElementById('aloj-addon-exit').value;
+  if(!sel||!sel.value||!entry||!exit){ showToast('Selecciona alojamiento, fecha entrada y salida'); return; }
+  const slug  = sel.value;
+  const aloj  = ALOJ_CATALOG.find(a=>a.slug===slug);
+  const nights= Math.max(1, Math.round((new Date(exit)-new Date(entry))/86400000));
+  const price = aloj ? (+aloj.price_from||0) : 0;
+  _alojAddon.push({key:`aloj__${slug}`, name:aloj?aloj.name:slug, nights, entry_date:entry, exit_date:exit, unit_price:price});
+  document.getElementById('aloj-addon-entry').value='';
+  document.getElementById('aloj-addon-exit').value='';
+  sel.value='';
+  renderAlojAddon(); updateAllAddons();
+}
+
+function addExpAddon(){
+  const sel  = document.getElementById('exp-addon-sel');
+  const date = document.getElementById('exp-addon-date').value;
+  if(!sel||!sel.value){ showToast('Selecciona una experiencia'); return; }
+  const slug = sel.value;
+  const exp  = EXP_CATALOG.find(e=>e.slug===slug);
+  const price= exp ? (+exp.price_per_person||0) : 0;
+  _expAddon.push({key:`exp__${slug}`, name:exp?exp.name:slug, date:date||'', qty:1, unit_price:price});
+  document.getElementById('exp-addon-date').value='';
+  sel.value='';
+  renderExpAddon(); updateAllAddons();
+}
+
+function updateAllAddons(){
+  updateExtrasTotals();
+}
+
 function slugify(s){
   return s.normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
     .toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
 }
 
 function initExtrasEditor(extrasJson){
-  // Build _extrasItems from existing extras_json, lookup catalog prices
   _extrasItems = [];
+  _alojAddon   = [];
+  _expAddon    = [];
   const catalogByKey = {};
   EXTRAS_CATALOG.forEach(e=>{ catalogByKey[e.key]=e; });
   Object.entries(extrasJson||{}).forEach(([key, val])=>{
-    const cat = catalogByKey[key];
-    // val puede ser número (qty) o objeto {qty, unit_price}
-    const qty = (typeof val === 'object' && val !== null) ? (+val.qty||1) : (+val||1);
-    const saved_price = (typeof val === 'object' && val !== null && val.unit_price) ? +val.unit_price : null;
-    _extrasItems.push({
-      key,
-      name: cat ? cat.name : key.replace(/_/g,' '),
-      qty,
-      unit_price: saved_price ?? (cat ? cat.price : 0),
-      unit_cost:  cat ? (cat.cost||0) : 0,
-    });
+    const isObj = typeof val === 'object' && val !== null;
+    if(key.startsWith('aloj__')){
+      // Stored as {qty:nights, unit_price, entry_date, exit_date, name}
+      const nights = isObj ? (+val.qty||+val.nights||1) : 1;
+      _alojAddon.push({
+        key,
+        name:       isObj&&val.name ? val.name : key.replace('aloj__','').replace(/_/g,' '),
+        nights,
+        entry_date: isObj&&val.entry_date ? val.entry_date : '',
+        exit_date:  isObj&&val.exit_date  ? val.exit_date  : '',
+        unit_price: isObj&&val.unit_price ? +val.unit_price : 0,
+      });
+    } else if(key.startsWith('exp__')){
+      const qty = isObj ? (+val.qty||1) : (+val||1);
+      _expAddon.push({
+        key,
+        name:       isObj&&val.name ? val.name : key.replace('exp__','').replace(/_/g,' '),
+        qty,
+        date:       isObj&&val.date ? val.date : '',
+        unit_price: isObj&&val.unit_price ? +val.unit_price : 0,
+      });
+    } else {
+      const cat = catalogByKey[key];
+      const qty = isObj ? (+val.qty||1) : (+val||1);
+      const saved_price = isObj&&val.unit_price ? +val.unit_price : null;
+      _extrasItems.push({
+        key,
+        name:       cat ? cat.name : key.replace(/_/g,' '),
+        qty,
+        unit_price: saved_price ?? (cat ? cat.price : 0),
+        unit_cost:  cat ? (cat.cost||0) : 0,
+      });
+    }
   });
   renderExtrasEditor();
   populateCatalogSelect();
+  populateAlojExpSelects();
+  renderAlojAddon();
+  renderExpAddon();
 }
 
 function populateCatalogSelect(){
@@ -2870,17 +3051,18 @@ function updateExtraSubtotal(i){
 function updateExtrasTotals(){
   const extrasTotal = _extrasItems.reduce((s,item)=>s+(+item.qty||0)*(+item.unit_price||0),0);
   const costoTotal  = _extrasItems.reduce((s,item)=>s+(+item.qty||0)*(+item.unit_cost ||0),0);
+  const alojTotal   = (_alojAddon||[]).reduce((s,a)=>s+(+a.nights||1)*(+a.unit_price||0),0);
+  const expTotal    = (_expAddon ||[]).reduce((s,a)=>s+(+a.qty||1)*(+a.unit_price||0),0);
+  const addonsTotal = extrasTotal + alojTotal + expTotal;
   const descTotal   = (_descuentos||[]).reduce((s,d)=>s+(+d.amount||0),0);
   const lbl = document.getElementById('extras-total-label');
   if(lbl) lbl.textContent = extrasTotal>0 ? fmtMoney(extrasTotal) : '';
-  // Auto-update ingreso_extras and ingreso_total fields
   const extEl  = document.getElementById('e-ingreso_extras');
   const totEl  = document.getElementById('e-ingreso_total');
   const resEl  = document.getElementById('e-ingreso_reserva');
   const varEl  = document.getElementById('e-costo_operativo_variable');
-  if(extEl) extEl.value = extrasTotal;
-  if(totEl && resEl) totEl.value = (+resEl.value||0) + extrasTotal - descTotal;
-  // Update variable cost and recalculate total cost
+  if(extEl) extEl.value = addonsTotal;
+  if(totEl && resEl) totEl.value = (+resEl.value||0) + addonsTotal - descTotal;
   if(varEl && costoTotal > 0){ varEl.value = costoTotal; syncCostoTotal(); }
   syncPagoFaltante();
 }
