@@ -170,7 +170,7 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
     <!-- Logo + Hero -->
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr><td align="center" style="padding:36px 32px 24px;">
-      {'<img src="' + logo_url + '" alt="' + biz + '" width="160" style="display:block;margin:0 auto 20px;max-width:160px;height:auto;filter:brightness(0) invert(1);">' if logo_url else '<div style="color:#e8b86d;font-size:13px;font-weight:700;letter-spacing:2px;margin-bottom:20px;">' + biz + '</div>'}
+      {'<img src="' + logo_url + '" alt="' + biz + '" width="160" style="display:block;margin:0 auto 20px;max-width:160px;height:auto;">' if logo_url else '<div style="color:#e8b86d;font-size:13px;font-weight:700;letter-spacing:2px;margin-bottom:20px;">' + biz + '</div>'}
       <h1 style="margin:0 0 10px;color:#f8fafc;font-size:26px;font-weight:800;
                  letter-spacing:-0.5px;line-height:1.2;">{hero_title}</h1>
       <p style="margin:0;color:#94a3b8;font-size:15px;line-height:1.55;">{hero_subtitle}</p>
