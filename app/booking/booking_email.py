@@ -46,6 +46,7 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
         "num_people":       str(booking.get("num_people") or ""),
         "total_price":      str(booking.get("total_price") or ""),
         "total_price_fmt":  _fmt_clp(booking.get("total_price")),
+        "deposit_fmt":      _fmt_clp(round((booking.get("total_price") or 0) * 0.5)),
         "subtotal_fmt":     _fmt_clp(booking.get("subtotal")),
         "extras_total_fmt": _fmt_clp(booking.get("extras_total")),
         "status":           str(booking.get("status") or ""),
@@ -71,6 +72,7 @@ def _sample_ctx(to_addr: str) -> Dict[str, str]:
         "num_people":       "4",
         "total_price":      "200000",
         "total_price_fmt":  _fmt_clp(200000),
+        "deposit_fmt":      _fmt_clp(100000),
         "subtotal_fmt":     _fmt_clp(180000),
         "extras_total_fmt": _fmt_clp(20000),
         "status":           "confirmed",
@@ -144,7 +146,8 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
     date   = ctx.get("booking_date", "")
     time_  = ctx.get("booking_time", "")
     people = ctx.get("num_people", "")
-    total  = ctx.get("total_price_fmt", "")
+    total   = ctx.get("total_price_fmt", "")
+    deposit = ctx.get("deposit_fmt", "")
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -208,6 +211,13 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
           </tr></table>
         </td></tr>
 
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+          <table width="100%" cellspacing="0" cellpadding="0"><tr>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">✅ &nbsp;Pagado (50%)</td>
+            <td align="right" style="color:#e8b86d;font-size:14px;font-weight:700;">{deposit}</td>
+          </tr></table>
+        </td></tr>
+
         <tr><td style="padding:16px 20px;background:rgba(16,185,129,.06);">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
             <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">💰 &nbsp;Total</td>
@@ -236,7 +246,6 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
     <tr><td align="center" style="padding:22px 28px 30px;">
       <p style="margin:0 0 6px;color:#94a3b8;font-size:13px;">¿Tienes preguntas? Escríbenos por WhatsApp</p>
       <a href="https://wa.me/{wa_num}" style="color:#e8b86d;font-size:15px;font-weight:700;text-decoration:none;">{phone}</a>
-      <p style="margin:12px 0 0;color:#64748b;font-size:11px;letter-spacing:0.5px;">{biz} &nbsp;·&nbsp; Pucón, Chile</p>
     </td></tr>
     </table>
 
@@ -245,7 +254,7 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
   <!-- Bottom note -->
   <tr><td align="center" style="padding-top:18px;">
     <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.7;">
-      Recibiste este correo porque realizaste una reserva en {biz}.<br>
+      Recibiste este correo porque realizaste una reserva en Hot Boat.<br>
       Puedes responder este email si tienes alguna consulta.
     </p>
   </td></tr>
