@@ -423,6 +423,12 @@ async def root():
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/booking", status_code=302)
 
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_redirect():
+    """Redirect /admin to admin reservas panel"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/admin/reservas", status_code=302)
+
 @app.get("/chat", response_class=HTMLResponse)
 async def chat_ui():
     """Serve Kia-Ai chat interface"""
