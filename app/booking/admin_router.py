@@ -22,6 +22,7 @@ from app.booking.operator_settings import (
     get_vacation_days, add_vacation_day, remove_vacation_day,
     get_setting, set_setting, is_urgency_mode,
     get_operating_hours, set_operating_hours,
+    get_urgency_days, set_urgency_day, remove_urgency_day,
 )
 
 
@@ -505,6 +506,47 @@ async def delete_vacation(fecha: str, x_admin_key: str = Header("")):
     from datetime import date as _date
     d = _date.fromisoformat(fecha)
     ok = remove_vacation_day(d)
+    return {"ok": ok, "date": fecha}
+
+
+# ── Per-day urgency overrides ─────────────────────────────────────────────────
+
+@admin_router.get("/api/admin/urgency-days")
+async def list_urgency_days(
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    x_admin_key: str = Header(""),
+):
+    _check_auth(x_admin_key)
+    from datetime import date as _date
+    fd = _date.fromisoformat(desde) if desde else None
+    td = _date.fromisoformat(hasta) if hasta else None
+    return {"urgency_days": get_urgency_days(fd, td)}
+
+
+class UrgencyDayRequest(BaseModel):
+    date: str
+    enabled: bool = True
+    reason: Optional[str] = ""
+
+
+@admin_router.post("/api/admin/urgency-days")
+async def add_urgency_day_route(body: UrgencyDayRequest, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from datetime import date as _date
+    d = _date.fromisoformat(body.date)
+    ok = set_urgency_day(d, body.enabled, body.reason or "")
+    if not ok:
+        raise HTTPException(status_code=500, detail="Error setting urgency day")
+    return {"ok": True, "date": body.date, "enabled": body.enabled}
+
+
+@admin_router.delete("/api/admin/urgency-days/{fecha}")
+async def delete_urgency_day_route(fecha: str, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from datetime import date as _date
+    d = _date.fromisoformat(fecha)
+    ok = remove_urgency_day(d)
     return {"ok": ok, "date": fecha}
 
 

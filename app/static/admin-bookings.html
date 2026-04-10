@@ -204,6 +204,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 /* Vacation day */
 .cal-day.vacation{background:rgba(231,76,60,.18);border-color:rgba(231,76,60,.4)}
 .cal-day.vacation .cal-day-num{color:var(--red)}
+/* Urgency day */
+.cal-day.urgency-on{background:rgba(245,200,66,.18);border-color:rgba(245,200,66,.5)}
+.cal-day.urgency-on .cal-day-num{color:var(--gold)}
+.cal-day.urgency-off{background:rgba(112,112,160,.12);border-color:rgba(112,112,160,.3)}
+.cal-day.urgency-off .cal-day-num{color:var(--muted)}
 /* Payment rows */
 .pago-row{display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem}
 .pago-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);
@@ -828,6 +833,27 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
+      <!-- ── Urgency Days Calendar ──────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">⚡ Urgencia por días específicos</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Activa o desactiva el modo urgencia para días concretos, independientemente del toggle global.<br>
+          <strong style="color:var(--gold)">⚡ Amarillo</strong> = urgencia forzada ON &nbsp;·&nbsp; <strong style="color:var(--muted)">✗ Gris</strong> = urgencia forzada OFF
+        </p>
+        <div style="display:flex;gap:.6rem;margin-bottom:.8rem;flex-wrap:wrap;align-items:center">
+          <button onclick="urgCalPrev()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">‹</button>
+          <h2 id="urg-cal-title" style="font-size:.95rem;flex:1;margin:0"></h2>
+          <button onclick="urgCalNext()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">›</button>
+        </div>
+        <div class="cal-grid" id="urg-cal-grid" style="gap:2px"></div>
+        <div style="display:flex;gap:1rem;margin-top:.8rem;font-size:.75rem;color:var(--muted)">
+          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Urgencia ON</span>
+          <span><span style="background:#7070a0;display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Urgencia OFF</span>
+          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem;opacity:.45"></span>Hoy</span>
+        </div>
+        <div id="urg-list" style="margin-top:1rem"></div>
+      </div>
+
       <!-- ── Push Notifications ─────────────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">🔔 Notificaciones Push (Expo Go)</div>
@@ -1016,7 +1042,7 @@ function showSection(name){
   if(name==='stats') loadStats();
   if(name==='extras-cat') loadExtrasCat();
   if(name==='emails') loadEmailBookingConfig();
-  if(name==='settings'){ loadSettings(); loadVacationDays(); }
+  if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); }
   if(name==='alojamientos-admin') loadAlojamientos();
   if(name==='experiencias') loadExperiencias();
   if(name==='packs-admin') loadPacksAdmin();
@@ -2449,6 +2475,90 @@ function renderVacList(vacDays){
   </div>`;
 }
 
+// ── Urgency days calendar ─────────────────────────────────────────────────────
+let urgYear = new Date().getFullYear(), urgMonth = new Date().getMonth();
+let urgencyDays = {}; // {dateStr: true=ON, false=OFF}
+
+async function loadUrgencyDays(){
+  try{
+    const d = await api('/api/admin/urgency-days');
+    urgencyDays = {};
+    (d.urgency_days||[]).forEach(v=>{ urgencyDays[v.date] = v.enabled; });
+    renderUrgCal();
+    renderUrgList();
+  }catch(e){}
+}
+
+function urgCalPrev(){ urgMonth--; if(urgMonth<0){urgMonth=11;urgYear--;} renderUrgCal(); }
+function urgCalNext(){ urgMonth++; if(urgMonth>11){urgMonth=0;urgYear++;} renderUrgCal(); }
+
+function renderUrgCal(){
+  const grid = document.getElementById('urg-cal-grid');
+  const title = document.getElementById('urg-cal-title');
+  if(!grid) return;
+  title.textContent = `${MONTHS[urgMonth]} ${urgYear}`;
+  const firstDayJs = new Date(urgYear,urgMonth,1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
+  const daysInMonth = new Date(urgYear,urgMonth+1,0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
+  for(let i=0;i<leadDays;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${urgYear}-${String(urgMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt=new Date(urgYear,urgMonth,d);
+    const isToday=dt.getTime()===today.getTime();
+    const override=urgencyDays.hasOwnProperty(dateStr);
+    const isOn=override&&urgencyDays[dateStr]===true;
+    const isOff=override&&urgencyDays[dateStr]===false;
+    const cls=`cal-day${isOn?' urgency-on':isOff?' urgency-off':''}${isToday?' today':''}`;
+    const icon=isOn?'⚡':isOff?'✗':'';
+    const tip=isOn?'Urgencia ON — click para ciclar':isOff?'Urgencia OFF — click para quitar':'Click para activar urgencia';
+    html+=`<div class="${cls}" onclick="cycleUrgDay('${dateStr}')" title="${tip}">
+      <div class="cal-day-num">${d}</div>
+      ${icon?`<div style="font-size:.6rem">${icon}</div>`:''}
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+async function cycleUrgDay(dateStr){
+  const cur = urgencyDays.hasOwnProperty(dateStr) ? urgencyDays[dateStr] : null;
+  try{
+    if(cur === null){
+      // No override → force ON
+      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({date:dateStr,enabled:true})});
+      urgencyDays[dateStr] = true;
+      showToast(`⚡ ${dateStr}: urgencia ON`);
+    } else if(cur === true){
+      // Force ON → force OFF
+      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({date:dateStr,enabled:false})});
+      urgencyDays[dateStr] = false;
+      showToast(`✗ ${dateStr}: urgencia OFF`);
+    } else {
+      // Force OFF → remove override
+      await api(`/api/admin/urgency-days/${dateStr}`,{method:'DELETE'});
+      delete urgencyDays[dateStr];
+      showToast(`${dateStr}: sigue el ajuste global`);
+    }
+    renderUrgCal();
+    renderUrgList();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function renderUrgList(){
+  const el = document.getElementById('urg-list');
+  if(!el) return;
+  const entries = Object.entries(urgencyDays);
+  if(!entries.length){ el.innerHTML='<p style="color:var(--muted);font-size:.82rem">Sin overrides por día.</p>'; return; }
+  el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem">
+    ${entries.sort(([a],[b])=>a<b?-1:1).map(([date,enabled])=>`
+      <div style="background:${enabled?'rgba(245,200,66,.15)':'rgba(112,112,160,.12)'};border:1px solid ${enabled?'rgba(245,200,66,.35)':'rgba(112,112,160,.3)'};border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
+        ${enabled?'⚡':'✗'} ${date}
+        <button onclick="cycleUrgDay('${date}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem" title="Ciclar estado">↻</button>
+      </div>`).join('')}
+  </div>`;
+}
+
 // ── Payment rows ──────────────────────────────────────────────────────────────
 const METODOS = ['transferencia','mercadopago','transbank','efectivo','cheque','otro'];
 let _pagos = [];   // working copy of pagos array for current modal
@@ -3753,6 +3863,10 @@ async function deleteExtrasBooking(id){
   await fetch(`/api/admin/extras-bookings/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
   await loadCalExtras(); showToast('Eliminada');
 }
+
+// Pre-render calendars so they display immediately when the section is opened
+renderUrgCal();
+renderVacCal();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>

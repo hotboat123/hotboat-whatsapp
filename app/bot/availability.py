@@ -222,24 +222,35 @@ class AvailabilityChecker:
             try:
                 from app.booking.operator_settings import (
                     get_vacation_days, is_urgency_mode, apply_urgency_filter,
-                    get_operating_hours_as_ints
+                    get_operating_hours_as_ints, get_urgency_days,
                 )
                 vacation_dates = {
                     v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
                 }
-                urgency = is_urgency_mode()
+                global_urgency = is_urgency_mode()
                 db_operating_hours = get_operating_hours_as_ints()
+                # Build per-day urgency override map: {date_str: bool}
+                urgency_day_overrides = {
+                    v["date"]: v["enabled"]
+                    for v in get_urgency_days(start_date.date(), end_date.date())
+                }
             except Exception as se:
                 logger.warning(f"Could not load operator settings: {se}")
                 vacation_dates = set()
-                urgency = False
+                global_urgency = False
                 db_operating_hours = None
+                urgency_day_overrides = {}
 
-            # Generate all possible slots and check availability
-            available_slots = []
-            # For urgency: track booked times per day from booknetic
+            # Determine effective urgency for each day (override wins over global)
+            def _day_urgency(date_str: str) -> bool:
+                if date_str in urgency_day_overrides:
+                    return urgency_day_overrides[date_str]
+                return global_urgency
+
+            # For urgency days: track booked times per day from booknetic
+            any_urgency = global_urgency or bool(urgency_day_overrides)
             booked_times_by_day: dict = {}
-            if urgency:
+            if any_urgency:
                 for slot in booked_slots:
                     if slot.get("starts_at"):
                         try:
@@ -255,7 +266,8 @@ class AvailabilityChecker:
             # In urgency mode generate a full hourly range so the filter can find
             # slots at booking ± gap_hours (e.g. 18:00 booked → 15:00 candidate).
             # Outside urgency, use only the configured operating hours.
-            if urgency and db_operating_hours:
+            urgency = global_urgency  # kept for backward compat in hour-range calc below
+            if any_urgency and db_operating_hours:
                 from app.booking.operator_settings import get_urgency_config
                 _gap = int(get_urgency_config().get("gap_hours", 3))
                 _min_h = max(8,  min(db_operating_hours) - _gap)
@@ -315,9 +327,11 @@ class AvailabilityChecker:
                 
                 current_date += timedelta(days=1)
 
-            # Apply urgency filter per day if enabled
-            if urgency:
+            # Apply urgency filter per day (global or per-day override)
+            if any_urgency:
                 for dk, day_slots in by_date.items():
+                    if not _day_urgency(dk):
+                        continue
                     times = [s["time"] for s in day_slots]
                     booked = booked_times_by_day.get(dk, [])
                     allowed = set(apply_urgency_filter(times, booked))

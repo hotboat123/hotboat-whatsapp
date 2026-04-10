@@ -128,6 +128,69 @@ def remove_vacation_day(d: date) -> bool:
         return False
 
 
+# ── Per-day urgency overrides ─────────────────────────────────────────────────
+
+def get_urgency_days(from_date: Optional[date] = None, to_date: Optional[date] = None) -> list:
+    """Return list of {date, enabled, reason} for days with urgency override."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                wheres, params = [], []
+                if from_date:
+                    wheres.append("fecha >= %s"); params.append(from_date)
+                if to_date:
+                    wheres.append("fecha <= %s"); params.append(to_date)
+                where = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+                cur.execute(f"SELECT fecha, enabled, reason FROM urgency_days {where} ORDER BY fecha", params)
+                return [{"date": str(r[0]), "enabled": r[1], "reason": r[2] or ""} for r in cur.fetchall()]
+    except Exception as e:
+        logger.error(f"get_urgency_days failed: {e}")
+        return []
+
+
+def get_urgency_day_override(d: date) -> Optional[bool]:
+    """
+    Returns True/False if the day has an explicit override, None if no override.
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT enabled FROM urgency_days WHERE fecha=%s", (d,))
+                row = cur.fetchone()
+                return row[0] if row else None
+    except Exception:
+        return None
+
+
+def set_urgency_day(d: date, enabled: bool, reason: str = "") -> bool:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO urgency_days (fecha, enabled, reason)
+                       VALUES (%s, %s, %s)
+                       ON CONFLICT (fecha) DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason""",
+                    (d, enabled, reason),
+                )
+                conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"set_urgency_day failed: {e}")
+        return False
+
+
+def remove_urgency_day(d: date) -> bool:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM urgency_days WHERE fecha=%s", (d,))
+                conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"remove_urgency_day failed: {e}")
+        return False
+
+
 # ── Urgency filter ────────────────────────────────────────────────────────────
 
 def apply_urgency_filter(
