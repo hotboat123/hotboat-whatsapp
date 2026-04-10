@@ -1357,10 +1357,20 @@ async function openModal(id){
     const r=await api(`/api/admin/reservas/${id}`);
     document.getElementById('modal-title').textContent=`${r.nombre_cliente||'Reserva'} · ${r.fecha}`;
     document.getElementById('modal-body').innerHTML=`
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
         ${badge(r.status)}
         <span class="chip" style="background:${sourceColor(r.source)}22;color:${sourceColor(r.source)}">${sourceLabel(r.source)}</span>
         <span class="chip">ID: ${r.appointment_id||r.source_id||r.id}</span>
+        <div style="display:flex;align-items:center;gap:.35rem;margin-left:.25rem">
+          <span style="font-size:.72rem;color:var(--muted);font-weight:600;white-space:nowrap">MEDIO CONTACTO</span>
+          <select id="e-medio_contacto"
+            style="background:var(--deep);border:1px solid var(--border);color:var(--text);
+                   border-radius:8px;padding:.28rem .55rem;font-size:.78rem;outline:none;cursor:pointer">
+            <option value="">— ninguno —</option>
+            ${['Instagram','Popeye','WhatsApp Business','WhatsApp Tom','Facebook','TikTok']
+              .map(m=>`<option value="${m}"${r.medio_contacto===m?' selected':''}>${m}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Fecha</label><input type="date" id="e-fecha" value="${r.fecha||''}"></div>
@@ -1734,6 +1744,7 @@ async function saveModal(id){
     como_supieron:g('e-como_supieron'), clima_del_dia:g('e-clima_del_dia'),
     categoria_clientes:g('e-categoria_clientes'), tipo_clientes:g('e-tipo_clientes'),
     quien_atendio:(g('e-quien_atendio')||'').trim(),
+    medio_contacto:g('e-medio_contacto')||null,
     num_personas: g('e-num_personas') ? +g('e-num_personas') : null,
     num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
     num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,

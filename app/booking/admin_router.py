@@ -171,6 +171,7 @@ class UpdateReservaRequest(BaseModel):
     descuentos: Optional[list] = None
     fecha: Optional[str] = None
     hora: Optional[str] = None
+    medio_contacto: Optional[str] = None
 
 
 @admin_router.put("/api/admin/reservas/{rid}")
