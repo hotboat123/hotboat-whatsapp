@@ -157,7 +157,7 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
     try:
         from app.booking.operator_settings import (
             get_vacation_days, is_urgency_mode, apply_urgency_filter,
-            get_operating_hours, get_urgency_fake_slots
+            get_operating_hours, get_urgency_fake_slots, get_urgency_days,
         )
         from app.db.connection import get_connection
 
@@ -167,10 +167,21 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
         end = start + timedelta(days=days)
         slots = await checker.get_available_slots(start, end)
 
-        # Load vacation days for the range
+        # Load vacation days and per-day urgency overrides for the range
         vacation_dates = {
             v["date"] for v in get_vacation_days(start.date(), end.date())
         }
+        global_urgency = is_urgency_mode()
+        urgency_day_overrides = {
+            v["date"]: v["enabled"]
+            for v in get_urgency_days(start.date(), end.date())
+        }
+
+        def _day_urgency_active(dk: str) -> bool:
+            """True if urgency is active for this specific date (override wins over global)."""
+            if dk in urgency_day_overrides:
+                return urgency_day_overrides[dk]
+            return global_urgency
 
         # Group slots by date, skipping vacation days
         grouped: dict = {}
@@ -183,11 +194,13 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
             grouped[dk].append(s["time"])
 
         # Compute fake_booked_slots for grey display in urgency mode.
+        # Applies per-day urgency overrides: each day is evaluated independently.
         # NOTE: availability.py already applies the urgency filter correctly (using data
         # from both booknetic + hotboat_appointments). We do NOT re-apply it here to
         # avoid double-filtering that empties valid days.
         fake_booked_by_day: dict = {}
-        if is_urgency_mode():
+        any_urgency_active = global_urgency or any(v for v in urgency_day_overrides.values())
+        if any_urgency_active:
             # Load actual bookings from BOTH sources for the fake-slot calculation
             booked_by_day: dict = {}
             try:
@@ -223,6 +236,8 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
             gap_min = int(float(get_urgency_config().get("gap_hours", 3)) * 60)
 
             for dk, times in grouped.items():
+                if not _day_urgency_active(dk):
+                    continue  # day has urgency off — no ghost slots
                 booked = booked_by_day.get(dk, [])
                 avail_set = set(times)
                 if not booked:
@@ -252,9 +267,9 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
         result = {
             "availability": grouped,
             "operating_hours": get_operating_hours(),
-            "urgency_mode": is_urgency_mode(),
+            "urgency_mode": global_urgency,
             "vacation_days": list(vacation_dates),
-            "fake_booked_slots": fake_booked_by_day if is_urgency_mode() else {},
+            "fake_booked_slots": fake_booked_by_day,
         }
         _avail_cache[cache_key] = {"data": result, "ts": _time.time()}
         return result
