@@ -134,8 +134,7 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
     wa_num  = phone.replace(" ", "").replace("+", "")
     # Logo: EMAIL_LOGO_URL env var > auto-detect Railway domain > text fallback
     import os as _os
-    settings = get_settings()
-    logo_url = (getattr(settings, "email_logo_url", "") or "").strip()
+    logo_url = _os.environ.get("EMAIL_LOGO_URL", "").strip()
     if not logo_url:
         railway_domain = _os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
         if railway_domain:
