@@ -1362,13 +1362,13 @@ async function openModal(id){
         <span class="chip" style="background:${sourceColor(r.source)}22;color:${sourceColor(r.source)}">${sourceLabel(r.source)}</span>
         <span class="chip">ID: ${r.appointment_id||r.source_id||r.id}</span>
         <div style="display:flex;align-items:center;gap:.35rem;margin-left:.25rem">
-          <span style="font-size:.72rem;color:var(--text);font-weight:600;white-space:nowrap">MEDIO CONTACTO</span>
+          <span style="font-size:.72rem;color:#f0f0f8;font-weight:600;white-space:nowrap">MEDIO CONTACTO</span>
           <select id="e-medio_contacto"
-            style="background:var(--deep);border:1px solid var(--border);color:var(--text);
+            style="background:#1a1a24;border:1px solid #2a2a38;color:#f0f0f8;
                    border-radius:8px;padding:.28rem .55rem;font-size:.78rem;outline:none;cursor:pointer">
-            <option value="">— ninguno —</option>
+            <option value="" style="background:#1a1a24;color:#f0f0f8">— ninguno —</option>
             ${['Instagram','Popeye','WhatsApp Business','WhatsApp Tom','Facebook','TikTok']
-              .map(m=>`<option value="${m}"${r.medio_contacto===m?' selected':''}>${m}</option>`).join('')}
+              .map(m=>`<option value="${m}" style="background:#1a1a24;color:#f0f0f8"${r.medio_contacto===m?' selected':''}>${m}</option>`).join('')}
           </select>
         </div>
       </div>

@@ -140,7 +140,7 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
     if not logo_url:
         railway_domain = _os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
         if railway_domain:
-            logo_url = f"https://{railway_domain}/static/Logo%20sin%20Fondo%20y%20sin%20CHILE.png"
+            logo_url = f"https://{railway_domain}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png"
 
     ref    = ctx.get("booking_ref", "")
     date   = ctx.get("booking_date", "")
