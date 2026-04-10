@@ -228,6 +228,18 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
                         """, (start.date(), end.date()))
                         for row in cur.fetchall():
                             booked_by_day.setdefault(row[0], []).append(row[1])
+                        # Manual / sheets reservations from all_appointments
+                        cur.execute("""
+                            SELECT fecha::text AS d,
+                                   TO_CHAR(hora, 'HH24:MI') AS t
+                            FROM all_appointments
+                            WHERE source NOT IN ('booknetic', 'hotboat_web')
+                              AND fecha >= %s AND fecha <= %s
+                              AND hora IS NOT NULL
+                              AND status NOT IN ('cancelled','rejected','cancelada','solicitud')
+                        """, (start.date(), end.date()))
+                        for row in cur.fetchall():
+                            booked_by_day.setdefault(row[0], []).append(row[1])
             except Exception as e:
                 logger.warning(f"Urgency fake-slots: could not fetch booked: {e}")
 

@@ -272,6 +272,39 @@ async def get_booked_slots(
                     except Exception:
                         pass
 
+                # Include manual reservations from all_appointments (source='manual' or 'sheets').
+                # These are NOT in booknetic_appointments or hotboat_appointments so would
+                # otherwise be invisible to the availability checker.
+                cur.execute("""
+                    SELECT fecha, hora, nombre_cliente, status
+                    FROM all_appointments
+                    WHERE source NOT IN ('booknetic', 'hotboat_web')
+                      AND fecha >= %s::date
+                      AND fecha <= %s::date
+                      AND hora IS NOT NULL
+                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud')
+                    ORDER BY fecha, hora
+                """, (start_date, end_date))
+                for row in cur.fetchall():
+                    b_date, b_time, b_name, b_status = row
+                    try:
+                        if hasattr(b_time, 'hour'):
+                            h, m = b_time.hour, b_time.minute
+                        else:
+                            parts = str(b_time).split(":")
+                            h, m = int(parts[0]), int(parts[1])
+                        dt_naive = datetime.combine(b_date, dt_time(h, m))
+                        starts_at = CHILE_TZ.localize(dt_naive)
+                        booked_slots.append({
+                            "id": None,
+                            "starts_at": starts_at,
+                            "service_name": "Manual",
+                            "customer_name": b_name,
+                            "status": b_status,
+                        })
+                    except Exception:
+                        pass
+
                 return booked_slots
 
     except Exception as e:
