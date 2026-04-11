@@ -1705,18 +1705,19 @@ async function openModal(id){
           <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">
             ✍️ Firmas T&amp;C <span id="firma-count" style="color:var(--gold);margin-left:.3rem"></span>
           </div>
-          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-            <button onclick="copyFirmaLink('${r.booking_ref||''}')"
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap" id="firma-btns">
+            <button onclick="copyFirmaLink(document.getElementById('_bref_val').value)"
               style="background:rgba(74,158,255,.12);color:var(--blue);border:1px solid rgba(74,158,255,.3);
                      border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
               🔗 Copiar link QR
             </button>
-            <button onclick="sendFirmasSummary('${r.booking_ref||''}')"
+            <button onclick="sendFirmasSummary(document.getElementById('_bref_val').value)"
               style="background:rgba(245,200,66,.1);color:var(--gold);border:1px solid rgba(245,200,66,.3);
                      border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
               📧 Enviar resumen
             </button>
           </div>
+          <input type="hidden" id="_bref_val" value="${r.booking_ref||(r.source==='hotboat_web'?r.source_id:'')||''}">
         </div>
         <div id="firma-list" style="font-size:.82rem;color:var(--muted)">Cargando firmas...</div>
       </div>
@@ -1734,8 +1735,10 @@ async function openModal(id){
         <button class="btn-del" onclick="closeModal()" style="margin-left:auto">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
+      // Derive booking_ref: for web bookings source_id IS the booking_ref
+      const _bref = r.booking_ref || (r.source === 'hotboat_web' ? r.source_id : '') || '';
       // Load signatures asynchronously after rendering modal
-      loadFirmas(r.booking_ref||'', r.num_personas||0);
+      loadFirmas(_bref, parseInt(r.num_personas)||0);
     // WhatsApp contact button
     const waBtn = document.getElementById('wa-contact-btn');
     if(waBtn){
@@ -1780,7 +1783,11 @@ async function openModal(id){
 async function loadFirmas(bookingRef, numPersonas){
   const listEl = document.getElementById('firma-list');
   const countEl = document.getElementById('firma-count');
-  if(!listEl || !bookingRef) return;
+  if(!listEl) return;
+  if(!bookingRef){
+    listEl.innerHTML = `<span style="color:var(--muted);font-size:.8rem">Las firmas T&amp;C solo están disponibles para reservas online (fuente: hotboat_web).</span>`;
+    return;
+  }
   try{
     const data = await api(`/api/admin/reservas/${encodeURIComponent(bookingRef)}/firmas`);
     const sigs = data.signatures || [];

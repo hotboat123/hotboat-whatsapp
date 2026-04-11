@@ -135,6 +135,10 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
                 for k in ("ingreso_reserva", "ingreso_extras", "ingreso_total",
                           "costo_operativo_fijo", "costo_operativo_variable", "costo_operativo_total"):
                     if r.get(k) is not None: r[k] = float(r[k])
+                # Derive booking_ref: for web bookings source_id IS the booking_ref
+                if not r.get("booking_ref"):
+                    if r.get("source") == "hotboat_web" and r.get("source_id"):
+                        r["booking_ref"] = r["source_id"]
                 return r
     except HTTPException:
         raise
