@@ -71,14 +71,65 @@ def _resolve_booking(booking_ref: str) -> Optional[dict]:
     return None
 
 
-@signatures_router.get("/firma/{booking_ref:path}", response_class=HTMLResponse)
-async def serve_firma_form(booking_ref: str):
-    """Serve the T&C signing page (linked from QR code)."""
+@signatures_router.get("/firma", response_class=HTMLResponse)
+async def serve_firma_generic():
+    """Serve the T&C signing page without a booking ref (generic QR code on-site)."""
     try:
         with open(FIRMA_HTML_PATH, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Página de firma no encontrada")
+
+
+@signatures_router.get("/firma/{booking_ref:path}", response_class=HTMLResponse)
+async def serve_firma_form(booking_ref: str):
+    """Serve the T&C signing page pre-linked to a specific booking."""
+    try:
+        with open(FIRMA_HTML_PATH, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Página de firma no encontrada")
+
+
+@signatures_router.get("/api/firma/bookings")
+async def get_bookings_for_date(date: str = ""):
+    """Return bookings for a given date (YYYY-MM-DD) for the walk-in selector."""
+    from app.db.connection import get_connection
+    from datetime import date as _date
+
+    if not date:
+        date = str(_date.today())
+
+    try:
+        target = _date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido, usa YYYY-MM-DD")
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, nombre_cliente, hora, num_personas, source, source_id
+                   FROM all_appointments
+                   WHERE fecha = %s
+                     AND status NOT IN ('cancelled', 'cancelada')
+                   ORDER BY hora ASC NULLS LAST""",
+                (target,),
+            )
+            rows = []
+            for row in cur.fetchall():
+                apt_id, nombre, hora, num_personas, source, source_id = row
+                # Build the booking_ref the same way admin_router does
+                if source == "hotboat_web" and source_id:
+                    bref = source_id
+                else:
+                    bref = f"AA-{apt_id}"
+                rows.append({
+                    "booking_ref": bref,
+                    "nombre_cliente": nombre or "Sin nombre",
+                    "hora": str(hora)[:5] if hora else "",
+                    "num_personas": num_personas or "?",
+                })
+    return {"date": date, "bookings": rows}
 
 
 @signatures_router.get("/api/firma/{booking_ref}/info")

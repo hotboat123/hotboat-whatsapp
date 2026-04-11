@@ -13,39 +13,61 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
      background:var(--bg);color:var(--text);min-height:100vh;padding:0 0 40px}
+
+/* Header */
 .header{background:linear-gradient(135deg,#0a1628 0%,#1a3a6e 100%);
         color:#fff;padding:1.4rem 1rem;text-align:center}
 .header .logo{font-size:2rem;margin-bottom:.3rem}
-.header h1{font-size:1.1rem;font-weight:700;margin-bottom:.2rem}
+.header h1{font-size:1.1rem;font-weight:700;margin-bottom:.15rem}
 .header p{font-size:.82rem;opacity:.8}
+.booking-badge{display:inline-flex;align-items:center;gap:.5rem;
+  background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);
+  border-radius:20px;padding:.45rem .9rem;margin-top:.8rem;font-size:.85rem}
 
-.booking-card{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
-              border-radius:12px;padding:.8rem 1rem;margin:.9rem auto 0;max-width:480px;
-              display:flex;gap:1rem;align-items:center}
-.booking-card .bc-icon{font-size:1.8rem}
-.booking-card .bc-info{font-size:.82rem;opacity:.9}
-.booking-card .bc-info strong{font-size:.95rem;display:block;margin-bottom:.2rem}
-
+/* Steps */
 .container{max-width:480px;margin:0 auto;padding:1rem}
+.step{display:none}
+.step.active{display:block}
 
+/* Cards */
 .card{background:var(--card);border-radius:16px;box-shadow:0 2px 16px rgba(0,0,0,.08);
       padding:1.4rem;margin-bottom:1rem}
-.card-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+.card-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
             color:var(--muted);margin-bottom:1rem;display:flex;align-items:center;gap:.4rem}
 
+/* Form elements */
 .form-group{margin-bottom:1rem}
 label.fl{display:block;font-size:.8rem;font-weight:600;color:var(--muted);
          margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.04em}
 input.fi,select.fi{width:100%;border:1.5px solid var(--border);border-radius:10px;
   padding:.72rem .9rem;font-size:.97rem;color:var(--text);outline:none;
-  transition:border-color .2s,box-shadow .2s;background:#fff;appearance:none}
+  transition:border-color .2s,box-shadow .2s;background:#fff;appearance:none;
+  -webkit-appearance:none}
 input.fi:focus,select.fi:focus{border-color:var(--blue);
   box-shadow:0 0 0 3px rgba(13,110,253,.12)}
 input.fi::placeholder{color:#adb5bd}
 .fi-error{border-color:var(--red)!important}
+.error-msg{color:var(--red);font-size:.8rem;margin-top:.3rem;display:none}
 
 /* Birthday 3-select row */
 .bday-row{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:.5rem}
+
+/* Booking selector card */
+.booking-option{display:flex;align-items:center;gap:.85rem;padding:.85rem;
+  border:2px solid var(--border);border-radius:12px;cursor:pointer;
+  transition:border-color .2s,background .2s,box-shadow .2s;margin-bottom:.55rem}
+.booking-option:hover{border-color:#adb5bd;background:#f8f9fa}
+.booking-option.selected{border-color:var(--blue);background:#e8f0fe;box-shadow:0 0 0 3px rgba(13,110,253,.1)}
+.bo-icon{width:42px;height:42px;background:linear-gradient(135deg,#0a1628,#1a3a6e);
+         border-radius:10px;display:flex;align-items:center;justify-content:center;
+         font-size:1.2rem;flex-shrink:0}
+.bo-info{flex:1}
+.bo-name{font-weight:700;font-size:.95rem;color:var(--text)}
+.bo-detail{font-size:.78rem;color:var(--muted);margin-top:.1rem}
+.bo-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);
+          flex-shrink:0;display:flex;align-items:center;justify-content:center;
+          font-size:.85rem;transition:all .2s}
+.booking-option.selected .bo-check{background:var(--blue);border-color:var(--blue);color:#fff}
 
 /* TC block */
 .tc-box{border:1.5px solid var(--border);border-radius:10px;padding:.9rem;
@@ -64,18 +86,24 @@ input.fi::placeholder{color:#adb5bd}
 .accept-row .ac-txt{font-size:.88rem;line-height:1.4}
 .accept-row .ac-txt strong{color:var(--green)}
 
-.btn-submit{width:100%;padding:1rem;border:none;border-radius:12px;
-  background:var(--blue);color:#fff;font-size:1rem;font-weight:700;
-  cursor:pointer;transition:background .2s,transform .1s;margin-top:.5rem;
+/* Buttons */
+.btn{width:100%;padding:1rem;border:none;border-radius:12px;font-size:1rem;
+  font-weight:700;cursor:pointer;transition:background .2s,transform .1s;
   display:flex;align-items:center;justify-content:center;gap:.5rem}
-.btn-submit:hover{background:var(--blue-dark)}
-.btn-submit:active{transform:scale(.98)}
-.btn-submit:disabled{background:#adb5bd;cursor:not-allowed}
+.btn:active{transform:scale(.98)}
+.btn:disabled{background:#adb5bd!important;cursor:not-allowed}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover:not(:disabled){background:var(--blue-dark)}
+.btn-back{background:none;border:2px solid var(--border);color:var(--muted);
+          border-radius:12px;padding:.6rem 1rem;font-size:.85rem;font-weight:600;
+          cursor:pointer;margin-bottom:.6rem;width:auto}
+.btn-back:hover{border-color:#adb5bd;color:var(--text)}
+
 .spinner{width:18px;height:18px;border:3px solid rgba(255,255,255,.3);
          border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* Success state */
+/* Success */
 #success{display:none;text-align:center;padding:2rem 1rem}
 .check-circle{width:80px;height:80px;background:#d1fae5;border-radius:50%;
               display:flex;align-items:center;justify-content:center;
@@ -86,18 +114,21 @@ input.fi::placeholder{color:#adb5bd}
              padding:.8rem 1.6rem;font-size:.95rem;font-weight:700;cursor:pointer}
 .btn-another:hover{background:var(--blue-dark)}
 
-.error-msg{color:var(--red);font-size:.8rem;margin-top:.3rem;display:none}
+/* Not found */
+#not-found{display:none;text-align:center;padding:3rem 1rem}
+#not-found .nf-icon{font-size:3rem;margin-bottom:1rem}
+#not-found h2{color:var(--red);margin-bottom:.5rem}
+#not-found p{color:var(--muted);font-size:.9rem}
+
+/* Toast */
 .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(100px);
        background:#dc3545;color:#fff;border-radius:10px;padding:.7rem 1.2rem;
        font-size:.88rem;font-weight:600;z-index:9999;transition:transform .3s;
        max-width:90vw;text-align:center}
 .toast.show{transform:translateX(-50%) translateY(0)}
 
-/* Not found */
-#not-found{display:none;text-align:center;padding:3rem 1rem}
-#not-found .nf-icon{font-size:3rem;margin-bottom:1rem}
-#not-found h2{color:var(--red);margin-bottom:.5rem}
-#not-found p{color:var(--muted);font-size:.9rem}
+.no-bookings{text-align:center;padding:1.5rem;color:var(--muted);font-size:.9rem}
+.no-bookings .icon{font-size:2rem;margin-bottom:.5rem}
 </style>
 </head>
 <body>
@@ -106,12 +137,9 @@ input.fi::placeholder{color:#adb5bd}
   <div class="logo">⛵</div>
   <h1>HotBoat Chile</h1>
   <p>Firma de Términos y Condiciones</p>
-  <div class="booking-card" id="booking-info" style="display:none">
-    <div class="bc-icon">📅</div>
-    <div class="bc-info">
-      <strong id="bi-ref"></strong>
-      <span id="bi-detail"></span>
-    </div>
+  <div class="booking-badge" id="header-badge" style="display:none">
+    <span>📅</span>
+    <span id="header-badge-text"></span>
   </div>
 </div>
 
@@ -124,10 +152,30 @@ input.fi::placeholder{color:#adb5bd}
     <p>El código de reserva no existe o el enlace está incorrecto.<br>Consulta a tu anfitrión.</p>
   </div>
 
-  <!-- Form -->
-  <div id="form-section">
+  <!-- STEP 1: Choose booking (generic QR mode) -->
+  <div class="step" id="step-select">
     <div class="card">
-      <div class="card-title">👤 Datos del pasajero</div>
+      <div class="card-title">📅 ¿A nombre de quién está tu reserva?</div>
+      <div class="form-group">
+        <label class="fl" for="sel-date">Fecha de hoy</label>
+        <input class="fi" type="date" id="sel-date">
+      </div>
+      <div id="bookings-list">
+        <div class="no-bookings"><div class="icon">⏳</div>Cargando reservas...</div>
+      </div>
+      <div class="error-msg" id="err-select" style="display:none;margin-top:.5rem">Selecciona una reserva para continuar</div>
+    </div>
+    <button class="btn btn-primary" id="btn-continue" onclick="goToForm()" style="margin-top:.3rem">
+      Continuar →
+    </button>
+  </div>
+
+  <!-- STEP 2: Passenger form -->
+  <div class="step" id="step-form">
+    <button class="btn-back" id="btn-back" onclick="goBack()" style="display:none">← Cambiar reserva</button>
+
+    <div class="card">
+      <div class="card-title">👤 Tus datos</div>
 
       <div class="form-group">
         <label class="fl" for="f-name">Nombre completo *</label>
@@ -194,7 +242,7 @@ input.fi::placeholder{color:#adb5bd}
       <div class="error-msg" id="err-accept">Debes aceptar los Términos y Condiciones</div>
     </div>
 
-    <button class="btn-submit" id="btn-submit" onclick="submitForm()">
+    <button class="btn btn-primary" id="btn-submit" onclick="submitForm()">
       <div class="spinner" id="spinner"></div>
       <span id="btn-text">✅ Firmar y enviar</span>
     </button>
@@ -205,7 +253,7 @@ input.fi::placeholder{color:#adb5bd}
     <div class="check-circle">✅</div>
     <h2>¡Listo, gracias!</h2>
     <p>Tu firma fue registrada correctamente.<br>
-       Si eres mayor de edad, pide a otros integrantes del grupo<br>que también firmen usando este mismo enlace.</p>
+       Si hay otros integrantes del grupo, pídeles que también firmen.</p>
     <button class="btn-another" onclick="resetForm()">
       ➕ Agregar otro pasajero
     </button>
@@ -215,52 +263,108 @@ input.fi::placeholder{color:#adb5bd}
 <div class="toast" id="toast"></div>
 
 <script>
-// ── Init ──────────────────────────────────────────────────────────────────────
-const bookingRef = location.pathname.split('/firma/')[1] || '';
+// ── Detect mode ────────────────────────────────────────────────────────────────
+// Path: /firma           → generic mode (show selector first)
+// Path: /firma/AA-123    → direct mode (skip to form)
+const pathParts = location.pathname.split('/firma');
+const rawRef = (pathParts[1] || '').replace(/^\//, '').trim();
+const isGeneric = rawRef === '' || rawRef === '/';
+let currentBookingRef = isGeneric ? '' : rawRef;
+let selectedBookingName = '';
 
-// Populate day selector
+// ── Populate selectors ────────────────────────────────────────────────────────
 const dSel = document.getElementById('f-bday-d');
 for(let d=1;d<=31;d++){
   const o=document.createElement('option');
   o.value=String(d).padStart(2,'0');o.textContent=d;dSel.appendChild(o);
 }
-// Populate year selector (current year - 100 to current year - 10)
 const ySel=document.getElementById('f-bday-y');
-const now=new Date().getFullYear();
-for(let y=now-10;y>=now-100;y--){
+const nowYear=new Date().getFullYear();
+for(let y=nowYear-10;y>=nowYear-100;y--){
   const o=document.createElement('option');
   o.value=String(y);o.textContent=y;ySel.appendChild(o);
 }
 
-// Load booking info
-async function loadBooking(){
-  if(!bookingRef){ showNotFound(); return; }
-  try{
-    const r=await fetch(`/api/firma/${encodeURIComponent(bookingRef)}/info`);
-    if(!r.ok){ showNotFound(); return; }
-    const d=await r.json();
-    const dateStr=fmtDate(d.booking_date);
-    const timeStr=(d.booking_time||'').substring(0,5);
-    document.getElementById('bi-ref').textContent=`Reserva ${d.booking_ref}`;
-    document.getElementById('bi-detail').textContent=`${dateStr} ${timeStr} · ${d.num_people||'?'} personas`;
-    document.getElementById('booking-info').style.display='flex';
-  }catch(e){
-    showNotFound();
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init(){
+  if(isGeneric){
+    // Set date input to today
+    const today=todayStr();
+    document.getElementById('sel-date').value=today;
+    document.getElementById('sel-date').addEventListener('change', e=>loadBookingsForDate(e.target.value));
+    showStep('step-select');
+    await loadBookingsForDate(today);
+  } else {
+    // Direct mode: verify booking exists then show form
+    const info = await fetchBookingInfo(currentBookingRef);
+    if(!info){ showNotFound(); return; }
+    setHeaderBadge(info);
+    showStep('step-form');
+    // Hide back button in direct mode
+    document.getElementById('btn-back').style.display='none';
   }
 }
-function fmtDate(s){
-  if(!s) return '';
-  const [y,m,d]=(s||'').split('-');
-  const MONTHS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-  return `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y}`;
-}
-function showNotFound(){
-  document.getElementById('not-found').style.display='block';
-  document.getElementById('form-section').style.display='none';
-}
-loadBooking();
 
-// ── TC accept toggle ──────────────────────────────────────────────────────────
+// ── Step 1: booking selector ──────────────────────────────────────────────────
+async function loadBookingsForDate(date){
+  const listEl=document.getElementById('bookings-list');
+  listEl.innerHTML='<div class="no-bookings"><div class="icon">⏳</div>Cargando...</div>';
+  try{
+    const r=await fetch(`/api/firma/bookings?date=${date}`);
+    const d=await r.json();
+    const bookings=d.bookings||[];
+    if(!bookings.length){
+      listEl.innerHTML='<div class="no-bookings"><div class="icon">📭</div>No hay reservas para esta fecha</div>';
+      return;
+    }
+    listEl.innerHTML=bookings.map(b=>`
+      <div class="booking-option" data-ref="${b.booking_ref}" data-name="${escHtml(b.nombre_cliente)}"
+           onclick="selectBooking(this,'${b.booking_ref}','${escHtml(b.nombre_cliente)}')">
+        <div class="bo-icon">⛵</div>
+        <div class="bo-info">
+          <div class="bo-name">${escHtml(b.nombre_cliente)}</div>
+          <div class="bo-detail">${b.hora?b.hora+' · ':''}${b.num_personas} personas</div>
+        </div>
+        <div class="bo-check" id="chk-${b.booking_ref}"></div>
+      </div>`).join('');
+  }catch(e){
+    listEl.innerHTML='<div class="no-bookings"><div class="icon">⚠️</div>Error al cargar reservas</div>';
+  }
+}
+
+function selectBooking(el, ref, name){
+  // Deselect all
+  document.querySelectorAll('.booking-option').forEach(o=>{
+    o.classList.remove('selected');
+    const c=o.querySelector('.bo-check');
+    if(c) c.textContent='';
+  });
+  // Select this
+  el.classList.add('selected');
+  const chk=document.getElementById('chk-'+ref);
+  if(chk) chk.textContent='✓';
+  currentBookingRef=ref;
+  selectedBookingName=name;
+  hide('err-select');
+}
+
+function goToForm(){
+  if(!currentBookingRef){ show('err-select'); return; }
+  // Show header badge
+  const date=document.getElementById('sel-date').value;
+  setHeaderBadge({booking_ref:currentBookingRef,customer_name:selectedBookingName,
+    booking_date:date,booking_time:'',num_people:''});
+  showStep('step-form');
+  document.getElementById('btn-back').style.display='block';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function goBack(){
+  showStep('step-select');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── Step 2: passenger form ────────────────────────────────────────────────────
 function toggleAccept(){
   const cb=document.getElementById('f-accept');
   const row=document.getElementById('accept-row');
@@ -269,23 +373,18 @@ function toggleAccept(){
   if(cb.checked) hide('err-accept');
 }
 
-// ── Submit ────────────────────────────────────────────────────────────────────
-function getIso(d,m,y){ return (d&&m&&y)?`${y}-${m}-${d}`:''; }
-
 function validate(){
   let ok=true;
   const name=(document.getElementById('f-name').value||'').trim();
   if(!name){ show('err-name'); fi('f-name',true); ok=false; }
-  else { hide('err-name'); fi('f-name',false); }
+  else{ hide('err-name'); fi('f-name',false); }
 
   const email=(document.getElementById('f-email').value||'').trim();
-  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
-    show('err-email'); fi('f-email',true); ok=false;
-  } else { hide('err-email'); fi('f-email',false); }
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ show('err-email'); fi('f-email',true); ok=false; }
+  else{ hide('err-email'); fi('f-email',false); }
 
-  if(!document.getElementById('f-accept').checked){
-    show('err-accept'); ok=false;
-  } else { hide('err-accept'); }
+  if(!document.getElementById('f-accept').checked){ show('err-accept'); ok=false; }
+  else{ hide('err-accept'); }
   return ok;
 }
 
@@ -299,17 +398,18 @@ async function submitForm(){
   const d=document.getElementById('f-bday-d').value;
   const m=document.getElementById('f-bday-m').value;
   const y=document.getElementById('f-bday-y').value;
+  const bday=(d&&m&&y)?`${y}-${m}-${d}`:null;
 
   const payload={
     passenger_name: document.getElementById('f-name').value.trim(),
     passenger_email: document.getElementById('f-email').value.trim()||null,
     passenger_phone: document.getElementById('f-phone').value.trim()||null,
-    passenger_birthday: getIso(d,m,y)||null,
+    passenger_birthday: bday,
     accepted_tc: true,
   };
 
   try{
-    const r=await fetch(`/api/firma/${encodeURIComponent(bookingRef)}`,{
+    const r=await fetch(`/api/firma/${encodeURIComponent(currentBookingRef)}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });
@@ -317,8 +417,9 @@ async function submitForm(){
       const err=await r.json().catch(()=>({detail:'Error al guardar'}));
       throw new Error(err.detail||'Error al guardar');
     }
-    document.getElementById('form-section').style.display='none';
+    document.getElementById('step-form').style.display='none';
     document.getElementById('success').style.display='block';
+    window.scrollTo({top:0,behavior:'smooth'});
   }catch(e){
     showToast(e.message);
   }finally{
@@ -338,16 +439,65 @@ function resetForm(){
   document.getElementById('accept-row').classList.remove('checked');
   ['err-name','err-email','err-accept'].forEach(hide);
   document.getElementById('success').style.display='none';
-  document.getElementById('form-section').style.display='block';
+
+  if(isGeneric){
+    // Go back to selector
+    showStep('step-select');
+    // Deselect booking options so user picks again (or same)
+    document.querySelectorAll('.booking-option').forEach(o=>o.classList.remove('selected'));
+    document.querySelectorAll('.bo-check').forEach(c=>c.textContent='');
+    // Re-select current booking
+    if(currentBookingRef){
+      const el=document.querySelector(`[data-ref="${currentBookingRef}"]`);
+      if(el){ el.classList.add('selected'); }
+    }
+    // Go directly to form since they just signed
+    showStep('step-form');
+  } else {
+    showStep('step-form');
+  }
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function show(id){ document.getElementById(id).style.display='block'; }
-function hide(id){ document.getElementById(id).style.display='none'; }
-function fi(id,err){
-  document.getElementById(id).classList.toggle('fi-error',err);
+function showStep(id){
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id);
+  if(el) el.classList.add('active');
 }
+function showNotFound(){
+  document.getElementById('not-found').style.display='block';
+}
+function setHeaderBadge(info){
+  const badge=document.getElementById('header-badge');
+  const txt=document.getElementById('header-badge-text');
+  let s = info.customer_name || info.booking_ref || '';
+  if(info.booking_date) s += ' · ' + fmtDate(info.booking_date);
+  if(info.booking_time) s += ' ' + (info.booking_time||'').substring(0,5);
+  txt.textContent=s;
+  badge.style.display='inline-flex';
+}
+async function fetchBookingInfo(ref){
+  try{
+    const r=await fetch(`/api/firma/${encodeURIComponent(ref)}/info`);
+    if(!r.ok) return null;
+    return await r.json();
+  }catch{ return null; }
+}
+function todayStr(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtDate(s){
+  if(!s) return '';
+  const [y,m,d]=(s||'').split('-');
+  const MONTHS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y}`;
+}
+function escHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function show(id){ const el=document.getElementById(id); if(el) el.style.display='block'; }
+function hide(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
+function fi(id,err){ const el=document.getElementById(id); if(el) el.classList.toggle('fi-error',err); }
 let _toastTimer;
 function showToast(msg){
   const t=document.getElementById('toast');
@@ -355,6 +505,8 @@ function showToast(msg){
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(()=>t.classList.remove('show'),4000);
 }
+
+init();
 </script>
 </body>
 </html>
