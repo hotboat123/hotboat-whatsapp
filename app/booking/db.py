@@ -38,8 +38,8 @@ def create_booking(data: dict) -> dict:
                 " (booking_ref,customer_name,customer_phone,customer_email,customer_birthday,"
                 "  booking_date,booking_time,num_people,"
                 "  price_per_person,subtotal,extras_total,flex_amount,total_price,"
-                "  extras,has_flex,status,source,notes)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_payment',%s,%s)"
+                "  extras,has_flex,status,source,notes,customer_language)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_payment',%s,%s,%s)"
                 " RETURNING id,booking_ref,status"
             )
             bday_raw = data.get("customer_birthday") or None
@@ -50,6 +50,9 @@ def create_booking(data: dict) -> dict:
                     bday = _date.fromisoformat(str(bday_raw))
                 except ValueError:
                     pass
+            lang = str(data.get("customer_language") or "es").strip().lower()[:5]
+            if lang not in ("es", "en", "pt"):
+                lang = "es"
             cur.execute(sql, (
                 ref,
                 data["customer_name"], data["customer_phone"],
@@ -58,7 +61,7 @@ def create_booking(data: dict) -> dict:
                 data["price_per_person"], data["subtotal"],
                 data.get("extras_total", 0), data.get("flex_amount", 0), data["total_price"],
                 json.dumps(data.get("extras", [])), data.get("has_flex", False),
-                data.get("source", "web"), data.get("notes")
+                data.get("source", "web"), data.get("notes"), lang
             ))
             row = cur.fetchone()
             conn.commit()
@@ -88,7 +91,8 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                 "       booking_date,booking_time,num_people,price_per_person,"
                 "       subtotal,extras_total,flex_amount,total_price,"
                 "       extras,has_flex,status,payment_id,payment_status,"
-                "       paid_at,source,notes,created_at,confirmation_email_sent_at"
+                "       paid_at,source,notes,created_at,confirmation_email_sent_at,"
+                "       COALESCE(customer_language,'es')"
                 " FROM hotboat_appointments WHERE booking_ref=%s",
                 (booking_ref,)
             )
@@ -99,7 +103,8 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                     "booking_date","booking_time","num_people","price_per_person",
                     "subtotal","extras_total","flex_amount","total_price",
                     "extras","has_flex","status","payment_id","payment_status",
-                    "paid_at","source","notes","created_at","confirmation_email_sent_at"]
+                    "paid_at","source","notes","created_at","confirmation_email_sent_at",
+                    "customer_language"]
             result = dict(zip(cols, row))
             for k in ("booking_date","booking_time","paid_at","created_at", "confirmation_email_sent_at"):
                 if result.get(k):
@@ -197,7 +202,8 @@ def get_bookings_for_followup(days_after: int) -> list:
             cur.execute("""
                 SELECT id, booking_ref, customer_name, customer_phone, customer_email,
                        booking_date, booking_time, num_people, subtotal, extras_total,
-                       total_price, has_flex, flex_amount, extras, notes
+                       total_price, has_flex, flex_amount, extras, notes,
+                       COALESCE(customer_language, 'es') AS customer_language
                 FROM hotboat_appointments
                 WHERE booking_date = %s
                   AND status = 'confirmed'
@@ -220,7 +226,8 @@ def get_bookings_for_followup(days_after: int) -> list:
                        FALSE                           AS has_flex,
                        0                               AS flex_amount,
                        NULL                            AS extras,
-                       observaciones                   AS notes
+                       observaciones                   AS notes,
+                       'es'                            AS customer_language
                 FROM all_appointments
                 WHERE fecha = %s
                   AND status = 'confirmed'
@@ -230,7 +237,7 @@ def get_bookings_for_followup(days_after: int) -> list:
             cols = [
                 "id", "booking_ref", "customer_name", "customer_phone", "customer_email",
                 "booking_date", "booking_time", "num_people", "subtotal", "extras_total",
-                "total_price", "has_flex", "flex_amount", "extras", "notes",
+                "total_price", "has_flex", "flex_amount", "extras", "notes", "customer_language",
             ]
             rows = []
             for row in cur.fetchall():
@@ -282,7 +289,8 @@ def get_customers_for_birthday_email() -> list:
                 SELECT DISTINCT ON (ha.customer_email)
                        ha.customer_email, ha.customer_name, ha.customer_phone,
                        ha.booking_ref, ha.booking_date, ha.booking_time,
-                       ha.num_people, ha.total_price, ha.subtotal, ha.extras_total
+                       ha.num_people, ha.total_price, ha.subtotal, ha.extras_total,
+                       COALESCE(ha.customer_language, 'es') AS customer_language
                 FROM hotboat_appointments ha
                 WHERE ha.customer_birthday IS NOT NULL
                   AND ha.customer_email IS NOT NULL
@@ -299,7 +307,8 @@ def get_customers_for_birthday_email() -> list:
             )
             cols = ["customer_email", "customer_name", "customer_phone",
                     "booking_ref", "booking_date", "booking_time",
-                    "num_people", "total_price", "subtotal", "extras_total"]
+                    "num_people", "total_price", "subtotal", "extras_total",
+                    "customer_language"]
             rows = []
             for row in cur.fetchall():
                 d = dict(zip(cols, row))

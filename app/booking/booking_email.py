@@ -50,25 +50,29 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
     booking_ref = str(booking.get("booking_ref") or "")
     base_url = _get_base_url()
     firma_url = f"{base_url}/firma/{booking_ref}" if booking_ref and base_url else ""
+    lang = str(booking.get("customer_language") or "es").strip().lower()
+    if lang not in ("es", "en", "pt"):
+        lang = "es"
     ctx = {
-        "booking_ref":      booking_ref,
-        "customer_name":    str(booking.get("customer_name") or "").strip() or "Cliente",
-        "customer_email":   str(booking.get("customer_email") or "").strip(),
-        "customer_phone":   str(booking.get("customer_phone") or "").strip(),
-        "booking_date":     str(booking.get("booking_date") or ""),
-        "booking_time":     bt,
-        "num_people":       str(booking.get("num_people") or ""),
-        "total_price":      str(booking.get("total_price") or ""),
-        "total_price_fmt":  _fmt_clp(booking.get("total_price")),
-        "deposit_fmt":      _fmt_clp(round((booking.get("total_price") or 0) * 0.5)),
-        "subtotal_fmt":     _fmt_clp(booking.get("subtotal")),
-        "extras_total_fmt": _fmt_clp(booking.get("extras_total")),
-        "status":           str(booking.get("status") or ""),
-        "business_name":    getattr(s, "business_name", "Hot Boat"),
-        "business_phone":   getattr(s, "business_phone", ""),
-        "business_email":   getattr(s, "business_email", ""),
-        "business_website": getattr(s, "business_website", ""),
-        "firma_url":        firma_url,
+        "booking_ref":        booking_ref,
+        "customer_name":      str(booking.get("customer_name") or "").strip() or "Cliente",
+        "customer_email":     str(booking.get("customer_email") or "").strip(),
+        "customer_phone":     str(booking.get("customer_phone") or "").strip(),
+        "booking_date":       str(booking.get("booking_date") or ""),
+        "booking_time":       bt,
+        "num_people":         str(booking.get("num_people") or ""),
+        "total_price":        str(booking.get("total_price") or ""),
+        "total_price_fmt":    _fmt_clp(booking.get("total_price")),
+        "deposit_fmt":        _fmt_clp(round((booking.get("total_price") or 0) * 0.5)),
+        "subtotal_fmt":       _fmt_clp(booking.get("subtotal")),
+        "extras_total_fmt":   _fmt_clp(booking.get("extras_total")),
+        "status":             str(booking.get("status") or ""),
+        "business_name":      getattr(s, "business_name", "Hot Boat"),
+        "business_phone":     getattr(s, "business_phone", ""),
+        "business_email":     getattr(s, "business_email", ""),
+        "business_website":   getattr(s, "business_website", ""),
+        "firma_url":          firma_url,
+        "customer_language":  lang,
     }
     if extra:
         ctx.update(extra)
@@ -97,8 +101,158 @@ def _sample_ctx(to_addr: str) -> Dict[str, str]:
         "business_phone":   getattr(s, "business_phone", ""),
         "business_email":   getattr(s, "business_email", ""),
         "business_website": getattr(s, "business_website", ""),
-        "firma_url":        f"{base_url}/firma/{demo_ref}" if base_url else "",
+        "firma_url":         f"{base_url}/firma/{demo_ref}" if base_url else "",
+        "customer_language": "es",
     }
+
+
+# ── i18n strings ─────────────────────────────────────────────────────────────
+
+_I18N: Dict[str, Dict[str, str]] = {
+    "es": {
+        "label_ref":    "Referencia",
+        "label_date":   "📅 \u00a0Fecha",
+        "label_time":   "⏰ \u00a0Hora",
+        "label_people": "👥 \u00a0Personas",
+        "label_paid":   "✅ \u00a0Pagado (50%)",
+        "label_total":  "💰 \u00a0Total",
+        "hrs":          "hrs",
+        "footer_questions": "¿Tienes preguntas? Escríbenos por WhatsApp",
+        "footer_note":  "Recibiste este correo porque realizaste una reserva en Hot Boat.<br>Puedes responder este email si tienes alguna consulta.",
+        "footer_contact": "Consultas: WhatsApp <strong>{phone}</strong> o responde este correo.",
+        # booking_created
+        "created_title":         "¡Reserva recibida!",
+        "created_subtitle":      "Hola <strong style=\"color:#e2e8f0;\">{name}</strong>, recibimos tu solicitud.<br>Completa el pago para confirmar tu lugar en el agua.",
+        "created_payment_title": "💳 Se pide el 50% del total para reservar.",
+        "created_payment_body":  "El resto se paga después de vivir la Experiencia HotBoat,<br>con efectivo, tarjeta o transferencia.",
+        "tc_title": "✍️ Todos los mayores de 18 años deben firmar los Términos y Condiciones",
+        "tc_body":  "Antes de subir al HotBoat, cada integrante adulto del grupo debe aceptar<br>los T&amp;C a través del siguiente link:",
+        # booking_confirmed
+        "confirmed_title":         "¡Reserva confirmada! ✅",
+        "confirmed_subtitle":      "Hola <strong style=\"color:#e2e8f0;\">{name}</strong>, tu pago fue recibido correctamente.<br>¡Todo listo para tu experiencia HotBoat!",
+        "confirmed_payment_title": "✅ Tu pago fue confirmado.",
+        "confirmed_payment_body":  "Tu reserva está asegurada. ¡Nos vemos en el agua!<br>El resto del pago se hace después de la experiencia.",
+        # CTAs
+        "cta_summary": "📋 Resumen de reserva",
+        "cta_sign_tc": "✍️ Firmar T&C",
+        "cta_video":   "🎬 Video instructivo",
+        "cta_menu":    "🍹 Tablas y bebestibles",
+        # booking_cancelled
+        "cancelled_title": "Reserva cancelada",
+        "cancelled_hello": "Hola <strong>{name}</strong>,",
+        "cancelled_body":  "Te informamos que tu reserva <strong>{ref}</strong> ha sido <strong>cancelada</strong>. Si tienes dudas o quieres reagendar, contáctanos.",
+        # booking_status_changed
+        "status_title": "Actualización de reserva",
+        "status_hello": "Hola <strong>{name}</strong>,",
+        "status_body":  "El estado de tu reserva <strong>{ref}</strong> ha sido actualizado a <strong>{status}</strong>.",
+        # booking_followup
+        "followup_title":  "¡Gracias por navegar con nosotros!",
+        "followup_hello":  "Hola <strong>{name}</strong>,",
+        "followup_body1":  "¡Fue un placer tenerte a bordo! Esperamos que hayas disfrutado tu experiencia en el agua el pasado <strong>{date}</strong>.",
+        "followup_body2":  "Si tienes un momento, nos ayudaría mucho que dejaras una reseña. ¡Y estaremos encantados de verte de nuevo pronto! 🌊",
+        # customer_birthday
+        "birthday_title": "¡Feliz cumpleaños! 🎂",
+        "birthday_hello": "Hola <strong>{name}</strong>,",
+        "birthday_body1": "El equipo de <strong>{biz}</strong> te desea un maravilloso cumpleaños. 🎉",
+        "birthday_body2": "¡Gracias por ser parte de nuestra comunidad! Esperamos verte de nuevo pronto en el agua.",
+        "birthday_cta":   "¿Listo para un nuevo paseo? Escríbenos al <strong>{phone}</strong>.",
+    },
+    "en": {
+        "label_ref":    "Reference",
+        "label_date":   "📅 \u00a0Date",
+        "label_time":   "⏰ \u00a0Time",
+        "label_people": "👥 \u00a0People",
+        "label_paid":   "✅ \u00a0Paid (50%)",
+        "label_total":  "💰 \u00a0Total",
+        "hrs":          "h",
+        "footer_questions": "Any questions? Message us on WhatsApp",
+        "footer_note":  "You received this email because you made a booking with Hot Boat.<br>You can reply to this email if you have any questions.",
+        "footer_contact": "Questions? WhatsApp <strong>{phone}</strong> or reply to this email.",
+        "created_title":         "Booking received!",
+        "created_subtitle":      "Hi <strong style=\"color:#e2e8f0;\">{name}</strong>, we've received your request.<br>Complete the payment to secure your spot on the water.",
+        "created_payment_title": "💳 A 50% deposit is required to confirm your booking.",
+        "created_payment_body":  "The balance is due after your HotBoat experience,<br>payable by cash, card or bank transfer.",
+        "tc_title": "✍️ All adults (18+) must sign the Terms &amp; Conditions",
+        "tc_body":  "Before boarding the HotBoat, every adult in your group must accept<br>the T&amp;C through the following link:",
+        "confirmed_title":         "Booking confirmed! ✅",
+        "confirmed_subtitle":      "Hi <strong style=\"color:#e2e8f0;\">{name}</strong>, your payment was received.<br>All set for your HotBoat experience!",
+        "confirmed_payment_title": "✅ Payment confirmed.",
+        "confirmed_payment_body":  "Your booking is secured. See you on the water!<br>The balance is due after the experience.",
+        "cta_summary": "📋 Booking summary",
+        "cta_sign_tc": "✍️ Sign T&C",
+        "cta_video":   "🎬 Instructional video",
+        "cta_menu":    "🍹 Food &amp; drinks menu",
+        "cancelled_title": "Booking cancelled",
+        "cancelled_hello": "Hi <strong>{name}</strong>,",
+        "cancelled_body":  "We're letting you know that your booking <strong>{ref}</strong> has been <strong>cancelled</strong>. If you have questions or want to reschedule, please contact us.",
+        "status_title": "Booking update",
+        "status_hello": "Hi <strong>{name}</strong>,",
+        "status_body":  "The status of your booking <strong>{ref}</strong> has been updated to <strong>{status}</strong>.",
+        "followup_title":  "Thanks for sailing with us!",
+        "followup_hello":  "Hi <strong>{name}</strong>,",
+        "followup_body1":  "It was a pleasure having you on board! We hope you enjoyed your time on the water on <strong>{date}</strong>.",
+        "followup_body2":  "If you have a moment, we'd love for you to leave a review. We'd love to see you again soon! 🌊",
+        "birthday_title": "Happy Birthday! 🎂",
+        "birthday_hello": "Hi <strong>{name}</strong>,",
+        "birthday_body1": "The <strong>{biz}</strong> team wishes you a wonderful birthday. 🎉",
+        "birthday_body2": "Thank you for being part of our community! We hope to see you back on the water soon.",
+        "birthday_cta":   "Ready for another trip? Message us at <strong>{phone}</strong>.",
+    },
+    "pt": {
+        "label_ref":    "Referência",
+        "label_date":   "📅 \u00a0Data",
+        "label_time":   "⏰ \u00a0Hora",
+        "label_people": "👥 \u00a0Pessoas",
+        "label_paid":   "✅ \u00a0Pago (50%)",
+        "label_total":  "💰 \u00a0Total",
+        "hrs":          "h",
+        "footer_questions": "Tem dúvidas? Fale conosco pelo WhatsApp",
+        "footer_note":  "Você recebeu este e-mail porque fez uma reserva no Hot Boat.<br>Pode responder este e-mail se tiver alguma dúvida.",
+        "footer_contact": "Dúvidas? WhatsApp <strong>{phone}</strong> ou responda este e-mail.",
+        "created_title":         "Reserva recebida!",
+        "created_subtitle":      "Olá <strong style=\"color:#e2e8f0;\">{name}</strong>, recebemos seu pedido.<br>Conclua o pagamento para confirmar seu lugar na água.",
+        "created_payment_title": "💳 É necessário 50% do total para confirmar a reserva.",
+        "created_payment_body":  "O restante é pago após a Experiência HotBoat,<br>em dinheiro, cartão ou transferência bancária.",
+        "tc_title": "✍️ Todos os adultos (18+) devem assinar os Termos e Condições",
+        "tc_body":  "Antes de embarcar no HotBoat, cada adulto do grupo deve aceitar<br>os T&amp;C pelo link abaixo:",
+        "confirmed_title":         "Reserva confirmada! ✅",
+        "confirmed_subtitle":      "Olá <strong style=\"color:#e2e8f0;\">{name}</strong>, seu pagamento foi recebido.<br>Tudo pronto para sua experiência HotBoat!",
+        "confirmed_payment_title": "✅ Pagamento confirmado.",
+        "confirmed_payment_body":  "Sua reserva está garantida. Até logo na água!<br>O saldo restante é pago após a experiência.",
+        "cta_summary": "📋 Resumo da reserva",
+        "cta_sign_tc": "✍️ Assinar T&C",
+        "cta_video":   "🎬 Vídeo instrucional",
+        "cta_menu":    "🍹 Cardápio e bebidas",
+        "cancelled_title": "Reserva cancelada",
+        "cancelled_hello": "Olá <strong>{name}</strong>,",
+        "cancelled_body":  "Informamos que sua reserva <strong>{ref}</strong> foi <strong>cancelada</strong>. Se tiver dúvidas ou quiser remarcar, entre em contato.",
+        "status_title": "Atualização da reserva",
+        "status_hello": "Olá <strong>{name}</strong>,",
+        "status_body":  "O status da sua reserva <strong>{ref}</strong> foi atualizado para <strong>{status}</strong>.",
+        "followup_title":  "Obrigado por navegar conosco!",
+        "followup_hello":  "Olá <strong>{name}</strong>,",
+        "followup_body1":  "Foi um prazer tê-lo a bordo! Esperamos que tenha aproveitado sua experiência na água em <strong>{date}</strong>.",
+        "followup_body2":  "Se tiver um momento, adoraríamos que deixasse uma avaliação. Esperamos vê-lo novamente em breve! 🌊",
+        "birthday_title": "Feliz Aniversário! 🎂",
+        "birthday_hello": "Olá <strong>{name}</strong>,",
+        "birthday_body1": "A equipe da <strong>{biz}</strong> deseja a você um aniversário maravilhoso. 🎉",
+        "birthday_body2": "Obrigado por fazer parte da nossa comunidade! Esperamos vê-lo novamente na água em breve.",
+        "birthday_cta":   "Pronto para uma nova aventura? Fale conosco pelo <strong>{phone}</strong>.",
+    },
+}
+
+
+def _t(lang: str, key: str, **fmt) -> str:
+    """Return translated string for lang/key, falling back to 'es'.
+    Optional keyword args are formatted into the string."""
+    strings = _I18N.get(lang) or _I18N["es"]
+    text = strings.get(key) or _I18N["es"].get(key, "")
+    if fmt:
+        try:
+            text = text.format(**fmt)
+        except (KeyError, IndexError):
+            pass
+    return text
 
 
 # ── Default HTML templates ────────────────────────────────────────────────────
@@ -119,12 +273,13 @@ def _header(ctx: Dict[str, str], title: str, accent: str = "#0f172a") -> str:
 
 
 def _details_table(ctx: Dict[str, str]) -> str:
+    lang = ctx.get("customer_language", "es")
     rows = [
-        ("Referencia", ctx.get("booking_ref", "")),
-        ("Fecha",      ctx.get("booking_date", "")),
-        ("Hora",       ctx.get("booking_time", "")),
-        ("Personas",   ctx.get("num_people", "")),
-        ("Total",      ctx.get("total_price_fmt", "")),
+        (_t(lang, "label_ref"),    ctx.get("booking_ref", "")),
+        (_t(lang, "label_date"),   ctx.get("booking_date", "")),
+        (_t(lang, "label_time"),   ctx.get("booking_time", "")),
+        (_t(lang, "label_people"), ctx.get("num_people", "")),
+        (_t(lang, "label_total"),  ctx.get("total_price_fmt", "")),
     ]
     trs = ""
     for i, (label, val) in enumerate(rows):
@@ -137,9 +292,10 @@ def _details_table(ctx: Dict[str, str]) -> str:
 
 
 def _footer(ctx: Dict[str, str]) -> str:
+    lang = ctx.get("customer_language", "es")
+    contact = _t(lang, "footer_contact", phone=ctx.get("business_phone", ""))
     return f"""<tr><td style="padding:18px 26px 26px;font-size:13px;color:#64748b;line-height:1.6;">
-  <p style="margin:0;">Consultas: WhatsApp <strong>{ctx.get('business_phone','')}</strong>
-     o responde este correo.</p>
+  <p style="margin:0;">{contact}</p>
   <p style="margin:10px 0 0;"><a href="{ctx.get('business_website','#')}"
      style="color:#1e40af;">{ctx.get('business_website','')}</a></p>
 </td></tr></table></td></tr></table></body></html>"""
@@ -160,6 +316,7 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
         if railway_domain:
             logo_url = f"https://{railway_domain}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png"
 
+    lang   = ctx.get("customer_language", "es")
     ref    = ctx.get("booking_ref", "")
     date   = ctx.get("booking_date", "")
     time_  = ctx.get("booking_time", "")
@@ -203,42 +360,42 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
 
         <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
-            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">Referencia</td>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_ref")}</td>
             <td align="right" style="color:#e8b86d;font-size:13px;font-weight:700;font-family:'Courier New',monospace;">{ref}</td>
           </tr></table>
         </td></tr>
 
         <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
-            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">📅 &nbsp;Fecha</td>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_date")}</td>
             <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{date}</td>
           </tr></table>
         </td></tr>
 
         <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
-            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">⏰ &nbsp;Hora</td>
-            <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{time_} hrs</td>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_time")}</td>
+            <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{time_} {_t(lang,"hrs")}</td>
           </tr></table>
         </td></tr>
 
         <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
-            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">👥 &nbsp;Personas</td>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_people")}</td>
             <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{people}</td>
           </tr></table>
         </td></tr>
 
         <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
-            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">✅ &nbsp;Pagado (50%)</td>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_paid")}</td>
             <td align="right" style="color:#e8b86d;font-size:14px;font-weight:700;">{deposit}</td>
           </tr></table>
         </td></tr>
 
         <tr><td style="padding:16px 20px;background:rgba(16,185,129,.06);">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
-            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">💰 &nbsp;Total</td>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_total")}</td>
             <td align="right" style="color:#10b981;font-size:18px;font-weight:800;">{total}</td>
           </tr></table>
         </td></tr>
@@ -262,7 +419,7 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
     <!-- Footer contact -->
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr><td align="center" style="padding:22px 28px 30px;">
-      <p style="margin:0 0 6px;color:#94a3b8;font-size:13px;">¿Tienes preguntas? Escríbenos por WhatsApp</p>
+      <p style="margin:0 0 6px;color:#94a3b8;font-size:13px;">{_t(lang,"footer_questions")}</p>
       <a href="https://wa.me/{wa_num}" style="color:#e8b86d;font-size:15px;font-weight:700;text-decoration:none;">{phone}</a>
     </td></tr>
     </table>
@@ -272,8 +429,7 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
   <!-- Bottom note -->
   <tr><td align="center" style="padding-top:18px;">
     <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.7;">
-      Recibiste este correo porque realizaste una reserva en Hot Boat.<br>
-      Puedes responder este email si tienes alguna consulta.
+      {_t(lang,"footer_note")}
     </p>
   </td></tr>
 
@@ -299,6 +455,7 @@ def _cta_btn(label: str, url: str, solid: bool = True) -> str:
 
 
 def _default_html_booking_created(ctx: Dict[str, str]) -> str:
+    lang      = ctx.get("customer_language", "es")
     name      = ctx.get("customer_name", "")
     website   = ctx.get("business_website", "#")
     firma_url = ctx.get("firma_url", "") or website
@@ -316,9 +473,8 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
              style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:12px;">
       <tr><td style="padding:15px 20px;">
         <p style="margin:0;color:#93c5fd;font-size:13px;line-height:1.65;">
-          💳 <strong>Se pide el 50% del total para reservar.</strong><br>
-          El resto se paga después de vivir la Experiencia HotBoat,<br>
-          con efectivo, tarjeta o transferencia.
+          <strong>{_t(lang,"created_payment_title")}</strong><br>
+          {_t(lang,"created_payment_body")}
         </p>
       </td></tr>
       </table>
@@ -330,11 +486,10 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
              style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;">
       <tr><td style="padding:15px 20px;">
         <p style="margin:0 0 8px;color:#fcd34d;font-size:13px;font-weight:700;">
-          ✍️ Todos los mayores de 18 años deben firmar los Términos y Condiciones
+          {_t(lang,"tc_title")}
         </p>
         <p style="margin:0;color:#fde68a;font-size:12px;line-height:1.6;">
-          Antes de subir al HotBoat, cada integrante adulto del grupo debe aceptar<br>
-          los T&amp;C a través del siguiente link:
+          {_t(lang,"tc_body")}
         </p>
         <p style="margin:10px 0 0;">
           <a href="{firma_url}" style="color:#fbbf24;font-weight:700;font-size:12px;word-break:break-all;">{firma_url}</a>
@@ -347,21 +502,21 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
     cta_rows = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn("✍️ Firmar T&C", firma_url, solid=False)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_sign_tc"), firma_url, solid=False)}</td>
     </tr>
     </table>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn("🎬 Video instructivo", "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn("🍹 Tablas y bebestibles", "https://hotboatchile.com/tablas/", solid=False)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_video"), "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_menu"), "https://hotboatchile.com/tablas/", solid=False)}</td>
     </tr>
     </table>"""
 
     return _hotboat_email_card(
         ctx,
-        hero_title="¡Reserva recibida!",
-        hero_subtitle=f"Hola <strong style=\"color:#e2e8f0;\">{name}</strong>, recibimos tu solicitud.<br>Completa el pago para confirmar tu lugar en el agua.",
+        hero_title=_t(lang, "created_title"),
+        hero_subtitle=_t(lang, "created_subtitle", name=name),
         accent_bar=accent,
         extra_body=payment_note,
         cta_rows=cta_rows,
@@ -369,6 +524,7 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
 
 
 def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
+    lang      = ctx.get("customer_language", "es")
     name      = ctx.get("customer_name", "")
     website   = ctx.get("business_website", "#")
     firma_url = ctx.get("firma_url", "") or website
@@ -385,9 +541,8 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
              style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:12px;">
       <tr><td style="padding:15px 20px;">
         <p style="margin:0;color:#6ee7b7;font-size:13px;line-height:1.65;">
-          ✅ <strong>Tu pago fue confirmado.</strong><br>
-          Tu reserva está asegurada. ¡Nos vemos en el agua!<br>
-          El resto del pago se hace después de la experiencia.
+          <strong>{_t(lang,"confirmed_payment_title")}</strong><br>
+          {_t(lang,"confirmed_payment_body")}
         </p>
       </td></tr>
       </table>
@@ -399,11 +554,10 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
              style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;">
       <tr><td style="padding:15px 20px;">
         <p style="margin:0 0 8px;color:#fcd34d;font-size:13px;font-weight:700;">
-          ✍️ Todos los mayores de 18 años deben firmar los Términos y Condiciones
+          {_t(lang,"tc_title")}
         </p>
         <p style="margin:0;color:#fde68a;font-size:12px;line-height:1.6;">
-          Antes de subir al HotBoat, cada integrante adulto del grupo debe aceptar<br>
-          los T&amp;C a través del siguiente link:
+          {_t(lang,"tc_body")}
         </p>
         <p style="margin:10px 0 0;">
           <a href="{firma_url}" style="color:#fbbf24;font-weight:700;font-size:12px;word-break:break-all;">{firma_url}</a>
@@ -416,21 +570,21 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
     cta_rows = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn("✍️ Firmar T&C", firma_url, solid=False)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_sign_tc"), firma_url, solid=False)}</td>
     </tr>
     </table>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn("🎬 Video instructivo", "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn("🍹 Tablas y bebestibles", "https://hotboatchile.com/tablas/", solid=False)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_video"), "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_menu"), "https://hotboatchile.com/tablas/", solid=False)}</td>
     </tr>
     </table>"""
 
     return _hotboat_email_card(
         ctx,
-        hero_title="¡Reserva confirmada! ✅",
-        hero_subtitle=f"Hola <strong style=\"color:#e2e8f0;\">{name}</strong>, tu pago fue recibido correctamente.<br>¡Todo listo para tu experiencia HotBoat!",
+        hero_title=_t(lang, "confirmed_title"),
+        hero_subtitle=_t(lang, "confirmed_subtitle", name=name),
         accent_bar=accent,
         extra_body=confirmed_note,
         cta_rows=cta_rows,
@@ -445,13 +599,14 @@ def _default_html_booking_created_OLD(ctx: Dict[str, str]) -> str:
 
 
 def _default_html_booking_cancelled(ctx: Dict[str, str]) -> str:
+    lang = ctx.get("customer_language", "es")
+    name = ctx.get("customer_name", "")
+    ref  = ctx.get("booking_ref", "")
     return (
-        _header(ctx, "Reserva cancelada", "#7f1d1d")
+        _header(ctx, _t(lang, "cancelled_title"), "#7f1d1d")
         + f"""<tr><td style="padding:26px 26px 8px;color:#0f172a;font-size:15px;line-height:1.65;">
-  <p style="margin:0 0 12px;">Hola <strong>{ctx.get('customer_name','')}</strong>,</p>
-  <p style="margin:0 0 12px;">Te informamos que tu reserva
-     <strong>{ctx.get('booking_ref','')}</strong> ha sido <strong>cancelada</strong>.
-     Si tienes dudas o quieres reagendar, contáctanos.</p>
+  <p style="margin:0 0 12px;">{_t(lang,"cancelled_hello",name=name)}</p>
+  <p style="margin:0 0 12px;">{_t(lang,"cancelled_body",ref=ref)}</p>
 </td></tr>
 <tr><td style="padding:0 26px 20px;">{_details_table(ctx)}</td></tr>"""
         + _footer(ctx)
@@ -459,13 +614,15 @@ def _default_html_booking_cancelled(ctx: Dict[str, str]) -> str:
 
 
 def _default_html_booking_status_changed(ctx: Dict[str, str]) -> str:
+    lang   = ctx.get("customer_language", "es")
+    name   = ctx.get("customer_name", "")
+    ref    = ctx.get("booking_ref", "")
+    status = ctx.get("status", "")
     return (
-        _header(ctx, "Actualización de reserva", "#1e40af")
+        _header(ctx, _t(lang, "status_title"), "#1e40af")
         + f"""<tr><td style="padding:26px 26px 8px;color:#0f172a;font-size:15px;line-height:1.65;">
-  <p style="margin:0 0 12px;">Hola <strong>{ctx.get('customer_name','')}</strong>,</p>
-  <p style="margin:0 0 12px;">El estado de tu reserva
-     <strong>{ctx.get('booking_ref','')}</strong> ha sido actualizado a
-     <strong>{ctx.get('status','')}</strong>.</p>
+  <p style="margin:0 0 12px;">{_t(lang,"status_hello",name=name)}</p>
+  <p style="margin:0 0 12px;">{_t(lang,"status_body",ref=ref,status=status)}</p>
 </td></tr>
 <tr><td style="padding:0 26px 20px;">{_details_table(ctx)}</td></tr>"""
         + _footer(ctx)
@@ -473,14 +630,15 @@ def _default_html_booking_status_changed(ctx: Dict[str, str]) -> str:
 
 
 def _default_html_booking_followup(ctx: Dict[str, str]) -> str:
+    lang = ctx.get("customer_language", "es")
+    name = ctx.get("customer_name", "")
+    date = ctx.get("booking_date", "")
     return (
-        _header(ctx, "¡Gracias por navegar con nosotros!", "#0f4c35")
+        _header(ctx, _t(lang, "followup_title"), "#0f4c35")
         + f"""<tr><td style="padding:26px 26px 8px;color:#0f172a;font-size:15px;line-height:1.65;">
-  <p style="margin:0 0 12px;">Hola <strong>{ctx.get('customer_name','')}</strong>,</p>
-  <p style="margin:0 0 12px;">¡Fue un placer tenerte a bordo! Esperamos que hayas disfrutado
-     tu experiencia en el agua el pasado <strong>{ctx.get('booking_date','')}</strong>.</p>
-  <p style="margin:0 0 12px;">Si tienes un momento, nos ayudaría mucho que dejaras una reseña.
-     ¡Y estaremos encantados de verte de nuevo pronto! 🌊</p>
+  <p style="margin:0 0 12px;">{_t(lang,"followup_hello",name=name)}</p>
+  <p style="margin:0 0 12px;">{_t(lang,"followup_body1",date=date)}</p>
+  <p style="margin:0 0 12px;">{_t(lang,"followup_body2")}</p>
 </td></tr>
 <tr><td style="padding:0 26px 20px;">{_details_table(ctx)}</td></tr>"""
         + _footer(ctx)
@@ -550,18 +708,19 @@ def _default_html_admin_booking_confirmed(ctx: Dict[str, str]) -> str:
 
 
 def _default_html_customer_birthday(ctx: Dict[str, str]) -> str:
+    lang  = ctx.get("customer_language", "es")
+    name  = ctx.get("customer_name", "")
+    biz   = ctx.get("business_name", "Hot Boat")
+    phone = ctx.get("business_phone", "")
     return (
-        _header(ctx, "¡Feliz cumpleaños! 🎂", "linear-gradient(135deg,#7c3aed,#db2777)")
+        _header(ctx, _t(lang, "birthday_title"), "linear-gradient(135deg,#7c3aed,#db2777)")
         + f"""<tr><td style="padding:26px 26px 8px;color:#0f172a;font-size:15px;line-height:1.65;">
-  <p style="margin:0 0 14px;">Hola <strong>{ctx.get('customer_name','')}</strong>,</p>
-  <p style="margin:0 0 14px;">El equipo de <strong>{ctx.get('business_name','Hot Boat')}</strong>
-     te desea un maravilloso cumpleaños. 🎉</p>
-  <p style="margin:0 0 14px;">¡Gracias por ser parte de nuestra comunidad! Esperamos verte
-     de nuevo pronto en el agua.</p>
+  <p style="margin:0 0 14px;">{_t(lang,"birthday_hello",name=name)}</p>
+  <p style="margin:0 0 14px;">{_t(lang,"birthday_body1",biz=biz)}</p>
+  <p style="margin:0 0 14px;">{_t(lang,"birthday_body2")}</p>
 </td></tr>
 <tr><td style="padding:0 26px 26px;font-size:13px;color:#64748b;line-height:1.6;">
-  <p style="margin:0;">¿Listo para un nuevo paseo? Escríbenos al
-     <strong>{ctx.get('business_phone','')}</strong>.</p>
+  <p style="margin:0;">{_t(lang,"birthday_cta",phone=phone)}</p>
   <p style="margin:10px 0 0;"><a href="{ctx.get('business_website','#')}"
      style="color:#7c3aed;">{ctx.get('business_website','')}</a></p>
 </td></tr></table></td></tr></table></body></html>"""
@@ -762,24 +921,28 @@ def send_email_for_trigger_with_data(trigger: str, to_addr: str,
     base_url = _get_base_url()
     firma_url = f"{base_url}/firma/{firma_ref}" if firma_ref and base_url else ""
 
+    raw_lang = str(data.get("customer_language") or "es").strip().lower()
+    if raw_lang not in ("es", "en", "pt"):
+        raw_lang = "es"
     ctx: Dict[str, str] = {
-        "booking_ref":      booking_ref,
-        "customer_name":    str(data.get("customer_name") or data.get("nombre_cliente") or "Cliente"),
-        "customer_email":   to_addr,
-        "customer_phone":   str(data.get("customer_phone") or data.get("telefono") or ""),
-        "booking_date":     str(data.get("booking_date") or data.get("fecha") or ""),
-        "booking_time":     bt,
-        "num_people":       str(data.get("num_people") or data.get("num_personas") or ""),
-        "total_price":      str(data.get("total_price") or data.get("ingreso_total") or ""),
-        "total_price_fmt":  _fmt_clp(data.get("total_price") or data.get("ingreso_total")),
-        "subtotal_fmt":     _fmt_clp(data.get("subtotal") or data.get("ingreso_reserva")),
-        "extras_total_fmt": _fmt_clp(data.get("extras_total") or data.get("ingreso_extras")),
-        "status":           str(data.get("status") or ""),
-        "business_name":    getattr(s, "business_name", "Hot Boat"),
-        "business_phone":   getattr(s, "business_phone", ""),
-        "business_email":   getattr(s, "business_email", ""),
-        "business_website": getattr(s, "business_website", ""),
-        "firma_url":        firma_url,
+        "booking_ref":       booking_ref,
+        "customer_name":     str(data.get("customer_name") or data.get("nombre_cliente") or "Cliente"),
+        "customer_email":    to_addr,
+        "customer_phone":    str(data.get("customer_phone") or data.get("telefono") or ""),
+        "booking_date":      str(data.get("booking_date") or data.get("fecha") or ""),
+        "booking_time":      bt,
+        "num_people":        str(data.get("num_people") or data.get("num_personas") or ""),
+        "total_price":       str(data.get("total_price") or data.get("ingreso_total") or ""),
+        "total_price_fmt":   _fmt_clp(data.get("total_price") or data.get("ingreso_total")),
+        "subtotal_fmt":      _fmt_clp(data.get("subtotal") or data.get("ingreso_reserva")),
+        "extras_total_fmt":  _fmt_clp(data.get("extras_total") or data.get("ingreso_extras")),
+        "status":            str(data.get("status") or ""),
+        "business_name":     getattr(s, "business_name", "Hot Boat"),
+        "business_phone":    getattr(s, "business_phone", ""),
+        "business_email":    getattr(s, "business_email", ""),
+        "business_website":  getattr(s, "business_website", ""),
+        "firma_url":         firma_url,
+        "customer_language": raw_lang,
     }
     return _render_and_send(trigger, to_addr, ctx)
 
