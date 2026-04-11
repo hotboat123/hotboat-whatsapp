@@ -801,13 +801,22 @@ async def sync_tables(x_admin_key: str = Header("")):
                      ing_res, ing_ext, ing_total, costo_fijo, costo_var, costo_total,
                      ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
                      status, extras, created) = row
-                    # Check existing: first by sheets source_id, then by appointment_id (any source)
+                    # Check existing: 1) sheets source_id, 2) appointment_id, 3) name+fecha+hora fallback
                     existing = None
                     cur.execute(f"SELECT id, source FROM {TABLE} WHERE source='sheets' AND source_id=%s", (str(rid),))
                     existing = cur.fetchone()
                     if not existing and appt_id:
                         cur.execute(f"SELECT id, source FROM {TABLE} WHERE appointment_id=%s LIMIT 1", (str(appt_id),))
                         existing = cur.fetchone()
+                    if not existing and nombre and fecha and hora:
+                        cur.execute(
+                            f"SELECT id, source FROM {TABLE} WHERE nombre_cliente=%s AND fecha=%s AND hora=%s ORDER BY updated_at DESC NULLS LAST LIMIT 1",
+                            (nombre, fecha, hora)
+                        )
+                        existing = cur.fetchone()
+                        if existing and existing[1] in ('sheets', 'manual', None):
+                            # Only stamp source_id on sheets/manual rows — never overwrite booknetic/hotboat_web source
+                            cur.execute(f"UPDATE {TABLE} SET source='sheets', source_id=%s WHERE id=%s", (str(rid), existing[0]))
 
                     if existing:
                         # Update rich fields regardless of source
@@ -860,7 +869,7 @@ async def sync_tables(x_admin_key: str = Header("")):
                               status, PgJson(extras or {}), created))
                         inserted_reservas += 1
 
-                # Remove duplicates (old Reservas_Con_Extras_Sheets rows replaced by reservas_con_extras)
+                # Remove duplicates by appointment_id (old sheets rows)
                 cur.execute("""
                     DELETE FROM all_appointments
                     WHERE source = 'sheets' AND appointment_id IS NOT NULL
@@ -871,6 +880,27 @@ async def sync_tables(x_admin_key: str = Header("")):
                     )
                 """)
                 dedup_deleted = cur.rowcount
+
+                # Remove orphan sheets rows superseded by a confirmed booknetic/hotboat_web record
+                # for the same (nombre_cliente + fecha + hora). Only removes source='sheets' rows
+                # when a non-sheets record with a real status already exists.
+                cur.execute(f"""
+                    DELETE FROM {TABLE} a
+                    WHERE a.source = 'sheets'
+                      AND a.nombre_cliente IS NOT NULL
+                      AND a.fecha IS NOT NULL
+                      AND a.hora IS NOT NULL
+                      AND EXISTS (
+                          SELECT 1 FROM {TABLE} b
+                          WHERE b.id <> a.id
+                            AND b.nombre_cliente = a.nombre_cliente
+                            AND b.fecha = a.fecha
+                            AND b.hora = a.hora
+                            AND b.source <> 'sheets'
+                            AND b.status IS NOT NULL
+                      )
+                """)
+                dedup_deleted += cur.rowcount
 
                 # Sync booknetic — do not use MAX(reservas_con_extras.fecha) as lower bound (it is often
                 # a future date and would skip all earlier appointments, e.g. April when June exists in DB)
