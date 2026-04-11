@@ -756,20 +756,26 @@ async def test_pre_booking_notif(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     from app.booking.signatures_email import send_pre_booking_notification
     fake_booking = {
-        "booking_ref":       "HB-2026-TEST1",
-        "customer_name":     "Cliente de Prueba",
-        "customer_phone":    "+56 9 1234 5678",
-        "customer_email":    "cliente@ejemplo.com",
-        "booking_date":      "2026-04-05",
-        "booking_time":      "15:00:00",
-        "num_people":        4,
-        "total_price":       179990,
-        "status":            "confirmed",
-        "source":            "hotboat_web",
+        "booking_ref":   "HB-2026-TEST1",
+        "customer_name": "Cliente de Prueba",
+        "customer_phone": "+56 9 1234 5678",
+        "customer_email": "cliente@ejemplo.com",
+        "booking_date":  "2026-04-05",
+        "booking_time":  "15:00:00",
+        "num_people":    4,
+        "total_price":   179990,
+        "extras_total":  29990,
+        "extras": [
+            {"name": "Tabla de quesos", "price": 19990, "quantity": 1},
+            {"name": "Botella de vino", "price": 9990,  "quantity": 1},
+        ],
+        "notes":         "Celebran cumpleaños. Llevan torta.",
+        "status":        "confirmed",
+        "source":        "hotboat_web",
         "customer_language": "es",
     }
     try:
-        await asyncio.to_thread(send_pre_booking_notification, fake_booking)
+        await asyncio.to_thread(send_pre_booking_notification, fake_booking, prev_bookings=2)
         return {"ok": True, "message": "Notificación de prueba enviada a hotboatnotification@gmail.com"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

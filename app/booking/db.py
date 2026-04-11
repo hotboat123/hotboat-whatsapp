@@ -299,7 +299,10 @@ def get_bookings_starting_soon(window_minutes: int = 20, target_minutes_ahead: i
             cur.execute(f"""
                 SELECT id, booking_ref, customer_name, customer_phone, customer_email,
                        booking_date, booking_time, num_people, total_price, status,
-                       'hotboat_web' AS source, COALESCE(customer_language,'es') AS customer_language
+                       'hotboat_web' AS source, COALESCE(customer_language,'es') AS customer_language,
+                       COALESCE(extras::text, '[]') AS extras,
+                       COALESCE(extras_total, 0) AS extras_total,
+                       notes
                 FROM hotboat_appointments
                 WHERE (booking_date + booking_time) AT TIME ZONE 'America/Santiago'
                       BETWEEN (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead - half} minutes')
@@ -310,17 +313,20 @@ def get_bookings_starting_soon(window_minutes: int = 20, target_minutes_ahead: i
                 UNION ALL
 
                 SELECT id,
-                       'MANUAL-' || id::text  AS booking_ref,
-                       nombre_cliente          AS customer_name,
-                       telefono               AS customer_phone,
-                       email                  AS customer_email,
-                       fecha                  AS booking_date,
-                       hora                   AS booking_time,
-                       num_personas           AS num_people,
-                       ingreso_total          AS total_price,
+                       'MANUAL-' || id::text          AS booking_ref,
+                       nombre_cliente                  AS customer_name,
+                       telefono                        AS customer_phone,
+                       email                           AS customer_email,
+                       fecha                           AS booking_date,
+                       hora                            AS booking_time,
+                       num_personas                    AS num_people,
+                       ingreso_total                   AS total_price,
                        status,
-                       fuente                 AS source,
-                       'es'                   AS customer_language
+                       fuente                          AS source,
+                       'es'                            AS customer_language,
+                       '[]'                            AS extras,
+                       COALESCE(ingreso_extras, 0)     AS extras_total,
+                       observaciones                   AS notes
                 FROM all_appointments
                 WHERE (fecha + hora) AT TIME ZONE 'America/Santiago'
                       BETWEEN (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead - half} minutes')
@@ -330,7 +336,7 @@ def get_bookings_starting_soon(window_minutes: int = 20, target_minutes_ahead: i
             """)
             cols = ["id", "booking_ref", "customer_name", "customer_phone", "customer_email",
                     "booking_date", "booking_time", "num_people", "total_price", "status",
-                    "source", "customer_language"]
+                    "source", "customer_language", "extras", "extras_total", "notes"]
             rows = []
             for row in cur.fetchall():
                 d = dict(zip(cols, row))
@@ -360,6 +366,48 @@ def mark_pre_booking_notif_sent(booking_ref: str) -> bool:
                 )
             conn.commit()
             return cur.rowcount > 0
+
+
+def count_previous_bookings(customer_email: str = "", customer_phone: str = "",
+                             exclude_ref: str = "") -> int:
+    """
+    Return the number of *previous confirmed* bookings for this customer
+    (matched by email OR phone, excluding the current booking_ref).
+    Checks both hotboat_appointments and all_appointments.
+    """
+    if not customer_email and not customer_phone:
+        return 0
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            parts, params = [], []
+            if customer_email:
+                parts.append("customer_email = %s")
+                params.append(customer_email.strip().lower())
+            if customer_phone:
+                parts.append("customer_phone = %s")
+                params.append(customer_phone.strip())
+            match_clause = " OR ".join(parts)
+            excl_ha = f"AND booking_ref != %s" if exclude_ref else ""
+            excl_aa = f"AND 'MANUAL-' || id::text != %s" if exclude_ref else ""
+            p_ha = params + ([exclude_ref] if exclude_ref else [])
+            p_aa = params + ([exclude_ref] if exclude_ref else [])
+
+            cur.execute(f"""
+                SELECT COUNT(*) FROM (
+                    SELECT id FROM hotboat_appointments
+                    WHERE ({match_clause}) AND status = 'confirmed' {excl_ha}
+                    UNION ALL
+                    SELECT id FROM all_appointments
+                    WHERE (
+                        ({' OR '.join(
+                            ['email = %s'] * (1 if customer_email else 0) +
+                            ['telefono = %s'] * (1 if customer_phone else 0)
+                        )})
+                    ) AND status = 'confirmed' {excl_aa}
+                ) t
+            """, p_ha + p_aa)
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
 
 
 # ── Birthday sweep ────────────────────────────────────────────────────────────

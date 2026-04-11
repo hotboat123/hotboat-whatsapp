@@ -168,21 +168,37 @@ def send_booking_signature_summary(booking_ref: str, booking: dict, signatures: 
         logger.error("send_booking_signature_summary failed for %s: %s", booking_ref, e)
 
 
-def send_pre_booking_notification(booking: dict) -> None:
+def _parse_extras(raw: object) -> list:
+    """Parse extras JSON (list of {name, price, quantity}) safely."""
+    import json as _json
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return raw
+    try:
+        parsed = _json.loads(str(raw))
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        return []
+
+
+def send_pre_booking_notification(booking: dict, prev_bookings: int = 0) -> None:
     """
     Send a 1-hour pre-booking admin notification to hotboatnotification@gmail.com.
     Called by the scheduler when a booking is ~60 min away.
+    prev_bookings: number of prior confirmed bookings by this customer.
     """
     ref     = booking.get("booking_ref") or "-"
     name    = booking.get("customer_name") or "-"
     phone   = booking.get("customer_phone") or "-"
-    email   = booking.get("customer_email") or "-"
+    email_  = booking.get("customer_email") or "-"
     bdate   = _fmt_date(str(booking.get("booking_date") or ""))
     btime   = str(booking.get("booking_time") or "")[:5]
     people  = booking.get("num_people") or "-"
     total   = booking.get("total_price") or "-"
     status  = booking.get("status") or "-"
     source  = booking.get("source") or "-"
+    notes   = (booking.get("notes") or "").strip()
 
     try:
         from app.booking.booking_email import _fmt_clp
@@ -190,7 +206,47 @@ def send_pre_booking_notification(booking: dict) -> None:
     except Exception:
         total_fmt = str(total)
 
-    subject = f"⏰ En 1 hora — Reserva {ref} ({name})"
+    # ── Returning customer badge ──────────────────────────────────────────────
+    if prev_bookings == 0:
+        returning_html = '<span style="display:inline-block;background:#7c3aed;color:#fff;border-radius:20px;padding:2px 12px;font-size:12px;font-weight:700">🆕 Primera visita</span>'
+    else:
+        returning_html = f'<span style="display:inline-block;background:#0284c7;color:#fff;border-radius:20px;padding:2px 12px;font-size:12px;font-weight:700">🔁 Regresa · {prev_bookings} visita{"s" if prev_bookings != 1 else ""} anterior{"es" if prev_bookings != 1 else ""}</span>'
+
+    # ── Extras rows ───────────────────────────────────────────────────────────
+    extras_list = _parse_extras(booking.get("extras"))
+    extras_total = booking.get("extras_total") or 0
+    if extras_list:
+        try:
+            from app.booking.booking_email import _fmt_clp
+            extra_rows = "".join(
+                f'<tr style="border-top:1px solid #1e2d45;">'
+                f'<td style="padding:8px 0;color:#94a3b8;font-size:13px;">'
+                f'{"x" + str(e.get("quantity","")) + " " if (e.get("quantity") or 1) > 1 else ""}'
+                f'{e.get("name","")}</td>'
+                f'<td style="padding:8px 0;text-align:right;color:#e2e8f0;font-size:13px;">'
+                f'{_fmt_clp((e.get("price") or 0) * (e.get("quantity") or 1))}</td>'
+                f'</tr>'
+                for e in extras_list
+            )
+            extras_section = f"""
+    <div style="margin-top:18px;padding-top:14px;border-top:2px solid #1e2d45;">
+      <div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:4px;">🎁 Extras</div>
+      <table width="100%" cellspacing="0" cellpadding="0">{extra_rows}
+        <tr><td style="padding:10px 0 0;color:#64748b;font-size:12px;">Total extras</td>
+            <td style="padding:10px 0 0;text-align:right;color:#e8b86d;font-weight:700;">{_fmt_clp(extras_total)}</td></tr>
+      </table>
+    </div>"""
+        except Exception:
+            extras_section = ""
+    else:
+        extras_section = '<div style="margin-top:12px;color:#475569;font-size:13px;">Sin extras</div>'
+
+    # ── Notes ─────────────────────────────────────────────────────────────────
+    notes_section = ""
+    if notes:
+        notes_section = f'<div style="margin-top:14px;padding:10px 14px;background:rgba(251,191,36,.07);border-radius:8px;border-left:3px solid #f59e0b;color:#fde68a;font-size:13px;"><strong>📝 Notas:</strong> {notes}</div>'
+
+    subject = f"⏰ En 1 hora — {ref} · {name} ({people} pax)"
     html = f"""<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8">
@@ -202,14 +258,13 @@ def send_pre_booking_notification(booking: dict) -> None:
   .header{{padding:26px 28px 18px;border-bottom:1px solid #1e2d45}}
   .header h2{{margin:0;color:#f8fafc;font-size:22px;font-weight:800}}
   .header p{{margin:6px 0 0;color:#94a3b8;font-size:14px}}
-  .body{{padding:22px 28px}}
-  table{{width:100%;border-collapse:collapse}}
-  td{{padding:10px 0;border-bottom:1px solid #1e2d45;font-size:14px;color:#cbd5e1}}
-  td:first-child{{color:#64748b;width:42%;font-size:12px;text-transform:uppercase;
+  .body{{padding:22px 28px 26px}}
+  table.main{{width:100%;border-collapse:collapse}}
+  table.main td{{padding:10px 0;border-bottom:1px solid #1e2d45;font-size:14px;color:#cbd5e1}}
+  table.main td:first-child{{color:#64748b;width:40%;font-size:11px;text-transform:uppercase;
                   letter-spacing:.8px;font-weight:600}}
-  .badge{{display:inline-block;background:#d97706;color:#fff;border-radius:20px;
-          padding:2px 12px;font-size:12px;font-weight:700}}
-  .footer{{padding:16px 28px 22px;text-align:center;color:#475569;font-size:12px}}
+  .footer{{padding:14px 28px 20px;text-align:center;color:#475569;font-size:12px;
+           border-top:1px solid #1e2d45}}
 </style>
 </head>
 <body>
@@ -220,28 +275,33 @@ def send_pre_booking_notification(booking: dict) -> None:
     <p>Notificación automática · HotBoat Chile</p>
   </div>
   <div class="body">
-    <table>
+    <table class="main">
       <tr><td>Referencia</td>
           <td style="color:#e8b86d;font-family:monospace;font-weight:700">{ref}</td></tr>
       <tr><td>Cliente</td>
-          <td style="color:#f1f5f9;font-weight:600">{name}</td></tr>
+          <td style="color:#f1f5f9;font-weight:700;font-size:15px">{name}</td></tr>
+      <tr><td>Historial</td>
+          <td>{returning_html}</td></tr>
       <tr><td>Teléfono</td>
-          <td>{phone}</td></tr>
+          <td><a href="https://wa.me/{phone.replace(' ','').replace('+','')}" style="color:#4ade80;text-decoration:none;">{phone}</a></td></tr>
       <tr><td>Email</td>
-          <td>{email}</td></tr>
+          <td style="color:#93c5fd">{email_}</td></tr>
       <tr><td>📅 Fecha</td>
           <td style="color:#e2e8f0;font-weight:600">{bdate}</td></tr>
       <tr><td>⏰ Hora</td>
-          <td style="color:#e2e8f0;font-weight:700;font-size:16px">{btime} hrs</td></tr>
+          <td style="color:#fbbf24;font-weight:800;font-size:18px">{btime} hrs</td></tr>
       <tr><td>👥 Personas</td>
-          <td>{people}</td></tr>
+          <td style="color:#e2e8f0;font-weight:600;font-size:16px">{people}</td></tr>
       <tr><td>💰 Total</td>
-          <td style="color:#10b981;font-weight:700">{total_fmt}</td></tr>
+          <td style="color:#10b981;font-weight:700;font-size:16px">{total_fmt}</td></tr>
       <tr><td>Estado</td>
-          <td><span class="badge">{status}</span></td></tr>
+          <td><span style="display:inline-block;background:#d97706;color:#fff;border-radius:20px;
+                           padding:2px 12px;font-size:12px;font-weight:700">{status}</span></td></tr>
       <tr><td>Fuente</td>
           <td style="color:#64748b">{source}</td></tr>
     </table>
+    {extras_section}
+    {notes_section}
   </div>
   <div class="footer">HotBoat Chile · aviso automático 1 hora antes</div>
 </div>
@@ -249,7 +309,7 @@ def send_pre_booking_notification(booking: dict) -> None:
 </html>"""
     try:
         _send(ADMIN_NOTIFICATION_EMAIL, subject, html)
-        logger.info("pre_booking_notification sent for %s (%s %s)", ref, bdate, btime)
+        logger.info("pre_booking_notification sent for %s (%s %s, prev=%d)", ref, bdate, btime, prev_bookings)
     except Exception as e:
         logger.error("pre_booking_notification failed for %s: %s", ref, e)
 
@@ -259,7 +319,7 @@ def run_pre_booking_notif_sweep() -> dict:
     Check for bookings starting in ~60 min and send admin notification if not yet sent.
     Runs every 10 minutes from the scheduler.
     """
-    from app.booking.db import get_bookings_starting_soon, mark_pre_booking_notif_sent
+    from app.booking.db import get_bookings_starting_soon, mark_pre_booking_notif_sent, count_previous_bookings
 
     result = {"checked": 0, "sent": 0, "errors": 0}
     try:
@@ -268,7 +328,12 @@ def run_pre_booking_notif_sweep() -> dict:
         for b in bookings:
             ref = b.get("booking_ref", "")
             try:
-                send_pre_booking_notification(b)
+                prev = count_previous_bookings(
+                    customer_email=b.get("customer_email") or "",
+                    customer_phone=b.get("customer_phone") or "",
+                    exclude_ref=ref,
+                )
+                send_pre_booking_notification(b, prev_bookings=prev)
                 mark_pre_booking_notif_sent(ref)
                 result["sent"] += 1
             except Exception as e:
