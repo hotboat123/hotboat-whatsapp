@@ -316,7 +316,7 @@ ORDER BY starts_at
 Puedo ayudarte a reservar el horario perfecto.
 
 💡 También puedes reservar directamente aquí:
-https://hotboatchile.com/es/book-hotboat/
+https://whatsapp.hotboat.cl/booking
 ```
 
 ---

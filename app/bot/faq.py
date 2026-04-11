@@ -74,7 +74,7 @@ class FAQHandler:
 _*niños pagan desde los 6 años_
 
 Aquí puedes reservar tu horario directo 👇
-https://hotboatchile.com/es/book-hotboat/""",
+https://whatsapp.hotboat.cl/booking""",
             
             "valor": "precio",  # Alias
             "valores": "precio",  # Alias

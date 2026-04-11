@@ -436,7 +436,7 @@ Gostaria de reservar sua experiência?"""
 _*niños pagan desde los 6 años_
 
 Aquí puedes reservar tu horario directo 👇
-https://hotboatchile.com/es/book-hotboat/""",
+https://whatsapp.hotboat.cl/booking""",
         
         "en": """💰 *HotBoat Prices:*
 
@@ -467,7 +467,7 @@ https://hotboatchile.com/es/book-hotboat/""",
 _*children pay from 6 years old_
 
 Book your time slot here 👇
-https://hotboatchile.com/en/book-hotboat/""",
+https://whatsapp.hotboat.cl/booking""",
         
         "pt": """💰 *Preços HotBoat:*
 
@@ -498,7 +498,7 @@ https://hotboatchile.com/en/book-hotboat/""",
 _*crianças pagam a partir dos 6 anos_
 
 Reserve seu horário aqui 👇
-https://hotboatchile.com/pt/book-hotboat/"""
+https://whatsapp.hotboat.cl/booking"""
     },
     
     # Location

@@ -439,7 +439,7 @@ class AvailabilityChecker:
 💡 *Te sugiero:*
 • Consultar disponibilidad para *mañana*
 • Ver disponibilidad para *esta semana*
-• Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
+• Visitar nuestro sitio: https://whatsapp.hotboat.cl/booking
 
 ¿Te gustaría que revise disponibilidad para mañana o esta semana? 🚤"""
                 elif specific_date_requested:
@@ -464,7 +464,7 @@ class AvailabilityChecker:
 💡 *Te sugiero:*
 • Consultar disponibilidad para *otro día*
 • Reservar con *anticipación*
-• Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
+• Visitar nuestro sitio: https://whatsapp.hotboat.cl/booking
 
 ¿Te gustaría que revise disponibilidad para otra fecha? 🚤"""
                 else:
@@ -475,7 +475,7 @@ class AvailabilityChecker:
 💡 *Te sugiero:*
 • Consultar disponibilidad para la *próxima semana*
 • Reservar con *anticipación*
-• Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
+• Visitar nuestro sitio: https://whatsapp.hotboat.cl/booking
 
 ¿Te gustaría que revise disponibilidad para otra fecha? 🚤"""
             
@@ -550,7 +550,7 @@ class AvailabilityChecker:
             response_parts.append("• *\"4 de noviembre a las 15 para 2 personas\"*")
             response_parts.append("\nYo lo agrego al carrito automáticamente 🚤")
             response_parts.append("\n💡 También puedes reservar directamente aquí:")
-            response_parts.append("https://hotboatchile.com/es/book-hotboat/")
+            response_parts.append("https://whatsapp.hotboat.cl/booking")
             
             return "\n".join(response_parts)
             
