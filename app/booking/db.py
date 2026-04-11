@@ -325,6 +325,120 @@ def mark_birthday_email_sent(customer_email: str) -> bool:
             return cur.rowcount > 0
 
 
+def ensure_signatures_table() -> None:
+    """Create hotboat_signatures table if it doesn't exist yet (idempotent)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS hotboat_signatures (
+                    id               SERIAL PRIMARY KEY,
+                    booking_ref      VARCHAR(50)  NOT NULL,
+                    passenger_name   VARCHAR(255) NOT NULL,
+                    passenger_email  VARCHAR(255),
+                    passenger_phone  VARCHAR(50),
+                    passenger_birthday DATE,
+                    accepted_tc      BOOLEAN      DEFAULT TRUE,
+                    ip_address       VARCHAR(50),
+                    created_at       TIMESTAMPTZ  DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_signatures_booking_ref ON hotboat_signatures(booking_ref);
+                CREATE INDEX IF NOT EXISTS idx_signatures_email       ON hotboat_signatures(passenger_email);
+            """)
+            conn.commit()
+
+
+def create_signature(booking_ref: str, data: dict, ip: str = "") -> dict:
+    """Save a passenger T&C signature. Returns the created row as dict."""
+    from datetime import date as _date
+    bday_raw = data.get("passenger_birthday") or None
+    bday = None
+    if bday_raw:
+        try:
+            bday = _date.fromisoformat(str(bday_raw))
+        except Exception:
+            pass
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO hotboat_signatures
+                   (booking_ref, passenger_name, passenger_email, passenger_phone,
+                    passenger_birthday, accepted_tc, ip_address)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id, booking_ref, passenger_name, passenger_email,
+                             passenger_phone, passenger_birthday, accepted_tc, created_at""",
+                (
+                    booking_ref,
+                    (data.get("passenger_name") or "").strip(),
+                    (data.get("passenger_email") or "").strip().lower() or None,
+                    (data.get("passenger_phone") or "").strip() or None,
+                    bday,
+                    bool(data.get("accepted_tc", True)),
+                    ip or None,
+                ),
+            )
+            conn.commit()
+            row = cur.fetchone()
+            cols = ["id", "booking_ref", "passenger_name", "passenger_email",
+                    "passenger_phone", "passenger_birthday", "accepted_tc", "created_at"]
+            d = dict(zip(cols, row))
+            for k in ("passenger_birthday", "created_at"):
+                if d.get(k):
+                    d[k] = str(d[k])
+            return d
+
+
+def get_signatures_by_booking_ref(booking_ref: str) -> list:
+    """Return all T&C signatures for a booking, newest first."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, booking_ref, passenger_name, passenger_email,
+                          passenger_phone, passenger_birthday, accepted_tc, created_at
+                   FROM hotboat_signatures
+                   WHERE booking_ref = %s
+                   ORDER BY created_at ASC""",
+                (booking_ref,),
+            )
+            cols = ["id", "booking_ref", "passenger_name", "passenger_email",
+                    "passenger_phone", "passenger_birthday", "accepted_tc", "created_at"]
+            rows = []
+            for row in cur.fetchall():
+                d = dict(zip(cols, row))
+                for k in ("passenger_birthday", "created_at"):
+                    if d.get(k):
+                        d[k] = str(d[k])
+                rows.append(d)
+            return rows
+
+
+def get_bookings_with_signatures_for_date(target_date) -> list:
+    """
+    Return today's bookings that have at least one signature.
+    Used for the daily summary notification.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT DISTINCT ha.booking_ref, ha.customer_name, ha.customer_email,
+                          ha.customer_phone, ha.booking_date, ha.booking_time, ha.num_people
+                   FROM hotboat_appointments ha
+                   JOIN hotboat_signatures hs ON hs.booking_ref = ha.booking_ref
+                   WHERE ha.booking_date = %s
+                   ORDER BY ha.booking_time""",
+                (target_date,),
+            )
+            cols = ["booking_ref", "customer_name", "customer_email",
+                    "customer_phone", "booking_date", "booking_time", "num_people"]
+            rows = []
+            for row in cur.fetchall():
+                d = dict(zip(cols, row))
+                for k in ("booking_date", "booking_time"):
+                    if d.get(k):
+                        d[k] = str(d[k])
+                rows.append(d)
+            return rows
+
+
 def get_all_bookings(limit: int = 200) -> List[dict]:
     with get_connection() as conn:
         with conn.cursor() as cur:

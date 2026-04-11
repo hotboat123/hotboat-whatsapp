@@ -1699,6 +1699,27 @@ async function openModal(id){
           + Agregar descuento
         </button>
       </div>
+      <!-- ── Firmas T&C ──────────────────────────────────────────────── -->
+      <div style="margin-top:1.2rem;border-top:1px solid var(--border);padding-top:1rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;flex-wrap:wrap;gap:.5rem">
+          <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">
+            ✍️ Firmas T&amp;C <span id="firma-count" style="color:var(--gold);margin-left:.3rem"></span>
+          </div>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <button onclick="copyFirmaLink('${r.booking_ref||''}')"
+              style="background:rgba(74,158,255,.12);color:var(--blue);border:1px solid rgba(74,158,255,.3);
+                     border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
+              🔗 Copiar link QR
+            </button>
+            <button onclick="sendFirmasSummary('${r.booking_ref||''}')"
+              style="background:rgba(245,200,66,.1);color:var(--gold);border:1px solid rgba(245,200,66,.3);
+                     border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
+              📧 Enviar resumen
+            </button>
+          </div>
+        </div>
+        <div id="firma-list" style="font-size:.82rem;color:var(--muted)">Cargando firmas...</div>
+      </div>
       <div id="modal-save-err" style="color:var(--red);font-size:.8rem;display:none;margin-top:.5rem"></div>
       <div class="modal-actions">
         <button class="btn-del" onclick="deleteReserva(${id},'${(r.nombre_cliente||'esta reserva').replace(/'/g,"\\'")}')">🗑 Eliminar</button>
@@ -1713,6 +1734,8 @@ async function openModal(id){
         <button class="btn-del" onclick="closeModal()" style="margin-left:auto">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
+      // Load signatures asynchronously after rendering modal
+      loadFirmas(r.booking_ref||'', r.num_personas||0);
     // WhatsApp contact button
     const waBtn = document.getElementById('wa-contact-btn');
     if(waBtn){
@@ -1753,6 +1776,78 @@ async function openModal(id){
     document.getElementById('modal-body').innerHTML=`<div class="loading-msg">Error: ${e.message}</div>`;
   }
 }
+// ── Firmas T&C ────────────────────────────────────────────────────────────────
+async function loadFirmas(bookingRef, numPersonas){
+  const listEl = document.getElementById('firma-list');
+  const countEl = document.getElementById('firma-count');
+  if(!listEl || !bookingRef) return;
+  try{
+    const data = await api(`/api/admin/reservas/${encodeURIComponent(bookingRef)}/firmas`);
+    const sigs = data.signatures || [];
+    const total = numPersonas || '?';
+    countEl.textContent = `(${sigs.length}/${total})`;
+    if(!sigs.length){
+      listEl.innerHTML = `<div style="color:var(--muted);font-size:.82rem;padding:.4rem 0">
+        Ningún pasajero ha firmado aún.<br>
+        <span style="font-size:.78rem">Comparte el link con el botón 🔗 para que firmen desde su celular.</span>
+      </div>`;
+      return;
+    }
+    listEl.innerHTML = `<div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+        <thead><tr>
+          ${['#','Nombre','Email','Teléfono','Nacimiento','Firmó'].map(h=>
+            `<th style="text-align:left;padding:.4rem .5rem;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)">${h}</th>`
+          ).join('')}
+        </tr></thead>
+        <tbody>
+          ${sigs.map((s,i)=>`<tr>
+            <td style="padding:.4rem .5rem;border-bottom:1px solid var(--border);color:var(--muted)">${i+1}</td>
+            <td style="padding:.4rem .5rem;border-bottom:1px solid var(--border);font-weight:600">${s.passenger_name||'-'}</td>
+            <td style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">${s.passenger_email||'-'}</td>
+            <td style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">${s.passenger_phone||'-'}</td>
+            <td style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">${fmtBday(s.passenger_birthday)}</td>
+            <td style="padding:.4rem .5rem;border-bottom:1px solid var(--border);color:var(--muted);font-size:.75rem">${fmtTs(s.created_at)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }catch(e){
+    if(listEl) listEl.innerHTML = `<span style="color:var(--muted);font-size:.8rem">Error cargando firmas: ${e.message}</span>`;
+  }
+}
+function fmtBday(d){
+  if(!d) return '-';
+  const p=(d||'').split('-');
+  return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d;
+}
+function fmtTs(ts){
+  if(!ts) return '-';
+  try{
+    const d=new Date(ts);
+    return d.toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'})
+      +' '+d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+  }catch{return ts;}
+}
+function copyFirmaLink(bookingRef){
+  if(!bookingRef){ showToast('Sin booking_ref'); return; }
+  const url = `${location.origin}/firma/${bookingRef}`;
+  navigator.clipboard.writeText(url).then(()=>{
+    showToast('✅ Link copiado: '+url);
+  }).catch(()=>{
+    prompt('Copia este link:', url);
+  });
+}
+async function sendFirmasSummary(bookingRef){
+  if(!bookingRef) return;
+  try{
+    await api(`/api/admin/reservas/${encodeURIComponent(bookingRef)}/firmas/summary-email`,{method:'POST'});
+    showToast('📧 Resumen enviado a hotboatnotification@gmail.com');
+  }catch(e){
+    showToast('Error: '+e.message);
+  }
+}
+
 function closeModal(e){
   if(e&&e.target!==document.getElementById('overlay')) return;
   document.getElementById('overlay').classList.remove('show');

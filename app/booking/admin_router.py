@@ -642,6 +642,34 @@ async def update_dp(request: Request, x_admin_key: str = Header("")):
     return {"ok": True}
 
 
+# ── T&C Signatures ────────────────────────────────────────────────────────────
+
+@admin_router.get("/api/admin/reservas/{booking_ref}/firmas")
+async def get_firmas(booking_ref: str, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.db import get_signatures_by_booking_ref, ensure_signatures_table
+    try:
+        ensure_signatures_table()
+    except Exception:
+        pass
+    sigs = get_signatures_by_booking_ref(booking_ref)
+    return {"booking_ref": booking_ref, "signatures": sigs, "count": len(sigs)}
+
+
+@admin_router.post("/api/admin/reservas/{booking_ref}/firmas/summary-email")
+async def send_firmas_summary(booking_ref: str, x_admin_key: str = Header("")):
+    """Manually trigger the signature summary email for a booking."""
+    _check_auth(x_admin_key)
+    from app.booking.db import get_signatures_by_booking_ref, get_booking_by_ref
+    from app.booking.signatures_email import send_booking_signature_summary
+    booking = get_booking_by_ref(booking_ref)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+    sigs = get_signatures_by_booking_ref(booking_ref)
+    send_booking_signature_summary(booking_ref, booking, sigs)
+    return {"ok": True, "sent_to": "hotboatnotification@gmail.com", "signatures": len(sigs)}
+
+
 # ── Email workflows (Booknetic-style multi-trigger, Resend) ──────────────────
 
 @admin_router.get("/api/admin/email-workflows")

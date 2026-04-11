@@ -1,0 +1,196 @@
+"""Email notifications for T&C passenger signatures."""
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+ADMIN_NOTIFICATION_EMAIL = "hotboatnotification@gmail.com"
+
+
+def _send(to: str, subject: str, html: str) -> None:
+    from app.config import get_settings
+    from app.email.resend_booking import send_booking_html
+
+    settings = get_settings()
+    api_key = (getattr(settings, "resend_api_key", "") or "").strip()
+    if not api_key:
+        logger.warning("signatures_email: RESEND_API_KEY not configured, skipping email")
+        return
+
+    from_addr = (
+        getattr(settings, "resend_from_confirmations", "")
+        or getattr(settings, "email_from", "")
+        or "noreply@reservas.hotboat.cl"
+    ).strip()
+
+    send_booking_html(
+        to=to,
+        subject=subject,
+        html=html,
+        from_address=from_addr,
+        api_key=api_key,
+    )
+
+
+def _fmt_date(d: Optional[str]) -> str:
+    if not d:
+        return "-"
+    try:
+        from datetime import date
+        parts = str(d).split("-")
+        if len(parts) == 3:
+            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+    except Exception:
+        pass
+    return str(d)
+
+
+def notify_admin_new_signature(sig: dict, booking: dict) -> None:
+    """Send a per-signature notification email to the admin."""
+    name = sig.get("passenger_name") or "-"
+    email = sig.get("passenger_email") or "-"
+    phone = sig.get("passenger_phone") or "-"
+    bday = _fmt_date(sig.get("passenger_birthday"))
+    booking_ref = sig.get("booking_ref") or booking.get("booking_ref", "")
+    booking_date = _fmt_date(str(booking.get("booking_date") or ""))
+    booking_time = str(booking.get("booking_time") or "")[:5]
+    num_people = booking.get("num_people") or "-"
+
+    subject = f"✍️ Nueva firma T&C — {name} ({booking_ref})"
+    html = f"""
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8">
+<style>
+  body{{font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px}}
+  .card{{background:#fff;border-radius:12px;max-width:520px;margin:auto;padding:28px;box-shadow:0 2px 8px rgba(0,0,0,.1)}}
+  h2{{color:#1a1a2e;margin:0 0 18px}}
+  table{{width:100%;border-collapse:collapse}}
+  td{{padding:8px 6px;border-bottom:1px solid #eee;font-size:14px}}
+  td:first-child{{color:#666;width:40%}}
+  .badge{{display:inline-block;background:#e8f5e9;color:#2e7d32;border-radius:20px;
+          padding:3px 12px;font-size:12px;font-weight:700}}
+  .ref{{color:#888;font-size:12px;margin-top:16px}}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>✍️ Firma de Términos y Condiciones</h2>
+  <p>Un pasajero firmó los T&amp;C para la reserva <strong>{booking_ref}</strong>.</p>
+  <table>
+    <tr><td>Pasajero</td><td><strong>{name}</strong></td></tr>
+    <tr><td>Email</td><td>{email}</td></tr>
+    <tr><td>Teléfono</td><td>{phone}</td></tr>
+    <tr><td>Fecha de nacimiento</td><td>{bday}</td></tr>
+    <tr><td>Acepta T&amp;C</td><td><span class="badge">✔ Sí</span></td></tr>
+  </table>
+  <hr style="margin:18px 0;border:none;border-top:1px solid #eee">
+  <table>
+    <tr><td>Fecha reserva</td><td>{booking_date} {booking_time}</td></tr>
+    <tr><td>Personas en reserva</td><td>{num_people}</td></tr>
+  </table>
+  <p class="ref">Reserva: {booking_ref} · HotBoat Chile</p>
+</div>
+</body>
+</html>
+"""
+    try:
+        _send(ADMIN_NOTIFICATION_EMAIL, subject, html)
+        logger.info("notify_admin_new_signature sent for %s / sig_id=%s", booking_ref, sig.get("id"))
+    except Exception as e:
+        logger.error("notify_admin_new_signature failed: %s", e)
+
+
+def send_booking_signature_summary(booking_ref: str, booking: dict, signatures: list) -> None:
+    """
+    Send a summary email to the admin with all passengers who signed for a booking.
+    Called by the daily sweep just before each booking.
+    """
+    num_people = booking.get("num_people") or "?"
+    booking_date = _fmt_date(str(booking.get("booking_date") or ""))
+    booking_time = str(booking.get("booking_time") or "")[:5]
+    customer_name = booking.get("customer_name") or "-"
+    signed = len(signatures)
+
+    rows_html = "".join(
+        f"""<tr>
+          <td>{i+1}</td>
+          <td><strong>{s.get('passenger_name','-')}</strong></td>
+          <td>{s.get('passenger_email','-') or '-'}</td>
+          <td>{s.get('passenger_phone','-') or '-'}</td>
+          <td>{_fmt_date(s.get('passenger_birthday'))}</td>
+        </tr>"""
+        for i, s in enumerate(signatures)
+    )
+
+    subject = f"📋 Firmas T&C hoy — {booking_ref} ({signed}/{num_people} firmaron)"
+    html = f"""
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8">
+<style>
+  body{{font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px}}
+  .card{{background:#fff;border-radius:12px;max-width:640px;margin:auto;padding:28px;box-shadow:0 2px 8px rgba(0,0,0,.1)}}
+  h2{{color:#1a1a2e;margin:0 0 6px}}
+  .sub{{color:#666;font-size:14px;margin-bottom:20px}}
+  table{{width:100%;border-collapse:collapse;font-size:13px}}
+  th{{background:#f5f5f5;padding:8px 6px;text-align:left;color:#444;border-bottom:2px solid #ddd}}
+  td{{padding:8px 6px;border-bottom:1px solid #eee}}
+  .count{{display:inline-block;background:{'#e8f5e9' if signed>=1 else '#fff3e0'};
+          color:{'#2e7d32' if signed>=1 else '#e65100'};border-radius:20px;
+          padding:4px 16px;font-size:13px;font-weight:700;margin-bottom:16px}}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>📋 Resumen de Firmas T&amp;C</h2>
+  <div class="sub">Reserva <strong>{booking_ref}</strong> · {customer_name} · {booking_date} {booking_time}</div>
+  <div class="count">{signed} de {num_people} personas firmaron</div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Nacimiento</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows_html if rows_html else '<tr><td colspan="5" style="color:#999;text-align:center">Nadie firmó aún</td></tr>'}
+    </tbody>
+  </table>
+  <p style="color:#888;font-size:12px;margin-top:18px">HotBoat Chile · resumen automático del día</p>
+</div>
+</body>
+</html>
+"""
+    try:
+        _send(ADMIN_NOTIFICATION_EMAIL, subject, html)
+        logger.info("send_booking_signature_summary sent for %s (%d sigs)", booking_ref, signed)
+    except Exception as e:
+        logger.error("send_booking_signature_summary failed for %s: %s", booking_ref, e)
+
+
+def run_daily_signature_summary_sweep() -> dict:
+    """
+    Send a summary of T&C signatures for every booking happening today.
+    Runs once per day from the scheduler.
+    """
+    from datetime import date
+    from app.booking.db import get_bookings_with_signatures_for_date, get_signatures_by_booking_ref, get_booking_by_ref
+
+    today = date.today()
+    result = {"checked": 0, "sent": 0, "errors": 0}
+    try:
+        bookings = get_bookings_with_signatures_for_date(today)
+        result["checked"] = len(bookings)
+        for b in bookings:
+            ref = b["booking_ref"]
+            try:
+                sigs = get_signatures_by_booking_ref(ref)
+                booking_detail = get_booking_by_ref(ref) or b
+                send_booking_signature_summary(ref, booking_detail, sigs)
+                result["sent"] += 1
+            except Exception as e:
+                logger.error("sweep sig summary for %s: %s", ref, e)
+                result["errors"] += 1
+    except Exception as e:
+        logger.error("run_daily_signature_summary_sweep: %s", e)
+    return result

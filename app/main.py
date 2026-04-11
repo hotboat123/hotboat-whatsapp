@@ -12,6 +12,7 @@ import httpx
 from app.booking.router import router as booking_router
 from app.booking.admin_router import admin_router
 from app.booking.content_router import content_router
+from app.booking.signatures_router import signatures_router
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
@@ -332,6 +333,30 @@ async def _run_daily_summary_scheduler():
         await asyncio.sleep(60)  # safety gap to avoid double-fire
 
 
+async def _run_signature_summary_scheduler():
+    """Every morning at 09:00 Santiago, send T&C signature summary for today's bookings."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    SEND_HOUR = 9  # 09:00 Santiago
+
+    while True:
+        now = datetime.now(CHILE_TZ)
+        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_secs = (target - now).total_seconds()
+        logger.info("✍️ Signature summary scheduled in %.0f min (at %s Santiago)", wait_secs / 60, target.strftime("%H:%M %d/%m"))
+        await asyncio.sleep(wait_secs)
+        try:
+            from app.booking.signatures_email import run_daily_signature_summary_sweep
+            result = await asyncio.to_thread(run_daily_signature_summary_sweep)
+            logger.info("✍️ Signature summary sweep: %s", result)
+        except Exception as _e:
+            logger.error("Signature summary scheduler error: %s", _e)
+        await asyncio.sleep(60)
+
+
 def _ensure_extras_visibility_table():
     """Create extras_visibility table if it doesn't exist (survives Sheets re-sync)."""
     try:
@@ -385,16 +410,25 @@ async def lifespan(app: FastAPI):
         seed_email_workflow_defaults()
     except Exception as _e:
         logger.warning(f"Email workflow seed skipped: {_e}")
+    # Ensure signatures table exists
+    try:
+        from app.booking.db import ensure_signatures_table
+        ensure_signatures_table()
+    except Exception as _e:
+        logger.warning(f"ensure_signatures_table skipped: {_e}")
+
     sync_task    = asyncio.create_task(_run_auto_sync())
     email_task   = asyncio.create_task(_run_email_sweeps_scheduler())
     pending_task = asyncio.create_task(_run_pending_payment_email_scheduler())
     daily_task   = asyncio.create_task(_run_daily_summary_scheduler())
+    sig_task     = asyncio.create_task(_run_signature_summary_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
     logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 1 h)")
     logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
     logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
+    logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
     yield
-    for task in (sync_task, email_task, pending_task, daily_task):
+    for task in (sync_task, email_task, pending_task, daily_task, sig_task):
         task.cancel()
         try:
             await task
@@ -441,6 +475,7 @@ conversation_manager = ConversationManager()
 app.include_router(booking_router)
 app.include_router(admin_router)
 app.include_router(content_router)
+app.include_router(signatures_router)
 
 
 @app.get("/", response_class=HTMLResponse)
