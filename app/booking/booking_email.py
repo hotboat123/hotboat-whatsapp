@@ -737,8 +737,33 @@ def send_email_for_trigger_with_data(trigger: str, to_addr: str,
     bt = str(data.get("booking_time") or data.get("hora") or "")
     if len(bt) >= 5:
         bt = bt[:5]
+    # Derive booking_ref (for display) and firma_ref (for the signing URL).
+    # firma_ref must be resolvable by the /firma/ system:
+    #   HB-xxx → hotboat_appointments
+    #   AA-{int} → all_appointments
+    # MANUAL-xxx / source_id-only refs use AA-{id} for the signing link.
+    apt_id = data.get("id") or data.get("appointment_id_int")
+    raw_ref = str(data.get("booking_ref") or "").strip()
+    source_id = str(data.get("source_id") or "").strip()
+
+    # Display ref (shown in the email body)
+    booking_ref = raw_ref or source_id or (f"AA-{apt_id}" if apt_id else "")
+
+    # Firma ref: web bookings keep HB-xxx, everything else uses AA-{id}
+    if source_id and not raw_ref.startswith("MANUAL"):
+        firma_ref = source_id          # HB-xxx
+    elif apt_id:
+        firma_ref = f"AA-{apt_id}"    # universal ref for all_appointments
+    elif raw_ref and not raw_ref.startswith("MANUAL"):
+        firma_ref = raw_ref
+    else:
+        firma_ref = ""
+
+    base_url = _get_base_url()
+    firma_url = f"{base_url}/firma/{firma_ref}" if firma_ref and base_url else ""
+
     ctx: Dict[str, str] = {
-        "booking_ref":      str(data.get("booking_ref") or data.get("source_id") or ""),
+        "booking_ref":      booking_ref,
         "customer_name":    str(data.get("customer_name") or data.get("nombre_cliente") or "Cliente"),
         "customer_email":   to_addr,
         "customer_phone":   str(data.get("customer_phone") or data.get("telefono") or ""),
@@ -754,6 +779,7 @@ def send_email_for_trigger_with_data(trigger: str, to_addr: str,
         "business_phone":   getattr(s, "business_phone", ""),
         "business_email":   getattr(s, "business_email", ""),
         "business_website": getattr(s, "business_website", ""),
+        "firma_url":        firma_url,
     }
     return _render_and_send(trigger, to_addr, ctx)
 

@@ -241,21 +241,22 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                 with get_connection() as conn3:
                     with conn3.cursor() as cur3:
                         cur3.execute(
-                            f"SELECT email, nombre_cliente, telefono, fecha, hora, "
+                            f"SELECT id, email, nombre_cliente, telefono, fecha, hora, "
                             f"num_personas, ingreso_total, ingreso_reserva, ingreso_extras, "
                             f"source_id, source FROM {TABLE} WHERE id=%s",
                             (rid,)
                         )
                         rr = cur3.fetchone()
                 if rr:
-                    email_to = (rr[0] or "").strip()
+                    email_to = (rr[1] or "").strip()
                     row_data = {
-                        "nombre_cliente": rr[1], "telefono": rr[2],
-                        "fecha": str(rr[3]) if rr[3] else "",
-                        "hora": str(rr[4])[:5] if rr[4] else "",
-                        "num_personas": rr[5],
-                        "ingreso_total": rr[6], "ingreso_reserva": rr[7], "ingreso_extras": rr[8],
-                        "source_id": rr[9], "source": rr[10],
+                        "id": rr[0],
+                        "nombre_cliente": rr[2], "telefono": rr[3],
+                        "fecha": str(rr[4]) if rr[4] else "",
+                        "hora": str(rr[5])[:5] if rr[5] else "",
+                        "num_personas": rr[6],
+                        "ingreso_total": rr[7], "ingreso_reserva": rr[8], "ingreso_extras": rr[9],
+                        "source_id": rr[10], "source": rr[11],
                         "status": updates["status"],
                     }
                     new_status = updates["status"]
