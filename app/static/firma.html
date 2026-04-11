@@ -17,8 +17,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 /* Header */
 .header{background:linear-gradient(135deg,#0a1628 0%,#1a3a6e 100%);
         color:#fff;padding:1.4rem 1rem;text-align:center}
-.header .logo{font-size:2rem;margin-bottom:.3rem}
-.header h1{font-size:1.1rem;font-weight:700;margin-bottom:.15rem}
+.header .logo img{height:72px;width:auto;display:block;margin:0 auto .3rem}
 .header p{font-size:.82rem;opacity:.8}
 .booking-badge{display:inline-flex;align-items:center;gap:.5rem;
   background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);
@@ -69,13 +68,6 @@ input.fi::placeholder{color:#adb5bd}
           font-size:.85rem;transition:all .2s}
 .booking-option.selected .bo-check{background:var(--blue);border-color:var(--blue);color:#fff}
 
-/* TC block */
-.tc-box{border:1.5px solid var(--border);border-radius:10px;padding:.9rem;
-        max-height:200px;overflow-y:auto;font-size:.8rem;line-height:1.6;
-        color:var(--muted);background:#fafafa;margin-bottom:1rem}
-.tc-box h4{color:var(--text);font-size:.85rem;margin-bottom:.5rem}
-.tc-box ol{padding-left:1.2rem}
-.tc-box li{margin-bottom:.4rem}
 
 .accept-row{display:flex;align-items:flex-start;gap:.7rem;cursor:pointer;
             padding:.75rem;border:2px solid var(--border);border-radius:10px;
@@ -134,8 +126,10 @@ input.fi::placeholder{color:#adb5bd}
 <body>
 
 <div class="header">
-  <div class="logo">⛵</div>
-  <h1>HotBoat Chile</h1>
+  <div class="logo" id="header-logo">
+    <img src="/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png" alt="HotBoat"
+         onerror="this.outerHTML='⛵'">
+  </div>
   <p>Firma de Términos y Condiciones</p>
   <div class="booking-badge" id="header-badge" style="display:none">
     <span>📅</span>
@@ -184,9 +178,9 @@ input.fi::placeholder{color:#adb5bd}
       </div>
 
       <div class="form-group">
-        <label class="fl" for="f-email">Email</label>
+        <label class="fl" for="f-email">Email *</label>
         <input class="fi" type="email" id="f-email" placeholder="juan@ejemplo.com" autocomplete="email">
-        <div class="error-msg" id="err-email">Ingresa un email válido</div>
+        <div class="error-msg" id="err-email">El email es obligatorio e debe ser válido</div>
       </div>
 
       <div class="form-group">
@@ -218,19 +212,17 @@ input.fi::placeholder{color:#adb5bd}
 
     <div class="card">
       <div class="card-title">📄 Términos y Condiciones</div>
-      <div class="tc-box">
-        <h4>Términos y Condiciones — HotBoat Chile</h4>
-        <ol>
-          <li>El pasajero declara encontrarse en buen estado de salud y no presentar condiciones que contraindiquen la actividad náutica.</li>
-          <li>El pasajero acepta respetar las instrucciones de seguridad impartidas por el capitán y la tripulación en todo momento.</li>
-          <li>Queda estrictamente prohibido el consumo de alcohol en exceso, el uso de drogas y cualquier conducta que ponga en riesgo la seguridad propia o de los demás pasajeros.</li>
-          <li>El pasajero exime a HotBoat Chile de toda responsabilidad por daños o lesiones producidos por incumplimiento de estas normas o por descuido propio.</li>
-          <li>El operador se reserva el derecho a cancelar o interrumpir la actividad por condiciones climáticas adversas, sin derecho a reclamo adicional más allá del reembolso acordado.</li>
-          <li>Las fotografías y videos tomados durante la actividad podrán ser utilizados por HotBoat Chile con fines promocionales, salvo indicación contraria por escrito.</li>
-          <li>Los menores de 18 años deben contar con la autorización firmada de un adulto responsable presente en la embarcación.</li>
-          <li>El pasajero reconoce haber leído, comprendido y aceptado la totalidad de estos términos al marcar la casilla de aceptación.</li>
-        </ol>
-      </div>
+
+      <a href="https://hotboatchile.com/es/terms-conditions/" target="_blank" rel="noopener"
+         style="display:block;text-align:center;background:linear-gradient(135deg,#0a1628,#1a3a6e);
+                color:#fff;text-decoration:none;border-radius:12px;padding:1rem 1.2rem;
+                font-size:1rem;font-weight:700;letter-spacing:.3px;margin-bottom:1rem;
+                box-shadow:0 4px 14px rgba(10,22,40,.25);">
+        📄 Ver Términos y Condiciones
+        <span style="display:block;font-size:.75rem;font-weight:400;opacity:.75;margin-top:.2rem">
+          hotboatchile.com/es/terms-conditions
+        </span>
+      </a>
 
       <label class="accept-row" id="accept-row" onclick="toggleAccept()">
         <input type="checkbox" id="f-accept" style="pointer-events:none">
@@ -380,7 +372,7 @@ function validate(){
   else{ hide('err-name'); fi('f-name',false); }
 
   const email=(document.getElementById('f-email').value||'').trim();
-  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ show('err-email'); fi('f-email',true); ok=false; }
+  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ show('err-email'); fi('f-email',true); ok=false; }
   else{ hide('err-email'); fi('f-email',false); }
 
   if(!document.getElementById('f-accept').checked){ show('err-accept'); ok=false; }
