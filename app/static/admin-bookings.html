@@ -1005,6 +1005,7 @@ let _expAddon=[];        // [{key,name,date,qty,unit_price}]
 let ALOJ_CATALOG=[];     // loaded from /api/admin/alojamientos
 let EXP_CATALOG=[];      // loaded from /api/admin/experiencias
 let _descuentos=[];      // working copy for current modal: [{amount,type,note}]
+let _currentReservaData = null; // full reservation object for current modal
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 function doLogin(){
@@ -1688,6 +1689,10 @@ async function openModal(id){
           style="background:rgba(37,211,102,.15);color:#25d366;border:1px solid rgba(37,211,102,.35);border-radius:8px;padding:.5rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">
           💳 Solicitar Pago
         </button>
+        <button onclick="generarRecibo()" title="Generar boleta/recibo imprimible"
+          style="background:rgba(74,158,255,.12);color:#4a9eff;border:1px solid rgba(74,158,255,.35);border-radius:8px;padding:.5rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">
+          🧾 Recibo
+        </button>
         <button class="btn-del" onclick="closeModal()" style="margin-left:auto">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
@@ -1707,6 +1712,7 @@ async function openModal(id){
     }
 
     // Call these AFTER setting innerHTML
+    _currentReservaData = r;
     initPagos(r.pagos||[]);
     initDescuentos(r.descuentos||[]);
     initExtrasEditor(r.extras_json||{});
@@ -3862,6 +3868,188 @@ async function deleteExtrasBooking(id){
   if(!confirm('¿Eliminar esta reserva?')) return;
   await fetch(`/api/admin/extras-bookings/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
   await loadCalExtras(); showToast('Eliminada');
+}
+
+// ── Generador de recibo/boleta ────────────────────────────────────────────────
+function generarRecibo(){
+  const r = _currentReservaData;
+  if(!r){ showToast('No hay reserva cargada'); return; }
+
+  const $ = v => v||'';
+  const money = n => n!=null&&n!=='' ? '$'+Math.round(+n).toLocaleString('es-CL') : '—';
+
+  // Fecha formateada
+  const fechaFmt = r.fecha ? (() => {
+    const [y,m,d] = r.fecha.split('-');
+    return `${d}/${m}/${y}`;
+  })() : '—';
+  const horaFmt = r.hora ? r.hora.substring(0,5) : '—';
+
+  // Extras desde el editor activo (_extrasItems + addons)
+  const extrasRows = [];
+  _extrasItems.forEach(it=>{
+    if((+it.qty||0)>0){
+      const cat = EXTRAS_CATALOG.find(e=>e.key===it.key);
+      extrasRows.push({ name: cat?.name||it.key, qty: it.qty, unit: it.unit_price, total: (+it.qty)*(+it.unit_price) });
+    }
+  });
+  (_alojAddon||[]).forEach(it=>{
+    extrasRows.push({ name: it.name||it.key, qty: `${it.nights||1} noche(s)`, unit: it.unit_price, total: (+it.nights||1)*(+it.unit_price) });
+  });
+  (_expAddon||[]).forEach(it=>{
+    if((+it.qty||0)>0)
+      extrasRows.push({ name: it.name||it.key, qty: it.qty, unit: it.unit_price, total: (+it.qty)*(+it.unit_price) });
+  });
+
+  // Descuentos
+  const descRows = _descuentos.filter(d=>(+d.amount||0)>0);
+
+  // Totales
+  const precioBase   = +r.ingreso_reserva||0;
+  const totalExtras  = extrasRows.reduce((s,e)=>s+(+e.total||0),0);
+  const totalDesc    = descRows.reduce((s,d)=>s+(+d.amount||0),0);
+  const totalFinal   = precioBase + totalExtras - totalDesc;
+  const totalPagado  = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
+  const saldoPend    = totalFinal - totalPagado;
+
+  // Número de referencia
+  const ref = r.appointment_id||r.source_id||r.id||'—';
+
+  // Método(s) de pago únicos
+  const metodosUsados = [...new Set(_pagos.filter(p=>p.method).map(p=>p.method))].join(', ') || '—';
+
+  // ── HTML del recibo ──────────────────────────────────────────────────────
+  const extrasHtml = extrasRows.length ? extrasRows.map(e=>`
+    <tr>
+      <td style="padding:.45rem .6rem">${e.name}</td>
+      <td style="padding:.45rem .6rem;text-align:center">${e.qty}</td>
+      <td style="padding:.45rem .6rem;text-align:right">${money(e.unit)}</td>
+      <td style="padding:.45rem .6rem;text-align:right;font-weight:600">${money(e.total)}</td>
+    </tr>`).join('') : `<tr><td colspan="4" style="padding:.45rem .6rem;color:#888">Sin extras</td></tr>`;
+
+  const descHtml = descRows.length ? descRows.map(d=>`
+    <tr style="color:#e55">
+      <td colspan="3" style="padding:.35rem .6rem">Descuento${d.note?` — ${d.note}`:''}</td>
+      <td style="padding:.35rem .6rem;text-align:right;font-weight:600">− ${money(d.amount)}</td>
+    </tr>`).join('') : '';
+
+  const pagosHtml = _pagos.filter(p=>+p.amount>0).map(p=>`
+    <tr>
+      <td style="padding:.45rem .6rem;text-transform:capitalize">${p.method||'—'}</td>
+      <td style="padding:.45rem .6rem">${p.date||'—'}</td>
+      <td style="padding:.45rem .6rem;text-align:right;font-weight:700;color:#1a7a3a">${money(p.amount)}</td>
+    </tr>`).join('') || `<tr><td colspan="3" style="padding:.45rem .6rem;color:#888">Sin pagos registrados</td></tr>`;
+
+  const saldoHtml = saldoPend > 0
+    ? `<div style="margin-top:1rem;padding:.7rem 1rem;background:#fff3cd;border:1px solid #f0c040;border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+         <span style="font-weight:600;color:#7a5a00">💸 Saldo pendiente</span>
+         <span style="font-weight:800;font-size:1.1rem;color:#b85000">${money(saldoPend)}</span>
+       </div>`
+    : `<div style="margin-top:1rem;padding:.7rem 1rem;background:#d4edda;border:1px solid #4caf50;border-radius:8px;text-align:center;font-weight:700;color:#1a7a3a">✅ Pago completo</div>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Recibo HotBoat – ${$(r.nombre_cliente)} – ${fechaFmt}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f5f7fa;color:#1a1a2e;font-size:14px;padding:2rem}
+  .page{max-width:680px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.1)}
+  .header{background:linear-gradient(135deg,#0d1b4e 0%,#1a3a7a 100%);padding:2rem;text-align:center;color:#fff}
+  .header h1{font-size:1.8rem;font-weight:800;letter-spacing:.5px;margin-bottom:.2rem}
+  .header p{color:#a8c4ff;font-size:.85rem}
+  .recibo-num{display:inline-block;background:rgba(255,255,255,.15);border-radius:20px;padding:.25rem .9rem;font-size:.8rem;margin-top:.6rem;color:#e8d87a;font-weight:700;letter-spacing:.05em}
+  .body{padding:1.5rem 2rem}
+  .section-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#7070a0;margin-bottom:.6rem;margin-top:1.4rem;border-bottom:1px solid #e8e8f0;padding-bottom:.3rem}
+  .client-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .8rem}
+  .client-field label{font-size:.7rem;color:#888;display:block;margin-bottom:.1rem}
+  .client-field span{font-weight:600;color:#1a1a2e}
+  table{width:100%;border-collapse:collapse;font-size:.88rem}
+  thead th{background:#f0f2f8;padding:.5rem .6rem;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:#7070a0}
+  thead th:last-child{text-align:right}
+  tbody tr:nth-child(even){background:#fafafe}
+  .total-row td{padding:.55rem .6rem;font-weight:700;font-size:1rem;background:#f0f2f8}
+  .total-row td:last-child{text-align:right;color:#1a3a7a;font-size:1.1rem}
+  .footer{background:#f5f7fa;padding:1rem 2rem;text-align:center;font-size:.75rem;color:#999;border-top:1px solid #e8e8f0}
+  @media print{
+    body{background:#fff;padding:0}
+    .page{box-shadow:none;border-radius:0}
+    .no-print{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <h1>🚤 HotBoat</h1>
+    <p>Hot Boat Villarrica · Pucón</p>
+    <div class="recibo-num">RECIBO #${ref}</div>
+  </div>
+  <div class="body">
+
+    <div class="section-title">Datos del cliente</div>
+    <div class="client-grid">
+      <div class="client-field"><label>Cliente</label><span>${$(r.nombre_cliente)||'—'}</span></div>
+      <div class="client-field"><label>Teléfono</label><span>${$(r.telefono)||'—'}</span></div>
+      <div class="client-field"><label>Email</label><span>${$(r.email)||'—'}</span></div>
+      <div class="client-field"><label>Personas</label><span>${r.num_personas||'—'}</span></div>
+      <div class="client-field"><label>Fecha</label><span>${fechaFmt}</span></div>
+      <div class="client-field"><label>Hora</label><span>${horaFmt}</span></div>
+    </div>
+
+    <div class="section-title">Detalle del servicio</div>
+    <table>
+      <thead><tr><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
+      <tbody>
+        <tr>
+          <td style="padding:.45rem .6rem">HotBoat Trip — experiencia náutica</td>
+          <td style="padding:.45rem .6rem;text-align:center">${r.num_personas||1} persona(s)</td>
+          <td style="padding:.45rem .6rem;text-align:right">${r.num_personas>0?money(Math.round(precioBase/(r.num_personas||1))):'—'}</td>
+          <td style="padding:.45rem .6rem;text-align:right;font-weight:600">${money(precioBase)}</td>
+        </tr>
+        ${extrasHtml}
+        ${descHtml}
+        <tr class="total-row">
+          <td colspan="3">TOTAL</td>
+          <td>${money(totalFinal)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="section-title">Pagos recibidos</div>
+    <table>
+      <thead><tr><th>Método de pago</th><th>Fecha</th><th style="text-align:right">Monto</th></tr></thead>
+      <tbody>
+        ${pagosHtml}
+        <tr style="border-top:2px solid #e8e8f0">
+          <td colspan="2" style="padding:.55rem .6rem;font-weight:700">Total pagado</td>
+          <td style="padding:.55rem .6rem;text-align:right;font-weight:800;color:#1a7a3a;font-size:1rem">${money(totalPagado)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    ${saldoHtml}
+
+    <div style="margin-top:1.5rem;text-align:right">
+      <button onclick="window.print()" class="no-print"
+        style="background:#1a3a7a;color:#fff;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.9rem;font-weight:700;cursor:pointer">
+        🖨️ Imprimir / Guardar PDF
+      </button>
+    </div>
+  </div>
+  <div class="footer">
+    Documento generado el ${new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}
+    &nbsp;·&nbsp; HotBoat Chile &nbsp;·&nbsp; hotboatchile.com
+  </div>
+</div>
+</body>
+</html>`;
+
+  const win = window.open('','_blank');
+  if(!win){ showToast('Permite popups para generar el recibo'); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 // Pre-render calendars so they display immediately when the section is opened
