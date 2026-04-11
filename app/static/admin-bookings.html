@@ -1717,7 +1717,7 @@ async function openModal(id){
               📧 Enviar resumen
             </button>
           </div>
-          <input type="hidden" id="_bref_val" value="${r.booking_ref||(r.source==='hotboat_web'?r.source_id:'')||''}">
+          <input type="hidden" id="_bref_val" value="${r.booking_ref||''}">
         </div>
         <div id="firma-list" style="font-size:.82rem;color:var(--muted)">Cargando firmas...</div>
       </div>
@@ -1735,10 +1735,8 @@ async function openModal(id){
         <button class="btn-del" onclick="closeModal()" style="margin-left:auto">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
-      // Derive booking_ref: for web bookings source_id IS the booking_ref
-      const _bref = r.booking_ref || (r.source === 'hotboat_web' ? r.source_id : '') || '';
-      // Load signatures asynchronously after rendering modal
-      loadFirmas(_bref, parseInt(r.num_personas)||0);
+      // booking_ref is always set by backend (HB-xxx for web, AA-{id} for others)
+      loadFirmas(r.booking_ref||'', parseInt(r.num_personas)||0);
     // WhatsApp contact button
     const waBtn = document.getElementById('wa-contact-btn');
     if(waBtn){
@@ -1785,7 +1783,7 @@ async function loadFirmas(bookingRef, numPersonas){
   const countEl = document.getElementById('firma-count');
   if(!listEl) return;
   if(!bookingRef){
-    listEl.innerHTML = `<span style="color:var(--muted);font-size:.8rem">Las firmas T&amp;C solo están disponibles para reservas online (fuente: hotboat_web).</span>`;
+    listEl.innerHTML = `<span style="color:var(--muted);font-size:.8rem">Sin referencia de reserva.</span>`;
     return;
   }
   try{

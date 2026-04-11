@@ -135,10 +135,14 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
                 for k in ("ingreso_reserva", "ingreso_extras", "ingreso_total",
                           "costo_operativo_fijo", "costo_operativo_variable", "costo_operativo_total"):
                     if r.get(k) is not None: r[k] = float(r[k])
-                # Derive booking_ref: for web bookings source_id IS the booking_ref
+                # Ensure every reservation has a usable booking_ref for T&C firma links.
+                # hotboat_web bookings: source_id IS the booking_ref (HB-xxxx).
+                # All others: AA-{id} is a stable universal ref.
                 if not r.get("booking_ref"):
                     if r.get("source") == "hotboat_web" and r.get("source_id"):
                         r["booking_ref"] = r["source_id"]
+                    else:
+                        r["booking_ref"] = f"AA-{r['id']}"
                 return r
     except HTTPException:
         raise
@@ -664,9 +668,10 @@ async def get_firmas(booking_ref: str, x_admin_key: str = Header("")):
 async def send_firmas_summary(booking_ref: str, x_admin_key: str = Header("")):
     """Manually trigger the signature summary email for a booking."""
     _check_auth(x_admin_key)
-    from app.booking.db import get_signatures_by_booking_ref, get_booking_by_ref
+    from app.booking.db import get_signatures_by_booking_ref
+    from app.booking.signatures_router import _resolve_booking
     from app.booking.signatures_email import send_booking_signature_summary
-    booking = get_booking_by_ref(booking_ref)
+    booking = _resolve_booking(booking_ref)
     if not booking:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
     sigs = get_signatures_by_booking_ref(booking_ref)
