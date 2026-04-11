@@ -1087,9 +1087,10 @@ function renderCal(){
   const daysInMonth = new Date(calYear,calMonth+1,0).getDate();
   const today = new Date(); today.setHours(0,0,0,0);
 
-  // Group reservas by date
+  // Group reservas by date (skip status=null rows — those are unconfirmed imports)
   const byDate={};
   allReservas.forEach(r=>{
+    if(!r.status) return;
     const d = r.fecha?.substring(0,10);
     const [y,m] = d?d.split('-').map(Number):[];
     if(y===calYear && m===calMonth+1){
@@ -1131,7 +1132,7 @@ function renderCal(){
 }
 
 function showDayReservas(dateStr){
-  const rsvs=(allReservas||[]).filter(r=>r.fecha?.startsWith(dateStr));
+  const rsvs=(allReservas||[]).filter(r=>r.fecha?.startsWith(dateStr) && r.status);
   if(!rsvs.length) return;
   if(rsvs.length===1){ openModal(rsvs[0].id); return; }
   const rows=rsvs.map(r=>`
