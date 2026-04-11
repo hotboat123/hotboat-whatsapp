@@ -334,7 +334,7 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
         </p>
         <p style="margin:0;color:#fde68a;font-size:12px;line-height:1.6;">
           Antes de subir al HotBoat, cada integrante adulto del grupo debe aceptar<br>
-          los T&amp;C a través del siguiente link personal de tu reserva:
+          los T&amp;C a través del siguiente link:
         </p>
         <p style="margin:10px 0 0;">
           <a href="{firma_url}" style="color:#fbbf24;font-weight:700;font-size:12px;word-break:break-all;">{firma_url}</a>
@@ -403,7 +403,7 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
         </p>
         <p style="margin:0;color:#fde68a;font-size:12px;line-height:1.6;">
           Antes de subir al HotBoat, cada integrante adulto del grupo debe aceptar<br>
-          los T&amp;C a través del siguiente link personal de tu reserva:
+          los T&amp;C a través del siguiente link:
         </p>
         <p style="margin:10px 0 0;">
           <a href="{firma_url}" style="color:#fbbf24;font-weight:700;font-size:12px;word-break:break-all;">{firma_url}</a>
