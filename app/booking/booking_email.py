@@ -460,6 +460,37 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
     )
 
 
+def _default_html_admin_booking_confirmed(ctx: Dict[str, str]) -> str:
+    return (
+        _header(ctx, "✅ Reserva confirmada y pagada", "#16a34a")
+        + f"""<tr><td style="padding:22px 26px 6px;color:#0f172a;font-size:15px;line-height:1.65;">
+  <p style="margin:0 0 10px;">El cliente completó el pago. Aquí están los detalles:</p>
+</td></tr>
+<tr><td style="padding:0 26px 20px;">
+  <table role="presentation" width="100%" style="background:#f0fdf4;border-radius:10px;
+         border:1px solid #bbf7d0;font-size:14px;color:#166534;">
+    <tr><td style="padding:12px 16px"><strong>Nombre</strong></td>
+        <td style="padding:12px 16px;text-align:right">{ctx.get('customer_name','')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #bbf7d0"><strong>Teléfono</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #bbf7d0;text-align:right">{ctx.get('customer_phone','')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #bbf7d0"><strong>Email</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #bbf7d0;text-align:right">{ctx.get('customer_email','—')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #bbf7d0"><strong>Fecha</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #bbf7d0;text-align:right">{ctx.get('booking_date','')} {ctx.get('booking_time','')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #bbf7d0"><strong>Personas</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #bbf7d0;text-align:right">{ctx.get('num_people','')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #bbf7d0"><strong>Total</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #bbf7d0;text-align:right;font-weight:bold">{ctx.get('total_price_fmt','')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #bbf7d0"><strong>Ref</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #bbf7d0;text-align:right;font-family:monospace">{ctx.get('booking_ref','')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #bbf7d0"><strong>Estado</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #bbf7d0;text-align:right;color:#16a34a;font-weight:bold">✅ confirmada</td></tr>
+  </table>
+</td></tr>"""
+        + _footer(ctx)
+    )
+
+
 def _default_html_customer_birthday(ctx: Dict[str, str]) -> str:
     return (
         _header(ctx, "¡Feliz cumpleaños! 🎂", "linear-gradient(135deg,#7c3aed,#db2777)")
@@ -480,13 +511,14 @@ def _default_html_customer_birthday(ctx: Dict[str, str]) -> str:
 
 
 _DEFAULT_TEMPLATES = {
-    "booking_created":        _default_html_booking_created,
-    "booking_confirmed":      _default_html_booking_confirmed,
-    "booking_cancelled":      _default_html_booking_cancelled,
-    "booking_status_changed": _default_html_booking_status_changed,
-    "booking_followup":       _default_html_booking_followup,
-    "admin_new_lead":         _default_html_admin_new_lead,
-    "customer_birthday":      _default_html_customer_birthday,
+    "booking_created":           _default_html_booking_created,
+    "booking_confirmed":         _default_html_booking_confirmed,
+    "booking_cancelled":         _default_html_booking_cancelled,
+    "booking_status_changed":    _default_html_booking_status_changed,
+    "booking_followup":          _default_html_booking_followup,
+    "admin_new_lead":            _default_html_admin_new_lead,
+    "admin_booking_confirmed":   _default_html_admin_booking_confirmed,
+    "customer_birthday":         _default_html_customer_birthday,
 }
 
 
@@ -816,7 +848,13 @@ def run_pending_payment_email_sweep(delay_minutes: int = 5) -> dict:
 # ── Legacy aliases (backwards compat) ─────────────────────────────────────────
 
 def try_send_booking_confirmation_after_payment(booking_ref: str) -> Dict[str, Any]:
-    return send_email_for_trigger("booking_confirmed", booking_ref)
+    result = send_email_for_trigger("booking_confirmed", booking_ref)
+    # Also notify the operator
+    try:
+        send_email_for_trigger("admin_booking_confirmed", booking_ref)
+    except Exception as _e:
+        logger.warning("admin_booking_confirmed email: %s", _e)
+    return result
 
 
 def send_test_booking_email(to_address: str) -> Dict[str, Any]:

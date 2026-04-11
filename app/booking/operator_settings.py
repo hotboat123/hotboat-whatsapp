@@ -449,6 +449,16 @@ TRIGGER_META: dict = {
         "icon": "🔔",
         "recipient": "admin",
     },
+    "admin_booking_confirmed": {
+        "label": "Pago confirmado (notificación al operador)",
+        "description": (
+            "Se envía AL ADMINISTRADOR (no al cliente) cuando el pago queda confirmado. "
+            "Ideal para recibir la notificación de nueva reserva pagada en tu correo."
+        ),
+        "default_subject": "✅ Reserva pagada: {{customer_name}} — {{booking_date}} {{booking_time}}",
+        "icon": "✅",
+        "recipient": "admin",
+    },
     "customer_birthday": {
         "label": "Cumpleaños del cliente",
         "description": (
@@ -461,7 +471,7 @@ TRIGGER_META: dict = {
 }
 
 # Triggers activos por defecto
-_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed", "booking_created", "admin_new_lead"}
+_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed", "booking_created", "admin_new_lead", "admin_booking_confirmed"}
 
 
 def seed_email_workflow_defaults() -> None:
