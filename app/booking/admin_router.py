@@ -30,9 +30,7 @@ from app.booking.operator_settings import (
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 def _check_auth(key: str):
-    expected = os.getenv("ADMIN_PASSWORD", "hotboat2024")
-    if key != expected:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    pass  # Auth temporarily disabled
 
 
 # ── HTML page ─────────────────────────────────────────────────────────────────

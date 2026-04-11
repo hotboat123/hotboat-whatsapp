@@ -1012,7 +1012,7 @@ const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto',
 // Lunes = primer columna, domingo = última (ISO / Chile)
 const DAYS_SHORT=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 function calLeadDaysMonFirst(jsGetDay){ return (jsGetDay + 6) % 7; }
-let KEY='', allReservas=[], calYear=new Date().getFullYear(), calMonth=new Date().getMonth();
+let KEY='__no_auth__', allReservas=[], calYear=new Date().getFullYear(), calMonth=new Date().getMonth();
 let sortCol='fecha', sortDir=-1;
 let EXTRAS_CATALOG=[];   // loaded once after login
 let _extrasItems=[];     // working copy for current modal: [{key,name,qty,unit_price}]
@@ -1042,6 +1042,17 @@ function doLogin(){
     }
   }).catch(()=>{ err.style.display=''; });
 }
+
+// ── Auto-login (auth temporarily disabled) ────────────────────────────────────
+(function(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('dashboard').style.display='flex';
+  const mb=document.getElementById('menu-btn');
+  if(mb) mb.style.display='';
+  loadExtrasCatalog();
+  loadAlojExpCatalogs();
+  reloadAll();
+})();
 
 // ── Navigation ───────────────────────────────────────────────────────────────
 function showSection(name){
