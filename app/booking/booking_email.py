@@ -347,14 +347,14 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
     cta_rows = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", website, solid=True)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
       <td width="50%" style="padding-left:6px;">{_cta_btn("✍️ Firmar T&C", firma_url, solid=False)}</td>
     </tr>
     </table>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn("🎬 Video instructivo", website, solid=False)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn("🍹 Tablas y bebestibles", website, solid=False)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn("🎬 Video instructivo", "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn("🍹 Tablas y bebestibles", "https://hotboatchile.com/tablas/", solid=False)}</td>
     </tr>
     </table>"""
 
@@ -416,14 +416,14 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
     cta_rows = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", website, solid=True)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
       <td width="50%" style="padding-left:6px;">{_cta_btn("✍️ Firmar T&C", firma_url, solid=False)}</td>
     </tr>
     </table>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn("🎬 Video instructivo", website, solid=False)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn("🍹 Tablas y bebestibles", website, solid=False)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn("🎬 Video instructivo", "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn("🍹 Tablas y bebestibles", "https://hotboatchile.com/tablas/", solid=False)}</td>
     </tr>
     </table>"""
 
