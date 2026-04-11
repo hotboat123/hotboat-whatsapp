@@ -31,13 +31,27 @@ def _apply_template(template: str, ctx: Dict[str, str]) -> str:
     return _PLACEHOLDER.sub(lambda m: ctx.get(m.group(1), ""), template)
 
 
+def _get_base_url() -> str:
+    """Return the public base URL of this deployment (no trailing slash)."""
+    import os as _os
+    domain = _os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if domain:
+        return f"https://{domain}"
+    s = get_settings()
+    website = (getattr(s, "business_website", "") or "").rstrip("/")
+    return website or ""
+
+
 def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     s = get_settings()
     bt = str(booking.get("booking_time") or "")
     if len(bt) >= 5:
         bt = bt[:5]
+    booking_ref = str(booking.get("booking_ref") or "")
+    base_url = _get_base_url()
+    firma_url = f"{base_url}/firma/{booking_ref}" if booking_ref and base_url else ""
     ctx = {
-        "booking_ref":      str(booking.get("booking_ref") or ""),
+        "booking_ref":      booking_ref,
         "customer_name":    str(booking.get("customer_name") or "").strip() or "Cliente",
         "customer_email":   str(booking.get("customer_email") or "").strip(),
         "customer_phone":   str(booking.get("customer_phone") or "").strip(),
@@ -54,6 +68,7 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
         "business_phone":   getattr(s, "business_phone", ""),
         "business_email":   getattr(s, "business_email", ""),
         "business_website": getattr(s, "business_website", ""),
+        "firma_url":        firma_url,
     }
     if extra:
         ctx.update(extra)
@@ -62,8 +77,10 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
 
 def _sample_ctx(to_addr: str) -> Dict[str, str]:
     s = get_settings()
+    base_url = _get_base_url()
+    demo_ref = "HB-2026-DEMO1"
     return {
-        "booking_ref":      "HB-2026-DEMO1",
+        "booking_ref":      demo_ref,
         "customer_name":    "Cliente de prueba",
         "customer_email":   to_addr,
         "customer_phone":   "+56 9 0000 0000",
@@ -80,6 +97,7 @@ def _sample_ctx(to_addr: str) -> Dict[str, str]:
         "business_phone":   getattr(s, "business_phone", ""),
         "business_email":   getattr(s, "business_email", ""),
         "business_website": getattr(s, "business_website", ""),
+        "firma_url":        f"{base_url}/firma/{demo_ref}" if base_url else "",
     }
 
 
@@ -281,8 +299,9 @@ def _cta_btn(label: str, url: str, solid: bool = True) -> str:
 
 
 def _default_html_booking_created(ctx: Dict[str, str]) -> str:
-    name    = ctx.get("customer_name", "")
-    website = ctx.get("business_website", "#")
+    name      = ctx.get("customer_name", "")
+    website   = ctx.get("business_website", "#")
+    firma_url = ctx.get("firma_url", "") or website
 
     accent = (
         '<td width="33%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
@@ -290,9 +309,9 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
         '<td width="33%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
     )
 
-    payment_note = """
+    payment_note = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-    <tr><td style="padding:0 28px 24px;">
+    <tr><td style="padding:0 28px 16px;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
              style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:12px;">
       <tr><td style="padding:15px 20px;">
@@ -304,13 +323,32 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
       </td></tr>
       </table>
     </td></tr>
+    </table>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+             style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;">
+      <tr><td style="padding:15px 20px;">
+        <p style="margin:0 0 8px;color:#fcd34d;font-size:13px;font-weight:700;">
+          ✍️ Todos los mayores de 18 años deben firmar los Términos y Condiciones
+        </p>
+        <p style="margin:0;color:#fde68a;font-size:12px;line-height:1.6;">
+          Antes de subir al HotBoat, cada integrante adulto del grupo debe aceptar<br>
+          los T&amp;C a través del siguiente link personal de tu reserva:
+        </p>
+        <p style="margin:10px 0 0;">
+          <a href="{firma_url}" style="color:#fbbf24;font-weight:700;font-size:12px;word-break:break-all;">{firma_url}</a>
+        </p>
+      </td></tr>
+      </table>
+    </td></tr>
     </table>"""
 
     cta_rows = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
     <tr>
       <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", website, solid=True)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn("📄 Términos y condiciones", website, solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn("✍️ Firmar T&C", firma_url, solid=False)}</td>
     </tr>
     </table>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
@@ -331,17 +369,18 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
 
 
 def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
-    name    = ctx.get("customer_name", "")
-    website = ctx.get("business_website", "#")
+    name      = ctx.get("customer_name", "")
+    website   = ctx.get("business_website", "#")
+    firma_url = ctx.get("firma_url", "") or website
 
     accent = (
         '<td width="50%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
         '<td width="50%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
     )
 
-    confirmed_note = """
+    confirmed_note = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-    <tr><td style="padding:0 28px 24px;">
+    <tr><td style="padding:0 28px 16px;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
              style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:12px;">
       <tr><td style="padding:15px 20px;">
@@ -353,13 +392,32 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
       </td></tr>
       </table>
     </td></tr>
+    </table>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+             style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;">
+      <tr><td style="padding:15px 20px;">
+        <p style="margin:0 0 8px;color:#fcd34d;font-size:13px;font-weight:700;">
+          ✍️ Todos los mayores de 18 años deben firmar los Términos y Condiciones
+        </p>
+        <p style="margin:0;color:#fde68a;font-size:12px;line-height:1.6;">
+          Antes de subir al HotBoat, cada integrante adulto del grupo debe aceptar<br>
+          los T&amp;C a través del siguiente link personal de tu reserva:
+        </p>
+        <p style="margin:10px 0 0;">
+          <a href="{firma_url}" style="color:#fbbf24;font-weight:700;font-size:12px;word-break:break-all;">{firma_url}</a>
+        </p>
+      </td></tr>
+      </table>
+    </td></tr>
     </table>"""
 
     cta_rows = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
     <tr>
       <td width="50%" style="padding-right:6px;">{_cta_btn("📋 Resumen de reserva", website, solid=True)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn("📄 Términos y condiciones", website, solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn("✍️ Firmar T&C", firma_url, solid=False)}</td>
     </tr>
     </table>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
