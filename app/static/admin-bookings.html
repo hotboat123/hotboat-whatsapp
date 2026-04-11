@@ -517,6 +517,22 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
+      <!-- Daily summary card -->
+      <div class="chart-wrap" style="margin-bottom:1.2rem">
+        <div class="chart-title">📅 Resumen diario de reservas</div>
+        <p style="color:var(--muted);font-size:.83rem;line-height:1.65;margin-bottom:.8rem">
+          Cada mañana a las <strong>08:00</strong> (hora Chile) se envía automáticamente a
+          <strong>hotboatnotification@gmail.com</strong> un resumen con todas las reservas del día,
+          sus extras, y botones de WhatsApp para recordar a cada cliente.
+        </p>
+        <button onclick="sendDailySummaryNow()"
+          style="background:var(--blue);color:#fff;border:none;border-radius:9px;
+                 padding:.5rem 1.2rem;font-size:.85rem;cursor:pointer;font-weight:600">
+          📤 Enviar resumen de hoy ahora
+        </button>
+        <span id="daily-summary-status" style="margin-left:.8rem;font-size:.82rem;color:var(--muted)"></span>
+      </div>
+
       <!-- Workflow cards (rendered by JS) -->
       <div id="email-workflows-list" style="display:flex;flex-direction:column;gap:1rem"></div>
     </div>
@@ -2200,6 +2216,21 @@ async function loadDefaultHtml(trigger){
     if(ta){ ta.value = r.html || ''; ta.focus(); }
     showToast('Plantilla cargada — edítala y guarda ✓');
   }catch(e){ showToast('Error cargando plantilla: '+(e.message||e)); }
+}
+
+async function sendDailySummaryNow(){
+  const btn = event.target;
+  const status = document.getElementById('daily-summary-status');
+  btn.disabled = true;
+  if(status) status.textContent = 'Enviando…';
+  try{
+    const r = await api('/api/admin/daily-summary/send',{method:'POST',body:JSON.stringify({})});
+    showToast(`✅ Resumen enviado (${r.count||0} reservas hoy)`);
+    if(status) status.textContent = `✅ Enviado — ${r.count||0} reservas`;
+  }catch(e){
+    showToast('Error: '+(e.message||e));
+    if(status) status.textContent = '❌ '+(e.message||e);
+  }finally{ btn.disabled = false; }
 }
 
 async function runWorkflowSweep(trigger){

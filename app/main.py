@@ -308,6 +308,30 @@ async def _run_email_sweeps_scheduler():
         await asyncio.sleep(3600)  # re-check every hour
 
 
+async def _run_daily_summary_scheduler():
+    """Every morning at 08:00 Santiago time, send the day's booking summary to the operator."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta, time as dtime
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    SEND_HOUR = 8  # 08:00 Santiago
+
+    while True:
+        now = datetime.now(CHILE_TZ)
+        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_secs = (target - now).total_seconds()
+        logger.info("📅 Daily summary scheduled in %.0f min (at %s Santiago)", wait_secs / 60, target.strftime("%H:%M %d/%m"))
+        await asyncio.sleep(wait_secs)
+        try:
+            from app.booking.booking_email import send_daily_summary_email
+            result = await asyncio.to_thread(send_daily_summary_email)
+            logger.info("📅 Daily summary: %s", result)
+        except Exception as _e:
+            logger.error("Daily summary scheduler error: %s", _e)
+        await asyncio.sleep(60)  # safety gap to avoid double-fire
+
+
 def _ensure_extras_visibility_table():
     """Create extras_visibility table if it doesn't exist (survives Sheets re-sync)."""
     try:
@@ -364,11 +388,13 @@ async def lifespan(app: FastAPI):
     sync_task    = asyncio.create_task(_run_auto_sync())
     email_task   = asyncio.create_task(_run_email_sweeps_scheduler())
     pending_task = asyncio.create_task(_run_pending_payment_email_scheduler())
+    daily_task   = asyncio.create_task(_run_daily_summary_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
     logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 1 h)")
     logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
+    logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
     yield
-    for task in (sync_task, email_task, pending_task):
+    for task in (sync_task, email_task, pending_task, daily_task):
         task.cancel()
         try:
             await task

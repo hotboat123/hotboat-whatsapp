@@ -1,4 +1,5 @@
 """Admin dashboard router — uses all_appointments as single source of truth."""
+import asyncio
 import json
 import logging
 import os
@@ -710,6 +711,17 @@ async def post_email_workflow_test(trigger: str, body: EmailWorkflowTestBody,
         reason = result.get("reason") or "send failed"
         logger.error("Test email failed trigger=%s to=%s: %s", trigger, to_addr, reason)
         raise HTTPException(status_code=500, detail=reason)
+    return {"ok": True, **result}
+
+
+@admin_router.post("/api/admin/daily-summary/send")
+async def send_daily_summary_now(x_admin_key: str = Header("")):
+    """Manually trigger the daily morning summary email (same as the 08:00 job)."""
+    _check_auth(x_admin_key)
+    from app.booking.booking_email import send_daily_summary_email
+    result = await asyncio.to_thread(send_daily_summary_email)
+    if not result.get("sent"):
+        raise HTTPException(status_code=500, detail=result.get("reason", "send failed"))
     return {"ok": True, **result}
 
 

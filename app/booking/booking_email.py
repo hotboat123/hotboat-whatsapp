@@ -859,3 +859,274 @@ def try_send_booking_confirmation_after_payment(booking_ref: str) -> Dict[str, A
 
 def send_test_booking_email(to_address: str) -> Dict[str, Any]:
     return send_test_email_for_trigger("booking_confirmed", to_address)
+
+
+# ── Daily morning summary ─────────────────────────────────────────────────────
+
+_MAPS_URL = "https://maps.app.goo.gl/jVYVHRzekkmFRjEH7"
+_MAPS_EMBED = "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3071.0!2d-71.85!3d-39.28!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sHotBoat!5e0!3m2!1ses!2scl!4v1"
+
+
+def _wa_link(phone: str, message: str) -> str:
+    """Build a wa.me deep-link with a pre-filled message."""
+    import urllib.parse
+    # Normalise phone: keep only digits, strip leading 0, ensure country code
+    digits = "".join(c for c in (phone or "") if c.isdigit())
+    if digits.startswith("0"):
+        digits = digits[1:]
+    if digits and not digits.startswith("56"):
+        digits = "56" + digits
+    if not digits:
+        return "#"
+    return f"https://wa.me/{digits}?text={urllib.parse.quote(message)}"
+
+
+def _extras_summary_html(extras_json: Any) -> str:
+    """Return a compact HTML list of extras, or empty string."""
+    if not extras_json:
+        return ""
+    items: List[str] = []
+    if isinstance(extras_json, dict):
+        for k, v in extras_json.items():
+            if v and k not in ("", None):
+                items.append(f"{k}: {v}")
+    elif isinstance(extras_json, list):
+        for item in extras_json:
+            if isinstance(item, dict):
+                name = item.get("name") or item.get("key") or ""
+                qty  = item.get("qty") or item.get("quantity") or ""
+                if name:
+                    items.append(f"{name}{' ×'+str(qty) if qty else ''}")
+            else:
+                items.append(str(item))
+    if not items:
+        return ""
+    li = "".join(f"<li style='margin:2px 0'>{i}</li>" for i in items)
+    return f"<ul style='margin:4px 0 0 16px;padding:0;font-size:12px;color:#64748b'>{li}</ul>"
+
+
+def _build_daily_summary_html(today_str: str, bookings: List[dict], settings) -> str:
+    business = getattr(settings, "business_name", "Hot Boat")
+    n = len(bookings)
+    total_rev = sum(float(b.get("ingreso_total") or 0) for b in bookings)
+    total_pax = sum(int(b.get("num_personas") or 0) for b in bookings)
+
+    def fmt_clp(v):
+        try:
+            return f"${int(float(v or 0)):,}".replace(",", ".")
+        except Exception:
+            return str(v)
+
+    # Header
+    html = f"""<!DOCTYPE html>
+<html><body style="margin:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+  style="background:#0f172a;padding:28px 16px;">
+<tr><td align="center">
+<table role="presentation" width="600" cellspacing="0" cellpadding="0"
+  style="max-width:600px;background:#1e293b;border-radius:16px;overflow:hidden;
+         box-shadow:0 8px 40px rgba(0,0,0,.5);">
+
+<!-- HEADER -->
+<tr><td style="background:linear-gradient(135deg,#0369a1,#0ea5e9);
+               padding:28px 28px 20px;text-align:center;">
+  <p style="margin:0 0 6px;font-size:13px;color:#bae6fd;letter-spacing:2px;
+             text-transform:uppercase">Resumen del día</p>
+  <h1 style="margin:0;font-size:28px;color:#fff;font-weight:800">{today_str}</h1>
+  <p style="margin:10px 0 0;font-size:14px;color:#e0f2fe">{business}</p>
+</td></tr>
+
+<!-- STATS BAR -->
+<tr><td style="padding:16px 28px">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+  <tr>
+    <td style="text-align:center;background:#0f172a;border-radius:10px;padding:14px 8px;width:33%">
+      <p style="margin:0;font-size:28px;font-weight:800;color:#38bdf8">{n}</p>
+      <p style="margin:4px 0 0;font-size:11px;color:#94a3b8;text-transform:uppercase">Reservas</p>
+    </td>
+    <td width="8"></td>
+    <td style="text-align:center;background:#0f172a;border-radius:10px;padding:14px 8px;width:33%">
+      <p style="margin:0;font-size:28px;font-weight:800;color:#34d399">{total_pax}</p>
+      <p style="margin:4px 0 0;font-size:11px;color:#94a3b8;text-transform:uppercase">Personas</p>
+    </td>
+    <td width="8"></td>
+    <td style="text-align:center;background:#0f172a;border-radius:10px;padding:14px 8px;width:33%">
+      <p style="margin:0;font-size:22px;font-weight:800;color:#a78bfa">{fmt_clp(total_rev)}</p>
+      <p style="margin:4px 0 0;font-size:11px;color:#94a3b8;text-transform:uppercase">Total día</p>
+    </td>
+  </tr>
+  </table>
+</td></tr>"""
+
+    if not bookings:
+        html += """<tr><td style="padding:28px;text-align:center;color:#94a3b8;font-size:15px">
+  😴 No hay reservas para hoy.
+</td></tr>"""
+    else:
+        # One card per booking
+        for b in bookings:
+            hora   = str(b.get("hora") or "")[:5]
+            nombre = (b.get("nombre_cliente") or "Cliente").strip()
+            first  = nombre.split()[0]
+            tel    = (b.get("telefono") or "").strip()
+            email  = (b.get("email") or "").strip()
+            pax    = b.get("num_personas") or ""
+            total  = fmt_clp(b.get("ingreso_total"))
+            status = (b.get("status") or "").lower()
+            obs    = (b.get("observaciones") or "").strip()
+            extras_html = _extras_summary_html(b.get("extras_json"))
+
+            status_color = "#34d399" if status == "confirmed" else "#f59e0b" if status else "#94a3b8"
+            status_label = status.upper() if status else "SIN ESTADO"
+
+            # WhatsApp reminder message
+            reminder_msg = (
+                f"Hola {first} 👋, te recordamos tu reserva en HotBoat para *hoy {today_str}* "
+                f"a las *{hora}*. ¡Te esperamos! 🚤\n\n"
+                f"📍 Cómo llegar: {_MAPS_URL}"
+            )
+            wa_url = _wa_link(tel, reminder_msg)
+
+            html += f"""
+<!-- BOOKING CARD -->
+<tr><td style="padding:0 16px 16px">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+  style="background:#0f172a;border-radius:12px;overflow:hidden;border:1px solid #334155">
+
+  <!-- time + status bar -->
+  <tr>
+    <td style="background:#1e3a5f;padding:10px 16px">
+      <span style="font-size:22px;font-weight:800;color:#38bdf8">{hora}</span>
+      <span style="font-size:14px;color:#94a3b8;margin-left:6px">hs</span>
+    </td>
+    <td style="background:#1e3a5f;padding:10px 16px;text-align:right">
+      <span style="background:{status_color};color:#0f172a;padding:3px 10px;border-radius:20px;
+                   font-size:11px;font-weight:700">{status_label}</span>
+    </td>
+  </tr>
+
+  <!-- client details -->
+  <tr><td colspan="2" style="padding:14px 16px 0">
+    <p style="margin:0;font-size:18px;font-weight:700;color:#f1f5f9">{nombre}</p>
+    {"<p style='margin:4px 0 0;font-size:13px;color:#94a3b8'>📞 "+tel+"</p>" if tel else ""}
+    {"<p style='margin:2px 0 0;font-size:13px;color:#94a3b8'>✉ "+email+"</p>" if email else ""}
+  </td></tr>
+
+  <!-- stats row -->
+  <tr><td colspan="2" style="padding:10px 16px">
+    <table role="presentation" cellspacing="0" cellpadding="0">
+    <tr>
+      {"<td style='font-size:13px;color:#cbd5e1;margin-right:20px;padding-right:20px'>👥 <strong style=color:#f1f5f9>"+str(pax)+"</strong> personas</td>" if pax else ""}
+      <td style="font-size:13px;color:#cbd5e1;padding-right:20px">💰 <strong style="color:#34d399">{total}</strong></td>
+    </tr>
+    </table>
+    {extras_html}
+    {"<p style='margin:6px 0 0;font-size:12px;color:#f59e0b'>📝 "+obs+"</p>" if obs else ""}
+  </td></tr>
+
+  <!-- action buttons -->
+  <tr><td colspan="2" style="padding:12px 16px 14px">
+    {"<a href='"+wa_url+"' style='display:inline-block;background:#25d366;color:#fff;text-decoration:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;margin-right:8px'>💬 WhatsApp recordatorio</a>" if wa_url != "#" else ""}
+    <a href="{_MAPS_URL}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;
+       padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700">📍 Cómo llegar</a>
+  </td></tr>
+
+</table>
+</td></tr>"""
+
+    # Footer with maps link
+    html += f"""
+<!-- FOOTER MAP -->
+<tr><td style="padding:8px 16px 24px">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+    style="background:#0f172a;border-radius:12px;border:1px solid #334155;overflow:hidden">
+    <tr><td style="padding:16px">
+      <p style="margin:0 0 10px;font-size:14px;font-weight:700;color:#f1f5f9">📍 Ubicación HotBoat</p>
+      <p style="margin:0 0 10px;font-size:13px;color:#94a3b8">Entre Pucón y Curarrehue, corazón de La Araucanía</p>
+      <a href="{_MAPS_URL}" style="display:inline-block;background:#1d4ed8;color:#fff;
+         text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700">
+        🗺️ Abrir en Google Maps
+      </a>
+    </td></tr>
+  </table>
+</td></tr>
+
+<!-- BOTTOM -->
+<tr><td style="padding:16px 28px 24px;text-align:center;font-size:12px;color:#475569">
+  {business} · Resumen automático del día · {today_str}
+</td></tr>
+
+</table></td></tr></table></body></html>"""
+
+    return html
+
+
+def send_daily_summary_email() -> Dict[str, Any]:
+    """
+    Send the daily morning summary of today's bookings to the operator email.
+    Returns a dict with sent/reason/count keys.
+    """
+    from zoneinfo import ZoneInfo
+    from datetime import date
+    out: Dict[str, Any] = {"sent": False, "reason": "", "count": 0}
+
+    settings = get_settings()
+    api_key = (getattr(settings, "resend_api_key", "") or "").strip()
+    if not api_key:
+        out["reason"] = "no_resend_key"
+        return out
+
+    to_addr = _get_admin_email(settings) or ""
+    if not to_addr:
+        out["reason"] = "no_admin_email"
+        return out
+
+    chile_tz = ZoneInfo("America/Santiago")
+    today = date.today()  # already called at Santiago time from the scheduler
+    today_str = today.strftime("%d/%m/%Y")
+    today_iso = today.isoformat()
+
+    # Fetch today's bookings (with status) from all_appointments
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT nombre_cliente, email, telefono, hora, num_personas,
+                           ingreso_total, status, extras_json, observaciones
+                    FROM all_appointments
+                    WHERE fecha = %s AND status IS NOT NULL
+                    ORDER BY hora ASC NULLS LAST
+                """, (today_iso,))
+                cols = [d[0] for d in cur.description]
+                bookings = [dict(zip(cols, row)) for row in cur.fetchall()]
+    except Exception as db_err:
+        out["reason"] = f"db_error: {db_err}"
+        logger.error("daily_summary: DB error: %s", db_err)
+        return out
+
+    out["count"] = len(bookings)
+
+    # Always send even if 0 bookings (so the operator knows the day is free)
+    html = _build_daily_summary_html(today_str, bookings, settings)
+
+    n_label = f"{len(bookings)} reserva{'s' if len(bookings)!=1 else ''}" if bookings else "sin reservas"
+    subject = f"📅 HotBoat hoy {today_str} — {n_label}"
+
+    from_addr = _get_from_addr(settings)
+    try:
+        result = send_booking_html(
+            to=to_addr,
+            subject=subject,
+            html=html,
+            from_address=from_addr,
+            api_key=api_key,
+        )
+        out["sent"] = True
+        out["resend_id"] = result.get("id") if isinstance(result, dict) else str(result)
+        logger.info("daily_summary: sent to %s (%s bookings)", to_addr, len(bookings))
+    except Exception as send_err:
+        out["reason"] = f"send_error: {send_err}"
+        logger.error("daily_summary: send error: %s", send_err)
+
+    return out
