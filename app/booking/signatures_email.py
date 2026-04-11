@@ -168,6 +168,117 @@ def send_booking_signature_summary(booking_ref: str, booking: dict, signatures: 
         logger.error("send_booking_signature_summary failed for %s: %s", booking_ref, e)
 
 
+def send_pre_booking_notification(booking: dict) -> None:
+    """
+    Send a 1-hour pre-booking admin notification to hotboatnotification@gmail.com.
+    Called by the scheduler when a booking is ~60 min away.
+    """
+    ref     = booking.get("booking_ref") or "-"
+    name    = booking.get("customer_name") or "-"
+    phone   = booking.get("customer_phone") or "-"
+    email   = booking.get("customer_email") or "-"
+    bdate   = _fmt_date(str(booking.get("booking_date") or ""))
+    btime   = str(booking.get("booking_time") or "")[:5]
+    people  = booking.get("num_people") or "-"
+    total   = booking.get("total_price") or "-"
+    status  = booking.get("status") or "-"
+    source  = booking.get("source") or "-"
+
+    try:
+        from app.booking.booking_email import _fmt_clp
+        total_fmt = _fmt_clp(total)
+    except Exception:
+        total_fmt = str(total)
+
+    subject = f"⏰ En 1 hora — Reserva {ref} ({name})"
+    html = f"""<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8">
+<style>
+  body{{font-family:Arial,sans-serif;background:#0b1120;margin:0;padding:24px}}
+  .card{{background:#131c2e;border-radius:16px;max-width:560px;margin:auto;
+         overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.5)}}
+  .bar{{height:5px;background:linear-gradient(90deg,#f59e0b,#ef4444)}}
+  .header{{padding:26px 28px 18px;border-bottom:1px solid #1e2d45}}
+  .header h2{{margin:0;color:#f8fafc;font-size:22px;font-weight:800}}
+  .header p{{margin:6px 0 0;color:#94a3b8;font-size:14px}}
+  .body{{padding:22px 28px}}
+  table{{width:100%;border-collapse:collapse}}
+  td{{padding:10px 0;border-bottom:1px solid #1e2d45;font-size:14px;color:#cbd5e1}}
+  td:first-child{{color:#64748b;width:42%;font-size:12px;text-transform:uppercase;
+                  letter-spacing:.8px;font-weight:600}}
+  .badge{{display:inline-block;background:#d97706;color:#fff;border-radius:20px;
+          padding:2px 12px;font-size:12px;font-weight:700}}
+  .footer{{padding:16px 28px 22px;text-align:center;color:#475569;font-size:12px}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="bar"></div>
+  <div class="header">
+    <h2>⏰ Reserva en 1 hora</h2>
+    <p>Notificación automática · HotBoat Chile</p>
+  </div>
+  <div class="body">
+    <table>
+      <tr><td>Referencia</td>
+          <td style="color:#e8b86d;font-family:monospace;font-weight:700">{ref}</td></tr>
+      <tr><td>Cliente</td>
+          <td style="color:#f1f5f9;font-weight:600">{name}</td></tr>
+      <tr><td>Teléfono</td>
+          <td>{phone}</td></tr>
+      <tr><td>Email</td>
+          <td>{email}</td></tr>
+      <tr><td>📅 Fecha</td>
+          <td style="color:#e2e8f0;font-weight:600">{bdate}</td></tr>
+      <tr><td>⏰ Hora</td>
+          <td style="color:#e2e8f0;font-weight:700;font-size:16px">{btime} hrs</td></tr>
+      <tr><td>👥 Personas</td>
+          <td>{people}</td></tr>
+      <tr><td>💰 Total</td>
+          <td style="color:#10b981;font-weight:700">{total_fmt}</td></tr>
+      <tr><td>Estado</td>
+          <td><span class="badge">{status}</span></td></tr>
+      <tr><td>Fuente</td>
+          <td style="color:#64748b">{source}</td></tr>
+    </table>
+  </div>
+  <div class="footer">HotBoat Chile · aviso automático 1 hora antes</div>
+</div>
+</body>
+</html>"""
+    try:
+        _send(ADMIN_NOTIFICATION_EMAIL, subject, html)
+        logger.info("pre_booking_notification sent for %s (%s %s)", ref, bdate, btime)
+    except Exception as e:
+        logger.error("pre_booking_notification failed for %s: %s", ref, e)
+
+
+def run_pre_booking_notif_sweep() -> dict:
+    """
+    Check for bookings starting in ~60 min and send admin notification if not yet sent.
+    Runs every 10 minutes from the scheduler.
+    """
+    from app.booking.db import get_bookings_starting_soon, mark_pre_booking_notif_sent
+
+    result = {"checked": 0, "sent": 0, "errors": 0}
+    try:
+        bookings = get_bookings_starting_soon(window_minutes=20, target_minutes_ahead=60)
+        result["checked"] = len(bookings)
+        for b in bookings:
+            ref = b.get("booking_ref", "")
+            try:
+                send_pre_booking_notification(b)
+                mark_pre_booking_notif_sent(ref)
+                result["sent"] += 1
+            except Exception as e:
+                logger.error("pre_booking sweep for %s: %s", ref, e)
+                result["errors"] += 1
+    except Exception as e:
+        logger.error("run_pre_booking_notif_sweep: %s", e)
+    return result
+
+
 def run_daily_signature_summary_sweep() -> dict:
     """
     Send a summary of T&C signatures for every booking happening today.

@@ -357,6 +357,22 @@ async def _run_signature_summary_scheduler():
         await asyncio.sleep(60)
 
 
+async def _run_pre_booking_notif_scheduler():
+    """Every 10 min: check for bookings starting in ~60 min and notify admin."""
+    POLL_SECONDS = 600  # 10 minutes
+    # Small initial delay so startup traffic settles before first check
+    await asyncio.sleep(30)
+    while True:
+        try:
+            from app.booking.signatures_email import run_pre_booking_notif_sweep
+            result = await asyncio.to_thread(run_pre_booking_notif_sweep)
+            if result.get("sent"):
+                logger.info("⏰ Pre-booking notif sweep: %s", result)
+        except Exception as _e:
+            logger.error("Pre-booking notif scheduler error: %s", _e)
+        await asyncio.sleep(POLL_SECONDS)
+
+
 def _ensure_extras_visibility_table():
     """Create extras_visibility table if it doesn't exist (survives Sheets re-sync)."""
     try:
@@ -417,18 +433,20 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         logger.warning(f"ensure_signatures_table skipped: {_e}")
 
-    sync_task    = asyncio.create_task(_run_auto_sync())
-    email_task   = asyncio.create_task(_run_email_sweeps_scheduler())
-    pending_task = asyncio.create_task(_run_pending_payment_email_scheduler())
-    daily_task   = asyncio.create_task(_run_daily_summary_scheduler())
-    sig_task     = asyncio.create_task(_run_signature_summary_scheduler())
+    sync_task       = asyncio.create_task(_run_auto_sync())
+    email_task      = asyncio.create_task(_run_email_sweeps_scheduler())
+    pending_task    = asyncio.create_task(_run_pending_payment_email_scheduler())
+    daily_task      = asyncio.create_task(_run_daily_summary_scheduler())
+    sig_task        = asyncio.create_task(_run_signature_summary_scheduler())
+    prebooking_task = asyncio.create_task(_run_pre_booking_notif_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
     logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 1 h)")
     logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
     logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
     logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
+    logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
     yield
-    for task in (sync_task, email_task, pending_task, daily_task, sig_task):
+    for task in (sync_task, email_task, pending_task, daily_task, sig_task, prebooking_task):
         task.cancel()
         try:
             await task

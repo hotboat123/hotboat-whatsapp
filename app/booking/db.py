@@ -272,6 +272,96 @@ def mark_followup_email_sent(booking_ref: str) -> bool:
             return cur.rowcount > 0
 
 
+# ── Pre-booking 1-hour notification ──────────────────────────────────────────
+
+def get_bookings_starting_soon(window_minutes: int = 20, target_minutes_ahead: int = 60) -> list:
+    """
+    Return bookings whose start time is between
+    (now + target_minutes_ahead - window_minutes/2) and
+    (now + target_minutes_ahead + window_minutes/2)
+    that haven't had a pre-booking notification sent yet.
+    Checks both hotboat_appointments and all_appointments.
+    window_minutes=20 with a 10-min scheduler gives safe overlap without duplicates.
+    """
+    from datetime import timezone
+    # Ensure the column exists on all_appointments too (safe guard)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS pre_booking_notif_sent_at TIMESTAMPTZ
+            """)
+            conn.commit()
+
+    half = window_minutes // 2
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT id, booking_ref, customer_name, customer_phone, customer_email,
+                       booking_date, booking_time, num_people, total_price, status,
+                       'hotboat_web' AS source, COALESCE(customer_language,'es') AS customer_language
+                FROM hotboat_appointments
+                WHERE (booking_date + booking_time) AT TIME ZONE 'America/Santiago'
+                      BETWEEN (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead - half} minutes')
+                          AND (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead + half} minutes')
+                  AND status IN ('confirmed','pending_payment')
+                  AND pre_booking_notif_sent_at IS NULL
+
+                UNION ALL
+
+                SELECT id,
+                       'MANUAL-' || id::text  AS booking_ref,
+                       nombre_cliente          AS customer_name,
+                       telefono               AS customer_phone,
+                       email                  AS customer_email,
+                       fecha                  AS booking_date,
+                       hora                   AS booking_time,
+                       num_personas           AS num_people,
+                       ingreso_total          AS total_price,
+                       status,
+                       fuente                 AS source,
+                       'es'                   AS customer_language
+                FROM all_appointments
+                WHERE (fecha + hora) AT TIME ZONE 'America/Santiago'
+                      BETWEEN (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead - half} minutes')
+                          AND (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead + half} minutes')
+                  AND status IN ('confirmed','pending_payment')
+                  AND pre_booking_notif_sent_at IS NULL
+            """)
+            cols = ["id", "booking_ref", "customer_name", "customer_phone", "customer_email",
+                    "booking_date", "booking_time", "num_people", "total_price", "status",
+                    "source", "customer_language"]
+            rows = []
+            for row in cur.fetchall():
+                d = dict(zip(cols, row))
+                for k in ("booking_date", "booking_time"):
+                    if d.get(k):
+                        d[k] = str(d[k])
+                rows.append(d)
+            return rows
+
+
+def mark_pre_booking_notif_sent(booking_ref: str) -> bool:
+    """Set pre_booking_notif_sent_at once (idempotent)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            if booking_ref.startswith("MANUAL-"):
+                row_id = int(booking_ref.split("-", 1)[1])
+                cur.execute(
+                    "UPDATE all_appointments SET pre_booking_notif_sent_at=NOW() "
+                    "WHERE id=%s AND pre_booking_notif_sent_at IS NULL",
+                    (row_id,),
+                )
+            else:
+                cur.execute(
+                    "UPDATE hotboat_appointments SET pre_booking_notif_sent_at=NOW() "
+                    "WHERE booking_ref=%s AND pre_booking_notif_sent_at IS NULL",
+                    (booking_ref,),
+                )
+            conn.commit()
+            return cur.rowcount > 0
+
+
 # ── Birthday sweep ────────────────────────────────────────────────────────────
 
 def get_customers_for_birthday_email() -> list:
