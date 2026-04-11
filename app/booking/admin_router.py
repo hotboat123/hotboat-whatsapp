@@ -750,6 +750,31 @@ async def post_email_workflow_test(trigger: str, body: EmailWorkflowTestBody,
     return {"ok": True, **result}
 
 
+@admin_router.post("/api/admin/pre-booking-notif/test")
+async def test_pre_booking_notif(x_admin_key: str = Header("")):
+    """Send a test pre-booking notification using a fake booking (for visual preview)."""
+    _check_auth(x_admin_key)
+    from app.booking.signatures_email import send_pre_booking_notification
+    fake_booking = {
+        "booking_ref":       "HB-2026-TEST1",
+        "customer_name":     "Cliente de Prueba",
+        "customer_phone":    "+56 9 1234 5678",
+        "customer_email":    "cliente@ejemplo.com",
+        "booking_date":      "2026-04-05",
+        "booking_time":      "15:00:00",
+        "num_people":        4,
+        "total_price":       179990,
+        "status":            "confirmed",
+        "source":            "hotboat_web",
+        "customer_language": "es",
+    }
+    try:
+        await asyncio.to_thread(send_pre_booking_notification, fake_booking)
+        return {"ok": True, "message": "Notificación de prueba enviada a hotboatnotification@gmail.com"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @admin_router.post("/api/admin/daily-summary/send")
 async def send_daily_summary_now(x_admin_key: str = Header("")):
     """Manually trigger the daily morning summary email (same as the 08:00 job)."""
