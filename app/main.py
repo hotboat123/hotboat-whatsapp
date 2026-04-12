@@ -426,6 +426,13 @@ async def lifespan(app: FastAPI):
         seed_email_workflow_defaults()
     except Exception as _e:
         logger.warning(f"Email workflow seed skipped: {_e}")
+    # Apply any missing DB columns (idempotent migrations)
+    try:
+        from app.booking.db import ensure_db_columns
+        ensure_db_columns()
+        logger.info("✅ DB columns ensured (customer_language, pre_booking_notif_sent_at, extra_images)")
+    except Exception as _e:
+        logger.warning(f"ensure_db_columns skipped: {_e}")
     # Ensure signatures table exists
     try:
         from app.booking.db import ensure_signatures_table

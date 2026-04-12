@@ -472,6 +472,30 @@ def mark_birthday_email_sent(customer_email: str) -> bool:
             return cur.rowcount > 0
 
 
+def ensure_db_columns() -> None:
+    """Apply any missing columns (idempotent). Run once at startup."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                -- 019: customer language on web bookings
+                ALTER TABLE hotboat_appointments
+                    ADD COLUMN IF NOT EXISTS customer_language VARCHAR(5) DEFAULT 'es';
+
+                -- 020: pre-booking notification tracker (web bookings)
+                ALTER TABLE hotboat_appointments
+                    ADD COLUMN IF NOT EXISTS pre_booking_notif_sent_at TIMESTAMPTZ;
+
+                -- 020b: pre-booking notification tracker (manual/all_appointments)
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS pre_booking_notif_sent_at TIMESTAMPTZ;
+
+                -- 021: multiple images per alojamiento
+                ALTER TABLE alojamientos
+                    ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]';
+            """)
+            conn.commit()
+
+
 def ensure_signatures_table() -> None:
     """Create hotboat_signatures table if it doesn't exist yet (idempotent)."""
     with get_connection() as conn:
