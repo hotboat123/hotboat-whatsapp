@@ -492,6 +492,36 @@ def ensure_db_columns() -> None:
                 -- 021: multiple images per alojamiento
                 ALTER TABLE alojamientos
                     ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]';
+
+                -- 027: stock management tables
+                CREATE TABLE IF NOT EXISTS stock_products (
+                    id SERIAL PRIMARY KEY, name TEXT NOT NULL, category TEXT DEFAULT '',
+                    unit TEXT DEFAULT 'unidad', current_stock NUMERIC DEFAULT 0,
+                    min_stock NUMERIC DEFAULT 0, cost_per_unit NUMERIC DEFAULT 0,
+                    notes TEXT DEFAULT '', is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS extras_bom (
+                    id SERIAL PRIMARY KEY, extra_slug TEXT NOT NULL,
+                    product_id INT REFERENCES stock_products(id) ON DELETE CASCADE,
+                    quantity NUMERIC DEFAULT 1, is_variant BOOLEAN DEFAULT FALSE,
+                    variant_label TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_bom_slug ON extras_bom(extra_slug);
+                CREATE TABLE IF NOT EXISTS stock_movements (
+                    id SERIAL PRIMARY KEY,
+                    product_id INT REFERENCES stock_products(id),
+                    product_name TEXT DEFAULT '', delta NUMERIC NOT NULL,
+                    reason TEXT DEFAULT '', booking_ref TEXT DEFAULT '',
+                    extra_slug TEXT DEFAULT '', notes TEXT DEFAULT '',
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_movements_product ON stock_movements(product_id);
+                CREATE INDEX IF NOT EXISTS idx_movements_booking  ON stock_movements(booking_ref);
+                ALTER TABLE hotboat_appointments
+                    ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
             """)
             conn.commit()
 

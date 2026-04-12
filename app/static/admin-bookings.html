@@ -352,6 +352,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('extras-cat')" id="nav-extras-cat">
       <span class="ni">🏷️</span> Precios Extras
     </div>
+    <div class="nav-item" onclick="showSection('stock')" id="nav-stock">
+      <span class="ni">📦</span> Control de Stock
+    </div>
     <div class="nav-item" onclick="showSection('emails')" id="nav-emails">
       <span class="ni">✉️</span> Emails reservas
     </div>
@@ -484,13 +487,130 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th style="text-align:right">Costo</th>
               <th style="text-align:right">Utilidad</th>
               <th style="text-align:right">Margen</th>
-              <th></th>
+              <th style="text-align:center;color:#a78bfa" title="Ingredientes de stock">🧪</th>
             </tr>
           </thead>
           <tbody id="ec-tbody"><tr><td colspan="10" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
+
+    <!-- CONTROL DE STOCK -->
+    <div id="section-stock" class="section">
+
+      <!-- Header -->
+      <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:1.2rem">
+        <div style="flex:1">
+          <h2 style="margin:0;font-size:1.1rem">📦 Control de Stock</h2>
+          <p style="margin:.2rem 0 0;color:var(--muted);font-size:.8rem">Gestiona el inventario de productos y su relación con los extras.</p>
+        </div>
+        <button class="btn-primary" onclick="openStockProductModal()">+ Nuevo Producto</button>
+        <button class="btn-secondary" onclick="loadStockSection()" style="padding:.4rem .8rem;font-size:.78rem">↺ Actualizar</button>
+      </div>
+
+      <!-- Alertas stock bajo -->
+      <div id="stock-alerts-box" style="display:none;margin-bottom:1rem;padding:.8rem 1rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px">
+        <div style="font-weight:700;color:#f87171;margin-bottom:.4rem">⚠️ Productos bajo stock mínimo</div>
+        <div id="stock-alerts-list" style="font-size:.82rem;color:#fca5a5;line-height:1.8"></div>
+      </div>
+
+      <!-- Tabla de productos -->
+      <div class="chart-wrap" style="margin-bottom:1.2rem;padding:0;overflow:hidden">
+        <div style="padding:.8rem 1rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:700;font-size:.9rem">🏷️ Catálogo de Productos</span>
+          <input type="text" id="stock-search" placeholder="Buscar..." oninput="filterStockProducts()"
+            style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .6rem;font-size:.78rem;width:160px">
+        </div>
+        <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+            <thead>
+              <tr style="background:var(--input)">
+                <th style="padding:.6rem .8rem;text-align:left;color:var(--muted);font-weight:600">Producto</th>
+                <th style="padding:.6rem .8rem;text-align:left;color:var(--muted);font-weight:600">Categoría</th>
+                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Unidad</th>
+                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Stock actual</th>
+                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Mínimo</th>
+                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Estado</th>
+                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Ajuste rápido</th>
+                <th style="padding:.6rem;color:var(--muted)"></th>
+              </tr>
+            </thead>
+            <tbody id="stock-products-tbody"><tr><td colspan="8" style="text-align:center;padding:1.5rem;color:var(--muted)">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Historial de movimientos -->
+      <div class="chart-wrap" style="padding:0;overflow:hidden">
+        <div style="padding:.8rem 1rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:700;font-size:.9rem">📋 Historial de Movimientos</span>
+          <span id="stock-hist-product" style="color:var(--muted);font-size:.78rem">Todos los productos</span>
+        </div>
+        <div class="tbl-wrap" style="max-height:320px;overflow-y:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+            <thead>
+              <tr style="background:var(--input)">
+                <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Fecha</th>
+                <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Producto</th>
+                <th style="padding:.5rem .8rem;text-align:center;color:var(--muted)">Movimiento</th>
+                <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Motivo</th>
+                <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Reserva</th>
+                <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Notas</th>
+              </tr>
+            </thead>
+            <tbody id="stock-movements-tbody"><tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--muted)">Sin movimientos</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Product modal -->
+      <div id="stock-product-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+        <div style="background:var(--card);border-radius:14px;max-width:480px;margin:auto;padding:1.5rem">
+          <div style="font-size:1rem;font-weight:700;margin-bottom:1.2rem" id="spm-title">Nuevo Producto</div>
+          <input type="hidden" id="spm-id">
+          <div class="form-group-adm"><label>Nombre *</label>
+            <input id="spm-name" type="text" placeholder="ej: Cerveza Ámbar"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+            <div class="form-group-adm"><label>Categoría</label>
+              <input id="spm-cat" type="text" placeholder="ej: Bebestibles"></div>
+            <div class="form-group-adm"><label>Unidad</label>
+              <select id="spm-unit" style="background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.45rem .6rem;width:100%">
+                <option>unidad</option><option>kg</option><option>litro</option>
+                <option>bolsa</option><option>caja</option><option>paquete</option><option>porción</option>
+              </select></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem">
+            <div class="form-group-adm"><label>Stock actual</label>
+              <input id="spm-stock" type="number" min="0" step="0.5" value="0"></div>
+            <div class="form-group-adm"><label>Stock mínimo</label>
+              <input id="spm-min" type="number" min="0" step="0.5" value="0"></div>
+            <div class="form-group-adm"><label>Costo/unidad</label>
+              <input id="spm-cost" type="number" min="0" value="0"></div>
+          </div>
+          <div class="form-group-adm"><label>Notas</label>
+            <input id="spm-notes" type="text" placeholder="opcional"></div>
+          <div style="display:flex;gap:.6rem;margin-top:1rem">
+            <button class="btn-primary" onclick="saveStockProduct()" style="flex:1">💾 Guardar</button>
+            <button class="btn-secondary" onclick="closeStockProductModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOM (ingredientes) modal — opened from extras tab -->
+      <div id="bom-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+        <div style="background:var(--card);border-radius:14px;max-width:540px;margin:auto;padding:1.5rem">
+          <div style="font-size:1rem;font-weight:700;margin-bottom:.4rem" id="bom-modal-title">Ingredientes del extra</div>
+          <div style="color:var(--muted);font-size:.78rem;margin-bottom:1rem" id="bom-modal-slug"></div>
+          <div id="bom-rows" style="display:flex;flex-direction:column;gap:.5rem"></div>
+          <button onclick="addBomRow()" style="margin-top:.7rem;width:100%;padding:.4rem;background:var(--input);border:1px dashed var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:.82rem">+ Agregar producto</button>
+          <div style="display:flex;gap:.6rem;margin-top:1rem">
+            <button class="btn-primary" onclick="saveBom()" style="flex:1">💾 Guardar ingredientes</button>
+            <button class="btn-secondary" onclick="document.getElementById('bom-modal').style.display='none'">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /section-stock -->
 
     <!-- EMAILS RESERVAS (Resend / Booknetic-style multi-trigger) -->
     <div id="section-emails" class="section">
@@ -729,8 +849,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             </select>
           </div>
           <div class="form-group-adm"><label>Notas</label><textarea id="eb-notes" rows="2"></textarea></div>
-          <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+          <div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveExtrasBooking()">Guardar</button>
+            <button class="sync-btn" style="background:#7c3aed;flex:1" onclick="consumeStockForBooking()" title="Descontar del inventario los extras de esta reserva">📦 Consumir Stock</button>
             <button class="sync-btn" style="flex:1" onclick="closeEbModal()">Cancelar</button>
           </div>
         </div>
@@ -1064,7 +1185,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
@@ -2957,8 +3078,10 @@ function renderExtrasCat(list){
       </td>
       <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
       <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
-      <td style="display:flex;gap:.4rem;align-items:center;padding:.5rem .4rem">
+      <td style="display:flex;gap:.4rem;align-items:center;padding:.5rem .4rem;white-space:nowrap">
         <button class="ec-save-btn" id="ec-btn-${e.id}" onclick="saveExtra('${e.id}')">Guardar</button>
+        <button onclick="openBomModal('${escHtml(e.key||e.name.toLowerCase().replace(/\s+/g,'_'))}','${escHtml(e.name)}')"
+          title="Ingredientes / stock" style="background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer">🧪</button>
         <button class="ec-del-btn" onclick="deleteExtra('${e.id}','${escHtml(e.name)}')" title="Eliminar">🗑</button>
       </td>
     </tr>`;
@@ -4308,6 +4431,277 @@ function generarRecibo(){
 // Pre-render calendars so they display immediately when the section is opened
 renderUrgCal();
 renderVacCal();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📦 CONTROL DE STOCK
+// ═══════════════════════════════════════════════════════════════════════════
+let _stockProducts = [];
+let _stockCurrentProductId = null;   // for history filter
+let _bomCurrentSlug = '';
+let _bomCurrentName = '';
+
+async function loadStockSection(){
+  const [pr, mr, ar] = await Promise.all([
+    api('/api/admin/stock/products'),
+    api('/api/admin/stock/movements?limit=80'),
+    api('/api/admin/stock/alerts'),
+  ]);
+  _stockProducts = pr.products || [];
+  renderStockProducts(_stockProducts);
+  renderStockMovements(mr.movements || []);
+  renderStockAlerts(ar.alerts || []);
+}
+
+function renderStockAlerts(alerts){
+  const box = document.getElementById('stock-alerts-box');
+  const list = document.getElementById('stock-alerts-list');
+  if(!box || !list) return;
+  if(!alerts.length){ box.style.display='none'; return; }
+  box.style.display='';
+  list.innerHTML = alerts.map(a=>
+    `<span style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(239,68,68,.15);border-radius:8px;padding:.2rem .6rem;margin:.15rem">
+      <strong>${a.name}</strong>: ${a.current_stock} ${a.unit} (mín ${a.min_stock})
+    </span>`
+  ).join(' ');
+}
+
+function renderStockProducts(list){
+  const tbody = document.getElementById('stock-products-tbody');
+  if(!tbody) return;
+  if(!list.length){
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin productos. Haz clic en "+ Nuevo Producto"</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(p=>{
+    const isLow = p.min_stock > 0 && p.current_stock <= p.min_stock;
+    const badge = isLow
+      ? `<span style="background:rgba(239,68,68,.15);color:#f87171;border-radius:12px;padding:2px 8px;font-size:.72rem;font-weight:700">⚠️ Bajo mínimo</span>`
+      : `<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 8px;font-size:.72rem">✓ OK</span>`;
+    return `<tr style="border-bottom:1px solid var(--border)" id="sp-row-${p.id}">
+      <td style="padding:.6rem .8rem;font-weight:600;color:var(--text)">${p.name}</td>
+      <td style="padding:.6rem .8rem;color:var(--muted);font-size:.8rem">${p.category||'—'}</td>
+      <td style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-size:.8rem">${p.unit}</td>
+      <td style="padding:.6rem .8rem;text-align:center;font-weight:700;color:${isLow?'#f87171':'#4ade80'};font-size:.95rem">${p.current_stock}</td>
+      <td style="padding:.6rem .8rem;text-align:center;color:var(--muted)">${p.min_stock}</td>
+      <td style="padding:.6rem .8rem;text-align:center">${badge}</td>
+      <td style="padding:.4rem .8rem;text-align:center">
+        <div style="display:inline-flex;gap:.2rem;align-items:center">
+          <button onclick="quickAdjust(${p.id},-1,'${p.unit}')"
+            style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;width:26px;height:26px;cursor:pointer;font-weight:700">−</button>
+          <input type="number" id="qa-${p.id}" value="1" min="0.5" step="0.5"
+            style="width:46px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem;font-size:.8rem">
+          <button onclick="quickAdjust(${p.id},1,'${p.unit}')"
+            style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.3);border-radius:6px;width:26px;height:26px;cursor:pointer;font-weight:700">+</button>
+        </div>
+      </td>
+      <td style="padding:.4rem .6rem;text-align:center">
+        <button onclick="openStockProductModal(${p.id})"
+          style="background:var(--input);border:1px solid var(--border);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;color:var(--text)">✏️</button>
+        <button onclick="deleteStockProduct(${p.id},'${p.name.replace(/'/g,"\\'")}')"
+          style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;color:#f87171;margin-left:.2rem">🗑</button>
+        <button onclick="showProductHistory(${p.id},'${p.name.replace(/'/g,"\\'")}')"
+          style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;color:#818cf8;margin-left:.2rem" title="Ver historial">📋</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterStockProducts(){
+  const q = (document.getElementById('stock-search')?.value||'').toLowerCase();
+  renderStockProducts(q ? _stockProducts.filter(p=>p.name.toLowerCase().includes(q)||p.category.toLowerCase().includes(q)) : _stockProducts);
+}
+
+function renderStockMovements(movements){
+  const tbody = document.getElementById('stock-movements-tbody');
+  if(!tbody) return;
+  if(!movements.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--muted)">Sin movimientos registrados</td></tr>';
+    return;
+  }
+  tbody.innerHTML = movements.map(m=>{
+    const isOut = m.delta < 0;
+    const dt = m.created_at ? m.created_at.substring(0,16).replace('T',' ') : '';
+    const reasonIcon = {booking:'🛥️',purchase:'📦',manual:'✏️',return:'↩️'}[m.reason]||'•';
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:.45rem .8rem;color:var(--muted);font-size:.78rem;white-space:nowrap">${dt}</td>
+      <td style="padding:.45rem .8rem;font-size:.82rem">${m.product_name}</td>
+      <td style="padding:.45rem .8rem;text-align:center;font-weight:700;color:${isOut?'#f87171':'#4ade80'}">${isOut?'':'+'}${m.delta}</td>
+      <td style="padding:.45rem .8rem;font-size:.78rem">${reasonIcon} ${m.reason}</td>
+      <td style="padding:.45rem .8rem;font-size:.78rem;color:var(--muted)">${m.booking_ref||'—'}</td>
+      <td style="padding:.45rem .8rem;font-size:.78rem;color:var(--muted)">${m.notes||''}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function showProductHistory(pid, name){
+  document.getElementById('stock-hist-product').textContent = name;
+  const r = await api(`/api/admin/stock/movements?product_id=${pid}&limit=50`);
+  renderStockMovements(r.movements||[]);
+  document.getElementById('stock-movements-tbody')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+async function quickAdjust(pid, sign, unit){
+  const qty = parseFloat(document.getElementById(`qa-${pid}`)?.value||1);
+  if(!qty || qty <= 0) return;
+  const delta = sign * qty;
+  const reason = sign > 0 ? 'purchase' : 'manual';
+  const notes = sign > 0 ? 'Entrada manual de stock' : 'Salida manual de stock';
+  try{
+    await api('/api/admin/stock/adjust', {method:'POST', body:JSON.stringify({product_id:pid, delta, reason, notes})});
+    showToast(`Stock ajustado: ${sign>0?'+':''}${delta} ${unit}`);
+    await loadStockSection();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Product modal ────────────────────────────────────────────────────────────
+function openStockProductModal(id){
+  const p = id ? _stockProducts.find(x=>x.id===id) : null;
+  document.getElementById('spm-id').value = id||'';
+  document.getElementById('spm-title').textContent = p ? 'Editar Producto' : 'Nuevo Producto';
+  document.getElementById('spm-name').value = p?.name||'';
+  document.getElementById('spm-cat').value = p?.category||'';
+  document.getElementById('spm-unit').value = p?.unit||'unidad';
+  document.getElementById('spm-stock').value = p?.current_stock??0;
+  document.getElementById('spm-min').value = p?.min_stock??0;
+  document.getElementById('spm-cost').value = p?.cost_per_unit??0;
+  document.getElementById('spm-notes').value = p?.notes||'';
+  document.getElementById('stock-product-modal').style.display='';
+}
+
+function closeStockProductModal(){
+  document.getElementById('stock-product-modal').style.display='none';
+}
+
+async function saveStockProduct(){
+  const id = document.getElementById('spm-id').value;
+  const body = {
+    name: document.getElementById('spm-name').value.trim(),
+    category: document.getElementById('spm-cat').value.trim(),
+    unit: document.getElementById('spm-unit').value,
+    current_stock: +document.getElementById('spm-stock').value||0,
+    min_stock: +document.getElementById('spm-min').value||0,
+    cost_per_unit: +document.getElementById('spm-cost').value||0,
+    notes: document.getElementById('spm-notes').value.trim(),
+    is_active: true,
+  };
+  if(!body.name){ showToast('El nombre es obligatorio'); return; }
+  try{
+    const url = id ? `/api/admin/stock/products/${id}` : '/api/admin/stock/products';
+    await api(url, {method: id?'PUT':'POST', body:JSON.stringify(body)});
+    closeStockProductModal();
+    await loadStockSection();
+    showToast('Producto guardado ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function deleteStockProduct(id, name){
+  if(!confirm(`¿Eliminar "${name}"? Se perderá el historial de movimientos.`)) return;
+  await api(`/api/admin/stock/products/${id}`, {method:'DELETE'});
+  await loadStockSection();
+  showToast('Producto eliminado');
+}
+
+// ── BOM (ingredientes por extra) ─────────────────────────────────────────────
+let _bomRows = [];
+
+async function openBomModal(slug, name){
+  _bomCurrentSlug = slug;
+  _bomCurrentName = name;
+  document.getElementById('bom-modal-title').textContent = `Ingredientes: ${name}`;
+  document.getElementById('bom-modal-slug').textContent = `slug: ${slug}`;
+  // Load products if not loaded yet
+  if(!_stockProducts.length){
+    const r = await api('/api/admin/stock/products');
+    _stockProducts = r.products||[];
+  }
+  // Load current BOM
+  try{
+    const r = await api(`/api/admin/stock/bom/${encodeURIComponent(slug)}`);
+    _bomRows = (r.bom||[]).map(b=>({product_id:b.product_id, quantity:b.quantity, is_variant:b.is_variant, variant_label:b.variant_label}));
+  }catch{ _bomRows=[]; }
+  renderBomRows();
+  document.getElementById('bom-modal').style.display='';
+}
+
+function renderBomRows(){
+  const container = document.getElementById('bom-rows');
+  if(!container) return;
+  const opts = _stockProducts.map(p=>`<option value="${p.id}">${p.name} (${p.unit})</option>`).join('');
+  if(!_bomRows.length){
+    container.innerHTML='<div style="color:var(--muted);font-size:.82rem;padding:.4rem 0">Sin ingredientes aún. Haz clic en "+ Agregar producto".</div>';
+    return;
+  }
+  container.innerHTML = _bomRows.map((row,i)=>`
+    <div style="display:grid;grid-template-columns:1fr 70px auto auto;gap:.4rem;align-items:center;background:var(--input);border-radius:8px;padding:.5rem .7rem">
+      <select onchange="_bomRows[${i}].product_id=+this.value"
+        style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.3rem;font-size:.8rem">
+        <option value="">-- Producto --</option>${opts.replace(`value="${row.product_id}"`,`value="${row.product_id}" selected`)}
+      </select>
+      <input type="number" min="0.25" step="0.25" value="${row.quantity}"
+        onchange="_bomRows[${i}].quantity=+this.value"
+        style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.3rem;font-size:.8rem;text-align:center"
+        title="Cantidad por unidad del extra">
+      <label style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);white-space:nowrap;cursor:pointer">
+        <input type="checkbox" ${row.is_variant?'checked':''} onchange="_bomRows[${i}].is_variant=this.checked;_bomRows[${i}].variant_label=document.getElementById('vl-${i}').value"> Variante
+      </label>
+      <input id="vl-${i}" type="text" placeholder="ej: Ámbar" value="${row.variant_label||''}"
+        onchange="_bomRows[${i}].variant_label=this.value" ${row.is_variant?'':'disabled'}
+        style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.3rem;font-size:.75rem;width:70px"
+        title="Etiqueta de variante (ej: Ámbar, Stout)">
+      <button onclick="_bomRows.splice(${i},1);renderBomRows()"
+        style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.25);border-radius:6px;padding:.2rem .4rem;cursor:pointer;font-size:.8rem">✕</button>
+    </div>`).join('');
+}
+
+function addBomRow(){
+  _bomRows.push({product_id:'', quantity:1, is_variant:false, variant_label:''});
+  renderBomRows();
+}
+
+async function saveBom(){
+  const items = _bomRows.filter(r=>r.product_id).map(r=>({
+    product_id:+r.product_id, quantity:+r.quantity,
+    is_variant:!!r.is_variant, variant_label:r.variant_label||''
+  }));
+  try{
+    await api(`/api/admin/stock/bom/${encodeURIComponent(_bomCurrentSlug)}`, {method:'PUT', body:JSON.stringify({items})});
+    document.getElementById('bom-modal').style.display='none';
+    showToast(`Ingredientes guardados para "${_bomCurrentName}" ✅`);
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Consume stock for a booking ──────────────────────────────────────────────
+async function consumeStockForBooking(){
+  if(!_currentReservaData) return showToast('Sin reserva cargada');
+  const ref = _currentReservaData.source_id || _currentReservaData.booking_ref ||
+              (_currentReservaData.source==='hotboat_web'
+                ? _currentReservaData.source_id
+                : `AA-${_currentReservaData.id}`);
+  if(!ref) return showToast('Sin referencia de reserva');
+
+  // Collect extras from the editor
+  const extras = _currentExtras || [];
+  if(!extras.length) return showToast('Esta reserva no tiene extras');
+
+  const items = extras.map(e=>({
+    extra_slug: e.key || e.slug || e.name?.toLowerCase().replace(/\s+/g,'_') || '',
+    quantity: e.quantity||1,
+    variant_product_id: e.variant_product_id||null,
+  })).filter(x=>x.extra_slug);
+
+  try{
+    const r = await api('/api/admin/stock/consume', {method:'POST', body:JSON.stringify({booking_ref:ref, extras:items})});
+    showToast(`Stock consumido para ${ref} 📦`);
+    await loadStockSection();
+  }catch(e){ showToast('Error consumiendo stock: '+e.message); }
+}
+
+// Load stock section when switching to it
+const _origShowSection = typeof showSection === 'function' ? showSection : null;
+document.addEventListener('DOMContentLoaded', ()=>{
+  const stockNavItem = document.getElementById('nav-stock');
+  if(stockNavItem) stockNavItem.addEventListener('click', ()=>{ loadStockSection(); });
+});
 </script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
