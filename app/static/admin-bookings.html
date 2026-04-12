@@ -4189,8 +4189,13 @@ function generarRecibo(){
 
     ${saldoHtml}
 
-    <div style="margin-top:1.5rem;text-align:right">
-      <button onclick="window.print()" class="no-print"
+    <div class="no-print" style="margin-top:1.5rem;display:flex;gap:.7rem;justify-content:flex-end;align-items:center;flex-wrap:wrap">
+      <span id="_email-status" style="font-size:.82rem;color:#555"></span>
+      <button onclick="_sendReciboEmail()" id="_btn-send-email"
+        style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.4rem">
+        📧 Enviar al cliente
+      </button>
+      <button onclick="window.print()"
         style="background:#1a3a7a;color:#fff;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.9rem;font-weight:700;cursor:pointer">
         🖨️ Imprimir / Guardar PDF
       </button>
@@ -4201,6 +4206,54 @@ function generarRecibo(){
     &nbsp;·&nbsp; HotBoat Chile &nbsp;·&nbsp; hotboatchile.com
   </div>
 </div>
+<script>
+// ── Envío de recibo por email ──────────────────────────────────────────────
+const _RECIBO_META = {
+  to:      ${JSON.stringify((r.email||'').trim())},
+  subject: ${JSON.stringify(`Recibo HotBoat #${ref} — ${r.nombre_cliente||''}`.trim())},
+  key:     ${JSON.stringify(window.opener ? window.opener.getKey() : '')},
+};
+
+async function _sendReciboEmail(){
+  const btn = document.getElementById('_btn-send-email');
+  const st  = document.getElementById('_email-status');
+  const to  = _RECIBO_META.to;
+  if(!to){
+    st.style.color='#dc2626';
+    st.textContent='Sin email del cliente registrado.';
+    return;
+  }
+  // Build clean HTML for email: strip .no-print elements
+  const clone = document.documentElement.cloneNode(true);
+  clone.querySelectorAll('.no-print').forEach(el=>el.remove());
+  const cleanHtml = '<!DOCTYPE html>' + clone.outerHTML;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Enviando…';
+  st.textContent = '';
+  try {
+    const resp = await fetch('/api/admin/recibo/send', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','x-admin-key': _RECIBO_META.key},
+      body: JSON.stringify({ to, subject: _RECIBO_META.subject, html: cleanHtml }),
+    });
+    const data = await resp.json().catch(()=>({}));
+    if(resp.ok && data.ok){
+      btn.textContent = '✅ Enviado';
+      btn.style.background = '#15803d';
+      st.style.color = '#15803d';
+      st.textContent = 'Recibo enviado a ' + to;
+    } else {
+      throw new Error(data.detail || 'Error al enviar');
+    }
+  } catch(e){
+    btn.disabled = false;
+    btn.textContent = '📧 Enviar al cliente';
+    st.style.color = '#dc2626';
+    st.textContent = '❌ ' + e.message;
+  }
+}
+</script>
 </body>
 </html>`;
 

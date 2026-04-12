@@ -781,6 +781,56 @@ async def test_pre_booking_notif(x_admin_key: str = Header("")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ReciboSendBody(BaseModel):
+    to: str
+    subject: str
+    html: str
+
+
+@admin_router.post("/api/admin/recibo/send")
+async def send_recibo_email(body: ReciboSendBody, x_admin_key: str = Header("")):
+    """Send the receipt HTML to the client's email via Resend."""
+    _check_auth(x_admin_key)
+    to_addr = body.to.strip()
+    if not to_addr or "@" not in to_addr:
+        raise HTTPException(status_code=400, detail="Email del cliente no válido")
+
+    from app.config import get_settings
+    from app.email.resend_booking import send_booking_html
+
+    settings = get_settings()
+    api_key = (getattr(settings, "resend_api_key", "") or "").strip()
+    if not api_key:
+        raise HTTPException(status_code=500, detail="RESEND_API_KEY no configurado")
+
+    from_addr = (
+        getattr(settings, "resend_from_confirmations", "")
+        or getattr(settings, "email_from", "")
+        or "noreply@reservas.hotboat.cl"
+    ).strip()
+
+    try:
+        await asyncio.to_thread(
+            send_booking_html,
+            to=to_addr,
+            subject=body.subject,
+            html=body.html,
+            from_address=from_addr,
+            api_key=api_key,
+        )
+        logger.info("Recibo enviado a %s — %s", to_addr, body.subject)
+        return {"ok": True, "to": to_addr}
+    except Exception as e:
+        error_detail = str(e)
+        try:
+            if hasattr(e, "body"):
+                error_detail += f" | {e.body}"
+        except Exception:
+            pass
+        logger.error("send_recibo_email failed to=%s: %s", to_addr, error_detail)
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
 @admin_router.post("/api/admin/daily-summary/send")
 async def send_daily_summary_now(x_admin_key: str = Header("")):
     """Manually trigger the daily morning summary email (same as the 08:00 job)."""
