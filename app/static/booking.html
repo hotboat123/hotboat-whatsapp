@@ -686,34 +686,82 @@ function showAlojamientos(){
   <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
 }
 
+// ── Image gallery state & navigation ────────────────────────────────────────
+const _galState = {};   // gid → current index
+
+function _galBuild(gid, imgs, icon){
+  if(!imgs.length)
+    return `<div style="text-align:center;font-size:4rem;padding:1.5rem 0;margin-bottom:.5rem">${icon}</div>`;
+  if(imgs.length === 1)
+    return `<img src="${imgs[0]}" style="width:100%;height:auto;border-radius:10px;margin-bottom:.8rem;display:block"
+        onerror="this.outerHTML='<div style=\\'text-align:center;font-size:4rem;padding:1.5rem 0;margin-bottom:.5rem\\'>${icon}</div>'">`;
+
+  _galState[gid] = 0;
+  const dots = imgs.map((_,i)=>
+    `<span id="${gid}-dot-${i}" style="display:inline-block;width:8px;height:8px;border-radius:50%;
+      background:${i===0?'#fff':'rgba(255,255,255,.4)'};transition:background .2s;cursor:pointer"
+      onclick="_galGoto('${gid}',${i})"></span>`
+  ).join('');
+
+  return `
+  <div id="${gid}" style="position:relative;margin-bottom:.8rem;border-radius:10px;overflow:hidden;background:#000;touch-action:pan-y"
+       data-imgs='${JSON.stringify(imgs).replace(/'/g,"&#39;")}' data-icon="${icon}">
+    <img id="${gid}-img" src="${imgs[0]}" style="width:100%;height:auto;display:block;transition:opacity .2s"
+         onerror="this.src='';this.style.display='none'">
+    <!-- arrows -->
+    <button onclick="_galGoto('${gid}',-1)" style="position:absolute;left:0;top:0;height:100%;width:44px;
+      background:linear-gradient(to right,rgba(0,0,0,.45),transparent);color:#fff;border:none;
+      font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">‹</button>
+    <button onclick="_galGoto('${gid}',1)" style="position:absolute;right:0;top:0;height:100%;width:44px;
+      background:linear-gradient(to left,rgba(0,0,0,.45),transparent);color:#fff;border:none;
+      font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">›</button>
+    <!-- dots -->
+    <div style="position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:6px">
+      ${dots}
+    </div>
+    <!-- counter -->
+    <div id="${gid}-ctr" style="position:absolute;top:8px;right:10px;background:rgba(0,0,0,.55);color:#fff;
+      font-size:11px;border-radius:12px;padding:2px 8px">1 / ${imgs.length}</div>
+  </div>`;
+}
+
+function _galGoto(gid, dir){
+  const wrap = document.getElementById(gid);
+  if(!wrap) return;
+  const imgs = JSON.parse(wrap.dataset.imgs);
+  const total = imgs.length;
+  let cur = _galState[gid] || 0;
+  cur = (cur + dir + total) % total;
+  _galState[gid] = cur;
+  const imgEl = document.getElementById(gid+'-img');
+  if(imgEl){ imgEl.style.opacity='0'; setTimeout(()=>{ imgEl.src=imgs[cur]; imgEl.style.opacity='1'; },150); }
+  const ctr = document.getElementById(gid+'-ctr');
+  if(ctr) ctr.textContent = `${cur+1} / ${total}`;
+  imgs.forEach((_,i)=>{
+    const d = document.getElementById(`${gid}-dot-${i}`);
+    if(d) d.style.background = i===cur ? '#fff' : 'rgba(255,255,255,.4)';
+  });
+}
+
+// Touch/swipe support for galleries
+(function(){
+  let _tx=0;
+  document.addEventListener('touchstart',e=>{
+    const g=e.target.closest('[data-imgs]'); if(g) _tx=e.touches[0].clientX;
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    const g=e.target.closest('[data-imgs]'); if(!g) return;
+    const dx=e.changedTouches[0].clientX - _tx;
+    if(Math.abs(dx)>40) _galGoto(g.id, dx<0?1:-1);
+  },{passive:true});
+})();
+
 function showAlojamiento(id){
   const a = ALOJAMIENTOS.find(x=>x.id===id);
   if(!a) return showAlojamientos();
   const imgs = (a.all_images && a.all_images.length) ? a.all_images : (a.image_path ? [a.image_path] : []);
-  const galleryId = 'aloj-gallery-' + a.id;
-  let imgHtml;
-  if(!imgs.length){
-    imgHtml = `<div style="text-align:center;font-size:4rem;padding:1.5rem 0;margin-bottom:.5rem">${a.icon}</div>`;
-  } else if(imgs.length === 1){
-    imgHtml = `<img src="${imgs[0]}" style="width:100%;height:auto;border-radius:10px;margin-bottom:.8rem;display:block"
-        onerror="this.outerHTML='<div style=\\'text-align:center;font-size:4rem;padding:1.5rem 0;margin-bottom:.5rem\\'>${a.icon}</div>'">`;
-  } else {
-    const thumbs = imgs.map((u,i)=>`<img src="${u}" data-idx="${i}"
-      style="width:52px;height:42px;object-fit:cover;border-radius:6px;cursor:pointer;opacity:${i===0?1:.55};border:2px solid ${i===0?'var(--primary)':'transparent'}"
-      onclick="_alojGoto('${galleryId}',${i})"
-      onerror="this.style.display='none'">`).join('');
-    imgHtml = `
-    <div id="${galleryId}" style="position:relative;margin-bottom:.8rem">
-      <img id="${galleryId}-main" src="${imgs[0]}"
-        style="width:100%;height:auto;border-radius:10px;display:block"
-        onerror="this.src=''" >
-      <button onclick="_alojGoto('${galleryId}',-1)"
-        style="position:absolute;left:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">‹</button>
-      <button onclick="_alojGoto('${galleryId}',1)"
-        style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">›</button>
-      <div style="display:flex;gap:.3rem;margin-top:.4rem;overflow-x:auto;padding-bottom:.2rem">${thumbs}</div>
-    </div>`;
-  }
+  const gid = 'gal-' + a.id;
+  const imgHtml = _galBuild(gid, imgs, a.icon);
   mc.innerHTML = `
   <div class="card">
     ${imgHtml}
@@ -726,26 +774,6 @@ function showAlojamiento(id){
   <button class="btn" onclick="showSolicitudForm('${a.name}','alojamiento:${a.dbId||a.id}')">Solicitar Reserva</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showAlojamientos()">Ver mas opciones</button>`;
 }
-
-// Gallery navigation for alojamiento detail view
-const _alojGalState = {};
-function _alojGoto(gid, idx){
-  const gallery = document.getElementById(gid);
-  if(!gallery) return;
-  const thumbs = gallery.querySelectorAll('img[data-idx]');
-  const total = thumbs.length;
-  if(!total) return;
-  let cur = _alojGalState[gid] || 0;
-  if(idx === -1) cur = (cur - 1 + total) % total;
-  else if(idx === 1) cur = (cur + 1) % total;
-  else cur = idx;
-  _alojGalState[gid] = cur;
-  const main = document.getElementById(gid + '-main');
-  if(main) main.src = thumbs[cur].src;
-  thumbs.forEach((t,i)=>{
-    t.style.opacity = i===cur ? '1' : '0.55';
-    t.style.border = i===cur ? '2px solid var(--primary)' : '2px solid transparent';
-  });
 }
 
 function showPacks(){
