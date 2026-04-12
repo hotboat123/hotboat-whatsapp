@@ -4214,7 +4214,7 @@ function generarRecibo(){
   win.document.write(html);
   win.document.close();
 
-  // Inject email handler from parent page (avoids </script> inside template literal)
+  // Inject email handler from parent page into the popup window
   const _to      = (r.email||'').trim();
   const _subject = ('Recibo HotBoat #' + ref + ' — ' + (r.nombre_cliente||'')).trim();
   setTimeout(function(){
