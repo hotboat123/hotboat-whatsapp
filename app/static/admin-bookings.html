@@ -573,18 +573,20 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <span style="font-size:.8rem;margin-left:.5rem">Activo</span>
             </div>
           </div>
-          <div class="form-group-adm" id="aloj-img-wrap" style="display:none;margin-top:.8rem">
-            <label>Foto actual</label>
-            <img id="aloj-img-preview" src="" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:contain;margin-top:.4rem">
+          <!-- Multi-image manager -->
+          <div class="form-group-adm" style="margin-top:.8rem">
+            <label style="display:flex;justify-content:space-between;align-items:center">
+              <span>📸 Fotos <span style="font-weight:400;opacity:.6;font-size:.75rem">(arrastra para reordenar)</span></span>
+              <button type="button" onclick="alojAddImageRow()" style="font-size:.75rem;padding:.2rem .6rem;background:var(--green);color:#fff;border:none;border-radius:6px;cursor:pointer">+ Agregar URL</button>
+            </label>
+            <div id="aloj-images-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem"></div>
+            <small style="color:var(--muted);font-size:.72rem;margin-top:.3rem;display:block">
+              Sube a Hostinger y pega el link. La 1ª foto es la portada. Puedes subir archivos abajo (⚠️ se pierden al reiniciar Railway).
+            </small>
           </div>
           <div class="form-group-adm">
-            <label>URL de imagen <span style="font-weight:400;opacity:.65">(recomendado — persiste entre deploys)</span></label>
-            <input id="aloj-img-url" type="url" placeholder="https://... pega aquí el link directo de la foto">
-            <small style="color:var(--muted);font-size:.72rem">Usa Google Drive (compartir → link directo), Cloudinary, Imgur, etc. Esta URL no se pierde al reiniciar Railway.</small>
-          </div>
-          <div class="form-group-adm">
-            <label>O subir archivo <span style="font-weight:400;opacity:.65">(se pierde al reiniciar Railway)</span></label>
-            <input type="file" id="aloj-img-file" accept="image/*">
+            <label>Subir archivo(s) <span style="font-weight:400;opacity:.65">(se pierde al reiniciar Railway — mejor usar URL)</span></label>
+            <input type="file" id="aloj-img-file" accept="image/*" multiple>
           </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveAloj()">Guardar</button>
@@ -3542,6 +3544,39 @@ let _exps = [];
 // ALOJAMIENTOS ADMIN
 // ═══════════════════════════════════════════════════════════════
 let _alojs = [];
+let _alojImagesList = [];  // ordered list of image URLs for the modal being edited
+
+function renderAlojImagesList(){
+  const container = document.getElementById('aloj-images-list');
+  if(!container) return;
+  if(!_alojImagesList.length){
+    container.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:.3rem 0">Sin fotos aún</div>';
+    return;
+  }
+  container.innerHTML = _alojImagesList.map((url, i) => `
+    <div style="display:flex;gap:.4rem;align-items:center" data-idx="${i}">
+      <span style="color:var(--muted);font-size:.75rem;width:18px;text-align:right;flex-shrink:0">${i===0?'📌':(i+1)}</span>
+      ${url ? `<img src="${url}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0"
+               onerror="this.style.display='none'">` : ''}
+      <input type="url" value="${url}" placeholder="https://..."
+        style="flex:1;font-size:.78rem;padding:.3rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px"
+        oninput="_alojImagesList[${i}]=this.value;renderAlojImagesList()">
+      <button type="button" onclick="_alojImagesList.splice(${i},1);renderAlojImagesList()"
+        style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer;flex-shrink:0">✕</button>
+      ${i>0?`<button type="button" onclick="_alojImagesList.splice(${i-1},0,_alojImagesList.splice(${i},1)[0]);renderAlojImagesList()"
+        style="background:var(--input);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.25rem .4rem;font-size:.75rem;cursor:pointer;flex-shrink:0" title="Subir">↑</button>`:''}
+    </div>`).join('');
+}
+
+function alojAddImageRow(){
+  _alojImagesList.push('');
+  renderAlojImagesList();
+  // Focus the new input
+  setTimeout(()=>{
+    const inputs = document.querySelectorAll('#aloj-images-list input[type=url]');
+    if(inputs.length) inputs[inputs.length-1].focus();
+  }, 50);
+}
 
 async function loadAlojamientos(){
   try{
@@ -3601,10 +3636,15 @@ function openAlojModal(id){
   document.getElementById('aloj-cost').value = a ? (a.cost_from||0) : 0;
   document.getElementById('aloj-order').value = a ? (a.display_order||0) : 0;
   document.getElementById('aloj-active').checked = a ? a.is_active : true;
-  const wrap = document.getElementById('aloj-img-wrap');
-  if(a && a.image_path){ wrap.style.display=''; document.getElementById('aloj-img-preview').src=a.image_path; }
-  else { wrap.style.display='none'; }
-  document.getElementById('aloj-img-url').value = (a && a.image_path) ? a.image_path : '';
+  // Build image list: main + extras
+  const allImgs = [];
+  if(a && a.image_path) allImgs.push(a.image_path);
+  if(a && a.extra_images) {
+    const extras = typeof a.extra_images === 'string' ? JSON.parse(a.extra_images||'[]') : (a.extra_images||[]);
+    extras.forEach(u => { if(u && !allImgs.includes(u)) allImgs.push(u); });
+  }
+  _alojImagesList = allImgs.slice();
+  renderAlojImagesList();
   document.getElementById('aloj-img-file').value='';
   document.getElementById('aloj-modal').style.display='';
 }
@@ -3628,8 +3668,8 @@ async function saveAloj(){
     cost_from: +document.getElementById('aloj-cost').value||0,
     display_order: +document.getElementById('aloj-order').value||0,
     is_active: document.getElementById('aloj-active').checked,
-    image_path: document.getElementById('aloj-img-url').value.trim() ||
-                (id ? (_alojs.find(x=>x.id==id)?.image_path||null) : null),
+    image_path: _alojImagesList[0] || null,
+    extra_images: _alojImagesList.slice(1),
   };
   try{
     const url = id ? `/api/admin/alojamientos/${id}` : '/api/admin/alojamientos';
@@ -3637,12 +3677,19 @@ async function saveAloj(){
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
     const d = await r.json();
     const savedId = id || d.id;
-    // Only upload file if no URL was provided (file upload is ephemeral on Railway)
-    const urlVal = document.getElementById('aloj-img-url').value.trim();
-    const file = !urlVal && document.getElementById('aloj-img-file').files[0];
-    if(file && savedId){
-      const fd = new FormData(); fd.append('file',file);
-      await fetch(`/api/admin/alojamientos/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+    // Upload files if any (appended to image list)
+    const files = document.getElementById('aloj-img-file').files;
+    for(const file of files){
+      const fd = new FormData(); fd.append('file', file);
+      const ur = await fetch(`/api/admin/alojamientos/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+      const ud = await ur.json();
+      if(ud.image_path) _alojImagesList.push(ud.image_path);
+    }
+    // Re-save if files were uploaded (to persist the updated list)
+    if(files.length){
+      body.image_path = _alojImagesList[0]||null;
+      body.extra_images = _alojImagesList.slice(1);
+      await fetch(`/api/admin/alojamientos/${savedId}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
     }
     closeAlojModal(); await loadAlojamientos(); showToast('Alojamiento guardado ✅');
   }catch(e){ showToast('Error: '+e.message); }

@@ -530,6 +530,7 @@ async function loadDynamicContent(){
           cap: a.capacity||2,
           features: [a.group_name||'', 'Hasta '+(a.capacity||2)+' persona'+(a.capacity>1?'s':'')].filter(Boolean),
           image_path: a.image_path||null,
+          all_images: [a.image_path, ...(a.extra_images||[])].filter(Boolean),
         });
       });
     }
@@ -688,10 +689,31 @@ function showAlojamientos(){
 function showAlojamiento(id){
   const a = ALOJAMIENTOS.find(x=>x.id===id);
   if(!a) return showAlojamientos();
-  const imgHtml = a.image_path
-    ? `<img src="${a.image_path}" style="width:100%;height:auto;border-radius:10px;margin-bottom:.8rem;display:block"
-        onerror="this.outerHTML='<div style=\\'text-align:center;font-size:4rem;padding:1.5rem 0;margin-bottom:.5rem\\'>${a.icon}</div>'">`
-    : `<div style="text-align:center;font-size:4rem;padding:1.5rem 0;margin-bottom:.5rem">${a.icon}</div>`;
+  const imgs = (a.all_images && a.all_images.length) ? a.all_images : (a.image_path ? [a.image_path] : []);
+  const galleryId = 'aloj-gallery-' + a.id;
+  let imgHtml;
+  if(!imgs.length){
+    imgHtml = `<div style="text-align:center;font-size:4rem;padding:1.5rem 0;margin-bottom:.5rem">${a.icon}</div>`;
+  } else if(imgs.length === 1){
+    imgHtml = `<img src="${imgs[0]}" style="width:100%;height:auto;border-radius:10px;margin-bottom:.8rem;display:block"
+        onerror="this.outerHTML='<div style=\\'text-align:center;font-size:4rem;padding:1.5rem 0;margin-bottom:.5rem\\'>${a.icon}</div>'">`;
+  } else {
+    const thumbs = imgs.map((u,i)=>`<img src="${u}" data-idx="${i}"
+      style="width:52px;height:42px;object-fit:cover;border-radius:6px;cursor:pointer;opacity:${i===0?1:.55};border:2px solid ${i===0?'var(--primary)':'transparent'}"
+      onclick="_alojGoto('${galleryId}',${i})"
+      onerror="this.style.display='none'">`).join('');
+    imgHtml = `
+    <div id="${galleryId}" style="position:relative;margin-bottom:.8rem">
+      <img id="${galleryId}-main" src="${imgs[0]}"
+        style="width:100%;height:auto;border-radius:10px;display:block"
+        onerror="this.src=''" >
+      <button onclick="_alojGoto('${galleryId}',-1)"
+        style="position:absolute;left:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">‹</button>
+      <button onclick="_alojGoto('${galleryId}',1)"
+        style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1">›</button>
+      <div style="display:flex;gap:.3rem;margin-top:.4rem;overflow-x:auto;padding-bottom:.2rem">${thumbs}</div>
+    </div>`;
+  }
   mc.innerHTML = `
   <div class="card">
     ${imgHtml}
@@ -703,6 +725,27 @@ function showAlojamiento(id){
   </div>
   <button class="btn" onclick="showSolicitudForm('${a.name}','alojamiento:${a.dbId||a.id}')">Solicitar Reserva</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showAlojamientos()">Ver mas opciones</button>`;
+}
+
+// Gallery navigation for alojamiento detail view
+const _alojGalState = {};
+function _alojGoto(gid, idx){
+  const gallery = document.getElementById(gid);
+  if(!gallery) return;
+  const thumbs = gallery.querySelectorAll('img[data-idx]');
+  const total = thumbs.length;
+  if(!total) return;
+  let cur = _alojGalState[gid] || 0;
+  if(idx === -1) cur = (cur - 1 + total) % total;
+  else if(idx === 1) cur = (cur + 1) % total;
+  else cur = idx;
+  _alojGalState[gid] = cur;
+  const main = document.getElementById(gid + '-main');
+  if(main) main.src = thumbs[cur].src;
+  thumbs.forEach((t,i)=>{
+    t.style.opacity = i===cur ? '1' : '0.55';
+    t.style.border = i===cur ? '2px solid var(--primary)' : '2px solid transparent';
+  });
 }
 
 function showPacks(){

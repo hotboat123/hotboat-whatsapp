@@ -1702,7 +1702,9 @@ async def admin_list_alojamientos(x_admin_key: str = Header(...)):
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id,slug,name,group_name,icon,description,price_from,cost_from,"
-                "capacity,owner_whatsapp,image_path,is_active,display_order FROM alojamientos ORDER BY display_order,id"
+                "capacity,owner_whatsapp,image_path,is_active,display_order,"
+                "COALESCE(extra_images,'[]'::jsonb) AS extra_images"
+                " FROM alojamientos ORDER BY display_order,id"
             )
             cols = [d.name for d in cur.description]
             return {"alojamientos": [_aloj_row(r, cols) for r in cur.fetchall()]}
@@ -1719,6 +1721,7 @@ class AlojamientoBody(BaseModel):
     capacity: int = 2
     owner_whatsapp: str = ""
     image_path: Optional[str] = None
+    extra_images: List[str] = []
     is_active: bool = True
     display_order: int = 0
 
@@ -1730,11 +1733,13 @@ async def admin_create_alojamiento(body: AlojamientoBody, x_admin_key: str = Hea
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO alojamientos"
-                " (slug,name,group_name,icon,description,price_from,cost_from,capacity,owner_whatsapp,image_path,is_active,display_order)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                " (slug,name,group_name,icon,description,price_from,cost_from,capacity,owner_whatsapp,"
+                "  image_path,extra_images,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
                 (body.slug, body.name, body.group_name, body.icon, body.description,
                  body.price_from, body.cost_from, body.capacity, body.owner_whatsapp,
-                 body.image_path, body.is_active, body.display_order),
+                 body.image_path, json.dumps(body.extra_images),
+                 body.is_active, body.display_order),
             )
             new_id = cur.fetchone()[0]
             conn.commit()
@@ -1748,11 +1753,12 @@ async def admin_update_alojamiento(aloj_id: int, body: AlojamientoBody, x_admin_
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE alojamientos SET slug=%s,name=%s,group_name=%s,icon=%s,description=%s,"
-                "price_from=%s,cost_from=%s,capacity=%s,owner_whatsapp=%s,image_path=%s,is_active=%s,"
-                "display_order=%s WHERE id=%s",
+                "price_from=%s,cost_from=%s,capacity=%s,owner_whatsapp=%s,image_path=%s,"
+                "extra_images=%s::jsonb,is_active=%s,display_order=%s WHERE id=%s",
                 (body.slug, body.name, body.group_name, body.icon, body.description,
                  body.price_from, body.cost_from, body.capacity, body.owner_whatsapp,
-                 body.image_path, body.is_active, body.display_order, aloj_id),
+                 body.image_path, json.dumps(body.extra_images),
+                 body.is_active, body.display_order, aloj_id),
             )
             conn.commit()
     return {"ok": True}
@@ -1771,16 +1777,32 @@ async def admin_delete_alojamiento(aloj_id: int, x_admin_key: str = Header(...))
 @admin_router.post("/api/admin/alojamientos/{aloj_id}/image")
 async def admin_upload_aloj_image(aloj_id: int, file: UploadFile = File(...), x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
+    import time as _time
     ext = os.path.splitext(file.filename or "img.jpg")[1].lower() or ".jpg"
-    dest_dir = os.path.join(MEDIA_ROOT, "images", "alojamientos", f"aloj_{aloj_id}")
-    os.makedirs(dest_dir, exist_ok=True)
-    dest = os.path.join(dest_dir, f"main{ext}")
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    rel = f"/media/images/alojamientos/aloj_{aloj_id}/main{ext}"
+    # Save inside app/static so it's served at /static/... and survives Railway restarts
+    # (as long as the image is committed to git or re-uploaded)
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "images", "alojamientos", f"aloj_{aloj_id}")
+    os.makedirs(static_dir, exist_ok=True)
+    ts = int(_time.time())
+    filename = f"img_{ts}{ext}"
+    dest = os.path.join(static_dir, filename)
+    with open(dest, "wb") as fh:
+        shutil.copyfileobj(file.file, fh)
+    rel = f"/static/images/alojamientos/aloj_{aloj_id}/{filename}"
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("UPDATE alojamientos SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, aloj_id))
+            # If no main image set yet, make this the primary
+            cur.execute("SELECT image_path, COALESCE(extra_images,'[]'::jsonb) FROM alojamientos WHERE id=%s", (aloj_id,))
+            row = cur.fetchone()
+            if row:
+                existing_main = row[0]
+                existing_extra = list(row[1]) if row[1] else []
+                if not existing_main:
+                    cur.execute("UPDATE alojamientos SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, aloj_id))
+                else:
+                    existing_extra.append(rel)
+                    cur.execute("UPDATE alojamientos SET extra_images=%s::jsonb,updated_at=NOW() WHERE id=%s",
+                                (json.dumps(existing_extra), aloj_id))
             conn.commit()
     return {"ok": True, "image_path": rel}
 
