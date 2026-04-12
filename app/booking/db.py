@@ -322,7 +322,7 @@ def get_bookings_starting_soon(window_minutes: int = 20, target_minutes_ahead: i
                        num_personas                    AS num_people,
                        ingreso_total                   AS total_price,
                        status,
-                       fuente                          AS source,
+                       source                          AS source,
                        'es'                            AS customer_language,
                        '[]'                            AS extras,
                        COALESCE(ingreso_extras, 0)     AS extras_total,
