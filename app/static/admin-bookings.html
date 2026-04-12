@@ -3271,17 +3271,24 @@ function renderAlojAddon(){
   if(!_alojAddon.length){
     list.innerHTML='<div style="color:var(--muted);font-size:.8rem;padding:.4rem 0">Sin alojamientos agregados</div>';
   } else {
-    list.innerHTML = _alojAddon.map((item,i)=>`
+    list.innerHTML = _alojAddon.map((item,i)=>{
+      const cost = item.cost_per_night||0;
+      const costCell = cost>0
+        ? `<span style="color:#f87171;font-size:.75rem">costo: ${fmtMoney(cost*item.nights)}</span>`
+        : '';
+      return `
       <div class="extras-row">
         <div class="ex-name">🏠 ${item.name}<br>
-          <span style="font-size:.7rem;color:var(--muted)">${fmtDateDisplay(item.entry_date)} → ${fmtDateDisplay(item.exit_date)}</span></div>
+          <span style="font-size:.7rem;color:var(--muted)">${fmtDateDisplay(item.entry_date)} → ${fmtDateDisplay(item.exit_date)}</span><br>
+          ${costCell}</div>
         <input type="number" min="1" value="${item.nights}" title="Noches"
           oninput="_alojAddon[${i}].nights=Math.max(1,+this.value||1);renderAlojAddon();updateAllAddons()">
-        <input type="number" min="0" value="${item.unit_price}" title="$/noche"
+        <input type="number" min="0" value="${item.unit_price}" title="$/noche (catálogo)"
           oninput="_alojAddon[${i}].unit_price=+this.value||0;renderAlojAddon();updateAllAddons()">
         <div>${fmtMoney(item.nights*item.unit_price)}</div>
         <button class="ex-del" onclick="_alojAddon.splice(${i},1);renderAlojAddon();updateAllAddons()">✕</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
   const total = _alojAddon.reduce((s,a)=>s+a.nights*a.unit_price,0);
   const lbl = document.getElementById('aloj-addon-total');
@@ -3320,7 +3327,8 @@ function addAlojAddon(){
   const aloj  = ALOJ_CATALOG.find(a=>a.slug===slug);
   const nights= Math.max(1, Math.round((new Date(exit)-new Date(entry))/86400000));
   const price = aloj ? (+aloj.price_from||0) : 0;
-  _alojAddon.push({key:`aloj__${slug}`, name:aloj?aloj.name:slug, nights, entry_date:entry, exit_date:exit, unit_price:price});
+  const cost  = aloj ? (+aloj.cost_from||0) : 0;
+  _alojAddon.push({key:`aloj__${slug}`, name:aloj?aloj.name:slug, nights, entry_date:entry, exit_date:exit, unit_price:price, cost_per_night:cost});
   const entryEl = document.getElementById('aloj-addon-entry');
   const exitEl  = document.getElementById('aloj-addon-exit');
   if(entryEl._flatpickr) entryEl._flatpickr.clear(); else entryEl.value='';
@@ -3372,14 +3380,20 @@ function initExtrasEditor(extrasJson){
     const isObj = typeof val === 'object' && val !== null;
     if(key.startsWith('aloj__')){
       // Stored as {qty:nights, unit_price, entry_date, exit_date, name}
+      const slug = key.replace('aloj__','');
+      const catalogAloj = ALOJ_CATALOG.find(a=>a.slug===slug);
       const nights = isObj ? (+val.qty||+val.nights||1) : 1;
+      const storedPrice = isObj&&val.unit_price ? +val.unit_price : 0;
+      const price = storedPrice || (catalogAloj ? (+catalogAloj.price_from||0) : 0);
+      const cost  = catalogAloj ? (+catalogAloj.cost_from||0) : 0;
       _alojAddon.push({
         key,
-        name:       isObj&&val.name ? val.name : key.replace('aloj__','').replace(/_/g,' '),
+        name:       isObj&&val.name ? val.name : (catalogAloj ? catalogAloj.name : slug.replace(/_/g,' ')),
         nights,
         entry_date: isObj&&val.entry_date ? val.entry_date : '',
         exit_date:  isObj&&val.exit_date  ? val.exit_date  : '',
-        unit_price: isObj&&val.unit_price ? +val.unit_price : 0,
+        unit_price: price,
+        cost_per_night: cost,
       });
     } else if(key.startsWith('exp__')){
       const qty = isObj ? (+val.qty||1) : (+val||1);
