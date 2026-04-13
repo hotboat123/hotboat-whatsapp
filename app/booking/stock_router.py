@@ -173,6 +173,7 @@ def create_product(body: ProductBody, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Insert with current_stock already set; log it without adding again
             cur.execute(
                 """INSERT INTO stock_products
                    (name, category, unit, current_stock, min_stock, cost_per_unit, notes, is_active)
@@ -181,10 +182,15 @@ def create_product(body: ProductBody, x_admin_key: str = Header("")):
                  body.min_stock, body.cost_per_unit, body.notes, body.is_active)
             )
             new_id = cur.fetchone()[0]
-            # Log initial stock if > 0
+            # Only log the movement — do NOT apply delta (stock already set by INSERT)
             if body.current_stock > 0:
-                _apply_movement(cur, new_id, body.current_stock, "purchase",
-                                notes=f"Stock inicial al crear producto")
+                cur.execute(
+                    """INSERT INTO stock_movements
+                       (product_id, product_name, delta, reason, notes)
+                       VALUES (%s,%s,%s,%s,%s)""",
+                    (new_id, body.name, body.current_stock, "purchase",
+                     "Stock inicial al crear producto")
+                )
             conn.commit()
     return {"ok": True, "id": new_id}
 
@@ -194,14 +200,29 @@ def update_product(pid: int, body: ProductBody, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Read old stock to compute delta for the movement log
+            cur.execute("SELECT current_stock, name FROM stock_products WHERE id=%s", (pid,))
+            row = cur.fetchone()
+            old_stock = float(row[0]) if row else 0.0
+            # Update all fields including current_stock
             cur.execute(
                 """UPDATE stock_products
-                   SET name=%s, category=%s, unit=%s, min_stock=%s,
+                   SET name=%s, category=%s, unit=%s, current_stock=%s, min_stock=%s,
                        cost_per_unit=%s, notes=%s, is_active=%s, updated_at=NOW()
                    WHERE id=%s""",
-                (body.name, body.category, body.unit, body.min_stock,
-                 body.cost_per_unit, body.notes, body.is_active, pid)
+                (body.name, body.category, body.unit, body.current_stock,
+                 body.min_stock, body.cost_per_unit, body.notes, body.is_active, pid)
             )
+            # Log only if stock actually changed
+            delta = round(body.current_stock - old_stock, 4)
+            if delta != 0:
+                cur.execute(
+                    """INSERT INTO stock_movements
+                       (product_id, product_name, delta, reason, notes)
+                       VALUES (%s,%s,%s,%s,%s)""",
+                    (pid, body.name, delta, "manual",
+                     "Ajuste manual desde panel de administración")
+                )
             conn.commit()
     return {"ok": True}
 

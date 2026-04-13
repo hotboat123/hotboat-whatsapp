@@ -4626,27 +4626,31 @@ async function saveBom(){
 // ── Consume stock for a booking ──────────────────────────────────────────────
 async function consumeStockForBooking(){
   if(!_currentReservaData) return showToast('Sin reserva cargada');
-  const ref = _currentReservaData.source_id || _currentReservaData.booking_ref ||
-              (_currentReservaData.source==='hotboat_web'
-                ? _currentReservaData.source_id
-                : `AA-${_currentReservaData.id}`);
-  if(!ref) return showToast('Sin referencia de reserva');
+  const r = _currentReservaData;
+  // Build booking_ref consistent with the signature system
+  const ref = (r.source==='hotboat_web' && r.source_id)
+              ? r.source_id
+              : `AA-${r.id}`;
+  if(!ref || ref === 'AA-undefined') return showToast('Sin referencia de reserva');
 
-  // Collect extras from the editor
-  const extras = _currentExtras || [];
-  if(!extras.length) return showToast('Esta reserva no tiene extras');
+  // _extrasItems holds the currently loaded extras in the modal editor
+  const allExtras = (_extrasItems||[]).filter(e=>(+e.qty||0)>0);
+  if(!allExtras.length) return showToast('Esta reserva no tiene extras con cantidad > 0');
 
-  const items = extras.map(e=>({
-    extra_slug: e.key || e.slug || e.name?.toLowerCase().replace(/\s+/g,'_') || '',
-    quantity: e.quantity||1,
-    variant_product_id: e.variant_product_id||null,
+  const items = allExtras.map(e=>({
+    extra_slug: e.key || e.name?.toLowerCase().replace(/\s+/g,'_') || '',
+    quantity: +e.qty || 1,
+    variant_product_id: e.variant_product_id || null,
   })).filter(x=>x.extra_slug);
 
+  if(!items.length) return showToast('No se encontraron slugs para los extras');
+
   try{
-    const r = await api('/api/admin/stock/consume', {method:'POST', body:JSON.stringify({booking_ref:ref, extras:items})});
-    showToast(`Stock consumido para ${ref} 📦`);
-    await loadStockSection();
-  }catch(e){ showToast('Error consumiendo stock: '+e.message); }
+    await api('/api/admin/stock/consume', {method:'POST', body:JSON.stringify({booking_ref:ref, extras:items})});
+    showToast(`✅ Stock consumido para ${ref}`);
+    // Refresh stock table if visible
+    if(document.getElementById('section-stock')?.style.display !== 'none') await loadStockSection();
+  }catch(e){ showToast('❌ Error: '+e.message); }
 }
 
 // Load stock section when switching to it
