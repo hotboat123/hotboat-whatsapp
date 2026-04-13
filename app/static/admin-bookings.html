@@ -1819,6 +1819,10 @@ async function openModal(id){
           style="background:rgba(74,158,255,.12);color:#4a9eff;border:1px solid rgba(74,158,255,.35);border-radius:8px;padding:.5rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">
           🧾 Recibo
         </button>
+        <button onclick="consumeStockForBooking()" title="Descontar stock de los extras (se hace automático al guardar)"
+          style="background:rgba(124,58,237,.15);color:#a78bfa;border:1px solid rgba(124,58,237,.35);border-radius:8px;padding:.5rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">
+          📦 Stock
+        </button>
         <button class="btn-del" onclick="closeModal()" style="margin-left:auto">Cerrar</button>
         <button class="btn-save" onclick="saveModal(${id})">Guardar cambios</button>
       </div>`;
@@ -2004,6 +2008,8 @@ async function saveModal(id){
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
     showToast('Guardado ✓');
+    // Auto-consume stock for extras that have a BOM configured
+    _autoConsumeStock(id).catch(e=>console.warn('stock consume skipped:',e));
     closeModal();
     await loadReservas();
     loadLista();
@@ -2011,6 +2017,26 @@ async function saveModal(id){
     const el=document.getElementById('modal-save-err');
     if(el){el.textContent='Error: '+e.message;el.style.display='';}
   }
+}
+
+async function _autoConsumeStock(reservaId){
+  const r = _currentReservaData;
+  if(!r) return;
+  const ref = (r.source==='hotboat_web' && r.source_id)
+              ? r.source_id
+              : `AA-${r.id || reservaId}`;
+  const allExtras = (_extrasItems||[]).filter(e=>(+e.qty||0)>0);
+  if(!allExtras.length) return;
+  const items = allExtras.map(e=>({
+    extra_slug: e.key || e.name?.toLowerCase().replace(/\s+/g,'_') || '',
+    quantity: +e.qty || 1,
+    variant_product_id: e.variant_product_id || null,
+  })).filter(x=>x.extra_slug);
+  if(!items.length) return;
+  await api('/api/admin/stock/consume', {
+    method:'POST',
+    body: JSON.stringify({booking_ref: ref, extras: items})
+  });
 }
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
