@@ -1391,24 +1391,33 @@ function renderForm(){
     <div class="summary-row"><span>${t('labelBase')}</span><span>$${sub.toLocaleString('es-CL')}${(()=>{if(S.dpEnabled&&mult!==1.0){const c=mult>1?'#e74c3c':'#2ecc71';const p=Math.round((mult-1)*100);const s=p>0?'+':'';return ` <span style="font-size:.72rem;color:${c}">(${s}${p}%)</span>`;}return '';})()}</span></div>
     ${extRows}
     ${flex ? `<div class="summary-row"><span>${t('labelFlex')}</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
-    ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón ${S.couponCode}</span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>` : ''}
+    ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón <strong>${S.couponCode}</strong></span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>` : ''}
     <div class="summary-row total" id="summary-total-row"><span>${t('labelTotal')}</span><span id="summary-total-val">$${(total - (S.couponDiscount||0)).toLocaleString('es-CL')}</span></div>
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
       🚤 <strong style="color:var(--gold)">50% ($${Math.round((total-(S.couponDiscount||0))*0.5).toLocaleString('es-CL')})</strong> — ${t('depositNote')}
     </div>
-    ${S.couponExtra ? `<div style="margin-top:.6rem;padding:.6rem .9rem;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:10px;font-size:.85rem;color:#a5b4fc">🎁 <strong>Beneficio:</strong> ${S.couponExtra}</div>` : ''}
+    ${S.couponExtra ? `<div style="margin-top:.6rem;padding:.6rem .9rem;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:10px;font-size:.85rem;color:#a5b4fc">🎁 <strong>${LANG==='en'?'Bonus':'Beneficio'}:</strong> ${S.couponExtra}</div>` : ''}
     <!-- Cupón input -->
-    <div style="margin-top:.9rem;display:flex;gap:.5rem;align-items:stretch">
-      <input type="text" id="coupon-input" placeholder="${LANG==='pt'?'Código de cupom':LANG==='en'?'Coupon code':'Código de cupón'}"
-        value="${S.couponCode}"
-        style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.55rem .8rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em"
-        oninput="this.value=this.value.toUpperCase()">
-      <button onclick="applyCoupon()" id="coupon-btn"
-        style="background:var(--gold);color:#111;border:none;border-radius:10px;padding:.55rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer;white-space:nowrap">
-        ${LANG==='pt'?'Aplicar':LANG==='en'?'Apply':'Aplicar'}
-      </button>
+    <div style="margin-top:.9rem">
+      <div style="display:flex;gap:.5rem;align-items:stretch">
+        <input type="text" id="coupon-input" placeholder="${LANG==='pt'?'Código de cupom':LANG==='en'?'Coupon code':'Código de cupón'}"
+          value="${S.couponCode}"
+          style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.55rem .8rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em"
+          oninput="this.value=this.value.toUpperCase()">
+        <button onclick="applyCoupon()" id="coupon-btn"
+          style="background:var(--gold);color:#111;border:none;border-radius:10px;padding:.55rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer;white-space:nowrap">
+          ${LANG==='pt'?'Aplicar':LANG==='en'?'Apply':'Aplicar'}
+        </button>
+      </div>
+      <div id="coupon-msg" style="font-size:.8rem;margin-top:.3rem;min-height:1.2em"></div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:.15rem;line-height:1.4">
+        ${LANG==='en'
+          ? '* Discount applies to the base HotBoat reservation only, not to extras.'
+          : LANG==='pt'
+          ? '* O desconto aplica-se apenas ao valor base da reserva HotBoat, não aos extras.'
+          : '* El descuento aplica solo sobre la tarifa base de la reserva HotBoat, no sobre los extras.'}
+      </div>
     </div>
-    <div id="coupon-msg" style="font-size:.8rem;margin-top:.3rem;min-height:1.2em"></div>
   </div>
   <div class="card">
     <div class="card-title">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
@@ -1440,11 +1449,10 @@ async function applyCoupon(){
   if(btn){ btn.disabled=true; btn.textContent='...'; }
 
   const pp = S.prices[S.numPeople] || 69990;
-  const sub = pp * S.numPeople;
-  const extrasArr = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>({name:e.name,price:e.price,quantity:S.extras[e.id]}));
-  const extTotal = extrasArr.reduce((a,e)=>a+e.price*e.quantity,0);
+  const sub = pp * S.numPeople;   // base boat price only — coupon applies to this
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
-  const baseTotal = sub + extTotal + flex;
+  // Discount base: only the boat reservation (sub), NOT extras
+  const discountBase = sub;
 
   try{
     const r = await fetch(`/api/booking/coupon/${encodeURIComponent(code)}`);
@@ -1455,8 +1463,8 @@ async function applyCoupon(){
       S.couponPercent = d.discount_percent || 0;
       S.couponExtra = d.extra_description || '';
       S.couponDiscount = d.discount_fixed > 0
-        ? Math.min(d.discount_fixed, baseTotal)
-        : Math.round(baseTotal * (d.discount_percent / 100));
+        ? Math.min(d.discount_fixed, discountBase)
+        : Math.round(discountBase * (d.discount_percent / 100));
       if(msg){
         msg.style.color='#4ade80';
         const parts = [];
