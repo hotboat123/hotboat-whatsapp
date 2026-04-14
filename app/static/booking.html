@@ -184,6 +184,10 @@ const S = {
   dpFactors: [],
   totalPrice: 0,
   menuSettings: { show_experiencias: true, show_alojamientos: true, show_packs: true, show_arma_pack: true },
+  couponCode: '',
+  couponDiscount: 0,      // CLP amount
+  couponExtra: '',        // e.g. "🎰 Tiro en la ruleta"
+  couponPercent: 0,
 };
 
 // ── i18n ──────────────────────────────────────────────────────────────────────
@@ -1362,6 +1366,7 @@ function toggleFlex(){
 }
 
 function renderForm(){
+  window._lastSummaryFn = renderForm;   // so applyCoupon can re-render
   const basepp = S.prices[S.numPeople] || 69990;
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const pp = Math.round(basepp * mult / 1000) * 1000;
@@ -1386,10 +1391,24 @@ function renderForm(){
     <div class="summary-row"><span>${t('labelBase')}</span><span>$${sub.toLocaleString('es-CL')}${(()=>{if(S.dpEnabled&&mult!==1.0){const c=mult>1?'#e74c3c':'#2ecc71';const p=Math.round((mult-1)*100);const s=p>0?'+':'';return ` <span style="font-size:.72rem;color:${c}">(${s}${p}%)</span>`;}return '';})()}</span></div>
     ${extRows}
     ${flex ? `<div class="summary-row"><span>${t('labelFlex')}</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
-    <div class="summary-row total"><span>${t('labelTotal')}</span><span>$${total.toLocaleString('es-CL')}</span></div>
+    ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón ${S.couponCode}</span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>` : ''}
+    <div class="summary-row total" id="summary-total-row"><span>${t('labelTotal')}</span><span id="summary-total-val">$${(total - (S.couponDiscount||0)).toLocaleString('es-CL')}</span></div>
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
-      🚤 <strong style="color:var(--gold)">50% ($${Math.round(total*0.5).toLocaleString('es-CL')})</strong> — ${t('depositNote')}
+      🚤 <strong style="color:var(--gold)">50% ($${Math.round((total-(S.couponDiscount||0))*0.5).toLocaleString('es-CL')})</strong> — ${t('depositNote')}
     </div>
+    ${S.couponExtra ? `<div style="margin-top:.6rem;padding:.6rem .9rem;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:10px;font-size:.85rem;color:#a5b4fc">🎁 <strong>Beneficio:</strong> ${S.couponExtra}</div>` : ''}
+    <!-- Cupón input -->
+    <div style="margin-top:.9rem;display:flex;gap:.5rem;align-items:stretch">
+      <input type="text" id="coupon-input" placeholder="${LANG==='pt'?'Código de cupom':LANG==='en'?'Coupon code':'Código de cupón'}"
+        value="${S.couponCode}"
+        style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.55rem .8rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em"
+        oninput="this.value=this.value.toUpperCase()">
+      <button onclick="applyCoupon()" id="coupon-btn"
+        style="background:var(--gold);color:#111;border:none;border-radius:10px;padding:.55rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer;white-space:nowrap">
+        ${LANG==='pt'?'Aplicar':LANG==='en'?'Apply':'Aplicar'}
+      </button>
+    </div>
+    <div id="coupon-msg" style="font-size:.8rem;margin-top:.3rem;min-height:1.2em"></div>
   </div>
   <div class="card">
     <div class="card-title">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
@@ -1410,6 +1429,48 @@ function renderForm(){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderExtras()">${t('back')}</button>`;
 }
 
+async function applyCoupon(){
+  const code = (document.getElementById('coupon-input')?.value||'').trim().toUpperCase();
+  const msg = document.getElementById('coupon-msg');
+  const btn = document.getElementById('coupon-btn');
+  if(!code){ if(msg) msg.textContent=''; return; }
+
+  // Reset if same code re-applied
+  S.couponCode = ''; S.couponDiscount = 0; S.couponExtra = ''; S.couponPercent = 0;
+  if(btn){ btn.disabled=true; btn.textContent='...'; }
+
+  const pp = S.prices[S.numPeople] || 69990;
+  const sub = pp * S.numPeople;
+  const extrasArr = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>({name:e.name,price:e.price,quantity:S.extras[e.id]}));
+  const extTotal = extrasArr.reduce((a,e)=>a+e.price*e.quantity,0);
+  const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
+  const baseTotal = sub + extTotal + flex;
+
+  try{
+    const r = await fetch(`/api/booking/coupon/${encodeURIComponent(code)}`);
+    const d = await r.json();
+    if(!r.ok){ if(msg){ msg.style.color='#f87171'; msg.textContent=d.detail||'Cupón no válido'; } }
+    else{
+      S.couponCode = d.code;
+      S.couponPercent = d.discount_percent || 0;
+      S.couponExtra = d.extra_description || '';
+      S.couponDiscount = d.discount_fixed > 0
+        ? Math.min(d.discount_fixed, baseTotal)
+        : Math.round(baseTotal * (d.discount_percent / 100));
+      if(msg){
+        msg.style.color='#4ade80';
+        const parts = [];
+        if(S.couponDiscount > 0) parts.push(`−$${S.couponDiscount.toLocaleString('es-CL')}`);
+        if(S.couponExtra) parts.push(S.couponExtra);
+        msg.textContent = `✅ Cupón aplicado${parts.length?' · '+parts.join(' + '):''}`;}
+      // Re-render summary to update totals
+      const fn = window._lastSummaryFn;
+      if(fn) fn(); else renderSolicitudDatos();
+    }
+  }catch(e){ if(msg){ msg.style.color='#f87171'; msg.textContent='Error al validar cupón'; } }
+  finally{ if(btn){ btn.disabled=false; btn.textContent=LANG==='en'?'Apply':LANG==='pt'?'Aplicar':'Aplicar'; } }
+}
+
 async function submitBooking(){
   S.customerName = $('f-name').value.trim();
   S.customerPhone = $('f-phone').value.trim();
@@ -1424,7 +1485,7 @@ async function submitBooking(){
   const extrasArr = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>({name:e.name,price:e.price,quantity:S.extras[e.id]}));
   const extTotal = extrasArr.reduce((a,e)=>a+e.price*e.quantity,0);
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
-  const total = sub + extTotal + flex;
+  const total = sub + extTotal + flex - (S.couponDiscount||0);
 
   mc.innerHTML = `<div class="card" style="text-align:center">
     <div style="font-size:2rem;margin:1rem">⏳</div>
@@ -1445,6 +1506,8 @@ async function submitBooking(){
       num_people: S.numPeople,
       extras: extrasArr,
       has_flex: S.hasFlex,
+      coupon_code: S.couponCode || null,
+      coupon_discount: S.couponDiscount || 0,
     };
     if(testPrice) payload.test_price = parseInt(testPrice);
 

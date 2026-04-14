@@ -415,3 +415,39 @@ async def public_create_extras_booking(body: PublicExtrasBookingBody):
     except Exception as e:
         logger.error(f"public extras booking error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── Public coupon validation ────────────────────────────────────────────────
+
+@content_router.get("/api/booking/coupon/{code}")
+def validate_coupon(code: str):
+    """Validate a coupon code and return its discount info (public endpoint)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, code, name, discount_percent, discount_fixed,
+                       extra_description, max_uses, uses_count, expires_at
+                FROM coupons
+                WHERE UPPER(code)=UPPER(%s) AND is_active=TRUE
+            """, (code.strip(),))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Cupón no válido o inactivo")
+            cols = ["id","code","name","discount_percent","discount_fixed",
+                    "extra_description","max_uses","uses_count","expires_at"]
+            c = dict(zip(cols, row))
+            # Check expiry
+            from datetime import date
+            if c["expires_at"] and c["expires_at"] < date.today():
+                raise HTTPException(status_code=410, detail="Este cupón ha expirado")
+            # Check max uses
+            if c["max_uses"] and c["uses_count"] >= c["max_uses"]:
+                raise HTTPException(status_code=410, detail="Este cupón ya alcanzó el límite de usos")
+            return {
+                "valid": True,
+                "code": c["code"],
+                "name": c["name"],
+                "discount_percent": float(c["discount_percent"] or 0),
+                "discount_fixed": float(c["discount_fixed"] or 0),
+                "extra_description": c["extra_description"] or "",
+            }

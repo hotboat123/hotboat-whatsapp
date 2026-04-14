@@ -38,8 +38,9 @@ def create_booking(data: dict) -> dict:
                 " (booking_ref,customer_name,customer_phone,customer_email,customer_birthday,"
                 "  booking_date,booking_time,num_people,"
                 "  price_per_person,subtotal,extras_total,flex_amount,total_price,"
-                "  extras,has_flex,status,source,notes,customer_language)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_payment',%s,%s,%s)"
+                "  extras,has_flex,status,source,notes,customer_language,"
+                "  coupon_code,coupon_discount)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending_payment',%s,%s,%s,%s,%s)"
                 " RETURNING id,booking_ref,status"
             )
             bday_raw = data.get("customer_birthday") or None
@@ -53,6 +54,8 @@ def create_booking(data: dict) -> dict:
             lang = str(data.get("customer_language") or "es").strip().lower()[:5]
             if lang not in ("es", "en", "pt"):
                 lang = "es"
+            coupon_code = data.get("coupon_code") or None
+            coupon_discount = float(data.get("coupon_discount") or 0)
             cur.execute(sql, (
                 ref,
                 data["customer_name"], data["customer_phone"],
@@ -61,9 +64,20 @@ def create_booking(data: dict) -> dict:
                 data["price_per_person"], data["subtotal"],
                 data.get("extras_total", 0), data.get("flex_amount", 0), data["total_price"],
                 json.dumps(data.get("extras", [])), data.get("has_flex", False),
-                data.get("source", "web"), data.get("notes"), lang
+                data.get("source", "web"), data.get("notes"), lang,
+                coupon_code, coupon_discount
             ))
             row = cur.fetchone()
+            # Increment coupon uses_count if a coupon was applied
+            if coupon_code:
+                try:
+                    cur.execute(
+                        "UPDATE coupons SET uses_count=uses_count+1, updated_at=NOW()"
+                        " WHERE UPPER(code)=UPPER(%s)",
+                        (coupon_code,)
+                    )
+                except Exception:
+                    pass
             conn.commit()
             return {"id": row[0], "booking_ref": row[1], "status": row[2]}
 
@@ -492,6 +506,20 @@ def ensure_db_columns() -> None:
                 -- 021: multiple images per alojamiento
                 ALTER TABLE alojamientos
                     ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]';
+
+                -- 028: coupons
+                CREATE TABLE IF NOT EXISTS coupons (
+                    id SERIAL PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT DEFAULT '',
+                    discount_percent NUMERIC DEFAULT 0, discount_fixed NUMERIC DEFAULT 0,
+                    extra_description TEXT DEFAULT '', max_uses INT DEFAULT 0,
+                    uses_count INT DEFAULT 0, expires_at DATE DEFAULT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                ALTER TABLE hotboat_appointments
+                    ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
+                ALTER TABLE hotboat_appointments
+                    ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0;
 
                 -- 027: stock management tables
                 CREATE TABLE IF NOT EXISTS stock_products (

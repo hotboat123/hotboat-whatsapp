@@ -355,6 +355,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('stock')" id="nav-stock">
       <span class="ni">📦</span> Control de Stock
     </div>
+    <div class="nav-item" onclick="showSection('coupons')" id="nav-coupons">
+      <span class="ni">🎟️</span> Cupones
+    </div>
     <div class="nav-item" onclick="showSection('emails')" id="nav-emails">
       <span class="ni">✉️</span> Emails reservas
     </div>
@@ -564,6 +567,34 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
 
     </div><!-- /section-stock -->
+
+    <!-- CUPONES -->
+    <div id="section-coupons" class="section">
+      <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:1.2rem">
+        <div style="flex:1">
+          <h2 style="margin:0;font-size:1.1rem">🎟️ Cupones de descuento</h2>
+          <p style="margin:.2rem 0 0;color:var(--muted);font-size:.8rem">Crea códigos que los clientes pueden ingresar al hacer una reserva.</p>
+        </div>
+        <button class="btn-primary" onclick="openCouponModal()">+ Nuevo Cupón</button>
+      </div>
+      <div class="chart-wrap" style="padding:0;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:.83rem">
+          <thead>
+            <tr style="background:var(--input)">
+              <th style="padding:.6rem .9rem;text-align:left;color:var(--muted);font-weight:600">Código</th>
+              <th style="padding:.6rem;text-align:left;color:var(--muted);font-weight:600">Nombre</th>
+              <th style="padding:.6rem;text-align:center;color:var(--muted);font-weight:600">Descuento</th>
+              <th style="padding:.6rem;text-align:left;color:var(--muted);font-weight:600">Beneficio extra</th>
+              <th style="padding:.6rem;text-align:center;color:var(--muted);font-weight:600">Usos</th>
+              <th style="padding:.6rem;text-align:center;color:var(--muted);font-weight:600">Vence</th>
+              <th style="padding:.6rem;text-align:center;color:var(--muted);font-weight:600">Estado</th>
+              <th style="padding:.6rem"></th>
+            </tr>
+          </thead>
+          <tbody id="coupons-tbody"><tr><td colspan="8" style="text-align:center;padding:1.5rem;color:var(--muted)">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div><!-- /section-coupons -->
 
     <!-- EMAILS RESERVAS (Resend / Booknetic-style multi-trigger) -->
     <div id="section-emails" class="section">
@@ -1138,7 +1169,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
@@ -4412,6 +4443,111 @@ renderUrgCal();
 renderVacCal();
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 🎟️ CUPONES
+// ═══════════════════════════════════════════════════════════════════════════
+let _coupons = [];
+
+async function loadCoupons(){
+  try{
+    const d = await api('/api/admin/coupons');
+    _coupons = d.coupons || [];
+    renderCoupons(_coupons);
+  }catch(e){ showToast('Error cargando cupones: '+e.message); }
+}
+
+function renderCoupons(list){
+  const tbody = document.getElementById('coupons-tbody');
+  if(!tbody) return;
+  if(!list.length){
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin cupones. Haz clic en "+ Nuevo Cupón"</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(c=>{
+    const discTxt = c.discount_percent > 0
+      ? `<span style="background:rgba(34,197,94,.12);color:#4ade80;border-radius:12px;padding:2px 8px;font-weight:700">${c.discount_percent}%</span>`
+      : c.discount_fixed > 0
+        ? `<span style="background:rgba(34,197,94,.12);color:#4ade80;border-radius:12px;padding:2px 8px;font-weight:700">$${Number(c.discount_fixed).toLocaleString('es-CL')}</span>`
+        : '—';
+    const maxUses = c.max_uses > 0 ? `${c.uses_count}/${c.max_uses}` : `${c.uses_count}/∞`;
+    const status = c.is_active
+      ? `<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 8px;font-size:.75rem;font-weight:700">✓ Activo</span>`
+      : `<span style="background:rgba(100,116,139,.15);color:#64748b;border-radius:12px;padding:2px 8px;font-size:.75rem">Inactivo</span>`;
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:.65rem .9rem;font-family:monospace;font-weight:700;color:var(--gold);font-size:.9rem">${c.code}</td>
+      <td style="padding:.65rem .6rem;color:var(--muted);font-size:.8rem">${c.name||'—'}</td>
+      <td style="padding:.65rem .6rem;text-align:center">${discTxt}</td>
+      <td style="padding:.65rem .6rem;font-size:.8rem">${c.extra_description||'—'}</td>
+      <td style="padding:.65rem .6rem;text-align:center;color:var(--muted);font-size:.8rem">${maxUses}</td>
+      <td style="padding:.65rem .6rem;text-align:center;color:var(--muted);font-size:.8rem">${c.expires_at?c.expires_at.substring(0,10):'—'}</td>
+      <td style="padding:.65rem .6rem;text-align:center">${status}</td>
+      <td style="padding:.5rem .6rem;text-align:center;white-space:nowrap">
+        <button onclick="openCouponModal(${c.id})"
+          style="background:var(--input);border:1px solid var(--border);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;color:var(--text)">✏️</button>
+        <button onclick="deleteCoupon(${c.id},'${c.code}')"
+          style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;color:#f87171;margin-left:.2rem">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openCouponModal(id){
+  const c = id ? _coupons.find(x=>x.id===id) : null;
+  document.getElementById('cm-id').value = id||'';
+  document.getElementById('cm-title').textContent = c ? 'Editar Cupón' : 'Nuevo Cupón';
+  document.getElementById('cm-code').value = c?.code||'';
+  document.getElementById('cm-name').value = c?.name||'';
+  document.getElementById('cm-pct').value = c?.discount_percent||0;
+  document.getElementById('cm-fixed').value = c?.discount_fixed||0;
+  document.getElementById('cm-extra').value = c?.extra_description||'';
+  document.getElementById('cm-maxuses').value = c?.max_uses||0;
+  document.getElementById('cm-expires').value = c?.expires_at ? c.expires_at.substring(0,10) : '';
+  document.getElementById('cm-active').checked = c ? c.is_active : true;
+  document.getElementById('coupon-modal').style.display='';
+}
+
+function closeCouponModal(){
+  document.getElementById('coupon-modal').style.display='none';
+}
+
+async function saveCoupon(){
+  const id = document.getElementById('cm-id').value;
+  const body = {
+    code: document.getElementById('cm-code').value.trim().toUpperCase(),
+    name: document.getElementById('cm-name').value.trim(),
+    discount_percent: +document.getElementById('cm-pct').value||0,
+    discount_fixed: +document.getElementById('cm-fixed').value||0,
+    extra_description: document.getElementById('cm-extra').value.trim(),
+    max_uses: +document.getElementById('cm-maxuses').value||0,
+    expires_at: document.getElementById('cm-expires').value||null,
+    is_active: document.getElementById('cm-active').checked,
+  };
+  if(!body.code){ showToast('El código es obligatorio'); return; }
+  if(!body.discount_percent && !body.discount_fixed && !body.extra_description){
+    showToast('Agrega al menos un descuento o beneficio'); return;
+  }
+  try{
+    const url = id ? `/api/admin/coupons/${id}` : '/api/admin/coupons';
+    await api(url, {method: id?'PUT':'POST', body:JSON.stringify(body)});
+    closeCouponModal();
+    await loadCoupons();
+    showToast('Cupón guardado ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function deleteCoupon(id, code){
+  if(!confirm(`¿Eliminar cupón "${code}"?`)) return;
+  await api(`/api/admin/coupons/${id}`, {method:'DELETE'});
+  await loadCoupons();
+  showToast('Cupón eliminado');
+}
+
+// Load coupons when switching to that section
+document.addEventListener('DOMContentLoaded', ()=>{
+  const navCoupons = document.getElementById('nav-coupons');
+  if(navCoupons) navCoupons.addEventListener('click', ()=>loadCoupons());
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 📦 CONTROL DE STOCK
 // ═══════════════════════════════════════════════════════════════════════════
 let _stockProducts = [];
@@ -4746,6 +4882,40 @@ document.addEventListener('DOMContentLoaded', () => {
   if(body) obs.observe(body, { childList: true, subtree: true });
 });
 </script>
+
+<!-- ═══ COUPON MODAL ═══ -->
+<div id="coupon-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+  <div style="background:var(--card);border-radius:14px;max-width:460px;margin:auto;padding:1.5rem">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:1.2rem" id="cm-title">Nuevo Cupón</div>
+    <input type="hidden" id="cm-id">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+      <div class="form-group-adm" style="grid-column:1/-1"><label>Código * <span style="color:var(--muted);font-weight:400;font-size:.75rem">(mayúsculas, sin espacios)</span></label>
+        <input id="cm-code" type="text" placeholder="ej: VERANO20" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase().replace(/\s/g,'')"></div>
+      <div class="form-group-adm" style="grid-column:1/-1"><label>Nombre interno</label>
+        <input id="cm-name" type="text" placeholder="ej: Descuento verano 2026"></div>
+      <div class="form-group-adm"><label>% Descuento</label>
+        <input id="cm-pct" type="number" min="0" max="100" step="1" value="0" placeholder="0"></div>
+      <div class="form-group-adm"><label>Descuento fijo ($)</label>
+        <input id="cm-fixed" type="number" min="0" value="0" placeholder="0"></div>
+    </div>
+    <div class="form-group-adm"><label>Beneficio extra <span style="color:var(--muted);font-weight:400;font-size:.75rem">(texto que ve el cliente, ej: 🎰 Tiro en la ruleta)</span></label>
+      <input id="cm-extra" type="text" placeholder="ej: 🎰 Un tiro en la ruleta de los premios"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+      <div class="form-group-adm"><label>Máx. usos <span style="color:var(--muted);font-size:.72rem">(0 = ilimitado)</span></label>
+        <input id="cm-maxuses" type="number" min="0" value="0"></div>
+      <div class="form-group-adm"><label>Fecha vencimiento</label>
+        <input id="cm-expires" type="date"></div>
+    </div>
+    <div class="form-group-adm" style="display:flex;align-items:center;gap:.5rem">
+      <input type="checkbox" id="cm-active" checked style="width:16px;height:16px">
+      <label for="cm-active" style="cursor:pointer;font-size:.85rem">Cupón activo (visible para clientes)</label>
+    </div>
+    <div style="display:flex;gap:.6rem;margin-top:1rem">
+      <button class="btn-primary" onclick="saveCoupon()" style="flex:1">💾 Guardar</button>
+      <button class="btn-secondary" onclick="closeCouponModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
 
 <!-- ═══ STOCK MODALS — at document root so they work from any tab ═══ -->
 

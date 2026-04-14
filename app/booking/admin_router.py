@@ -2090,3 +2090,114 @@ async def put_prices_config(request: Request, x_admin_key: str = Header(...)):
     except Exception as e:
         logger.warning(f"Could not refresh live PRICES: {e}")
     return {"ok": True, "prices": validated}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🎟️  COUPONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _ensure_coupons_table():
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS coupons (
+                    id                SERIAL PRIMARY KEY,
+                    code              TEXT NOT NULL UNIQUE,
+                    name              TEXT DEFAULT '',
+                    discount_percent  NUMERIC DEFAULT 0,
+                    discount_fixed    NUMERIC DEFAULT 0,
+                    extra_description TEXT DEFAULT '',
+                    max_uses          INT DEFAULT 0,
+                    uses_count        INT DEFAULT 0,
+                    expires_at        DATE DEFAULT NULL,
+                    is_active         BOOLEAN DEFAULT TRUE,
+                    created_at        TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at        TIMESTAMPTZ DEFAULT NOW()
+                );
+                ALTER TABLE hotboat_appointments
+                    ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
+                ALTER TABLE hotboat_appointments
+                    ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0;
+            """)
+            conn.commit()
+
+
+class CouponBody(BaseModel):
+    code: str
+    name: str = ""
+    discount_percent: float = 0
+    discount_fixed: float = 0
+    extra_description: str = ""
+    max_uses: int = 0
+    expires_at: Optional[str] = None   # ISO date string or None
+    is_active: bool = True
+
+
+@admin_router.get("/api/admin/coupons")
+def list_coupons(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    _ensure_coupons_table()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, code, name, discount_percent, discount_fixed,
+                       extra_description, max_uses, uses_count, expires_at,
+                       is_active, created_at
+                FROM coupons ORDER BY created_at DESC
+            """)
+            cols = [d.name for d in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            for r in rows:
+                for k in ("expires_at", "created_at"):
+                    if r.get(k):
+                        r[k] = str(r[k])
+            return {"coupons": rows}
+
+
+@admin_router.post("/api/admin/coupons")
+def create_coupon(body: CouponBody, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    _ensure_coupons_table()
+    expires = body.expires_at or None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO coupons
+                   (code, name, discount_percent, discount_fixed,
+                    extra_description, max_uses, expires_at, is_active)
+                   VALUES (UPPER(%s),%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                (body.code.strip(), body.name, body.discount_percent, body.discount_fixed,
+                 body.extra_description, body.max_uses, expires, body.is_active)
+            )
+            new_id = cur.fetchone()[0]
+            conn.commit()
+    return {"ok": True, "id": new_id}
+
+
+@admin_router.put("/api/admin/coupons/{cid}")
+def update_coupon(cid: int, body: CouponBody, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    expires = body.expires_at or None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE coupons
+                   SET code=UPPER(%s), name=%s, discount_percent=%s, discount_fixed=%s,
+                       extra_description=%s, max_uses=%s, expires_at=%s,
+                       is_active=%s, updated_at=NOW()
+                   WHERE id=%s""",
+                (body.code.strip(), body.name, body.discount_percent, body.discount_fixed,
+                 body.extra_description, body.max_uses, expires, body.is_active, cid)
+            )
+            conn.commit()
+    return {"ok": True}
+
+
+@admin_router.delete("/api/admin/coupons/{cid}")
+def delete_coupon(cid: int, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM coupons WHERE id=%s", (cid,))
+            conn.commit()
+    return {"ok": True}
