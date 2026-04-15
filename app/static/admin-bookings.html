@@ -467,6 +467,41 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div class="chart-wrap" id="status-chart"></div>
         <div class="chart-wrap" id="source-chart"></div>
       </div>
+
+      <!-- Reporte de caja por método de pago -->
+      <div class="chart-wrap" style="margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.9rem">
+          <div>
+            <div class="chart-title" style="margin:0">💵 Reporte de Caja</div>
+            <div style="color:var(--muted);font-size:.78rem;margin-top:.15rem">Ingresos por método de pago, desglosados por día</div>
+          </div>
+          <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+            <select id="cash-method-filter" onchange="loadCashReport()"
+              style="background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:.35rem .6rem;font-size:.8rem">
+              <option value="">Todos los métodos</option>
+              <option value="efectivo" selected>Efectivo</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="mercadopago">MercadoPago</option>
+              <option value="transbank">Transbank</option>
+              <option value="cheque">Cheque</option>
+            </select>
+            <select id="cash-period-filter"
+              style="background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:.35rem .6rem;font-size:.8rem"
+              onchange="loadCashReport()">
+              <option value="7">Últimos 7 días</option>
+              <option value="14">Últimas 2 semanas</option>
+              <option value="30">Último mes</option>
+              <option value="90">Últimos 3 meses</option>
+            </select>
+            <button onclick="loadCashReport()"
+              style="background:var(--green);color:#fff;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.8rem;cursor:pointer;font-weight:600">↺ Ver</button>
+          </div>
+        </div>
+
+        <div id="cash-report-body">
+          <div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Haz clic en "Ver" para cargar el reporte.</div>
+        </div>
+      </div>
     </div>
 
     <!-- PRECIOS EXTRAS -->
@@ -1174,7 +1209,7 @@ function showSection(name){
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
   if(name==='clientes') loadClients();
-  if(name==='stats') loadStats();
+  if(name==='stats'){ loadStats(); loadCashReport(); }
   if(name==='extras-cat') loadExtrasCat();
   if(name==='emails') loadEmailBookingConfig();
   if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); }
@@ -1470,6 +1505,62 @@ async function openClientModal(tel){
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
+async function loadCashReport(){
+  const days = +document.getElementById('cash-period-filter').value || 7;
+  const method = document.getElementById('cash-method-filter').value;
+  const body = document.getElementById('cash-report-body');
+  body.innerHTML = '<div style="color:var(--muted);font-size:.84rem;padding:.4rem 0">⏳ Cargando…</div>';
+  try{
+    const params = new URLSearchParams({ days });
+    if(method) params.set('method', method);
+    const d = await api('/api/admin/reports/cash?' + params.toString());
+    if(!d.rows || d.rows.length === 0){
+      body.innerHTML = '<div style="color:var(--muted);font-size:.84rem;padding:.4rem 0">Sin registros para el período.</div>';
+      return;
+    }
+    const methodLabel = method || 'todos los métodos';
+    const totalSum = d.rows.reduce((s,r)=>s+r.total,0);
+    let html = `<div style="margin-bottom:.6rem;font-size:.82rem;color:var(--muted)">
+      Período: <b>${d.rows[0].fecha}</b> → <b>${d.rows[d.rows.length-1].fecha}</b> &nbsp;|&nbsp;
+      Método: <b>${methodLabel}</b> &nbsp;|&nbsp;
+      Total: <b style="color:var(--green)">${fmtMoney(totalSum)}</b>
+    </div>`;
+    html += '<table style="width:100%;border-collapse:collapse;font-size:.83rem">';
+    html += '<thead><tr style="border-bottom:1px solid var(--border)">';
+    html += '<th style="text-align:left;padding:.3rem .5rem;color:var(--muted)">Fecha</th>';
+    html += '<th style="text-align:right;padding:.3rem .5rem;color:var(--muted)">N° pagos</th>';
+    html += '<th style="text-align:right;padding:.3rem .5rem;color:var(--muted)">Total recibido</th>';
+    if(!method) html += '<th style="text-align:left;padding:.3rem .5rem;color:var(--muted)">Desglose por método</th>';
+    html += '</tr></thead><tbody>';
+    const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    d.rows.forEach(r=>{
+      const dt = new Date(r.fecha + 'T12:00:00');
+      const dn = dayNames[dt.getDay()];
+      html += `<tr style="border-bottom:1px solid #ffffff08">
+        <td style="padding:.35rem .5rem"><b>${dn}</b> ${r.fecha}</td>
+        <td style="text-align:right;padding:.35rem .5rem;color:var(--muted)">${r.count}</td>
+        <td style="text-align:right;padding:.35rem .5rem;color:var(--green);font-weight:600">${fmtMoney(r.total)}</td>`;
+      if(!method){
+        const breakdown = Object.entries(r.by_method||{})
+          .sort((a,b)=>b[1]-a[1])
+          .map(([m,v])=>`${m}: <b>${fmtMoney(v)}</b>`)
+          .join(' &nbsp;·&nbsp; ');
+        html += `<td style="padding:.35rem .5rem;font-size:.77rem;color:var(--muted)">${breakdown||'-'}</td>`;
+      }
+      html += '</tr>';
+    });
+    html += `</tbody><tfoot><tr style="border-top:2px solid var(--border)">
+      <td style="padding:.4rem .5rem;font-weight:700">TOTAL</td>
+      <td style="text-align:right;padding:.4rem .5rem;font-weight:700;color:var(--muted)">${d.rows.reduce((s,r)=>s+r.count,0)}</td>
+      <td style="text-align:right;padding:.4rem .5rem;font-weight:700;color:var(--green)">${fmtMoney(totalSum)}</td>
+      ${!method?'<td></td>':''}
+    </tr></tfoot></table>`;
+    body.innerHTML = html;
+  }catch(e){
+    body.innerHTML = `<div style="color:#ef4444;font-size:.84rem">Error: ${e.message}</div>`;
+  }
+}
+
 async function loadStats(){
   const yr=+document.getElementById('year-sel').value;
   try{

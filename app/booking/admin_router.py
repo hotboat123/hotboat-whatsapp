@@ -371,6 +371,60 @@ async def delete_reserva(rid: int, x_admin_key: str = Header("")):
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
 
+@admin_router.get("/api/admin/reports/cash")
+async def get_cash_report(
+    days: int = Query(7, ge=1, le=365),
+    method: str = Query(""),
+    x_admin_key: str = Header(""),
+):
+    """Daily cash/payment breakdown from all_appointments.pagos JSONB array."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                method_filter = ""
+                params: list = [days]
+                if method:
+                    method_filter = "AND LOWER(pago->>'method') = %s"
+                    params.append(method.lower())
+
+                cur.execute(f"""
+                    SELECT
+                        (pago->>'date')::date           AS dia,
+                        COUNT(*)::int                   AS cnt,
+                        SUM((pago->>'amount')::numeric) AS total,
+                        LOWER(pago->>'method')          AS met
+                    FROM all_appointments,
+                         jsonb_array_elements(COALESCE(pagos, '[]'::jsonb)) AS pago
+                    WHERE (pago->>'date')::date >= CURRENT_DATE - (%s || ' days')::interval
+                      AND (pago->>'amount') IS NOT NULL
+                      AND (pago->>'amount')::numeric > 0
+                      {method_filter}
+                    GROUP BY dia, met
+                    ORDER BY dia ASC, met
+                """, params)
+                rows_raw = cur.fetchall()
+
+        from collections import defaultdict
+        by_day: dict = defaultdict(lambda: {"count": 0, "total": 0.0, "by_method": {}})
+        for dia, cnt, total, met in rows_raw:
+            key = str(dia)
+            by_day[key]["count"] += cnt
+            by_day[key]["total"] = round(by_day[key]["total"] + float(total or 0), 0)
+            by_day[key]["by_method"][met or "otro"] = round(
+                by_day[key]["by_method"].get(met or "otro", 0) + float(total or 0), 0
+            )
+
+        rows = [
+            {"fecha": k, "count": v["count"], "total": v["total"], "by_method": v["by_method"]}
+            for k, v in sorted(by_day.items())
+        ]
+        return {"rows": rows}
+    except Exception as e:
+        logger.exception("cash report error")
+        raise HTTPException(500, str(e))
+
+
 @admin_router.get("/api/admin/stats")
 async def get_stats(
     year: int = Query(2026),
