@@ -293,7 +293,7 @@ async def _run_pending_payment_email_scheduler():
 
 
 async def _run_email_sweeps_scheduler():
-    """Run followup + birthday email sweeps every hour (DB flags ensure idempotency)."""
+    """Run followup + birthday email sweeps every 30 min (DB flags ensure idempotency)."""
     await asyncio.sleep(120)  # brief delay after startup
     while True:
         try:
@@ -307,7 +307,7 @@ async def _run_email_sweeps_scheduler():
                     logger.error("Email sweep %s error: %s", name, _se)
         except Exception as _fe:
             logger.error("Email sweeps scheduler error: %s", _fe)
-        await asyncio.sleep(3600)  # re-check every hour
+        await asyncio.sleep(1800)  # re-check every 30 minutes
 
 
 async def _run_daily_summary_scheduler():
@@ -448,7 +448,7 @@ async def lifespan(app: FastAPI):
     sig_task        = asyncio.create_task(_run_signature_summary_scheduler())
     prebooking_task = asyncio.create_task(_run_pre_booking_notif_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
-    logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 1 h)")
+    logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
     logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
     logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
     logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")

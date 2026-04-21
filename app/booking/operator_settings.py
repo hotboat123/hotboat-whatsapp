@@ -423,19 +423,19 @@ TRIGGER_META: dict = {
     "booking_followup": {
         "label": "Seguimiento post-reserva",
         "description": (
-            "El servidor revisa cada día si corresponde enviar este correo. "
-            "Útil para pedir reseña, ofrecer descuento próximo viaje, etc."
+            "Se envía automáticamente N horas después del horario de la reserva. "
+            "Pide reseña en TripAdvisor y encuesta de satisfacción."
         ),
         "default_subject": "¡Gracias por navegar con nosotros! — {{booking_ref}}",
         "icon": "⭐",
         "extra_fields": [
             {
-                "key": "days_after",
-                "label": "Días después de la reserva",
+                "key": "hours_after",
+                "label": "Horas después del horario de la reserva",
                 "type": "number",
-                "default": 5,
+                "default": 2,
                 "min": 1,
-                "max": 180,
+                "max": 72,
             }
         ],
     },

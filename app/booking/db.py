@@ -193,15 +193,13 @@ def mark_confirmation_email_sent(booking_ref: str) -> bool:
             return cur.rowcount > 0
 
 
-def get_bookings_for_followup(days_after: int) -> list:
-    """Return confirmed bookings whose booking_date = today - days_after
+def get_bookings_for_followup(hours_after: int) -> list:
+    """Return confirmed bookings whose booking_date+booking_time+hours_after <= NOW()
     that have a customer email and haven't received the followup email yet.
+    Only looks back up to 3 days to avoid spamming old bookings.
     Includes both hotboat_appointments (public) and all_appointments (manual).
     Manual rows use synthetic booking_ref = 'MANUAL-<id>'.
     """
-    from datetime import date, timedelta
-    target_date = date.today() - timedelta(days=days_after)
-
     # Ensure all_appointments has the followup column (safe guard for old DBs)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -219,10 +217,15 @@ def get_bookings_for_followup(days_after: int) -> list:
                        total_price, has_flex, flex_amount, extras, notes,
                        COALESCE(customer_language, 'es') AS customer_language
                 FROM hotboat_appointments
-                WHERE booking_date = %s
-                  AND status = 'confirmed'
+                WHERE status = 'confirmed'
                   AND customer_email IS NOT NULL AND customer_email <> ''
                   AND followup_email_sent_at IS NULL
+                  AND booking_date >= CURRENT_DATE - INTERVAL '3 days'
+                  AND booking_date <= CURRENT_DATE
+                  AND (booking_date + COALESCE(booking_time, '12:00:00'::time))
+                        AT TIME ZONE 'America/Santiago'
+                        + make_interval(hours => %s)
+                      <= NOW() AT TIME ZONE 'America/Santiago'
 
                 UNION ALL
 
@@ -243,11 +246,16 @@ def get_bookings_for_followup(days_after: int) -> list:
                        observaciones                   AS notes,
                        'es'                            AS customer_language
                 FROM all_appointments
-                WHERE fecha = %s
-                  AND status = 'confirmed'
+                WHERE status = 'confirmed'
                   AND email IS NOT NULL AND email <> ''
                   AND followup_email_sent_at IS NULL
-            """, (target_date, target_date))
+                  AND fecha >= CURRENT_DATE - INTERVAL '3 days'
+                  AND fecha <= CURRENT_DATE
+                  AND (fecha + COALESCE(hora, '12:00:00'::time))
+                        AT TIME ZONE 'America/Santiago'
+                        + make_interval(hours => %s)
+                      <= NOW() AT TIME ZONE 'America/Santiago'
+            """, (hours_after, hours_after))
             cols = [
                 "id", "booking_ref", "customer_name", "customer_phone", "customer_email",
                 "booking_date", "booking_time", "num_people", "subtotal", "extras_total",

@@ -148,8 +148,10 @@ _I18N: Dict[str, Dict[str, str]] = {
         # booking_followup
         "followup_title":  "¡Gracias por navegar con nosotros!",
         "followup_hello":  "Hola <strong>{name}</strong>,",
-        "followup_body1":  "¡Fue un placer tenerte a bordo! Esperamos que hayas disfrutado tu experiencia en el agua el pasado <strong>{date}</strong>.",
-        "followup_body2":  "Si tienes un momento, nos ayudaría mucho que dejaras una reseña. ¡Y estaremos encantados de verte de nuevo pronto! 🌊",
+        "followup_body1":  "¡Fue un placer tenerte a bordo! Esperamos que hayas disfrutado tu experiencia en el agua el día de hoy 🌊",
+        "followup_body2":  "Tu opinión es muy importante para nosotros. Te pedimos dos pequeños favores:",
+        "followup_review_label": "⭐ Déjanos una reseña en TripAdvisor",
+        "followup_survey_label": "📋 Completa nuestra encuesta de satisfacción",
         # customer_birthday
         "birthday_title": "¡Feliz cumpleaños! 🎂",
         "birthday_hello": "Hola <strong>{name}</strong>,",
@@ -190,8 +192,10 @@ _I18N: Dict[str, Dict[str, str]] = {
         "status_body":  "The status of your booking <strong>{ref}</strong> has been updated to <strong>{status}</strong>.",
         "followup_title":  "Thanks for sailing with us!",
         "followup_hello":  "Hi <strong>{name}</strong>,",
-        "followup_body1":  "It was a pleasure having you on board! We hope you enjoyed your time on the water on <strong>{date}</strong>.",
-        "followup_body2":  "If you have a moment, we'd love for you to leave a review. We'd love to see you again soon! 🌊",
+        "followup_body1":  "It was a pleasure having you on board! We hope you enjoyed your experience on the water today 🌊",
+        "followup_body2":  "Your feedback means a lot to us. We'd love to ask two small favours:",
+        "followup_review_label": "⭐ Leave us a review on TripAdvisor",
+        "followup_survey_label": "📋 Fill out our satisfaction survey",
         "birthday_title": "Happy Birthday! 🎂",
         "birthday_hello": "Hi <strong>{name}</strong>,",
         "birthday_body1": "The <strong>{biz}</strong> team wishes you a wonderful birthday. 🎉",
@@ -231,8 +235,10 @@ _I18N: Dict[str, Dict[str, str]] = {
         "status_body":  "O status da sua reserva <strong>{ref}</strong> foi atualizado para <strong>{status}</strong>.",
         "followup_title":  "Obrigado por navegar conosco!",
         "followup_hello":  "Olá <strong>{name}</strong>,",
-        "followup_body1":  "Foi um prazer tê-lo a bordo! Esperamos que tenha aproveitado sua experiência na água em <strong>{date}</strong>.",
-        "followup_body2":  "Se tiver um momento, adoraríamos que deixasse uma avaliação. Esperamos vê-lo novamente em breve! 🌊",
+        "followup_body1":  "Foi um prazer tê-lo a bordo! Esperamos que tenha aproveitado sua experiência na água hoje 🌊",
+        "followup_body2":  "Sua opinião é muito importante para nós. Gostaríamos de pedir dois pequenos favores:",
+        "followup_review_label": "⭐ Deixe uma avaliação no TripAdvisor",
+        "followup_survey_label": "📋 Preencha nossa pesquisa de satisfação",
         "birthday_title": "Feliz Aniversário! 🎂",
         "birthday_hello": "Olá <strong>{name}</strong>,",
         "birthday_body1": "A equipe da <strong>{biz}</strong> deseja a você um aniversário maravilhoso. 🎉",
@@ -629,18 +635,39 @@ def _default_html_booking_status_changed(ctx: Dict[str, str]) -> str:
     )
 
 
+_TRIPADVISOR_URL = "https://www.tripadvisor.cl/UserReviewEdit-g294297-d33038747-HotBoat-Pucon_Araucania_Region.html"
+_SURVEY_URL      = "https://docs.google.com/forms/d/e/1FAIpQLSd0ZsxvVMKa1sMg7JRaKBIMpe__2xwCwswscDGTTFIvlJcOIQ/viewform?usp=sharing"
+
 def _default_html_booking_followup(ctx: Dict[str, str]) -> str:
     lang = ctx.get("customer_language", "es")
     name = ctx.get("customer_name", "")
-    date = ctx.get("booking_date", "")
+    review_label = _t(lang, "followup_review_label")
+    survey_label = _t(lang, "followup_survey_label")
     return (
         _header(ctx, _t(lang, "followup_title"), "#0f4c35")
-        + f"""<tr><td style="padding:26px 26px 8px;color:#0f172a;font-size:15px;line-height:1.65;">
+        + f"""<tr><td style="padding:26px 26px 16px;color:#0f172a;font-size:15px;line-height:1.65;">
   <p style="margin:0 0 12px;">{_t(lang,"followup_hello",name=name)}</p>
-  <p style="margin:0 0 12px;">{_t(lang,"followup_body1",date=date)}</p>
-  <p style="margin:0 0 12px;">{_t(lang,"followup_body2")}</p>
-</td></tr>
-<tr><td style="padding:0 26px 20px;">{_details_table(ctx)}</td></tr>"""
+  <p style="margin:0 0 12px;">{_t(lang,"followup_body1")}</p>
+  <p style="margin:0 0 20px;">{_t(lang,"followup_body2")}</p>
+  <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%">
+    <tr><td style="padding-bottom:12px;">
+      <a href="{_TRIPADVISOR_URL}"
+         style="display:block;background:#34d399;color:#fff;text-decoration:none;
+                font-weight:700;font-size:15px;border-radius:10px;
+                padding:14px 20px;text-align:center;">
+        {review_label}
+      </a>
+    </td></tr>
+    <tr><td>
+      <a href="{_SURVEY_URL}"
+         style="display:block;background:#3b82f6;color:#fff;text-decoration:none;
+                font-weight:700;font-size:15px;border-radius:10px;
+                padding:14px 20px;text-align:center;">
+        {survey_label}
+      </a>
+    </td></tr>
+  </table>
+</td></tr>"""
         + _footer(ctx)
     )
 
@@ -990,8 +1017,8 @@ def run_followup_email_sweep() -> dict:
         out["reason"] = "no_resend_key"
         return out
 
-    days_after = int(cfg.get("days_after") or 5)
-    bookings = get_bookings_for_followup(days_after)
+    hours_after = int(cfg.get("hours_after") or cfg.get("days_after") or 2)
+    bookings = get_bookings_for_followup(hours_after)
     out["checked"] = len(bookings)
 
     for b in bookings:
@@ -1006,7 +1033,7 @@ def run_followup_email_sweep() -> dict:
         else:
             out["errors"].append({"ref": b["booking_ref"], "reason": result.get("reason")})
 
-    logger.info("Followup sweep: days_after=%s checked=%s sent=%s", days_after, out["checked"], out["sent"])
+    logger.info("Followup sweep: hours_after=%s checked=%s sent=%s", hours_after, out["checked"], out["sent"])
     return out
 
 
