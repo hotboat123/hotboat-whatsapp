@@ -641,34 +641,44 @@ _SURVEY_URL      = "https://docs.google.com/forms/d/e/1FAIpQLSd0ZsxvVMKa1sMg7JRa
 def _default_html_booking_followup(ctx: Dict[str, str]) -> str:
     lang = ctx.get("customer_language", "es")
     name = ctx.get("customer_name", "")
-    review_label = _t(lang, "followup_review_label")
-    survey_label = _t(lang, "followup_survey_label")
-    return (
-        _header(ctx, _t(lang, "followup_title"), "#0f4c35")
-        + f"""<tr><td style="padding:26px 26px 16px;color:#0f172a;font-size:15px;line-height:1.65;">
-  <p style="margin:0 0 12px;">{_t(lang,"followup_hello",name=name)}</p>
-  <p style="margin:0 0 12px;">{_t(lang,"followup_body1")}</p>
-  <p style="margin:0 0 20px;">{_t(lang,"followup_body2")}</p>
-  <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%">
-    <tr><td style="padding-bottom:12px;">
-      <a href="{_TRIPADVISOR_URL}"
-         style="display:block;background:#34d399;color:#fff;text-decoration:none;
-                font-weight:700;font-size:15px;border-radius:10px;
-                padding:14px 20px;text-align:center;">
-        {review_label}
-      </a>
+
+    accent = (
+        '<td width="33%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="34%" height="4" bgcolor="#34d399" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="33%" height="4" bgcolor="#3b82f6" style="line-height:4px;font-size:0;">&nbsp;</td>'
+    )
+
+    extra_body = f"""
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 24px;">
+      <p style="margin:0 0 10px;color:#cbd5e1;font-size:15px;line-height:1.65;">
+        {_t(lang,"followup_body1")}
+      </p>
+      <p style="margin:0;color:#94a3b8;font-size:14px;line-height:1.65;">
+        {_t(lang,"followup_body2")}
+      </p>
     </td></tr>
-    <tr><td>
-      <a href="{_SURVEY_URL}"
-         style="display:block;background:#3b82f6;color:#fff;text-decoration:none;
-                font-weight:700;font-size:15px;border-radius:10px;
-                padding:14px 20px;text-align:center;">
-        {survey_label}
-      </a>
-    </td></tr>
-  </table>
-</td></tr>"""
-        + _footer(ctx)
+    </table>"""
+
+    cta_rows = f"""
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
+    <tr>
+      <td style="padding-right:6px;">{_cta_btn(_t(lang,"followup_review_label"), _TRIPADVISOR_URL, solid=True)}</td>
+    </tr>
+    </table>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr>
+      <td>{_cta_btn(_t(lang,"followup_survey_label"), _SURVEY_URL, solid=False)}</td>
+    </tr>
+    </table>"""
+
+    return _hotboat_email_card(
+        ctx,
+        hero_title=_t(lang, "followup_title"),
+        hero_subtitle=_t(lang, "followup_hello", name=name),
+        accent_bar=accent,
+        extra_body=extra_body,
+        cta_rows=cta_rows,
     )
 
 
@@ -995,7 +1005,7 @@ def send_test_email_for_trigger(trigger: str, to_addr: str) -> Dict[str, Any]:
         if not effective_to:
             return {"sent": False, "reason": "no_to"}
     ctx = _sample_ctx(effective_to)
-    return _render_and_send(trigger, effective_to, ctx, subject_prefix="[Prueba] ")
+    return _render_and_send(trigger, effective_to, ctx)
 
 
 # ── Daily follow-up sweep ────────────────────────────────────────────────────
