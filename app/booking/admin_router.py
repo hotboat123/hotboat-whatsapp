@@ -180,12 +180,19 @@ class UpdateReservaRequest(BaseModel):
     fecha: Optional[str] = None
     hora: Optional[str] = None
     medio_contacto: Optional[str] = None
+    coupon_code: Optional[str] = None
+    coupon_discount: Optional[float] = None
 
 
 @admin_router.put("/api/admin/reservas/{rid}")
 async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    # coupon fields are nullable — include them if explicitly sent in the request
+    if 'coupon_code' in body.model_fields_set:
+        updates['coupon_code'] = body.coupon_code
+    if 'coupon_discount' in body.model_fields_set:
+        updates['coupon_discount'] = body.coupon_discount or 0
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
     try:

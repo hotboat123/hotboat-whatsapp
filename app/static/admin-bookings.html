@@ -1163,6 +1163,7 @@ let _expAddon=[];        // [{key,name,date,qty,unit_price}]
 let ALOJ_CATALOG=[];     // loaded from /api/admin/alojamientos
 let EXP_CATALOG=[];      // loaded from /api/admin/experiencias
 let _descuentos=[];      // working copy for current modal: [{amount,type,note}]
+let _appliedCoupon=null; // working copy for current modal: {code, discount_amount} | null
 let _currentReservaData = null; // full reservation object for current modal
 
 // ── Auth ────────────────────────────────────────────────────────────────────
@@ -1908,6 +1909,19 @@ async function openModal(id){
           + Agregar descuento
         </button>
       </div>
+      <div style="margin-top:1rem">
+        <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
+          🎟️ Cupón de descuento
+        </label>
+        <div id="coupon-applied-row" style="display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:8px;padding:.55rem .8rem;align-items:center;gap:.5rem;margin-bottom:.4rem">
+          <span style="flex:1;font-size:.85rem;color:#4ade80">🎟️ <strong id="coupon-applied-code"></strong> — <span id="coupon-applied-desc"></span></span>
+          <button type="button" onclick="removeCouponFromModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:0 .3rem;line-height:1" title="Quitar cupón">✕</button>
+        </div>
+        <div id="coupon-input-row" style="display:flex;gap:.5rem">
+          <input type="text" id="coupon-code-input" placeholder="Código de cupón" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none;text-transform:uppercase" onkeydown="if(event.key==='Enter')applyCouponToModal()">
+          <button type="button" onclick="applyCouponToModal()" style="background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.35);border-radius:8px;padding:.45rem .9rem;font-size:.83rem;cursor:pointer;font-weight:600">Aplicar</button>
+        </div>
+      </div>
       <!-- ── Firmas T&C ──────────────────────────────────────────────── -->
       <div style="margin-top:1.2rem;border-top:1px solid var(--border);padding-top:1rem">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;flex-wrap:wrap;gap:.5rem">
@@ -1969,6 +1983,7 @@ async function openModal(id){
     _currentReservaData = r;
     initPagos(r.pagos||[]);
     initDescuentos(r.descuentos||[]);
+    initCouponSection(r);
     initExtrasEditor(r.extras_json||{});
     if(r.num_personas) lookupBasePrice(r.num_personas);
     setTimeout(()=>{
@@ -2124,8 +2139,11 @@ async function saveModal(id){
   // Pagos y descuentos
   body.pagos = _pagos.filter(p=>p.amount||p.method);
   body.descuentos = _descuentos.filter(d=>d.amount||d.type||d.note);
+  // Cupón
+  body.coupon_code = _appliedCoupon ? _appliedCoupon.code : null;
+  body.coupon_discount = _appliedCoupon ? (_appliedCoupon.discount_amount || 0) : 0;
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos','quien_atendio','ciudad_origen','fecha','hora']);
+  const keepAlways = new Set(['extras_json','descuentos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -3369,6 +3387,57 @@ function renderDescuentos(){
 function addDescuento(){
   _descuentos.push({amount:'',type:'pack',note:''});
   renderDescuentos();
+}
+
+// ── Cupones en modal ──────────────────────────────────────────────────────────
+function initCouponSection(r){
+  _appliedCoupon = r.coupon_code
+    ? { code: r.coupon_code, discount_amount: +r.coupon_discount||0 }
+    : null;
+  renderCouponSection();
+}
+
+function renderCouponSection(){
+  const appliedRow = document.getElementById('coupon-applied-row');
+  const inputRow   = document.getElementById('coupon-input-row');
+  if(!appliedRow) return;
+  if(_appliedCoupon){
+    appliedRow.style.display = 'flex';
+    inputRow.style.display   = 'none';
+    document.getElementById('coupon-applied-code').textContent = _appliedCoupon.code;
+    document.getElementById('coupon-applied-desc').textContent =
+      _appliedCoupon.discount_amount > 0 ? '-'+fmtMoney(_appliedCoupon.discount_amount) : 'sin descuento monetario';
+  } else {
+    appliedRow.style.display = 'none';
+    inputRow.style.display   = 'flex';
+    const inp = document.getElementById('coupon-code-input');
+    if(inp) inp.value = '';
+  }
+}
+
+async function applyCouponToModal(){
+  const inp  = document.getElementById('coupon-code-input');
+  const code = (inp?.value||'').trim().toUpperCase();
+  if(!code){ showToast('Ingresa un código de cupón'); return; }
+  try{
+    const d = await api(`/api/booking/coupon/${encodeURIComponent(code)}`);
+    const base = +(document.getElementById('e-ingreso_reserva')?.value)||0;
+    let disc = 0;
+    if(d.discount_percent) disc = Math.round(base * d.discount_percent / 100 * 100) / 100;
+    else if(d.discount_fixed) disc = +d.discount_fixed;
+    _appliedCoupon = { code: d.code, discount_amount: disc };
+    renderCouponSection();
+    showToast(`Cupón ${d.code} aplicado ✅`);
+  }catch(e){
+    let msg = e.message||'Error';
+    try{ msg = JSON.parse(msg).detail||msg; }catch(_){}
+    showToast(msg);
+  }
+}
+
+function removeCouponFromModal(){
+  _appliedCoupon = null;
+  renderCouponSection();
 }
 
 // Recalculate costo_operativo_total when fijo or variable changes
