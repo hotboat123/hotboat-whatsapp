@@ -2107,8 +2107,9 @@ async function saveModal(id){
     extrasJson[item.key]={qty, unit_price:price, date:item.date, name:item.name};
     extrasTotal+=qty*price;
   });
-  // Discounts total
-  const descTotal=_descuentos.reduce((s,d)=>s+(+d.amount||0),0);
+  // Discounts total (manual + coupon)
+  const descTotal=_descuentos.reduce((s,d)=>s+(+d.amount||0),0)
+                 +(_appliedCoupon?.discount_amount||0);
   const ingresoReserva=+g('e-ingreso_reserva')||0;
   const costoFijo=+g('e-costo_operativo_fijo')||0;
   const costoVar=+g('e-costo_operativo_variable')||0;
@@ -3427,6 +3428,7 @@ async function applyCouponToModal(){
     else if(d.discount_fixed) disc = +d.discount_fixed;
     _appliedCoupon = { code: d.code, discount_amount: disc };
     renderCouponSection();
+    updateExtrasTotals();
     showToast(`Cupón ${d.code} aplicado ✅`);
   }catch(e){
     let msg = e.message||'Error';
@@ -3438,6 +3440,7 @@ async function applyCouponToModal(){
 function removeCouponFromModal(){
   _appliedCoupon = null;
   renderCouponSection();
+  updateExtrasTotals();
 }
 
 // Recalculate costo_operativo_total when fijo or variable changes
@@ -3758,7 +3761,8 @@ function updateExtrasTotals(){
   const alojTotal   = (_alojAddon||[]).reduce((s,a)=>s+(+a.nights||1)*(+a.unit_price||0),0);
   const expTotal    = (_expAddon ||[]).reduce((s,a)=>s+(+a.qty||1)*(+a.unit_price||0),0);
   const addonsTotal = extrasTotal + alojTotal + expTotal;
-  const descTotal   = (_descuentos||[]).reduce((s,d)=>s+(+d.amount||0),0);
+  const descTotal   = (_descuentos||[]).reduce((s,d)=>s+(+d.amount||0),0)
+                    + (_appliedCoupon?.discount_amount||0);
   const lbl = document.getElementById('extras-total-label');
   if(lbl) lbl.textContent = extrasTotal>0 ? fmtMoney(extrasTotal) : '';
   const extEl  = document.getElementById('e-ingreso_extras');

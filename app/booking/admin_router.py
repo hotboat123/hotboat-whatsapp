@@ -189,6 +189,8 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
     _check_auth(x_admin_key)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     # coupon fields are nullable — include them if explicitly sent in the request
+    if 'coupon_code' in body.model_fields_set or 'coupon_discount' in body.model_fields_set:
+        _ensure_coupons_table()
     if 'coupon_code' in body.model_fields_set:
         updates['coupon_code'] = body.coupon_code
     if 'coupon_discount' in body.model_fields_set:
@@ -2178,6 +2180,10 @@ def _ensure_coupons_table():
                 ALTER TABLE hotboat_appointments
                     ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
                 ALTER TABLE hotboat_appointments
+                    ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0;
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
+                ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0;
             """)
             conn.commit()
