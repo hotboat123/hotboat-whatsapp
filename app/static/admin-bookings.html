@@ -469,39 +469,68 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
 
       <!-- Reporte de caja por método de pago -->
-      <div class="chart-wrap" style="margin-top:1rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.9rem">
+      <div style="margin-top:1.4rem;background:#0d0d14;border:1px solid #1e1e2e;border-radius:16px;overflow:hidden">
+
+        <!-- Header bar -->
+        <div style="background:linear-gradient(135deg,#12122a 0%,#0e1a2e 100%);padding:1rem 1.3rem;border-bottom:1px solid #1e1e2e;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.7rem">
           <div>
-            <div class="chart-title" style="margin:0">💵 Reporte de Caja</div>
-            <div style="color:var(--muted);font-size:.78rem;margin-top:.15rem">Ingresos por método de pago, desglosados por día</div>
+            <div style="font-size:1rem;font-weight:700;color:#e0e0f0;letter-spacing:.01em">💵 Reporte de Caja</div>
+            <div style="color:#5a5a80;font-size:.75rem;margin-top:.1rem">Ingresos por método de pago · desglose diario</div>
           </div>
           <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+            <!-- period pills -->
+            <div id="cash-period-pills" style="display:flex;gap:.3rem;background:#0a0a14;border:1px solid #1e1e2e;border-radius:9px;padding:.25rem">
+              <button class="cpill active" data-days="7"  onclick="setCashPeriod(this)">7d</button>
+              <button class="cpill"        data-days="14" onclick="setCashPeriod(this)">14d</button>
+              <button class="cpill"        data-days="30" onclick="setCashPeriod(this)">30d</button>
+              <button class="cpill"        data-days="90" onclick="setCashPeriod(this)">90d</button>
+            </div>
             <select id="cash-method-filter" onchange="loadCashReport()"
-              style="background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:.35rem .6rem;font-size:.8rem">
+              style="background:#0a0a14;color:#b0b0d0;border:1px solid #1e1e2e;border-radius:8px;padding:.32rem .65rem;font-size:.78rem;outline:none">
               <option value="">Todos los métodos</option>
-              <option value="efectivo" selected>Efectivo</option>
-              <option value="transferencia">Transferencia</option>
-              <option value="mercadopago">MercadoPago</option>
-              <option value="transbank">Transbank</option>
-              <option value="cheque">Cheque</option>
+              <option value="efectivo" selected>💵 Efectivo</option>
+              <option value="transferencia">🏦 Transferencia</option>
+              <option value="mercadopago">💙 MercadoPago</option>
+              <option value="transbank">💳 Transbank</option>
+              <option value="cheque">📄 Cheque</option>
             </select>
-            <select id="cash-period-filter"
-              style="background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:.35rem .6rem;font-size:.8rem"
-              onchange="loadCashReport()">
-              <option value="7">Últimos 7 días</option>
-              <option value="14">Últimas 2 semanas</option>
-              <option value="30">Último mes</option>
-              <option value="90">Últimos 3 meses</option>
-            </select>
-            <button onclick="loadCashReport()"
-              style="background:var(--green);color:#fff;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.8rem;cursor:pointer;font-weight:600">↺ Ver</button>
           </div>
         </div>
 
-        <div id="cash-report-body">
-          <div style="color:var(--muted);font-size:.85rem;padding:.5rem 0">Haz clic en "Ver" para cargar el reporte.</div>
+        <!-- KPI cards row -->
+        <div id="cash-kpi-row" style="display:none;grid-template-columns:repeat(3,1fr);gap:1px;background:#1e1e2e"></div>
+
+        <!-- Mini bar chart -->
+        <div id="cash-bar-wrap" style="display:none;padding:1rem 1.3rem .4rem;border-bottom:1px solid #1a1a28">
+          <div style="font-size:.7rem;color:#3a3a60;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.55rem">Tendencia de ingresos</div>
+          <div id="cash-bar-chart" style="display:flex;align-items:flex-end;gap:4px;height:56px"></div>
+          <div id="cash-bar-dates" style="display:flex;gap:4px;margin-top:.3rem"></div>
+        </div>
+
+        <!-- Table -->
+        <div id="cash-report-body" style="padding:.2rem 0">
+          <div style="color:#3a3a60;font-size:.82rem;padding:1.2rem 1.3rem">↑ Selecciona el período y método para ver el reporte.</div>
         </div>
       </div>
+
+      <style>
+        .cpill{background:none;border:none;color:#4a4a70;font-size:.75rem;font-weight:600;padding:.22rem .55rem;border-radius:6px;cursor:pointer;transition:all .15s}
+        .cpill:hover{color:#a0a0d0}
+        .cpill.active{background:#2a2a4a;color:#c0c0f0}
+        .cash-kpi{padding:.85rem 1.1rem;background:#0d0d14;text-align:center}
+        .cash-kpi .kv{font-size:1.25rem;font-weight:700;color:#2ecc71;letter-spacing:-.01em}
+        .cash-kpi .kl{font-size:.7rem;color:#4a4a70;text-transform:uppercase;letter-spacing:.07em;margin-top:.15rem}
+        .cash-row{display:grid;align-items:center;padding:.55rem 1.3rem;border-bottom:1px solid #11111d;transition:background .12s;cursor:default}
+        .cash-row:hover{background:#13131e}
+        .cash-row:last-child{border-bottom:none}
+        .cash-badge{display:inline-block;padding:.12rem .5rem;border-radius:5px;font-size:.7rem;font-weight:600;letter-spacing:.02em}
+        .m-efectivo{background:#1a2e1a;color:#4ade80}
+        .m-transferencia{background:#1a1e2e;color:#60a5fa}
+        .m-mercadopago{background:#1a1e30;color:#818cf8}
+        .m-transbank{background:#2e1a1a;color:#f87171}
+        .m-cheque{background:#2e2a1a;color:#fbbf24}
+        .m-otro{background:#1e1e2e;color:#94a3b8}
+      </style>
     </div>
 
     <!-- PRECIOS EXTRAS -->
@@ -1506,59 +1535,129 @@ async function openClientModal(tel){
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
+let _cashDays = 7;
+function setCashPeriod(el){
+  document.querySelectorAll('.cpill').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  _cashDays = +el.dataset.days;
+  loadCashReport();
+}
+
+const METHOD_COLORS = {
+  efectivo:'#4ade80', transferencia:'#60a5fa', mercadopago:'#818cf8',
+  transbank:'#f87171', cheque:'#fbbf24', otro:'#94a3b8'
+};
+function methodBadge(m){
+  const cls = 'm-'+(m||'otro').toLowerCase().replace(/\s/g,'');
+  return `<span class="cash-badge ${cls}">${m||'otro'}</span>`;
+}
+function sparkBar(val, max, color){
+  const pct = max > 0 ? Math.round((val/max)*100) : 0;
+  const h = Math.max(4, Math.round((val/max)*52));
+  return `<div title="${fmtMoney(val)}" style="flex:1;height:${h}px;min-height:4px;background:${color};border-radius:3px 3px 0 0;opacity:.85;transition:opacity .15s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.85"></div>`;
+}
+
 async function loadCashReport(){
-  const days = +document.getElementById('cash-period-filter').value || 7;
   const method = document.getElementById('cash-method-filter').value;
-  const body = document.getElementById('cash-report-body');
-  body.innerHTML = '<div style="color:var(--muted);font-size:.84rem;padding:.4rem 0">⏳ Cargando…</div>';
+  const body  = document.getElementById('cash-report-body');
+  const kpiRow  = document.getElementById('cash-kpi-row');
+  const barWrap = document.getElementById('cash-bar-wrap');
+  body.innerHTML = '<div style="color:#3a3a60;font-size:.82rem;padding:1.2rem 1.3rem">⏳ Cargando…</div>';
   try{
-    const params = new URLSearchParams({ days });
+    const params = new URLSearchParams({ days: _cashDays });
     if(method) params.set('method', method);
     const d = await api('/api/admin/reports/cash?' + params.toString());
     if(!d.rows || d.rows.length === 0){
-      body.innerHTML = '<div style="color:var(--muted);font-size:.84rem;padding:.4rem 0">Sin registros para el período.</div>';
+      kpiRow.style.display = 'none';
+      barWrap.style.display = 'none';
+      body.innerHTML = '<div style="color:#3a3a60;font-size:.82rem;padding:1.2rem 1.3rem">Sin registros para el período seleccionado.</div>';
       return;
     }
-    const methodLabel = method || 'todos los métodos';
-    const totalSum = d.rows.reduce((s,r)=>s+r.total,0);
-    let html = `<div style="margin-bottom:.6rem;font-size:.82rem;color:var(--muted)">
-      Período: <b>${d.rows[0].fecha}</b> → <b>${d.rows[d.rows.length-1].fecha}</b> &nbsp;|&nbsp;
-      Método: <b>${methodLabel}</b> &nbsp;|&nbsp;
-      Total: <b style="color:var(--green)">${fmtMoney(totalSum)}</b>
+
+    const rows = d.rows;
+    const totalSum   = rows.reduce((s,r)=>s+r.total,0);
+    const totalCount = rows.reduce((s,r)=>s+r.count,0);
+    const avgPerDay  = rows.length > 0 ? totalSum / rows.length : 0;
+    const bestRow    = rows.reduce((a,b)=>b.total>a.total?b:a, rows[0]);
+    const dayNames   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+    // ── KPI cards ──────────────────────────────────────────────────
+    kpiRow.style.display = 'grid';
+    kpiRow.innerHTML = `
+      <div class="cash-kpi">
+        <div class="kv">${fmtMoney(totalSum)}</div>
+        <div class="kl">Total recibido</div>
+      </div>
+      <div class="cash-kpi" style="border-left:1px solid #1e1e2e;border-right:1px solid #1e1e2e">
+        <div class="kv" style="color:#60a5fa">${totalCount}</div>
+        <div class="kl">Pagos registrados</div>
+      </div>
+      <div class="cash-kpi">
+        <div class="kv" style="color:#fbbf24">${fmtMoney(Math.round(avgPerDay))}</div>
+        <div class="kl">Promedio / día</div>
+      </div>`;
+
+    // ── Mini bar chart ──────────────────────────────────────────────
+    barWrap.style.display = 'block';
+    const maxVal = Math.max(...rows.map(r=>r.total), 1);
+    const color  = method ? (METHOD_COLORS[method.toLowerCase()]||'#60a5fa') : '#2ecc71';
+    document.getElementById('cash-bar-chart').innerHTML = rows.map(r=>sparkBar(r.total,maxVal,color)).join('');
+    document.getElementById('cash-bar-dates').innerHTML = rows.map(r=>{
+      const dt=new Date(r.fecha+'T12:00:00');
+      const dn=dayNames[dt.getDay()];
+      const isWeekend=dt.getDay()===0||dt.getDay()===6;
+      return `<div style="flex:1;font-size:.58rem;text-align:center;color:${isWeekend?'#6060a0':'#2e2e50'};overflow:hidden;white-space:nowrap">${dn}</div>`;
+    }).join('');
+
+    // ── Table ───────────────────────────────────────────────────────
+    const showBreakdown = !method;
+    const cols = showBreakdown ? 'grid-template-columns:1.1fr .5fr .8fr 1.6fr' : 'grid-template-columns:1.1fr .5fr 1fr';
+    let html = `<div class="cash-row" style="${cols};background:#0a0a14;border-bottom:1px solid #1e1e2e !important">
+      <div style="font-size:.68rem;color:#3a3a60;text-transform:uppercase;letter-spacing:.08em">Fecha</div>
+      <div style="font-size:.68rem;color:#3a3a60;text-transform:uppercase;letter-spacing:.08em;text-align:right">Pagos</div>
+      <div style="font-size:.68rem;color:#3a3a60;text-transform:uppercase;letter-spacing:.08em;text-align:right">Total</div>
+      ${showBreakdown?'<div style="font-size:.68rem;color:#3a3a60;text-transform:uppercase;letter-spacing:.08em">Desglose</div>':''}
     </div>`;
-    html += '<table style="width:100%;border-collapse:collapse;font-size:.83rem">';
-    html += '<thead><tr style="border-bottom:1px solid var(--border)">';
-    html += '<th style="text-align:left;padding:.3rem .5rem;color:var(--muted)">Fecha</th>';
-    html += '<th style="text-align:right;padding:.3rem .5rem;color:var(--muted)">N° pagos</th>';
-    html += '<th style="text-align:right;padding:.3rem .5rem;color:var(--muted)">Total recibido</th>';
-    if(!method) html += '<th style="text-align:left;padding:.3rem .5rem;color:var(--muted)">Desglose por método</th>';
-    html += '</tr></thead><tbody>';
-    const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-    d.rows.forEach(r=>{
-      const dt = new Date(r.fecha + 'T12:00:00');
+
+    rows.forEach(r=>{
+      const dt = new Date(r.fecha+'T12:00:00');
       const dn = dayNames[dt.getDay()];
-      html += `<tr style="border-bottom:1px solid #ffffff08">
-        <td style="padding:.35rem .5rem"><b>${dn}</b> ${r.fecha}</td>
-        <td style="text-align:right;padding:.35rem .5rem;color:var(--muted)">${r.count}</td>
-        <td style="text-align:right;padding:.35rem .5rem;color:var(--green);font-weight:600">${fmtMoney(r.total)}</td>`;
-      if(!method){
-        const breakdown = Object.entries(r.by_method||{})
-          .sort((a,b)=>b[1]-a[1])
-          .map(([m,v])=>`${m}: <b>${fmtMoney(v)}</b>`)
-          .join(' &nbsp;·&nbsp; ');
-        html += `<td style="padding:.35rem .5rem;font-size:.77rem;color:var(--muted)">${breakdown||'-'}</td>`;
-      }
-      html += '</tr>';
+      const isWeekend = dt.getDay()===0||dt.getDay()===6;
+      const isBest = r.fecha === bestRow.fecha;
+      const pct = totalSum>0 ? Math.round((r.total/totalSum)*100) : 0;
+      const barW = totalSum>0 ? Math.round((r.total/totalSum)*90) : 0;
+      const breakdown = showBreakdown
+        ? Object.entries(r.by_method||{}).sort((a,b)=>b[1]-a[1]).map(([m,v])=>`${methodBadge(m)} <span style="font-size:.74rem;color:#6060a0">${fmtMoney(v)}</span>`).join(' ')
+        : '';
+
+      html += `<div class="cash-row" style="${cols}${isBest?' background:#0f1a0f':isWeekend?' background:#0e0e1a':''}">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <span style="font-size:.75rem;color:${isWeekend?'#6060a0':'#9090c0'};min-width:2rem">${dn}</span>
+          <span style="font-size:.82rem;color:#c0c0e0">${r.fecha}</span>
+          ${isBest?'<span style="font-size:.62rem;background:#1a2e1a;color:#4ade80;padding:.1rem .35rem;border-radius:4px;font-weight:700">★ mejor</span>':''}
+        </div>
+        <div style="text-align:right;color:#4a4a70;font-size:.8rem">${r.count}</div>
+        <div style="text-align:right">
+          <span style="font-size:.88rem;font-weight:700;color:#2ecc71">${fmtMoney(r.total)}</span>
+          <div style="margin-top:.2rem;height:3px;background:#1a2e1a;border-radius:2px"><div style="width:${barW}%;height:100%;background:#2ecc71;border-radius:2px;opacity:.7"></div></div>
+        </div>
+        ${showBreakdown?`<div style="font-size:.76rem;display:flex;flex-wrap:wrap;gap:.3rem;align-items:center">${breakdown||'<span style="color:#2a2a40">—</span>'}</div>`:''}
+      </div>`;
     });
-    html += `</tbody><tfoot><tr style="border-top:2px solid var(--border)">
-      <td style="padding:.4rem .5rem;font-weight:700">TOTAL</td>
-      <td style="text-align:right;padding:.4rem .5rem;font-weight:700;color:var(--muted)">${d.rows.reduce((s,r)=>s+r.count,0)}</td>
-      <td style="text-align:right;padding:.4rem .5rem;font-weight:700;color:var(--green)">${fmtMoney(totalSum)}</td>
-      ${!method?'<td></td>':''}
-    </tr></tfoot></table>`;
+
+    // footer total
+    html += `<div class="cash-row" style="${cols};background:#0a0a14;border-top:1px solid #2a2a3a !important;border-bottom:none !important">
+      <div style="font-size:.78rem;font-weight:700;color:#8080b0">TOTAL · ${rows.length} días</div>
+      <div style="text-align:right;font-size:.78rem;font-weight:700;color:#8080b0">${totalCount}</div>
+      <div style="text-align:right;font-size:.95rem;font-weight:800;color:#2ecc71">${fmtMoney(totalSum)}</div>
+      ${showBreakdown?'<div></div>':''}
+    </div>`;
+
     body.innerHTML = html;
   }catch(e){
-    body.innerHTML = `<div style="color:#ef4444;font-size:.84rem">Error: ${e.message}</div>`;
+    kpiRow.style.display = 'none';
+    barWrap.style.display = 'none';
+    body.innerHTML = `<div style="color:#ef4444;font-size:.82rem;padding:1rem 1.3rem">❌ Error: ${e.message}</div>`;
   }
 }
 
