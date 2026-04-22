@@ -573,6 +573,13 @@ def ensure_db_columns() -> None:
                     created_at TIMESTAMPTZ DEFAULT NOW(),
                     updated_at TIMESTAMPTZ DEFAULT NOW()
                 );
+                -- ensure columns exist even if table was previously created with different schema
+                ALTER TABLE marketing_costs ADD COLUMN IF NOT EXISTS fecha        DATE    NOT NULL DEFAULT CURRENT_DATE;
+                ALTER TABLE marketing_costs ADD COLUMN IF NOT EXISTS amount       NUMERIC NOT NULL DEFAULT 0;
+                ALTER TABLE marketing_costs ADD COLUMN IF NOT EXISTS category     TEXT             DEFAULT 'general';
+                ALTER TABLE marketing_costs ADD COLUMN IF NOT EXISTS notes        TEXT             DEFAULT '';
+                ALTER TABLE marketing_costs ADD COLUMN IF NOT EXISTS created_at   TIMESTAMPTZ      DEFAULT NOW();
+                ALTER TABLE marketing_costs ADD COLUMN IF NOT EXISTS updated_at   TIMESTAMPTZ      DEFAULT NOW();
                 CREATE INDEX IF NOT EXISTS idx_marketing_costs_fecha ON marketing_costs(fecha);
 
                 CREATE TABLE IF NOT EXISTS financial_budget (
