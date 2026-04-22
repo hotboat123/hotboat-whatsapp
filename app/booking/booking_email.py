@@ -63,7 +63,7 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
         "num_people":         str(booking.get("num_people") or ""),
         "total_price":        str(booking.get("total_price") or ""),
         "total_price_fmt":    _fmt_clp(booking.get("total_price")),
-        "deposit_fmt":        _fmt_clp(round((booking.get("total_price") or 0) * 0.5)),
+        "deposit_fmt":        _fmt_clp(round(float(booking.get("total_price") or 0) * 0.5)),
         "subtotal_fmt":       _fmt_clp(booking.get("subtotal")),
         "extras_total_fmt":   _fmt_clp(booking.get("extras_total")),
         "status":             str(booking.get("status") or ""),
