@@ -112,7 +112,7 @@ def _get_marketing_costs_range(date_from: date, date_to: date) -> List[Dict]:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, fecha::text, amount, category, notes
-                FROM marketing_costs
+                FROM marketing_costs_daily
                 WHERE fecha BETWEEN %s AND %s
                 ORDER BY fecha
             """, (date_from, date_to))
