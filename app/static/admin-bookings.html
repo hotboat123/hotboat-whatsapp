@@ -373,6 +373,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('cal-extras')" id="nav-cal-extras">
       <span class="ni">🗓️</span> Calendario Extras
     </div>
+    <div class="nav-item" onclick="showSection('financial')" id="nav-financial">
+      <span class="ni">💰</span> Finanzas
+    </div>
     <div class="nav-item" onclick="showSection('settings')" id="nav-settings">
       <span class="ni">⚙️</span> Configuracion
     </div>
@@ -1157,6 +1160,142 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div>
 
   </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       MÓDULO FINANCIERO
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div id="section-financial" class="section" style="display:none">
+
+    <!-- Controles globales del período -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.2rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <!-- Selector diario/semanal/mensual -->
+      <div style="display:flex;gap:.3rem;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:.2rem">
+        <button class="fin-view-btn active" data-view="daily"   onclick="setFinView('daily')"  >Diario</button>
+        <button class="fin-view-btn"        data-view="weekly"  onclick="setFinView('weekly')" >Semanal</button>
+        <button class="fin-view-btn"        data-view="monthly" onclick="setFinView('monthly')">Mensual</button>
+      </div>
+      <!-- Fechas -->
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <input type="date" id="fin-date-from" onchange="loadFinancial()"
+          style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
+        <span style="color:var(--muted);font-size:.8rem">→</span>
+        <input type="date" id="fin-date-to" onchange="loadFinancial()"
+          style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
+      </div>
+      <!-- Shortcuts de período -->
+      <div style="display:flex;gap:.3rem">
+        <button class="fin-shortcut" onclick="setFinPeriod(30)" >30d</button>
+        <button class="fin-shortcut" onclick="setFinPeriod(90)" >90d</button>
+        <button class="fin-shortcut" onclick="setFinPeriod(180)">6m</button>
+        <button class="fin-shortcut" onclick="setFinPeriod(365)">1a</button>
+      </div>
+      <!-- Configuración rápida -->
+      <div style="margin-left:auto;display:flex;gap:.5rem">
+        <button onclick="openMarketingModal()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.35rem .8rem;font-size:.79rem;cursor:pointer">
+          📣 Marketing
+        </button>
+        <button onclick="openCommissionsModal()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.35rem .8rem;font-size:.79rem;cursor:pointer">
+          ⚙️ Comisiones
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabs P&L / Flujo de Caja / Forecast -->
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.2rem">
+      <button class="fin-tab active" data-tab="pnl"      onclick="setFinTab('pnl')"     >📊 P&amp;L</button>
+      <button class="fin-tab"        data-tab="cashflow" onclick="setFinTab('cashflow')" >💵 Flujo de Caja</button>
+      <button class="fin-tab"        data-tab="forecast" onclick="setFinTab('forecast')" >🔭 Forecast</button>
+    </div>
+
+    <!-- ── P&L Panel ──────────────────────────────────────────────────── -->
+    <div id="fin-pnl-panel">
+
+      <!-- KPI cards -->
+      <div id="fin-pnl-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.8rem;margin-bottom:1.2rem"></div>
+
+      <!-- Tabla P&L -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+        <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:.92rem">Detalle P&amp;L</span>
+          <span id="fin-pnl-loading" style="color:var(--muted);font-size:.78rem"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="fin-pnl-table" style="width:100%;border-collapse:collapse;font-size:.81rem">
+            <thead>
+              <tr style="background:var(--card);color:var(--muted);font-size:.73rem;text-transform:uppercase;letter-spacing:.05em">
+                <th style="padding:.6rem 1rem;text-align:left">Período</th>
+                <th style="padding:.6rem .8rem;text-align:right">Reservas</th>
+                <th style="padding:.6rem .8rem;text-align:right">Ingreso Bruto</th>
+                <th style="padding:.6rem .8rem;text-align:right;color:#e74c3c">Comisiones</th>
+                <th style="padding:.6rem .8rem;text-align:right">Ingreso Neto</th>
+                <th style="padding:.6rem .8rem;text-align:right;color:#e74c3c">Costos Op.</th>
+                <th style="padding:.6rem .8rem;text-align:right;color:#e74c3c">Marketing</th>
+                <th style="padding:.6rem .8rem;text-align:right">Resultado</th>
+                <th style="padding:.6rem .8rem;text-align:center">Margen</th>
+              </tr>
+            </thead>
+            <tbody id="fin-pnl-tbody"></tbody>
+            <tfoot id="fin-pnl-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Cash Flow Panel ────────────────────────────────────────────── -->
+    <div id="fin-cf-panel" style="display:none">
+
+      <!-- Saldo inicial -->
+      <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:1rem">
+        <label style="color:var(--muted);font-size:.82rem">Saldo inicial del período:</label>
+        <input type="number" id="fin-cf-opening" value="0" placeholder="0"
+          onchange="loadCashFlow()"
+          style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.85rem;outline:none;width:130px">
+        <span style="color:var(--muted);font-size:.75rem">CLP</span>
+      </div>
+
+      <!-- KPI cards -->
+      <div id="fin-cf-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.8rem;margin-bottom:1.2rem"></div>
+
+      <!-- Tabla Cash Flow -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+        <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:.92rem">Flujo de Caja</span>
+          <span id="fin-cf-loading" style="color:var(--muted);font-size:.78rem"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="fin-cf-table" style="width:100%;border-collapse:collapse;font-size:.81rem">
+            <thead>
+              <tr style="background:var(--card);color:var(--muted);font-size:.73rem;text-transform:uppercase;letter-spacing:.05em">
+                <th style="padding:.6rem 1rem;text-align:left">Período</th>
+                <th style="padding:.6rem .8rem;text-align:right">Saldo Inicial</th>
+                <th style="padding:.6rem .8rem;text-align:right;color:#2ecc71">Entradas Netas</th>
+                <th style="padding:.6rem .8rem;text-align:right;color:#e74c3c">Salidas</th>
+                <th style="padding:.6rem .8rem;text-align:right">Flujo Neto</th>
+                <th style="padding:.6rem .8rem;text-align:right;font-weight:700">Saldo Final</th>
+                <th style="padding:.6rem .8rem;text-align:center">Detalle</th>
+              </tr>
+            </thead>
+            <tbody id="fin-cf-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Forecast Panel ─────────────────────────────────────────────── -->
+    <div id="fin-fc-panel" style="display:none">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+        <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:.92rem">🔭 Forecast vs Budget</span>
+          <button onclick="loadForecast()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↻ Actualizar</button>
+        </div>
+        <div id="fin-fc-content" style="padding:1rem"></div>
+      </div>
+    </div>
+
+  </div><!-- /section-financial -->
+
+
 </div><!-- /main -->
 
 </div><!-- /dashboard -->
@@ -1234,7 +1373,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
@@ -1247,6 +1386,7 @@ function showSection(name){
   if(name==='experiencias') loadExperiencias();
   if(name==='packs-admin') loadPacksAdmin();
   if(name==='cal-extras') loadCalExtras();
+  if(name==='financial') initFinancialSection();
 }
 function toggleSidebar(){
   document.getElementById('sidebar').classList.toggle('open');
@@ -5234,6 +5374,599 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
   </div>
 </div>
+
+<!-- ═══ FINANCIAL: COMMISSIONS MODAL ═══ -->
+<div id="fin-comm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+  <div style="background:var(--card);border-radius:14px;max-width:500px;margin:auto;padding:1.5rem">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:1rem">⚙️ Tasas de Comisión</div>
+    <div style="color:var(--muted);font-size:.78rem;margin-bottom:1.2rem">Define la comisión por método de pago. Para tarjeta crédito se descuenta además el IVA del monto bruto.</div>
+    <div id="fin-comm-rows" style="display:flex;flex-direction:column;gap:.7rem"></div>
+    <div style="display:flex;gap:.6rem;margin-top:1.2rem">
+      <button class="btn-primary" onclick="saveCommissions()" style="flex:1">💾 Guardar</button>
+      <button class="btn-secondary" onclick="document.getElementById('fin-comm-modal').style.display='none'">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FINANCIAL: MARKETING COSTS MODAL ═══ -->
+<div id="fin-mkt-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+  <div style="background:var(--card);border-radius:14px;max-width:560px;margin:auto;padding:1.5rem">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:.4rem">📣 Costos de Marketing</div>
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem">
+      <select id="fin-mkt-year"  onchange="loadMarketingCosts()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .6rem;font-size:.82rem;outline:none"></select>
+      <select id="fin-mkt-month" onchange="loadMarketingCosts()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .6rem;font-size:.82rem;outline:none">
+        <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+        <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+        <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+        <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+      </select>
+    </div>
+    <div id="fin-mkt-list" style="display:flex;flex-direction:column;gap:.5rem;max-height:340px;overflow-y:auto;margin-bottom:.8rem"></div>
+    <button onclick="addMarketingRow()" style="width:100%;padding:.4rem;background:var(--surface);border:1px dashed var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:.82rem">+ Agregar costo</button>
+    <div style="display:flex;gap:.6rem;margin-top:1rem">
+      <button class="btn-secondary" style="flex:1" onclick="document.getElementById('fin-mkt-modal').style.display='none'">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FINANCIAL: BUDGET MODAL ═══ -->
+<div id="fin-budget-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+  <div style="background:var(--card);border-radius:14px;max-width:420px;margin:auto;padding:1.5rem">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:1rem">📋 Presupuesto <span id="fin-budget-title"></span></div>
+    <input type="hidden" id="fin-budget-year">
+    <input type="hidden" id="fin-budget-month">
+    <div style="display:flex;flex-direction:column;gap:.8rem">
+      <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Ingreso presupuestado</label>
+        <input type="number" id="fin-budget-income" placeholder="0"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
+      <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Costos operativos presupuestados</label>
+        <input type="number" id="fin-budget-costs" placeholder="0"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
+      <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Marketing presupuestado</label>
+        <input type="number" id="fin-budget-marketing" placeholder="0"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
+      <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Notas</label>
+        <input type="text" id="fin-budget-notes" placeholder="opcional"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
+    </div>
+    <div style="display:flex;gap:.6rem;margin-top:1.2rem">
+      <button class="btn-primary" onclick="saveBudget()" style="flex:1">💾 Guardar presupuesto</button>
+      <button class="btn-secondary" onclick="document.getElementById('fin-budget-modal').style.display='none'">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.fin-view-btn{background:none;border:none;color:var(--muted);padding:.32rem .75rem;border-radius:7px;cursor:pointer;font-size:.8rem;transition:all .15s}
+.fin-view-btn.active{background:var(--gold);color:#000;font-weight:600}
+.fin-shortcut{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:.28rem .6rem;border-radius:7px;cursor:pointer;font-size:.75rem}
+.fin-shortcut:hover{color:var(--text);border-color:var(--gold)}
+.fin-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:.55rem 1.1rem;cursor:pointer;font-size:.85rem;transition:all .15s}
+.fin-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.fin-kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.9rem 1rem}
+.fin-kpi .fk-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem}
+.fin-kpi .fk-value{font-size:1.25rem;font-weight:700;color:var(--text)}
+.fin-kpi .fk-sub{font-size:.72rem;color:var(--muted);margin-top:.15rem}
+.fin-tr-expand{cursor:pointer}
+.fin-tr-expand:hover{background:rgba(255,255,255,.03)}
+.fin-tr-detail{display:none}
+.fin-tr-detail.open{display:table-row}
+.fin-row-pos{color:var(--green)}
+.fin-row-neg{color:var(--red)}
+</style>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// MÓDULO FINANCIERO
+// ══════════════════════════════════════════════════════════════
+
+let _finView = 'daily';
+let _finTab  = 'pnl';
+let _finCommissions = null;
+let _mktCosts = [];   // editing buffer for marketing costs
+
+function fmtClp(n){
+  const v = Math.round(Number(n)||0);
+  return '$' + v.toLocaleString('es-CL');
+}
+function fmtPct(num, den){
+  if(!den) return '—';
+  return Math.round(num/den*100) + '%';
+}
+function colorNum(n){
+  return n >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+// ── Period helpers ────────────────────────────────────────────
+function _isoDate(d){ return d.toISOString().substring(0,10); }
+
+function initFinDates(){
+  const to   = new Date();
+  const from = new Date(); from.setDate(from.getDate() - 29);
+  document.getElementById('fin-date-from').value = _isoDate(from);
+  document.getElementById('fin-date-to').value   = _isoDate(to);
+}
+
+function setFinPeriod(days){
+  const to   = new Date();
+  const from = new Date(); from.setDate(from.getDate() - days + 1);
+  document.getElementById('fin-date-from').value = _isoDate(from);
+  document.getElementById('fin-date-to').value   = _isoDate(to);
+  loadFinancial();
+}
+
+function setFinView(v){
+  _finView = v;
+  document.querySelectorAll('.fin-view-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.view === v);
+  });
+  loadFinancial();
+}
+
+function setFinTab(t){
+  _finTab = t;
+  document.querySelectorAll('.fin-tab').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab === t);
+  });
+  document.getElementById('fin-pnl-panel').style.display  = t==='pnl'      ? '' : 'none';
+  document.getElementById('fin-cf-panel').style.display   = t==='cashflow'  ? '' : 'none';
+  document.getElementById('fin-fc-panel').style.display   = t==='forecast'  ? '' : 'none';
+  if(t==='pnl')      loadPnl();
+  if(t==='cashflow') loadCashFlow();
+  if(t==='forecast') loadForecast();
+}
+
+function loadFinancial(){
+  if(_finTab==='pnl')      loadPnl();
+  if(_finTab==='cashflow') loadCashFlow();
+}
+
+// ── KPI cards ─────────────────────────────────────────────────
+function renderKpis(containerId, cards){
+  const el = document.getElementById(containerId);
+  el.innerHTML = cards.map(c=>`
+    <div class="fin-kpi">
+      <div class="fk-label">${c.label}</div>
+      <div class="fk-value" style="color:${c.color||'var(--text)'}">${c.value}</div>
+      ${c.sub ? `<div class="fk-sub">${c.sub}</div>` : ''}
+    </div>`).join('');
+}
+
+// ── P&L ───────────────────────────────────────────────────────
+async function loadPnl(){
+  const from = document.getElementById('fin-date-from').value;
+  const to   = document.getElementById('fin-date-to').value;
+  if(!from||!to) return;
+  document.getElementById('fin-pnl-loading').textContent = 'Cargando…';
+  try {
+    const r = await fetch(`/api/admin/financial/pnl?date_from=${from}&date_to=${to}&view=${_finView}`);
+    const d = await r.json();
+    renderPnlKpis(d.totals);
+    renderPnlTable(d.data, d.view);
+    document.getElementById('fin-pnl-loading').textContent = '';
+  } catch(e){
+    document.getElementById('fin-pnl-loading').textContent = 'Error al cargar';
+  }
+}
+
+function renderPnlKpis(t){
+  const margin = t.gross ? Math.round(t.resultado/t.gross*100) : 0;
+  renderKpis('fin-pnl-kpis', [
+    {label:'Ingreso Bruto',    value: fmtClp(t.gross),               color:'var(--text)'},
+    {label:'Comisiones',       value: '-'+fmtClp(t.commission_deduction), color:'var(--red)'},
+    {label:'Ingreso Neto',     value: fmtClp(t.net_income),          color:'var(--gold)'},
+    {label:'Costos Operac.',   value: '-'+fmtClp(t.costo_operacional),color:'var(--red)'},
+    {label:'Marketing',        value: '-'+fmtClp(t.marketing),       color:'var(--red)'},
+    {label:'Resultado',        value: fmtClp(t.resultado),           color: colorNum(t.resultado),
+     sub: `Margen ${margin}%`},
+  ]);
+}
+
+function renderPnlTable(data, view){
+  const tbody = document.getElementById('fin-pnl-tbody');
+  const tfoot = document.getElementById('fin-pnl-tfoot');
+  tbody.innerHTML = '';
+
+  data.forEach((row, idx) => {
+    const label  = view==='daily'   ? row.fecha :
+                   view==='weekly'  ? `${row.week} (${row.week_start} → ${row.week_end})` :
+                                      row.month;
+    const margin = row.gross ? Math.round(row.resultado/row.gross*100) : 0;
+    const hasDetail = view!=='daily' && row.days && row.days.length>0;
+    const detailId = `pnl-detail-${idx}`;
+
+    const tr = document.createElement('tr');
+    tr.className = 'fin-tr-expand';
+    tr.style.borderTop = '1px solid var(--border)';
+    if(hasDetail) tr.setAttribute('onclick', `togglePnlDetail('${detailId}')`);
+    tr.innerHTML = `
+      <td style="padding:.6rem 1rem;color:var(--text)">${hasDetail?'▶ ':''}<strong>${label}</strong></td>
+      <td style="padding:.6rem .8rem;text-align:right;color:var(--muted)">${row.n_reservas}</td>
+      <td style="padding:.6rem .8rem;text-align:right">${fmtClp(row.gross)}</td>
+      <td style="padding:.6rem .8rem;text-align:right;color:var(--red)">-${fmtClp(row.commission_deduction)}</td>
+      <td style="padding:.6rem .8rem;text-align:right;color:var(--gold)">${fmtClp(row.net_income)}</td>
+      <td style="padding:.6rem .8rem;text-align:right;color:var(--red)">-${fmtClp(row.costo_operacional)}</td>
+      <td style="padding:.6rem .8rem;text-align:right;color:var(--red)">-${fmtClp(row.marketing)}</td>
+      <td style="padding:.6rem .8rem;text-align:right;font-weight:600;color:${colorNum(row.resultado)}">${fmtClp(row.resultado)}</td>
+      <td style="padding:.6rem .8rem;text-align:center;color:${colorNum(margin)}">${margin}%</td>`;
+    tbody.appendChild(tr);
+
+    if(hasDetail){
+      const trDetail = document.createElement('tr');
+      trDetail.id = detailId;
+      trDetail.className = 'fin-tr-detail';
+      const subdaysHtml = row.days.map(d=>{
+        const dm = d.gross ? Math.round(d.resultado/d.gross*100) : 0;
+        return `<tr style="background:rgba(0,0,0,.25)">
+          <td style="padding:.4rem 1rem .4rem 2rem;color:var(--muted)">${d.fecha}</td>
+          <td style="padding:.4rem .8rem;text-align:right;color:var(--muted)">${d.n_reservas}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem">${fmtClp(d.gross)}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--red)">-${fmtClp(d.commission_deduction)}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--gold)">${fmtClp(d.net_income)}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--red)">-${fmtClp(d.costo_operacional)}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--red)">-${fmtClp(d.marketing)}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:${colorNum(d.resultado)}">${fmtClp(d.resultado)}</td>
+          <td style="padding:.4rem .8rem;text-align:center;font-size:.78rem;color:${colorNum(dm)}">${dm}%</td>
+        </tr>`;
+      }).join('');
+      trDetail.innerHTML = `<td colspan="9" style="padding:0"><table style="width:100%;border-collapse:collapse">${subdaysHtml}</table></td>`;
+      tbody.appendChild(trDetail);
+    }
+  });
+
+  // Totals footer
+  tfoot.innerHTML = '';
+}
+
+function togglePnlDetail(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const isOpen = el.classList.contains('open');
+  el.classList.toggle('open', !isOpen);
+  el.style.display = isOpen ? 'none' : 'table-row';
+  // Update arrow
+  const prevTr = el.previousElementSibling;
+  if(prevTr){
+    const first = prevTr.querySelector('td:first-child');
+    if(first) first.innerHTML = first.innerHTML.replace(/[▶▼] /, (!isOpen?'▼ ':'▶ '));
+  }
+}
+
+// ── Cash Flow ─────────────────────────────────────────────────
+async function loadCashFlow(){
+  const from = document.getElementById('fin-date-from').value;
+  const to   = document.getElementById('fin-date-to').value;
+  const ob   = document.getElementById('fin-cf-opening').value || 0;
+  if(!from||!to) return;
+  document.getElementById('fin-cf-loading').textContent = 'Cargando…';
+  try {
+    const r = await fetch(`/api/admin/financial/cashflow?date_from=${from}&date_to=${to}&view=${_finView}&opening_balance=${ob}`);
+    const d = await r.json();
+    renderCfKpis(d.data);
+    renderCfTable(d.data, d.view);
+    document.getElementById('fin-cf-loading').textContent = '';
+  } catch(e){
+    document.getElementById('fin-cf-loading').textContent = 'Error al cargar';
+  }
+}
+
+function renderCfKpis(data){
+  if(!data||!data.length){ renderKpis('fin-cf-kpis',[]); return; }
+  const totalIn  = data.reduce((s,d)=>s+(d.inflow_neto||0),0);
+  const totalOut = data.reduce((s,d)=>s+(d.total_outflow||0),0);
+  const netFlow  = data.reduce((s,d)=>s+(d.net_cashflow||0),0);
+  const last     = data[data.length-1];
+  renderKpis('fin-cf-kpis',[
+    {label:'Total Entradas Netas', value: fmtClp(totalIn),           color:'var(--green)'},
+    {label:'Total Salidas',        value: '-'+fmtClp(totalOut),      color:'var(--red)'},
+    {label:'Flujo Neto',           value: fmtClp(netFlow),           color: colorNum(netFlow)},
+    {label:'Saldo Final',          value: fmtClp(last.ending_balance||last.ending_balance), color:'var(--gold)'},
+  ]);
+}
+
+function renderCfTable(data, view){
+  const tbody = document.getElementById('fin-cf-tbody');
+  tbody.innerHTML = '';
+  if(!data||!data.length){
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:1.5rem;text-align:center;color:var(--muted)">Sin datos en el período</td></tr>';
+    return;
+  }
+
+  data.forEach((row, idx) => {
+    const label = view==='daily'  ? row.fecha :
+                  view==='weekly' ? `${row.week} (${row.week_start} → ${row.week_end})` :
+                                    row.month;
+    const hasDetail = (view!=='daily') && row.days && row.days.length>0;
+    const detailId = `cf-detail-${idx}`;
+    const endBal = row.ending_balance;
+
+    const tr = document.createElement('tr');
+    tr.className = 'fin-tr-expand';
+    tr.style.borderTop = '1px solid var(--border)';
+    if(hasDetail) tr.setAttribute('onclick', `toggleCfDetail('${detailId}')`);
+    tr.innerHTML = `
+      <td style="padding:.6rem 1rem">${hasDetail?'▶ ':''}<strong>${label}</strong></td>
+      <td style="padding:.6rem .8rem;text-align:right;color:var(--muted)">${fmtClp(row.beginning_balance)}</td>
+      <td style="padding:.6rem .8rem;text-align:right;color:var(--green)">+${fmtClp(row.inflow_neto)}</td>
+      <td style="padding:.6rem .8rem;text-align:right;color:var(--red)">-${fmtClp(row.total_outflow)}</td>
+      <td style="padding:.6rem .8rem;text-align:right;color:${colorNum(row.net_cashflow)}">${fmtClp(row.net_cashflow)}</td>
+      <td style="padding:.6rem .8rem;text-align:right;font-weight:700;font-size:.92rem;color:var(--gold)">${fmtClp(endBal)}</td>
+      <td style="padding:.6rem .8rem;text-align:center">
+        ${!hasDetail && row.pagos_detail && row.pagos_detail.length ?
+          `<button onclick='showCfDetail(${JSON.stringify(row.pagos_detail)})' style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.75rem">👁</button>` : ''}
+      </td>`;
+    tbody.appendChild(tr);
+
+    if(hasDetail){
+      const trDetail = document.createElement('tr');
+      trDetail.id = detailId;
+      trDetail.className = 'fin-tr-detail';
+      const subHtml = row.days.map(d=>`
+        <tr style="background:rgba(0,0,0,.25)">
+          <td style="padding:.4rem 1rem .4rem 2rem;color:var(--muted)">${d.fecha}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--muted)">${fmtClp(d.beginning_balance)}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--green)">+${fmtClp(d.inflow_neto)}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--red)">-${fmtClp(d.total_outflow)}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:${colorNum(d.net_cashflow)}">${fmtClp(d.net_cashflow)}</td>
+          <td style="padding:.4rem .8rem;text-align:right;font-weight:600;font-size:.78rem;color:var(--gold)">${fmtClp(d.ending_balance)}</td>
+          <td style="padding:.4rem .8rem;text-align:center">
+            ${d.pagos_detail&&d.pagos_detail.length ?
+              `<button onclick='showCfDetail(${JSON.stringify(d.pagos_detail)})' style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.75rem">👁</button>` : ''}
+          </td>
+        </tr>`).join('');
+      trDetail.innerHTML = `<td colspan="7" style="padding:0"><table style="width:100%;border-collapse:collapse">${subHtml}</table></td>`;
+      tbody.appendChild(trDetail);
+    }
+  });
+}
+
+function toggleCfDetail(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const isOpen = el.classList.contains('open');
+  el.classList.toggle('open', !isOpen);
+  el.style.display = isOpen ? 'none' : 'table-row';
+  const prevTr = el.previousElementSibling;
+  if(prevTr){
+    const first = prevTr.querySelector('td:first-child');
+    if(first) first.innerHTML = first.innerHTML.replace(/[▶▼] /, (!isOpen?'▼ ':'▶ '));
+  }
+}
+
+function showCfDetail(pagos){
+  const lines = pagos.map(p=>
+    `${p.nombre_cliente} · ${p.method} · Bruto: ${fmtClp(p.amount_bruto)} → Neto: ${fmtClp(p.amount_neto)}`
+  ).join('\n');
+  alert('Detalle de pagos del día:\n\n' + lines);
+}
+
+// ── Forecast ──────────────────────────────────────────────────
+async function loadForecast(){
+  const el = document.getElementById('fin-fc-content');
+  el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:.5rem">Cargando…</div>';
+  try {
+    const r = await fetch('/api/admin/financial/forecast?months_ahead=3');
+    const d = await r.json();
+    renderForecast(d.data);
+  } catch(e){
+    el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar</div>';
+  }
+}
+
+function renderForecast(data){
+  const el = document.getElementById('fin-fc-content');
+  if(!data||!data.length){
+    el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Sin reservas futuras</div>'; return;
+  }
+  const MONTH_NAMES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  el.innerHTML = data.map(m=>{
+    const mo = parseInt(m.month.split('-')[1]);
+    const yr = m.month.split('-')[0];
+    const b = m.budget || {};
+    const incomeBudget = b.income_budget || 0;
+    const vs = m.vs_budget;
+    const vsColor = vs >= 0 ? 'var(--green)' : 'var(--red)';
+    const vsPct = incomeBudget ? Math.round(vs/incomeBudget*100) : null;
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:.8rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.8rem">
+        <div>
+          <div style="font-weight:600">${MONTH_NAMES[mo]} ${yr}</div>
+          <div style="color:var(--muted);font-size:.75rem">${m.n_reservas} reservas · ${m.confirmed} confirmadas · ${m.pending} pendientes</div>
+        </div>
+        <button onclick="openBudgetModal('${yr}','${mo}')" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.28rem .6rem;font-size:.75rem;cursor:pointer">
+          📋 Editar budget
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;font-size:.8rem">
+        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
+          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Ingreso Forecast</div>
+          <div style="font-weight:600;color:var(--gold)">${fmtClp(m.net_income)}</div>
+          ${incomeBudget ? `<div style="font-size:.7rem;color:${vsColor};margin-top:.15rem">${vs>=0?'+':''}${fmtClp(vs)} vs budget ${vsPct!==null?'('+vsPct+'%)':''}</div>` : ''}
+        </div>
+        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
+          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Budget Ingreso</div>
+          <div style="font-weight:600">${incomeBudget ? fmtClp(incomeBudget) : '<span style="color:var(--muted)">—</span>'}</div>
+        </div>
+        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
+          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Resultado Forecast</div>
+          <div style="font-weight:600;color:${colorNum(m.resultado_forecast)}">${fmtClp(m.resultado_forecast)}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Commissions modal ─────────────────────────────────────────
+async function openCommissionsModal(){
+  const r = await fetch('/api/admin/financial/commissions');
+  _finCommissions = await r.json();
+  const METHODS = ['transbank','transbank_credito','transbank_debito','mercadopago',
+                   'transferencia','efectivo','cheque','otro'];
+  const METHOD_LABELS = {
+    transbank:'Transbank (general)', transbank_credito:'Transbank Crédito',
+    transbank_debito:'Transbank Débito', mercadopago:'MercadoPago',
+    transferencia:'Transferencia', efectivo:'Efectivo', cheque:'Cheque', otro:'Otro'
+  };
+  const el = document.getElementById('fin-comm-rows');
+  el.innerHTML = METHODS.map(m=>{
+    const cfg = _finCommissions[m] || {rate:0, iva_included:false};
+    return `<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;background:var(--surface);border-radius:8px">
+      <span style="flex:1;font-size:.82rem">${METHOD_LABELS[m]||m}</span>
+      <label style="display:flex;align-items:center;gap:.3rem;font-size:.75rem;color:var(--muted)">
+        <input type="checkbox" id="fc-iva-${m}" ${cfg.iva_included?'checked':''}>IVA incluido
+      </label>
+      <input type="number" id="fc-rate-${m}" value="${((cfg.rate||0)*100).toFixed(2)}" min="0" max="20" step="0.01"
+        style="width:70px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.28rem .5rem;font-size:.8rem;outline:none;text-align:right">
+      <span style="color:var(--muted);font-size:.75rem">%</span>
+    </div>`;
+  }).join('');
+  document.getElementById('fin-comm-modal').style.display = '';
+}
+
+async function saveCommissions(){
+  const METHODS = ['transbank','transbank_credito','transbank_debito','mercadopago',
+                   'transferencia','efectivo','cheque','otro'];
+  const body = {};
+  METHODS.forEach(m=>{
+    body[m] = {
+      rate: parseFloat(document.getElementById(`fc-rate-${m}`).value||'0') / 100,
+      iva_included: document.getElementById(`fc-iva-${m}`).checked,
+    };
+  });
+  await fetch('/api/admin/financial/commissions', {
+    method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+  });
+  document.getElementById('fin-comm-modal').style.display = 'none';
+  loadFinancial();
+}
+
+// ── Marketing costs modal ─────────────────────────────────────
+function openMarketingModal(){
+  const today = new Date();
+  const yearSel  = document.getElementById('fin-mkt-year');
+  const monthSel = document.getElementById('fin-mkt-month');
+  // Populate year select
+  yearSel.innerHTML = '';
+  for(let y = today.getFullYear()-1; y <= today.getFullYear()+1; y++){
+    yearSel.innerHTML += `<option value="${y}" ${y===today.getFullYear()?'selected':''}>${y}</option>`;
+  }
+  monthSel.value = today.getMonth()+1;
+  document.getElementById('fin-mkt-modal').style.display = '';
+  loadMarketingCosts();
+}
+
+async function loadMarketingCosts(){
+  const year  = document.getElementById('fin-mkt-year').value;
+  const month = document.getElementById('fin-mkt-month').value;
+  const r = await fetch(`/api/admin/financial/marketing-costs?year=${year}&month=${month}`);
+  const d = await r.json();
+  _mktCosts = d.data || [];
+  renderMarketingList();
+}
+
+function renderMarketingList(){
+  const el = document.getElementById('fin-mkt-list');
+  if(!_mktCosts.length){
+    el.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:.5rem">Sin costos registrados</div>';
+    return;
+  }
+  el.innerHTML = _mktCosts.map((c,i)=>`
+    <div style="display:flex;gap:.4rem;align-items:center;background:var(--surface);border-radius:8px;padding:.45rem .6rem">
+      <input type="date" value="${c.fecha}"
+        onchange="_mktCosts[${i}].fecha=this.value"
+        style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .4rem;font-size:.78rem;outline:none;width:130px">
+      <input type="number" value="${c.amount}" placeholder="Monto"
+        onchange="_mktCosts[${i}].amount=+this.value"
+        style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;outline:none;width:100px">
+      <select onchange="_mktCosts[${i}].category=this.value"
+        style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .4rem;font-size:.78rem;outline:none;flex:1">
+        ${['general','google_ads','instagram','facebook','influencer','otro'].map(cat=>
+          `<option value="${cat}" ${c.category===cat?'selected':''}>${cat}</option>`
+        ).join('')}
+      </select>
+      <input type="text" value="${c.notes||''}" placeholder="Notas"
+        onchange="_mktCosts[${i}].notes=this.value"
+        style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .4rem;font-size:.78rem;outline:none;flex:1.5">
+      <button onclick="saveMktCost(${i})" title="Guardar"
+        style="background:none;border:none;color:var(--green);cursor:pointer;font-size:1rem">💾</button>
+      <button onclick="deleteMktCost(${i})" title="Eliminar"
+        style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.9rem">✕</button>
+    </div>`).join('');
+}
+
+function addMarketingRow(){
+  const year  = document.getElementById('fin-mkt-year').value;
+  const month = String(document.getElementById('fin-mkt-month').value).padStart(2,'0');
+  const today = `${year}-${month}-01`;
+  _mktCosts.push({id:null, fecha:today, amount:0, category:'general', notes:''});
+  renderMarketingList();
+}
+
+async function saveMktCost(i){
+  const c = _mktCosts[i];
+  if(c.id){
+    await fetch(`/api/admin/financial/marketing-costs/${c.id}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fecha:c.fecha, amount:c.amount, category:c.category, notes:c.notes})
+    });
+  } else {
+    const r = await fetch('/api/admin/financial/marketing-costs', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fecha:c.fecha, amount:c.amount, category:c.category, notes:c.notes})
+    });
+    const d = await r.json();
+    _mktCosts[i].id = d.id;
+  }
+  showToast('Costo guardado');
+}
+
+async function deleteMktCost(i){
+  const c = _mktCosts[i];
+  if(c.id){
+    await fetch(`/api/admin/financial/marketing-costs/${c.id}`, {method:'DELETE'});
+  }
+  _mktCosts.splice(i,1);
+  renderMarketingList();
+}
+
+// ── Budget modal ──────────────────────────────────────────────
+async function openBudgetModal(year, month){
+  document.getElementById('fin-budget-year').value  = year;
+  document.getElementById('fin-budget-month').value = month;
+  const MONTH_NAMES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('fin-budget-title').textContent = `${MONTH_NAMES[parseInt(month)]} ${year}`;
+  const r = await fetch(`/api/admin/financial/budget/${year}/${month}`);
+  const d = await r.json();
+  document.getElementById('fin-budget-income').value    = d.income_budget    || '';
+  document.getElementById('fin-budget-costs').value     = d.costs_budget     || '';
+  document.getElementById('fin-budget-marketing').value = d.marketing_budget || '';
+  document.getElementById('fin-budget-notes').value     = d.notes            || '';
+  document.getElementById('fin-budget-modal').style.display = '';
+}
+
+async function saveBudget(){
+  const year  = document.getElementById('fin-budget-year').value;
+  const month = document.getElementById('fin-budget-month').value;
+  await fetch(`/api/admin/financial/budget/${year}/${month}`, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      income_budget:    parseFloat(document.getElementById('fin-budget-income').value)    || 0,
+      costs_budget:     parseFloat(document.getElementById('fin-budget-costs').value)     || 0,
+      marketing_budget: parseFloat(document.getElementById('fin-budget-marketing').value) || 0,
+      notes:            document.getElementById('fin-budget-notes').value || '',
+    })
+  });
+  document.getElementById('fin-budget-modal').style.display = 'none';
+  showToast('Presupuesto guardado');
+  if(_finTab==='forecast') loadForecast();
+}
+
+// ── Init on section show ──────────────────────────────────────
+function initFinancialSection(){
+  initFinDates();
+  setFinTab('pnl');
+}
+</script>
 
 </body>
 </html>

@@ -14,6 +14,7 @@ from app.booking.admin_router import admin_router
 from app.booking.content_router import content_router
 from app.booking.signatures_router import signatures_router
 from app.booking.stock_router import stock_router
+from app.booking.financial_router import financial_router
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
@@ -503,6 +504,7 @@ app.include_router(admin_router)
 app.include_router(content_router)
 app.include_router(signatures_router)
 app.include_router(stock_router)
+app.include_router(financial_router)
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -558,6 +558,31 @@ def ensure_db_columns() -> None:
                     ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
+
+                -- 029: financial module tables
+                CREATE TABLE IF NOT EXISTS marketing_costs (
+                    id SERIAL PRIMARY KEY,
+                    fecha DATE NOT NULL,
+                    amount NUMERIC NOT NULL DEFAULT 0,
+                    category TEXT DEFAULT 'general',
+                    notes TEXT DEFAULT '',
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_marketing_costs_fecha ON marketing_costs(fecha);
+
+                CREATE TABLE IF NOT EXISTS financial_budget (
+                    id SERIAL PRIMARY KEY,
+                    year INT NOT NULL,
+                    month INT NOT NULL,
+                    income_budget NUMERIC DEFAULT 0,
+                    costs_budget NUMERIC DEFAULT 0,
+                    marketing_budget NUMERIC DEFAULT 0,
+                    notes TEXT DEFAULT '',
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(year, month)
+                );
             """)
             conn.commit()
 
