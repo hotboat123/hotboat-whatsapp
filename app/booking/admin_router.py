@@ -496,6 +496,26 @@ async def get_stats(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Log viewer ───────────────────────────────────────────────────────────────
+
+@admin_router.get("/api/admin/logs")
+async def get_logs(
+    n:      int = Query(200, ge=1, le=500),
+    level:  str = Query(""),
+    search: str = Query(""),
+    x_admin_key: str = Header(""),
+):
+    """Return the last N in-memory log lines, optionally filtered."""
+    from app.main import _log_buffer
+    lines = list(_log_buffer)[-n:]
+    if level:
+        lines = [l for l in lines if l["level"] == level.upper()]
+    if search:
+        s = search.lower()
+        lines = [l for l in lines if s in l["message"].lower() or s in l["logger"].lower()]
+    return {"count": len(lines), "lines": lines}
+
+
 # ── Clients ───────────────────────────────────────────────────────────────────
 
 @admin_router.get("/api/admin/clients")

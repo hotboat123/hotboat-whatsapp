@@ -46,6 +46,26 @@ logger = logging.getLogger(__name__)
 # Reduce httpx logging noise (403 errors from expired media)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+# ── In-memory log buffer (last 500 lines, queryable via /api/admin/logs) ──────
+import collections
+_log_buffer: collections.deque = collections.deque(maxlen=500)
+
+class _BufferHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord):
+        try:
+            _log_buffer.append({
+                "ts":      self.formatTime(record, "%Y-%m-%d %H:%M:%S"),
+                "level":   record.levelname,
+                "logger":  record.name,
+                "message": record.getMessage(),
+            })
+        except Exception:
+            pass
+
+_buf_handler = _BufferHandler()
+_buf_handler.setLevel(logging.DEBUG)
+logging.getLogger().addHandler(_buf_handler)
+
 # Get settings
 settings = get_settings()
 
