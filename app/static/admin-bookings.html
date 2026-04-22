@@ -963,6 +963,27 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
+      <!-- ── Notificaciones de visitas ─────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">🔔 Notificaciones de visitas a la página de reservas</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1.2rem;line-height:1.6">
+          Recibe un email cuando alguien entra a tu página de reservas o elige una fecha.<br>
+          Útil para saber si tus mensajes de WhatsApp generan visitas.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:.9rem">
+          <div style="display:flex;align-items:center;gap:1rem">
+            <label class="toggle-wrap">
+              <input type="checkbox" id="visitor-notif-toggle" onchange="saveVisitorNotif(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:.9rem;font-weight:600">Activar notificaciones de visitas</div>
+              <div style="font-size:.77rem;color:var(--muted)">Recibirás un email al email de administración cuando alguien entre a la página o elija una fecha</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Precios por persona HotBoat ───────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem" id="prices-config-card">
         <div class="chart-title">💰 Precios HotBoat por persona</div>
@@ -2609,7 +2630,18 @@ async function loadSettings(){
     if(msAloj) msAloj.checked = ms.show_alojamientos !== false;
     if(msPack) msPack.checked = ms.show_packs        !== false;
     if(msArma) msArma.checked = ms.show_arma_pack    !== false;
+    // Visitor notification toggle
+    const vnToggle = document.getElementById('visitor-notif-toggle');
+    if(vnToggle) vnToggle.checked = d.booking_visitor_notif === true;
   }catch(e){ console.error(e); }
+}
+
+async function saveVisitorNotif(enabled){
+  try{
+    await fetch(`/api/admin/settings/visitor-notif?enabled=${enabled}`,
+      {method:'PUT', headers:{'x-admin-key': KEY}});
+    showToast(enabled ? '🔔 Notificaciones de visitas activadas' : '🔕 Notificaciones desactivadas');
+  }catch(e){ showToast('Error al guardar'); }
 }
 
 async function saveMenuSettings(){

@@ -360,7 +360,23 @@ function mediaBlock(id, imgSrc, pdfSrc){
   return imgBtn + pdfLink;
 }
 
+function _trackEvent(event, date){
+  try{
+    fetch('/api/booking/track', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        event,
+        date: date || null,
+        lang: S.lang || 'es',
+        referrer: document.referrer ? document.referrer.substring(0,200) : '',
+      })
+    }).catch(()=>{});
+  }catch(e){}
+}
+
 async function loadPricesAndAvail(){
+  _trackEvent('page_visit');
   try{
     const [pr, av, ex] = await Promise.all([
       fetch('/api/booking/prices').then(r=>r.json()),
@@ -1207,6 +1223,7 @@ function nextMonth(){
 function selectDate(key){
   S.selectedDate = key;
   S.selectedTime = null;
+  _trackEvent('date_selected', key);
   // Fetch dynamic price in background (non-blocking)
   fetch(`/api/booking/dynamic-price?date=${key}&persons=${S.numPeople}`)
     .then(r=>r.ok?r.json():null)

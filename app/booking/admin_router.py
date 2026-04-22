@@ -651,7 +651,15 @@ async def get_all_settings(x_admin_key: str = Header("")):
         "urgency_mode": is_urgency_mode(),
         "urgency_config": get_urgency_config(),
         "dynamic_pricing": get_dp_config(),
+        "booking_visitor_notif": get_setting("booking_visitor_notif", "false") == "true",
     }
+
+
+@admin_router.put("/api/admin/settings/visitor-notif")
+async def set_visitor_notif(x_admin_key: str = Header(""), enabled: bool = True):
+    _check_auth(x_admin_key)
+    set_setting("booking_visitor_notif", "true" if enabled else "false")
+    return {"ok": True, "booking_visitor_notif": enabled}
 
 
 class SettingsRequest(BaseModel):

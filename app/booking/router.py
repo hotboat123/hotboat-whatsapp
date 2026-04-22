@@ -826,3 +826,82 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
         logger.warning(f"_email_accommodation_solicitud send error: {e}")
 
 
+# ── Booking page visitor tracking ─────────────────────────────────────────────
+
+class TrackEventRequest(BaseModel):
+    event: str          # "page_visit" | "date_selected"
+    date: Optional[str] = None   # only for date_selected
+    lang: Optional[str] = "es"
+    referrer: Optional[str] = ""
+
+
+@router.post("/api/booking/track")
+async def track_booking_event(body: TrackEventRequest):
+    """
+    Called by the booking page JS on page load and date selection.
+    Sends an admin email notification if booking_visitor_notif is enabled.
+    Returns immediately (fire-and-forget email in background).
+    """
+    from app.booking.operator_settings import get_setting
+    if get_setting("booking_visitor_notif", "false").lower() != "true":
+        return {"ok": True, "sent": False}
+
+    import asyncio
+    asyncio.get_event_loop().run_in_executor(None, _send_visitor_notif, body.event,
+                                             body.date, body.lang, body.referrer)
+    return {"ok": True, "sent": True}
+
+
+def _send_visitor_notif(event: str, date_sel: Optional[str],
+                        lang: str, referrer: str):
+    try:
+        from app.config import get_settings
+        from app.booking.booking_email import _get_admin_email, _get_from_addr
+        from app.email.resend_booking import send_booking_html
+
+        settings = get_settings()
+        api_key  = (getattr(settings, "resend_api_key", "") or "").strip()
+        to_addr  = _get_admin_email(settings)
+        from_addr = _get_from_addr(settings)
+
+        if not api_key or not to_addr:
+            logger.warning("booking_visitor_notif: no resend key or admin email configured")
+            return
+
+        now_cl = datetime.now(CHILE_TZ).strftime("%d/%m/%Y %H:%M")
+
+        if event == "page_visit":
+            subject = f"👀 Visita a página de reservas — {now_cl}"
+            html = f"""
+            <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:1.5rem">
+              <h2 style="color:#f5c842;margin-bottom:.5rem">👀 Nuevo visitante</h2>
+              <p>Alguien entró a tu página de reservas.</p>
+              <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-top:1rem">
+                <tr><td style="color:#666;padding:.3rem 0">Hora</td><td><strong>{now_cl}</strong></td></tr>
+                <tr><td style="color:#666;padding:.3rem 0">Idioma</td><td>{lang.upper()}</td></tr>
+                {"<tr><td style='color:#666;padding:.3rem 0'>Referrer</td><td>" + referrer + "</td></tr>" if referrer else ""}
+              </table>
+            </div>"""
+        elif event == "date_selected":
+            subject = f"📅 Cliente eligió fecha {date_sel or ''} — {now_cl}"
+            html = f"""
+            <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:1.5rem">
+              <h2 style="color:#f5c842;margin-bottom:.5rem">📅 Fecha seleccionada</h2>
+              <p>Un cliente eligió una fecha en tu página de reservas.</p>
+              <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-top:1rem">
+                <tr><td style="color:#666;padding:.3rem 0">Fecha elegida</td><td><strong>{date_sel or '—'}</strong></td></tr>
+                <tr><td style="color:#666;padding:.3rem 0">Hora</td><td>{now_cl}</td></tr>
+                <tr><td style="color:#666;padding:.3rem 0">Idioma</td><td>{lang.upper()}</td></tr>
+              </table>
+              <p style="color:#999;font-size:.8rem;margin-top:1rem">
+                Si el cliente completó la reserva verás una nueva entrada en el panel admin.
+              </p>
+            </div>"""
+        else:
+            return
+
+        send_booking_html(to=to_addr, subject=subject, html=html,
+                          from_address=from_addr, api_key=api_key)
+        logger.info("booking_visitor_notif sent: event=%s date=%s", event, date_sel)
+    except Exception as e:
+        logger.warning("_send_visitor_notif error: %s", e)
