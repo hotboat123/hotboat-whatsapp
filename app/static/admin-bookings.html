@@ -3464,16 +3464,22 @@ function initDescuentos(arr){
   renderDescuentos();
 }
 
+function renderDescuentosTotal(){
+  const totEl = document.getElementById('desc-total');
+  if(!totEl) return;
+  const total = _descuentos.reduce((s,d)=>s+(+d.amount||0),0);
+  totEl.textContent = total>0 ? '-'+fmtMoney(total) : '';
+  updateExtrasTotals();
+}
+
 function renderDescuentos(){
   const list = document.getElementById('desc-list');
-  const totEl = document.getElementById('desc-total');
   if(!list) return;
-  const total = _descuentos.reduce((s,d)=>s+(+d.amount||0),0);
-  if(totEl) totEl.textContent = total>0 ? '-'+fmtMoney(total) : '';
+  renderDescuentosTotal();
   list.innerHTML = _descuentos.map((d,i)=>`
     <div class="desc-row">
       <input class="d-amount" type="number" value="${d.amount||''}" placeholder="Monto $"
-        oninput="_descuentos[${i}].amount=+this.value;renderDescuentos();updateExtrasTotals()">
+        oninput="_descuentos[${i}].amount=+this.value;renderDescuentosTotal()">
       <select class="d-type" onchange="_descuentos[${i}].type=this.value"
         style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none">
         ${TIPOS_DESC.map(t=>`<option value="${t}"${d.type===t?' selected':''}>${t}</option>`).join('')}
