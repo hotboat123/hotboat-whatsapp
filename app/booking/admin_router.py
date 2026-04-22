@@ -506,8 +506,8 @@ async def get_logs(
     x_admin_key: str = Header(""),
 ):
     """Return the last N in-memory log lines, optionally filtered."""
-    from app.main import _log_buffer
-    lines = list(_log_buffer)[-n:]
+    from app.log_buffer import log_buffer
+    lines = list(log_buffer)[-n:]
     if level:
         lines = [l for l in lines if l["level"] == level.upper()]
     if search:

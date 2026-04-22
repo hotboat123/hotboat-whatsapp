@@ -559,6 +559,10 @@ def ensure_db_columns() -> None:
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
 
+                -- 029a: descuentos column (JSONB array of {amount,type,note})
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS descuentos JSONB DEFAULT '[]'::jsonb;
+
                 -- 029: financial module tables
                 CREATE TABLE IF NOT EXISTS marketing_costs (
                     id SERIAL PRIMARY KEY,

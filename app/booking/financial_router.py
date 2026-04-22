@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from app.db.connection import get_connection
@@ -630,6 +630,7 @@ async def get_commissions_endpoint(x_admin_key: str = Header("")):
 
 
 @financial_router.put("/api/admin/financial/commissions")
-async def update_commissions(body: Dict, x_admin_key: str = Header("")):
+async def update_commissions(request: Request, x_admin_key: str = Header("")):
+    body = await request.json()
     set_setting("financial_commissions", json.dumps(body))
     return body
