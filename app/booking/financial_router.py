@@ -60,7 +60,7 @@ def _fmt_int(v: Any) -> int:
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
 def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
-    """Return confirmed/pending bookings with pagos and descuentos for a date range."""
+    """Return bookings with pagos and descuentos for a date range."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -80,7 +80,7 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
                     COALESCE(num_personas::text, '0')
                 FROM all_appointments
                 WHERE fecha BETWEEN %s AND %s
-                  AND status NOT IN ('cancelled', 'no_show')
+                  AND (status IS NULL OR status NOT IN ('cancelled', 'no_show'))
                 ORDER BY fecha, id
             """, (date_from, date_to))
             cols = ["id", "fecha", "ingreso_reserva", "ingreso_extras",
@@ -278,25 +278,41 @@ def _build_cashflow_days(bookings: List[Dict], marketing: List[Dict],
     for m in marketing:
         mkt_by_day[m["fecha"]] += m["amount"]
 
-    # Inflows: pagos by payment date (net of commission)
+    # Inflows: pagos by payment date (net of commission).
+    # If a booking has no pagos, fall back to ingreso_total on the booking date.
     inflows_by_day: Dict[str, List[Dict]] = defaultdict(list)
     for b in bookings:
-        for p in b["pagos"]:
-            pago_date = p.get("date") or b["fecha"]
-            if not pago_date:
-                continue
-            amt = float(p.get("amount", 0) or 0)
-            method = p.get("method", "otro")
-            net = _net_amount(amt, method, commissions)
-            commission = amt - net
-            inflows_by_day[pago_date].append({
-                "booking_id":     b["id"],
-                "nombre_cliente": b["nombre_cliente"],
-                "amount_bruto":   _fmt_int(amt),
-                "commission":     _fmt_int(commission),
-                "amount_neto":    _fmt_int(net),
-                "method":         method,
-            })
+        pagos = b["pagos"]
+        if not pagos:
+            # No payment records — treat the full ingreso_total as received on booking date
+            amt = b["ingreso_total"]
+            if amt and b["fecha"]:
+                net = _net_amount(amt, "transferencia", commissions)
+                inflows_by_day[b["fecha"]].append({
+                    "booking_id":     b["id"],
+                    "nombre_cliente": b["nombre_cliente"],
+                    "amount_bruto":   _fmt_int(amt),
+                    "commission":     0,
+                    "amount_neto":    _fmt_int(net),
+                    "method":         "sin registro",
+                })
+        else:
+            for p in pagos:
+                pago_date = p.get("date") or b["fecha"]
+                if not pago_date:
+                    continue
+                amt = float(p.get("amount", 0) or 0)
+                method = p.get("method", "otro")
+                net = _net_amount(amt, method, commissions)
+                commission = amt - net
+                inflows_by_day[pago_date].append({
+                    "booking_id":     b["id"],
+                    "nombre_cliente": b["nombre_cliente"],
+                    "amount_bruto":   _fmt_int(amt),
+                    "commission":     _fmt_int(commission),
+                    "amount_neto":    _fmt_int(net),
+                    "method":         method,
+                })
 
     all_days = (set(opex_by_day.keys()) | set(mkt_by_day.keys()) |
                 set(inflows_by_day.keys()))

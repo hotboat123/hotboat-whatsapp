@@ -5571,11 +5571,20 @@ async function loadPnl(){
   document.getElementById('fin-pnl-loading').textContent = 'Cargando…';
   try {
     const r = await fetch(`/api/admin/financial/pnl?date_from=${from}&date_to=${to}&view=${_finView}`);
+    if(!r.ok){
+      const err = await r.text();
+      console.error('P&L API error:', r.status, err);
+      document.getElementById('fin-pnl-loading').textContent = `Error ${r.status}`;
+      return;
+    }
     const d = await r.json();
+    if(!d.totals){ console.error('P&L: respuesta inesperada', d); return; }
     renderPnlKpis(d.totals);
-    renderPnlTable(d.data, d.view);
-    document.getElementById('fin-pnl-loading').textContent = '';
+    renderPnlTable(d.data || [], d.view);
+    document.getElementById('fin-pnl-loading').textContent =
+      (d.data||[]).length === 0 ? 'Sin reservas en este período' : '';
   } catch(e){
+    console.error('loadPnl error:', e);
     document.getElementById('fin-pnl-loading').textContent = 'Error al cargar';
   }
 }
@@ -5672,11 +5681,19 @@ async function loadCashFlow(){
   document.getElementById('fin-cf-loading').textContent = 'Cargando…';
   try {
     const r = await fetch(`/api/admin/financial/cashflow?date_from=${from}&date_to=${to}&view=${_finView}&opening_balance=${ob}`);
+    if(!r.ok){
+      const err = await r.text();
+      console.error('CashFlow API error:', r.status, err);
+      document.getElementById('fin-cf-loading').textContent = `Error ${r.status}`;
+      return;
+    }
     const d = await r.json();
     renderCfKpis(d.data);
     renderCfTable(d.data, d.view);
-    document.getElementById('fin-cf-loading').textContent = '';
+    document.getElementById('fin-cf-loading').textContent =
+      (d.data||[]).length === 0 ? 'Sin movimientos en este período' : '';
   } catch(e){
+    console.error('loadCashFlow error:', e);
     document.getElementById('fin-cf-loading').textContent = 'Error al cargar';
   }
 }
