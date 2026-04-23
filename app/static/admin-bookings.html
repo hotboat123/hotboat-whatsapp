@@ -3325,12 +3325,19 @@ function renderPagos(){
         style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none;flex:1">
         ${METODOS.map(m=>`<option value="${m}"${p.method===m?' selected':''}>${m}</option>`).join('')}
       </select>
-      <input class="p-date" type="date" value="${p.date||''}" data-idx="${i}"
-        oninput="_pagos[${i}].date=this.value">
+      <input class="p-date" type="text" value="${p.date||''}" data-idx="${i}" placeholder="Fecha pago" readonly>
       <button class="p-del" onclick="_pagos.splice(${i},1);renderPagos()" title="Eliminar">✕</button>
     </div>`).join('');
-  // Re-init date pickers after render
-  setTimeout(initDynamicDPs, 30);
+  // Init flatpickr with onChange instead of oninput — avoids date corruption
+  setTimeout(() => {
+    document.querySelectorAll('.p-date').forEach(el => {
+      const idx = +el.dataset.idx;
+      if(el._flatpickr) el._flatpickr.destroy();
+      flatpickr(el, Object.assign({}, FP_BASE, {
+        onChange(sel, dateStr){ if(idx >= 0 && idx < _pagos.length) _pagos[idx].date = dateStr; }
+      }));
+    });
+  }, 30);
 }
 
 function renderPagosTotal(){
@@ -3905,7 +3912,7 @@ function syncFlexTotal(){
   const flexAmt = hasFlex ? Math.round(reserva * 0.1) : 0;
   if(displayEl) displayEl.textContent = hasFlex ? '('+fmtMoney(flexAmt)+')' : '';
   if(totalEl){
-    const extras = _extrasItems ? _extrasItems.reduce((s,e)=>s+(+e.qty||0)*(+e.price||0),0) : 0;
+    const extras = _extrasItems ? _extrasItems.reduce((s,e)=>s+(+e.qty||0)*(+e.unit_price||0),0) : 0;
     const descs = _descuentos ? _descuentos.reduce((s,d)=>s+(+d.amount||0),0) : 0;
     totalEl.value = reserva + extras + flexAmt - descs;
     syncPagoFaltante();
@@ -4783,11 +4790,12 @@ function generarRecibo(){
   // Descuentos
   const descRows = _descuentos.filter(d=>(+d.amount||0)>0);
 
-  // Totales
+  // Totales (incluye flex si aplica)
   const precioBase   = +r.ingreso_reserva||0;
+  const flexAmount   = (r.has_flex && r.flex_amount) ? +r.flex_amount : 0;
   const totalExtras  = extrasRows.reduce((s,e)=>s+(+e.total||0),0);
   const totalDesc    = descRows.reduce((s,d)=>s+(+d.amount||0),0);
-  const totalFinal   = precioBase + totalExtras - totalDesc;
+  const totalFinal   = precioBase + totalExtras + flexAmount - totalDesc;
   const totalPagado  = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
   const saldoPend    = totalFinal - totalPagado;
 
@@ -4798,13 +4806,20 @@ function generarRecibo(){
   const metodosUsados = [...new Set(_pagos.filter(p=>p.method).map(p=>p.method))].join(', ') || '—';
 
   // ── HTML del recibo ──────────────────────────────────────────────────────
-  const extrasHtml = extrasRows.length ? extrasRows.map(e=>`
+  const flexRow = flexAmount > 0 ? `
+    <tr style="color:#2563eb">
+      <td style="padding:.45rem .6rem">🔒 Reserva FLEX (+10%)</td>
+      <td style="padding:.45rem .6rem;text-align:center">1</td>
+      <td style="padding:.45rem .6rem;text-align:right">—</td>
+      <td style="padding:.45rem .6rem;text-align:right;font-weight:600">${money(flexAmount)}</td>
+    </tr>` : '';
+  const extrasHtml = (extrasRows.length || flexAmount > 0) ? (extrasRows.map(e=>`
     <tr>
       <td style="padding:.45rem .6rem">${e.name}</td>
       <td style="padding:.45rem .6rem;text-align:center">${e.qty}</td>
       <td style="padding:.45rem .6rem;text-align:right">${money(e.unit)}</td>
       <td style="padding:.45rem .6rem;text-align:right;font-weight:600">${money(e.total)}</td>
-    </tr>`).join('') : `<tr><td colspan="4" style="padding:.45rem .6rem;color:#888">Sin extras</td></tr>`;
+    </tr>`).join('') + flexRow) : `<tr><td colspan="4" style="padding:.45rem .6rem;color:#888">Sin extras</td></tr>`;
 
   const descHtml = descRows.length ? descRows.map(d=>`
     <tr style="color:#e55">
