@@ -83,9 +83,9 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
                     COALESCE(num_personas::text, '0')
                 FROM all_appointments
                 WHERE fecha BETWEEN %s AND %s
-                  AND status IN %s
+                  AND status = ANY(%s)
                 ORDER BY fecha, id
-            """, (date_from, date_to, CONFIRMED_STATUSES))
+            """, (date_from, date_to, list(CONFIRMED_STATUSES)))
             cols = ["id", "fecha", "ingreso_reserva", "ingreso_extras",
                     "ingreso_total", "costo_fijo", "costo_variable", "costo_total",
                     "pagos", "descuentos", "nombre_cliente", "status", "num_personas"]
@@ -584,9 +584,9 @@ async def get_forecast(
                     status
                 FROM all_appointments
                 WHERE fecha BETWEEN %s AND %s
-                  AND status IN %s
+                  AND status = ANY(%s)
                 ORDER BY fecha
-            """, (d_from, d_to, CONFIRMED_STATUSES))
+            """, (d_from, d_to, list(CONFIRMED_STATUSES)))
             rows = cur.fetchall()
 
     months_data: Dict[str, Dict] = {}
