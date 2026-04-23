@@ -1558,17 +1558,22 @@ async def woo_webhook(request: Request):
         meta_map = {m["key"]: m["value"] for m in data.get("meta_data", [])}
         booking_ref_wc = meta_map.get("hotboat_booking_ref", "")
 
-        paid_date = data.get("date_paid", "")[:10] if data.get("date_paid") else ""
+        # Parse WooCommerce date_paid; accept only plausible ISO dates (>=2024).
+        # Otherwise fall back to the reservation's created_at (see below).
+        raw_date_paid = (data.get("date_paid") or "")[:10] or ""
+        paid_date_wc = raw_date_paid if raw_date_paid >= "2024-01-01" else ""
 
-        def _add_pago(pagos: list, amount: float, method: str) -> list:
-            """Add a payment entry if not already present for this WC order."""
+        def _add_pago(pagos: list, amount: float, method: str, fallback_date: str = "") -> list:
+            """Add a payment entry if not already present for this WC order.
+            If the WooCommerce date_paid is missing/invalid, use fallback_date
+            (typically the reservation's created_at)."""
             already = any(p.get("wc_order_id") == wc_id for p in pagos)
             if not already:
                 pagos.append({
                     "amount":      amount,
                     "method":      method,
                     "wc_order_id": wc_id,
-                    "date":        paid_date,
+                    "date":        paid_date_wc or fallback_date,
                     "status":      status,
                 })
             return pagos
@@ -1578,13 +1583,13 @@ async def woo_webhook(request: Request):
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f"SELECT id, nombre_cliente, COALESCE(pagos,'[]'::jsonb) FROM {TABLE} WHERE payment_id=%s",
+                    f"SELECT id, nombre_cliente, COALESCE(pagos,'[]'::jsonb), created_at::date::text FROM {TABLE} WHERE payment_id=%s",
                     (str(wc_id),)
                 )
                 row = cur.fetchone()
                 if row:
-                    res_id, nombre, pagos_raw = row
-                    pagos = _add_pago(list(pagos_raw) if pagos_raw else [], total, "transbank")
+                    res_id, nombre, pagos_raw, created_at_str = row
+                    pagos = _add_pago(list(pagos_raw) if pagos_raw else [], total, "transbank", created_at_str or "")
                     cur.execute(
                         f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
                         (PgJson(pagos), status, res_id)
@@ -1642,16 +1647,17 @@ async def woo_webhook(request: Request):
                             with get_connection() as conn2:
                                 with conn2.cursor() as cur2:
                                     cur2.execute(
-                                        f"SELECT id, COALESCE(pagos,'[]'::jsonb) FROM {TABLE} "
+                                        f"SELECT id, COALESCE(pagos,'[]'::jsonb), created_at::date::text FROM {TABLE} "
                                         f"WHERE source='hotboat_web' AND source_id=%s",
                                         (booking_ref_wc,)
                                     )
                                     all_row = cur2.fetchone()
                                     if all_row:
-                                        all_id, pagos_raw2 = all_row
+                                        all_id, pagos_raw2, created_at_str2 = all_row
                                         pagos2 = _add_pago(
                                             list(pagos_raw2) if pagos_raw2 else [],
-                                            total, "transbank"
+                                            total, "transbank",
+                                            created_at_str2 or ""
                                         )
                                         cur2.execute(
                                             f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
@@ -2296,3 +2302,43 @@ def delete_coupon(cid: int, x_admin_key: str = Header("")):
             cur.execute("DELETE FROM coupons WHERE id=%s", (cid,))
             conn.commit()
     return {"ok": True}
+
+
+# ── Fix empty/invalid pago dates: replace with reservation's created_at ───────
+
+@admin_router.post("/api/admin/fix-pago-dates")
+def fix_pago_dates(x_admin_key: str = Header("")):
+    """
+    Scan all reservations whose pagos array has entries with empty, missing,
+    or implausible date (< 2024-01-01). Replace those dates with the
+    reservation's created_at::date. Returns how many rows were fixed.
+    """
+    _check_auth(x_admin_key)
+    from psycopg.types.json import Jsonb as PgJson
+    fixed = 0
+    examples = []
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT id, nombre_cliente, created_at::date::text, pagos "
+                f"FROM {TABLE} "
+                f"WHERE pagos IS NOT NULL AND jsonb_array_length(pagos) > 0"
+            )
+            for rid, nombre, created_at_str, pagos_raw in cur.fetchall():
+                pagos = list(pagos_raw) if pagos_raw else []
+                changed = False
+                for p in pagos:
+                    d = (p.get("date") or "")
+                    if not d or d < "2024-01-01":
+                        p["date"] = created_at_str or ""
+                        changed = True
+                if changed:
+                    cur.execute(
+                        f"UPDATE {TABLE} SET pagos=%s, updated_at=NOW() WHERE id=%s",
+                        (PgJson(pagos), rid)
+                    )
+                    fixed += 1
+                    if len(examples) < 10:
+                        examples.append({"id": rid, "nombre": nombre, "created_at": created_at_str})
+            conn.commit()
+    return {"fixed": fixed, "examples": examples}
