@@ -78,7 +78,6 @@ async def _run_auto_sync():
 
             inserted_reservas = 0
             updated_reservas = 0
-            inserted_book = 0
             inserted_hb = 0
             status_updated = 0
 
@@ -179,48 +178,6 @@ async def _run_auto_sync():
                     """)
                     dedup_deleted = cur.rowcount
 
-                    # Sync booknetic (do NOT filter by MAX(reservas_con_extras.fecha): that max is usually
-                    # a *future* date, which would skip all earlier Booknetic appointments e.g. April when June exists)
-                    cur.execute("""
-                        SELECT id, customer_name, customer_email, starts_at, status, raw, created_at
-                        FROM booknetic_appointments
-                        WHERE starts_at IS NOT NULL
-                          AND starts_at::date >= (CURRENT_DATE - INTERVAL '3 years')
-                          AND starts_at::date <= (CURRENT_DATE + INTERVAL '3 years')
-                    """)
-                    for row in cur.fetchall():
-                        bid, nombre, email, starts_at, status, raw, created = row
-                        raw = raw or {}
-                        sid = str(bid)
-                        cur.execute(
-                            f"""SELECT id, source, status FROM {TABLE}
-                                WHERE (source = 'booknetic' AND source_id = %s)
-                                   OR (appointment_id IS NOT NULL AND TRIM(appointment_id::text) = %s)
-                                LIMIT 1""",
-                            (sid, sid),
-                        )
-                        existing = cur.fetchone()
-                        if existing:
-                            ex_id, ex_src, ex_st = existing[0], existing[1], existing[2]
-                            if ex_src == "booknetic" and status and status != ex_st:
-                                cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s", (status, ex_id))
-                                status_updated += 1
-                            continue
-                        else:
-                            phone = normalize_phone(raw.get("phone") or raw.get("customer_phone") or raw.get("cf_phone"))
-                            fecha = starts_at.date() if hasattr(starts_at, 'date') else starts_at
-                            hora = starts_at.strftime("%H:%M") if hasattr(starts_at, 'strftime') else "10:00"
-                            num_p = raw.get("num_people") or raw.get("persons") or 2
-                            total = float(raw.get("total_price") or raw.get("total") or 0)
-                            cur.execute(f"""
-                                INSERT INTO {TABLE}
-                                (source,source_id,fecha,hora,nombre_cliente,email,telefono,
-                                 servicio,num_personas,ingreso_total,status,created_at)
-                                VALUES ('booknetic',%s,%s,%s,%s,%s,%s,'HotBoat Booknetic',%s,%s,%s,NOW())
-                                ON CONFLICT DO NOTHING
-                            """, (str(bid), fecha, hora, nombre, email, phone, str(num_p), total, status or "confirmed"))
-                            inserted_book += 1
-
                     # Sync hotboat_web — exclude cancelled/rejected so deleted bookings stay deleted
                     cur.execute("""
                         SELECT booking_ref, customer_name, customer_email, customer_phone,
@@ -259,7 +216,7 @@ async def _run_auto_sync():
 
                     conn.commit()
 
-            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), +{inserted_book} booknetic, +{inserted_hb} web, {status_updated} estados")
+            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), +{inserted_hb} web, {status_updated} estados")
 
             # Clean up stale pending_payment web bookings (older than 45 min)
             try:
