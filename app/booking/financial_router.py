@@ -17,6 +17,9 @@ financial_router = APIRouter()
 
 CHILE_TZ = __import__("zoneinfo").ZoneInfo("America/Santiago")
 
+# Statuses that count as revenue in P&L and cash-flow reports
+CONFIRMED_STATUSES = ('confirmed', 'paid', 'aprobado')
+
 # ── Default commission config ─────────────────────────────────────────────────
 
 DEFAULT_COMMISSIONS = {
@@ -80,9 +83,9 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
                     COALESCE(num_personas::text, '0')
                 FROM all_appointments
                 WHERE fecha BETWEEN %s AND %s
-                  AND (status IS NULL OR status NOT IN ('cancelled', 'no_show'))
+                  AND status IN %s
                 ORDER BY fecha, id
-            """, (date_from, date_to))
+            """, (date_from, date_to, CONFIRMED_STATUSES))
             cols = ["id", "fecha", "ingreso_reserva", "ingreso_extras",
                     "ingreso_total", "costo_fijo", "costo_variable", "costo_total",
                     "pagos", "descuentos", "nombre_cliente", "status", "num_personas"]
@@ -581,9 +584,9 @@ async def get_forecast(
                     status
                 FROM all_appointments
                 WHERE fecha BETWEEN %s AND %s
-                  AND status NOT IN ('cancelled', 'no_show')
+                  AND status IN %s
                 ORDER BY fecha
-            """, (d_from, d_to))
+            """, (d_from, d_to, CONFIRMED_STATUSES))
             rows = cur.fetchall()
 
     months_data: Dict[str, Dict] = {}
