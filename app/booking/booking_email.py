@@ -683,6 +683,28 @@ def _default_html_booking_followup(ctx: Dict[str, str]) -> str:
 
 
 def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
+    name  = ctx.get("customer_name", "el cliente")
+    date  = ctx.get("booking_date", "")
+    time_ = ctx.get("booking_time", "")
+    phone = ctx.get("customer_phone", "")
+    wa_msg = (
+        f"Hola {name}! Vimos que intentaste hacer una reserva en Hot Boat Chile "
+        f"para el {date} a las {time_}, pero parece que hubo un problema con el pago. "
+        f"¿Te podemos ayudar a completar tu reserva? 😊"
+    )
+    wa_url  = _wa_link(phone, wa_msg)
+    wa_btn  = "" if not phone else (
+        f"""<tr><td style="padding:4px 26px 24px;text-align:center;">
+  <a href="{wa_url}" target="_blank"
+     style="display:inline-block;background:#25d366;color:#ffffff;font-size:15px;
+            font-weight:600;text-decoration:none;padding:13px 32px;border-radius:8px;">
+    💬 Contactar por WhatsApp
+  </a>
+  <p style="margin:10px 0 0;font-size:12px;color:#64748b;">
+    Mensaje pre-cargado: problema con el pago de la reserva {date} {time_}
+  </p>
+</td></tr>"""
+    )
     return (
         _header(ctx, "Nuevo lead en formulario", "#7c3aed")
         + f"""<tr><td style="padding:22px 26px 6px;color:#0f172a;font-size:15px;line-height:1.65;">
@@ -694,11 +716,11 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
     <tr><td style="padding:12px 16px"><strong>Nombre</strong></td>
         <td style="padding:12px 16px;text-align:right">{ctx.get('customer_name','')}</td></tr>
     <tr><td style="padding:12px 16px;border-top:1px solid #e2e8f0"><strong>Teléfono</strong></td>
-        <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right">{ctx.get('customer_phone','')}</td></tr>
+        <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right">{phone}</td></tr>
     <tr><td style="padding:12px 16px;border-top:1px solid #e2e8f0"><strong>Email</strong></td>
         <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right">{ctx.get('customer_email','—')}</td></tr>
     <tr><td style="padding:12px 16px;border-top:1px solid #e2e8f0"><strong>Fecha</strong></td>
-        <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right">{ctx.get('booking_date','')} {ctx.get('booking_time','')}</td></tr>
+        <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right">{date} {time_}</td></tr>
     <tr><td style="padding:12px 16px;border-top:1px solid #e2e8f0"><strong>Personas</strong></td>
         <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right">{ctx.get('num_people','')}</td></tr>
     <tr><td style="padding:12px 16px;border-top:1px solid #e2e8f0"><strong>Total</strong></td>
@@ -709,6 +731,60 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
         <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right;color:#b45309">pendiente de pago</td></tr>
   </table>
 </td></tr>"""
+        + wa_btn
+        + _footer(ctx)
+    )
+
+
+def _default_html_admin_pending_payment(ctx: Dict[str, str]) -> str:
+    name  = ctx.get("customer_name", "el cliente")
+    date  = ctx.get("booking_date", "")
+    time_ = ctx.get("booking_time", "")
+    phone = ctx.get("customer_phone", "")
+    wa_msg = (
+        f"Hola {name}! Vimos que intentaste hacer una reserva en Hot Boat Chile "
+        f"para el {date} a las {time_}, pero parece que hubo un problema con el pago. "
+        f"¿Te podemos ayudar a completar tu reserva? 😊"
+    )
+    wa_url = _wa_link(phone, wa_msg)
+    wa_btn = "" if not phone else (
+        f"""<tr><td style="padding:4px 26px 24px;text-align:center;">
+  <a href="{wa_url}" target="_blank"
+     style="display:inline-block;background:#25d366;color:#ffffff;font-size:15px;
+            font-weight:600;text-decoration:none;padding:13px 32px;border-radius:8px;">
+    💬 Contactar por WhatsApp
+  </a>
+  <p style="margin:10px 0 0;font-size:12px;color:#64748b;">
+    Mensaje pre-cargado: problema con el pago de la reserva {date} {time_}
+  </p>
+</td></tr>"""
+    )
+    return (
+        _header(ctx, "⚠️ Pago pendiente — sin completar", "#d97706")
+        + f"""<tr><td style="padding:22px 26px 6px;color:#0f172a;font-size:15px;line-height:1.65;">
+  <p style="margin:0 0 10px;">Han pasado 5 minutos y el cliente <strong>no completó el pago</strong>.
+  Puedes contactarle directamente por WhatsApp.</p>
+</td></tr>
+<tr><td style="padding:0 26px 20px;">
+  <table role="presentation" width="100%" style="background:#fffbeb;border-radius:10px;
+         border:1px solid #fde68a;font-size:14px;color:#334155;">
+    <tr><td style="padding:12px 16px"><strong>Nombre</strong></td>
+        <td style="padding:12px 16px;text-align:right">{name}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #fde68a"><strong>Teléfono</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #fde68a;text-align:right">{phone}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #fde68a"><strong>Email</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #fde68a;text-align:right">{ctx.get('customer_email','—')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #fde68a"><strong>Fecha</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #fde68a;text-align:right">{date} {time_}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #fde68a"><strong>Personas</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #fde68a;text-align:right">{ctx.get('num_people','')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #fde68a"><strong>Total</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #fde68a;text-align:right">{ctx.get('total_price_fmt','')}</td></tr>
+    <tr><td style="padding:12px 16px;border-top:1px solid #fde68a"><strong>Ref</strong></td>
+        <td style="padding:12px 16px;border-top:1px solid #fde68a;text-align:right;font-family:monospace">{ctx.get('booking_ref','')}</td></tr>
+  </table>
+</td></tr>"""
+        + wa_btn
         + _footer(ctx)
     )
 
@@ -771,6 +847,7 @@ _DEFAULT_TEMPLATES = {
     "booking_status_changed":    _default_html_booking_status_changed,
     "booking_followup":          _default_html_booking_followup,
     "admin_new_lead":            _default_html_admin_new_lead,
+    "admin_pending_payment":     _default_html_admin_pending_payment,
     "admin_booking_confirmed":   _default_html_admin_booking_confirmed,
     "customer_birthday":         _default_html_customer_birthday,
 }
@@ -1117,12 +1194,23 @@ def run_pending_payment_email_sweep(delay_minutes: int = 5) -> dict:
         if not to_addr:
             continue
         ctx = _booking_ctx(b)
+
+        # Notify customer with booking reminder
         result = _render_and_send("booking_created", to_addr, ctx)
         if result.get("sent"):
             mark_pending_email_sent(b["booking_ref"])
             out["sent"] += 1
         else:
             out["errors"].append({"ref": b["booking_ref"], "reason": result.get("reason")})
+
+        # Notify admin with WhatsApp contact button (fire-and-forget, don't block on failure)
+        if _can_send("admin_pending_payment"):
+            admin_email = _get_admin_email(settings)
+            if admin_email:
+                try:
+                    _render_and_send("admin_pending_payment", admin_email, ctx)
+                except Exception as _e:
+                    logger.warning("admin_pending_payment email failed ref=%s: %s", b["booking_ref"], _e)
 
     if out["checked"]:
         logger.info("Pending-payment email sweep: checked=%s sent=%s", out["checked"], out["sent"])

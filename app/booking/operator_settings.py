@@ -459,6 +459,16 @@ TRIGGER_META: dict = {
         "icon": "✅",
         "recipient": "admin",
     },
+    "admin_pending_payment": {
+        "label": "Pago pendiente — recordatorio al operador (5 min)",
+        "description": (
+            "Se envía AL ADMINISTRADOR 5 minutos después de que un cliente avanzó al pago "
+            "pero no lo completó. Incluye botón de WhatsApp para contactar al cliente."
+        ),
+        "default_subject": "⚠️ Sin pago: {{customer_name}} — {{booking_date}} {{booking_time}}",
+        "icon": "⚠️",
+        "recipient": "admin",
+    },
     "customer_birthday": {
         "label": "Cumpleaños del cliente",
         "description": (
@@ -471,7 +481,7 @@ TRIGGER_META: dict = {
 }
 
 # Triggers activos por defecto
-_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed", "booking_created", "admin_new_lead", "admin_booking_confirmed"}
+_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed", "booking_created", "admin_new_lead", "admin_booking_confirmed", "admin_pending_payment"}
 
 
 def seed_email_workflow_defaults() -> None:
