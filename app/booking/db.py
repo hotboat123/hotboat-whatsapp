@@ -563,6 +563,12 @@ def ensure_db_columns() -> None:
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS descuentos JSONB DEFAULT '[]'::jsonb;
 
+                -- 030: reserva flex tracking in all_appointments
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS has_flex    BOOLEAN DEFAULT FALSE;
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS flex_amount NUMERIC DEFAULT 0;
+
                 -- 029: financial module tables
                 CREATE TABLE IF NOT EXISTS marketing_costs (
                     id SERIAL PRIMARY KEY,

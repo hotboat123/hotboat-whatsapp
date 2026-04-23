@@ -1567,7 +1567,10 @@ async function loadLista(){
           ${pagoBadge(r.pagos,r.ingreso_total)}
         </td>
         <td>${badge(r.status)}</td>
-        <td><span class="chip">${r.source||'-'}</span></td>
+        <td>
+          <span class="chip">${r.source||'-'}</span>
+          ${r.has_flex?`<span class="chip" style="background:#1e3a5f44;color:#60a5fa;border:1px solid #1e4a7f">🔒 Flex</span>`:''}
+        </td>
       </tr>`).join(''):`<tr><td colspan="8" class="no-data">Sin resultados</td></tr>`;
     document.getElementById('lista-count').textContent=`${rows.length} reservas`;
   }catch(e){
@@ -1909,6 +1912,16 @@ async function openModal(id){
               .map(m=>`<option value="${m}" style="background:#1a1a24;color:#f0f0f8"${r.medio_contacto===m?' selected':''}>${m}</option>`).join('')}
           </select>
         </div>
+        <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;margin-left:.4rem;
+                      background:#0d1f33;border:1px solid #1e3a5f;border-radius:8px;
+                      padding:.28rem .6rem;font-size:.72rem;color:#60a5fa;font-weight:600;white-space:nowrap">
+          <input type="checkbox" id="e-has_flex" ${r.has_flex?'checked':''}
+            style="accent-color:#60a5fa" onchange="syncFlexTotal()">
+          🔒 RESERVA FLEX
+          <span id="e-flex-amt-display" style="color:#93c5fd;font-weight:400;margin-left:.15rem">
+            ${r.has_flex&&r.flex_amount ? '('+fmtMoney(r.flex_amount)+')' : ''}
+          </span>
+        </label>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Fecha</label><input type="date" id="e-fecha" value="${r.fecha||''}"></div>
@@ -2395,6 +2408,8 @@ async function saveModal(id){
   const descTotal=_descuentos.reduce((s,d)=>s+(+d.amount||0),0)
                  +(_appliedCoupon?.discount_amount||0);
   const ingresoReserva=+g('e-ingreso_reserva')||0;
+  const hasFlex=document.getElementById('e-has_flex')?.checked||false;
+  const flexAmt=hasFlex?Math.round(ingresoReserva*0.1):0;
   const costoFijo=+g('e-costo_operativo_fijo')||0;
   const costoVar=+g('e-costo_operativo_variable')||0;
   const body={
@@ -2407,6 +2422,8 @@ async function saveModal(id){
     categoria_clientes:g('e-categoria_clientes'), tipo_clientes:g('e-tipo_clientes'),
     quien_atendio:(g('e-quien_atendio')||'').trim(),
     medio_contacto:g('e-medio_contacto')||null,
+    has_flex:hasFlex,
+    flex_amount:flexAmt,
     num_personas: g('e-num_personas') ? +g('e-num_personas') : null,
     num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
     num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,
@@ -2414,7 +2431,7 @@ async function saveModal(id){
     nombre_ninos:   g('e-nombre_ninos')||null,
     ingreso_reserva:ingresoReserva,
     ingreso_extras:extrasTotal,
-    ingreso_total:ingresoReserva+extrasTotal-descTotal,
+    ingreso_total:ingresoReserva+extrasTotal+flexAmt-descTotal,
     costo_operativo_fijo:costoFijo,
     costo_operativo_variable:costoVar,
     costo_operativo_total:costoFijo+costoVar,
@@ -3833,6 +3850,22 @@ function syncCostoTotal(){
   const variable = varEl ? +varEl.value||0 : 0;
   const totEl = document.getElementById('e-costo_operativo_total');
   if(totEl) totEl.value = fijo + variable;
+}
+
+function syncFlexTotal(){
+  const hasFlex = document.getElementById('e-has_flex')?.checked || false;
+  const reservaEl = document.getElementById('e-ingreso_reserva');
+  const totalEl = document.getElementById('e-ingreso_total');
+  const displayEl = document.getElementById('e-flex-amt-display');
+  const reserva = reservaEl ? +reservaEl.value||0 : 0;
+  const flexAmt = hasFlex ? Math.round(reserva * 0.1) : 0;
+  if(displayEl) displayEl.textContent = hasFlex ? '('+fmtMoney(flexAmt)+')' : '';
+  if(totalEl){
+    const extras = _extrasItems ? _extrasItems.reduce((s,e)=>s+(+e.qty||0)*(+e.price||0),0) : 0;
+    const descs = _descuentos ? _descuentos.reduce((s,d)=>s+(+d.amount||0),0) : 0;
+    totalEl.value = reserva + extras + flexAmt - descs;
+    syncPagoFaltante();
+  }
 }
 
 // ── Extras catalog & editor ────────────────────────────────────────────────────

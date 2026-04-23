@@ -83,6 +83,7 @@ async def list_reservas(
                            servicio, num_personas, num_adultos, num_ninos,
                            nombre_adultos, nombre_ninos,
                            ingreso_reserva, ingreso_extras, ingreso_total,
+                           has_flex, COALESCE(flex_amount,0) AS flex_amount,
                            costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
                            ciudad_origen, como_supieron, clima_del_dia,
                            categoria_clientes, tipo_clientes, quien_atendio,
@@ -104,6 +105,7 @@ async def list_reservas(
                         if r.get(k): r[k] = r[k].isoformat()
                     if r.get("hora"): r["hora"] = str(r["hora"])
                     for k in ("ingreso_reserva", "ingreso_extras", "ingreso_total",
+                              "flex_amount",
                               "costo_operativo_fijo", "costo_operativo_variable", "costo_operativo_total"):
                         if r.get(k) is not None: r[k] = float(r[k])
                     rows.append(r)
@@ -180,6 +182,8 @@ class UpdateReservaRequest(BaseModel):
     fecha: Optional[str] = None
     hora: Optional[str] = None
     medio_contacto: Optional[str] = None
+    has_flex: Optional[bool] = None
+    flex_amount: Optional[float] = None
     coupon_code: Optional[str] = None
     coupon_discount: Optional[float] = None
 
@@ -195,6 +199,11 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
         updates['coupon_code'] = body.coupon_code
     if 'coupon_discount' in body.model_fields_set:
         updates['coupon_discount'] = body.coupon_discount or 0
+    # has_flex is a boolean that can be False — include if explicitly sent
+    if 'has_flex' in body.model_fields_set:
+        updates['has_flex'] = body.has_flex
+    if 'flex_amount' in body.model_fields_set:
+        updates['flex_amount'] = body.flex_amount or 0
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
     try:

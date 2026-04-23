@@ -633,14 +633,16 @@ def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):
                  nombre_cliente, email, telefono,
                  servicio, num_personas,
                  ingreso_reserva, ingreso_extras, ingreso_total,
+                 has_flex, flex_amount,
                  costo_operativo_fijo, costo_operativo_total,
                  status, extras_json, observaciones, created_at, updated_at)
-                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18000,18000,%s,%s,%s,NOW(),NOW())
+                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18000,18000,%s,%s,%s,NOW(),NOW())
             """, (
                 booking_ref, booking_ref, fecha, hora,
                 data.get("customer_name"), data.get("customer_email"), data.get("customer_phone"),
                 f"HotBoat Web ({num_p}p)", str(num_p),
                 float(data.get("subtotal", 0)), float(data.get("extras_total", 0)), float(data.get("total_price", 0)),
+                bool(data.get("has_flex", False)), float(data.get("flex_amount", 0)),
                 status, PgJson(data.get("extras") or []), data.get("notes")
             ))
             conn.commit()
