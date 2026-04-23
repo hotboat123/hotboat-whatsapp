@@ -110,14 +110,44 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
 def _get_marketing_costs_range(date_from: date, date_to: date) -> List[Dict]:
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Inspect columns available in the view
             cur.execute("""
-                SELECT id, fecha::text, amount, category, notes
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'marketing_costs_daily'
+                ORDER BY ordinal_position
+            """)
+            view_cols = {r[0] for r in cur.fetchall()}
+
+            has_id       = "id"       in view_cols
+            has_category = "category" in view_cols
+            has_notes    = "notes"    in view_cols
+
+            select_parts = []
+            if has_id:       select_parts.append("id")
+            select_parts.append("fecha::text")
+            select_parts.append("amount")
+            if has_category: select_parts.append("category")
+            if has_notes:    select_parts.append("notes")
+
+            cur.execute(f"""
+                SELECT {', '.join(select_parts)}
                 FROM marketing_costs_daily
                 WHERE fecha BETWEEN %s AND %s
                 ORDER BY fecha
             """, (date_from, date_to))
-            return [{"id": r[0], "fecha": r[1], "amount": float(r[2]),
-                     "category": r[3], "notes": r[4]} for r in cur.fetchall()]
+
+            results = []
+            for r in cur.fetchall():
+                idx = 0
+                row: Dict = {}
+                if has_id:       row["id"]       = r[idx]; idx += 1
+                else:            row["id"]       = None
+                row["fecha"]  = r[idx]; idx += 1
+                row["amount"] = float(r[idx]);   idx += 1
+                row["category"] = r[idx] if has_category else None; idx += (1 if has_category else 0)
+                row["notes"]    = r[idx] if has_notes    else None
+                results.append(row)
+            return results
 
 
 def _get_budget(year: int, month: int) -> Dict:
