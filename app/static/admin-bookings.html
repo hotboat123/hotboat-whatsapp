@@ -88,10 +88,15 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .badge-paid{background:rgba(155,89,182,.15);color:var(--purple)}
 
 /* Calendar */
-.cal-nav{display:flex;align-items:center;gap:1rem;margin-bottom:1rem}
+.cal-nav{display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem;flex-wrap:wrap}
 .cal-nav h2{flex:1;font-size:1.1rem;font-weight:600}
 .cal-nav button{background:var(--card);border:1px solid var(--border);color:var(--text);
   border-radius:8px;padding:.4rem .8rem;cursor:pointer;font-size:1rem}
+.cal-status-bar{display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.7rem}
+.cal-sf{display:inline-flex;align-items:center;gap:.3rem;padding:.22rem .6rem;border-radius:20px;
+  font-size:.7rem;font-weight:600;cursor:pointer;border:1px solid transparent;opacity:.45;
+  transition:opacity .15s,border-color .15s,box-shadow .15s;user-select:none}
+.cal-sf.on{opacity:1;box-shadow:0 0 0 1px currentColor}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .cal-hdr{background:var(--surface);padding:.5rem;text-align:center;font-size:.73rem;
   color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
@@ -408,6 +413,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <button onclick="calPrev()">‹</button>
         <button onclick="calNext()">›</button>
       </div>
+      <div class="cal-status-bar" id="cal-status-bar"></div>
       <div class="cal-grid" id="cal-grid"></div>
     </div>
 
@@ -1367,6 +1373,43 @@ const DAYS_SHORT=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 function calLeadDaysMonFirst(jsGetDay){ return (jsGetDay + 6) % 7; }
 let KEY='__no_auth__', allReservas=[], calYear=new Date().getFullYear(), calMonth=new Date().getMonth();
 let sortCol='fecha', sortDir=-1;
+
+// ── Calendar status filters ──────────────────────────────────────────────────
+const CAL_STATUS_GROUPS = [
+  { key:'confirmed', label:'Confirmadas', icon:'✅', color:'#2ecc71',
+    test: s => s && (s.includes('confirm') || s.includes('aprobado')) },
+  { key:'paid',      label:'Pagadas',     icon:'💜', color:'#9b59b6',
+    test: s => s && s.includes('paid') },
+  { key:'pending',   label:'Por pagar',   icon:'⏳', color:'#f39c12',
+    test: s => s && (s.includes('pending') || s.includes('pendiente')) },
+  { key:'solicitud', label:'Solicitudes', icon:'📋', color:'#4a9eff',
+    test: s => s && s.includes('solicitud') },
+  { key:'cancelled', label:'Canceladas',  icon:'❌', color:'#e74c3c',
+    test: s => s && (s.includes('cancel') || s.includes('rechaz')) },
+];
+// confirmed ON by default; rest OFF
+const _calActive = { confirmed:true, paid:false, pending:false, solicitud:false, cancelled:false };
+
+function _calStatusVisible(status){
+  return CAL_STATUS_GROUPS.some(g => _calActive[g.key] && g.test(status?.toLowerCase?.() ?? ''));
+}
+
+function buildCalStatusBar(){
+  const bar = document.getElementById('cal-status-bar');
+  if(!bar) return;
+  bar.innerHTML = CAL_STATUS_GROUPS.map(g=>`
+    <span class="cal-sf${_calActive[g.key]?' on':''}"
+      style="background:${g.color}22;color:${g.color}"
+      onclick="toggleCalFilter('${g.key}')">
+      ${g.icon} ${g.label}
+    </span>`).join('');
+}
+
+function toggleCalFilter(key){
+  _calActive[key] = !_calActive[key];
+  buildCalStatusBar();
+  renderCal();
+}
 let EXTRAS_CATALOG=[];   // loaded once after login
 let _extrasItems=[];     // working copy for current modal: [{key,name,qty,unit_price}]
 let _alojAddon=[];       // [{key,name,entry_date,exit_date,nights,unit_price}]
@@ -1464,6 +1507,7 @@ function calPrev(){ calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCal
 function calNext(){ calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCal(); }
 
 function renderCal(){
+  buildCalStatusBar();
   document.getElementById('cal-title').textContent = `${MONTHS[calMonth]} ${calYear}`;
   const grid = document.getElementById('cal-grid');
   const firstDayJs = new Date(calYear,calMonth,1).getDay();
@@ -1471,10 +1515,10 @@ function renderCal(){
   const daysInMonth = new Date(calYear,calMonth+1,0).getDate();
   const today = new Date(); today.setHours(0,0,0,0);
 
-  // Group reservas by date (skip status=null rows — those are unconfirmed imports)
+  // Group reservas by date, filtered by active status groups
   const byDate={};
   allReservas.forEach(r=>{
-    if(!r.status) return;
+    if(!r.status || !_calStatusVisible(r.status)) return;
     const d = r.fecha?.substring(0,10);
     const [y,m] = d?d.split('-').map(Number):[];
     if(y===calYear && m===calMonth+1){
@@ -1516,7 +1560,7 @@ function renderCal(){
 }
 
 function showDayReservas(dateStr){
-  const rsvs=(allReservas||[]).filter(r=>r.fecha?.startsWith(dateStr) && r.status);
+  const rsvs=(allReservas||[]).filter(r=>r.fecha?.startsWith(dateStr) && r.status && _calStatusVisible(r.status));
   if(!rsvs.length) return;
   if(rsvs.length===1){ openModal(rsvs[0].id); return; }
   const rows=rsvs.map(r=>`
