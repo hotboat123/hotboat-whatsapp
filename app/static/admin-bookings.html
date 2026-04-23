@@ -2188,6 +2188,7 @@ function closeModal(e){
   if(waBtn) waBtn.style.display='none';
 }
 async function saveModal(id){
+  syncPagosDatesFromPickers();
   const g=id=>document.getElementById(id)?.value;
   // Build extras_json from editor + alojamientos + experiencias add-ons
   const extrasJson={};
@@ -3054,6 +3055,37 @@ function renderUrgList(){
 const METODOS = ['transferencia','mercadopago','transbank','efectivo','cheque','otro'];
 let _pagos = [];   // working copy of pagos array for current modal
 
+/** Normalize pago.date to YYYY-MM-DD for native pickers / flatpickr (handles ISO datetimes, dd/mm/yyyy). */
+function normalizePagoDate(v){
+  if(v==null||v==='') return '';
+  const s=String(v).trim();
+  if(!s) return '';
+  const iso=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const slash=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(slash){
+    const d=slash[1].padStart(2,'0'), m=slash[2].padStart(2,'0'), y=slash[3];
+    return `${y}-${m}-${d}`;
+  }
+  return '';
+}
+
+/** Copy dates from flatpickr (or input) into _pagos — flatpickr does not reliably fire input events. */
+function syncPagosDatesFromPickers(){
+  document.querySelectorAll('.p-date').forEach(el=>{
+    const i=+el.dataset.idx;
+    if(isNaN(i)||!_pagos[i]) return;
+    const fp=el._flatpickr;
+    if(fp&&fp.selectedDates&&fp.selectedDates.length)
+      _pagos[i].date=fp.formatDate(fp.selectedDates[0],'Y-m-d');
+    else{
+      const raw=(fp&&fp.input&&fp.input.value)||el.value||'';
+      const n=normalizePagoDate(raw);
+      if(n) _pagos[i].date=n;
+    }
+  });
+}
+
 function renderPagos(){
   const list = document.getElementById('pagos-list');
   const totEl = document.getElementById('pagos-total');
@@ -3068,8 +3100,8 @@ function renderPagos(){
         style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none;flex:1">
         ${METODOS.map(m=>`<option value="${m}"${p.method===m?' selected':''}>${m}</option>`).join('')}
       </select>
-      <input class="p-date" type="date" value="${p.date||''}" data-idx="${i}"
-        oninput="_pagos[${i}].date=this.value">
+      <input class="p-date" type="text" value="${normalizePagoDate(p.date)}" data-idx="${i}" placeholder="Fecha" readonly
+        style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .6rem;font-size:.83rem;outline:none">
       <button class="p-del" onclick="_pagos.splice(${i},1);renderPagos()" title="Eliminar">✕</button>
     </div>`).join('');
   // Re-init date pickers after render
@@ -3106,7 +3138,11 @@ function addPago(){
 }
 
 function initPagos(pagosArr){
-  _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p, method:(p.method||'').toLowerCase()||'transferencia'})) : [];
+  _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({
+    ...p,
+    method:(p.method||'').toLowerCase()||'transferencia',
+    date: normalizePagoDate(p.date),
+  })) : [];
   renderPagos();
   syncPagoFaltante();
 }
@@ -4480,6 +4516,7 @@ async function deleteExtrasBooking(id){
 function generarRecibo(){
   const r = _currentReservaData;
   if(!r){ showToast('No hay reserva cargada'); return; }
+  syncPagosDatesFromPickers();
 
   const $ = v => v||'';
   const money = n => n!=null&&n!=='' ? '$'+Math.round(+n).toLocaleString('es-CL') : '—';
@@ -4542,7 +4579,7 @@ function generarRecibo(){
   const pagosHtml = _pagos.filter(p=>+p.amount>0).map(p=>`
     <tr>
       <td style="padding:.45rem .6rem;text-transform:capitalize">${p.method||'—'}</td>
-      <td style="padding:.45rem .6rem">${p.date||'—'}</td>
+      <td style="padding:.45rem .6rem">${p.date ? fmtDateDisplay(normalizePagoDate(p.date)||p.date) : '—'}</td>
       <td style="padding:.45rem .6rem;text-align:right;font-weight:700;color:#1a7a3a">${money(p.amount)}</td>
     </tr>`).join('') || `<tr><td colspan="3" style="padding:.45rem .6rem;color:#888">Sin pagos registrados</td></tr>`;
 
@@ -5127,7 +5164,13 @@ function initAddonDatePickers(){
 // Init date inputs inside dynamically-rendered content (payments, etc.)
 function initDynamicDPs(){
   document.querySelectorAll('.p-date').forEach(el => {
-    if(!el._flatpickr) flatpickr(el, Object.assign({}, FP_BASE));
+    if(el._flatpickr) el._flatpickr.destroy();
+    const idx = +el.dataset.idx;
+    flatpickr(el, Object.assign({}, FP_BASE, {
+      onChange(_selectedDates, dateStr){
+        if(!isNaN(idx) && _pagos[idx]) _pagos[idx].date = dateStr || '';
+      },
+    }));
   });
 }
 
