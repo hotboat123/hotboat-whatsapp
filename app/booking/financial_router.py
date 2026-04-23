@@ -111,7 +111,18 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
 
 
 _DATE_COL_CANDIDATES   = ("fecha", "date", "day", "dia", "cost_date", "fecha_costo", "report_date", "cost_day")
-_AMOUNT_COL_CANDIDATES = ("amount", "total_amount", "monto", "costo", "cost", "total", "sum_amount", "total_cost")
+# total_spent first: marketing_costs_daily view (Meta ads rollup)
+_AMOUNT_COL_CANDIDATES = (
+    "total_spent",
+    "amount",
+    "total_amount",
+    "monto",
+    "costo",
+    "cost",
+    "total",
+    "sum_amount",
+    "total_cost",
+)
 
 
 def _detect_col(available: set, candidates) -> Optional[str]:
@@ -126,9 +137,9 @@ def _detect_col(available: set, candidates) -> Optional[str]:
 def _get_marketing_costs_range(date_from: date, date_to: date) -> List[Dict]:
     """
     Read marketing costs for a date range. Tries the `marketing_costs_daily`
-    view first (auto-detects date/amount column names); if the view is
-    missing or has no recognizable columns, falls back to the base
-    `marketing_costs` table.
+    view first (auto-detects date column and amount: e.g. `total_spent`);
+    if the view is missing or has no recognizable columns, falls back to the
+    base `marketing_costs` table.
     """
     with get_connection() as conn:
         with conn.cursor() as cur:
