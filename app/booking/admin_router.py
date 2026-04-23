@@ -19,6 +19,41 @@ admin_router = APIRouter()
 CHILE_TZ = ZoneInfo("America/Santiago")
 TABLE = "all_appointments"
 
+
+def _normalize_pagos_for_db(pagos: list) -> list:
+    """Store pago['date'] as YYYY-MM-DD or '' (uses paid_on if date missing; strips paid_on after merge)."""
+    if not pagos:
+        return pagos
+    out: list = []
+    for p in pagos:
+        if not isinstance(p, dict):
+            out.append(p)
+            continue
+        row = dict(p)
+        raw = row.get("date")
+        if raw is None or (isinstance(raw, str) and not str(raw).strip()):
+            raw = row.get("paid_on")
+        if hasattr(raw, "strftime"):
+            norm = raw.strftime("%Y-%m-%d")
+        elif raw is None:
+            norm = ""
+        else:
+            s = str(raw).strip()
+            m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", s)
+            if m:
+                norm = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+            else:
+                m2 = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", s)
+                if m2:
+                    norm = f"{m2.group(3)}-{m2.group(2).zfill(2)}-{m2.group(1).zfill(2)}"
+                else:
+                    norm = ""
+        row["date"] = norm
+        row.pop("paid_on", None)
+        out.append(row)
+    return out
+
+
 from app.booking.operator_settings import (
     get_vacation_days, add_vacation_day, remove_vacation_day,
     get_setting, set_setting, is_urgency_mode,
@@ -108,6 +143,8 @@ async def list_reservas(
                               "flex_amount",
                               "costo_operativo_fijo", "costo_operativo_variable", "costo_operativo_total"):
                         if r.get(k) is not None: r[k] = float(r[k])
+                    if isinstance(r.get("pagos"), list):
+                        r["pagos"] = _normalize_pagos_for_db(r["pagos"])
                     rows.append(r)
         return {"reservas": rows, "total": len(rows)}
     except Exception as e:
@@ -143,6 +180,8 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
                         r["booking_ref"] = r["source_id"]
                     else:
                         r["booking_ref"] = f"AA-{r['id']}"
+                if isinstance(r.get("pagos"), list):
+                    r["pagos"] = _normalize_pagos_for_db(r["pagos"])
                 return r
     except HTTPException:
         raise
@@ -214,7 +253,7 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                 if "extras_json" in updates:
                     updates["extras_json"] = PgJson(updates["extras_json"])
                 if "pagos" in updates:
-                    updates["pagos"] = PgJson(updates["pagos"])
+                    updates["pagos"] = PgJson(_normalize_pagos_for_db(updates["pagos"]))
                 if "descuentos" in updates:
                     updates["descuentos"] = PgJson(updates["descuentos"])
 

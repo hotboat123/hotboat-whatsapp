@@ -221,7 +221,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .pago-row input:focus{border-color:var(--gold)}
 .pago-row .p-amount{width:120px;flex-shrink:0}
 .pago-row .p-method{flex:1}
-.pago-row .p-date{width:130px;flex-shrink:0}
+.pago-row .pago-fecha-native{width:130px;flex-shrink:0}
+/* No ocultar fechas de pago si algún build aplica estilos tipo flatpickr */
+#pagos-list input.pago-fecha-native{display:block!important;opacity:1!important}
 .pago-row .p-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;padding:.2rem .4rem;border-radius:6px;flex-shrink:0}
 .pago-row .p-del:hover{background:rgba(231,76,60,.1)}
 /* Discount rows */
@@ -2349,7 +2351,6 @@ async function openModal(id){
     if(r.num_personas) lookupBasePrice(r.num_personas);
     setTimeout(()=>{
       initAddonDatePickers();
-      initDynamicDPs();
       initDP('e-fecha', {
         onChange(sel, dateStr){
           // Update modal title to reflect the new date
@@ -2500,23 +2501,17 @@ async function saveModal(id){
     costo_operativo_variable:costoVar,
     costo_operativo_total:costoFijo+costoVar,
     tiene_cruce:g('e-tiene_cruce')==='true',
-    extras_json:extrasJson,
+    extras_json: JSON.parse(JSON.stringify(extrasJson)),
   };
   // Pagos y descuentos
-  // Sync pago dates from flatpickr instances (source of truth) before saving
-  document.querySelectorAll('.p-date').forEach(el => {
-    const idx = +el.dataset.idx;
-    if(el._flatpickr && el._flatpickr.selectedDates.length > 0 && idx < _pagos.length){
-      _pagos[idx].date = el._flatpickr.formatDate(el._flatpickr.selectedDates[0], 'Y-m-d');
-    }
-  });
-  body.pagos = _pagos.filter(p=>p.amount||p.method);
+  syncPagosDatesFromPickers();
+  body.pagos = serializePagosForSave();
   body.descuentos = _descuentos.filter(d=>d.amount||d.type||d.note);
   // Cupón
   body.coupon_code = _appliedCoupon ? _appliedCoupon.code : null;
   body.coupon_discount = _appliedCoupon ? (_appliedCoupon.discount_amount || 0) : 0;
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount']);
+  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -3338,6 +3333,48 @@ function renderUrgList(){
 const METODOS = ['transferencia','mercadopago','transbank','efectivo','cheque','otro'];
 let _pagos = [];   // working copy of pagos array for current modal
 
+/** Normalize pago.date to YYYY-MM-DD (ISO con hora, dd/mm/yyyy). */
+function normalizePagoDate(v){
+  if(v==null||v==='') return '';
+  const s=String(v).trim();
+  if(!s) return '';
+  const iso=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const slash=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(slash){
+    const d=slash[1].padStart(2,'0'), m=slash[2].padStart(2,'0'), y=slash[3];
+    return `${y}-${m}-${d}`;
+  }
+  return '';
+}
+
+function readPagoFechaInput(el){
+  if(!el) return '';
+  const fp=el._flatpickr;
+  if(fp&&fp.selectedDates&&fp.selectedDates.length)
+    return normalizePagoDate(fp.formatDate(fp.selectedDates[0],'Y-m-d'))||'';
+  return normalizePagoDate(el.value)||'';
+}
+
+function syncPagosDatesFromPickers(){
+  document.querySelectorAll('#pagos-list input[data-pago-idx]').forEach(el=>{
+    const i=+el.dataset.pagoIdx;
+    if(isNaN(i)||!_pagos[i]) return;
+    _pagos[i].date=readPagoFechaInput(el);
+  });
+}
+
+function serializePagosForSave(){
+  return _pagos.map((p,i)=>{
+    if(!(p.amount||p.method)) return null;
+    const el=document.querySelector(`#pagos-list input[data-pago-idx="${i}"]`);
+    let d=readPagoFechaInput(el);
+    if(!d) d=normalizePagoDate(p.date)||normalizePagoDate(p.paid_on)||'';
+    const {date:_d,paid_on:_p,...rest}=p;
+    return {...rest,amount:+p.amount||0,method:String(p.method||'transferencia'),date:d,paid_on:d};
+  }).filter(Boolean);
+}
+
 function renderPagos(){
   const list = document.getElementById('pagos-list');
   const totEl = document.getElementById('pagos-total');
@@ -3352,26 +3389,11 @@ function renderPagos(){
         style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none;flex:1">
         ${METODOS.map(m=>`<option value="${m}"${p.method===m?' selected':''}>${m}</option>`).join('')}
       </select>
-      <input class="p-date" type="text" data-idx="${i}" placeholder="Fecha pago" readonly>
+      <input class="pago-fecha-native" type="date" value="${normalizePagoDate(p.date)}" data-pago-idx="${i}" autocomplete="off"
+        style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .6rem;font-size:.83rem;outline:none;min-width:9.5rem"
+        onchange="_pagos[${i}].date=normalizePagoDate(this.value)||''">
       <button class="p-del" onclick="_pagos.splice(${i},1);renderPagos()" title="Eliminar">✕</button>
     </div>`).join('');
-  // Init flatpickr using defaultDate (not el.value) — reliable with altInput:true
-  setTimeout(() => {
-    document.querySelectorAll('.p-date').forEach(el => {
-      const idx = +el.dataset.idx;
-      const curDate = (_pagos[idx]||{}).date || null;
-      if(el._flatpickr) el._flatpickr.destroy();
-      flatpickr(el, Object.assign({}, FP_BASE, {
-        defaultDate: curDate,
-        onChange(sel, dateStr){
-          if(idx >= 0 && idx < _pagos.length && dateStr) _pagos[idx].date = dateStr;
-        },
-        onClose(sel, dateStr){
-          if(idx >= 0 && idx < _pagos.length && dateStr) _pagos[idx].date = dateStr;
-        }
-      }));
-    });
-  }, 30);
 }
 
 function renderPagosTotal(){
@@ -3397,14 +3419,26 @@ function syncPagoFaltante(){
   }
 }
 
+function todayLocalISO(){
+  const d=new Date();
+  const z=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
+}
+
 function addPago(){
-  const today = new Date().toISOString().substring(0,10);
-  _pagos.push({amount:'',method:'transferencia',date:today});
+  _pagos.push({amount:'',method:'transferencia',date:todayLocalISO()});
   renderPagos();
 }
 
 function initPagos(pagosArr){
-  _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({...p, method:(p.method||'').toLowerCase()||'transferencia'})) : [];
+  _pagos = Array.isArray(pagosArr) ? pagosArr.map(p=>({
+    ...p,
+    method:(p.method||'').toLowerCase()||'transferencia',
+    date: normalizePagoDate(
+      (p.date!=null&&p.date!=='')?p.date
+      :((p.paid_on!=null&&p.paid_on!=='')?p.paid_on:(p.fecha!=null?p.fecha:''))
+    ),
+  })) : [];
   renderPagos();
   syncPagoFaltante();
 }
@@ -4081,6 +4115,9 @@ function initExtrasEditor(extrasJson){
   _extrasItems = [];
   _alojAddon   = [];
   _expAddon    = [];
+  if(typeof extrasJson==='string'){
+    try{ extrasJson = JSON.parse(extrasJson); }catch(_){ extrasJson = {}; }
+  }
   const catalogByKey = {};
   EXTRAS_CATALOG.forEach(e=>{ catalogByKey[e.key]=e; });
   // Web bookings store extras as an array [{name,price,quantity}] — convert to dict
@@ -4794,6 +4831,7 @@ async function deleteExtrasBooking(id){
 function generarRecibo(){
   const r = _currentReservaData;
   if(!r){ showToast('No hay reserva cargada'); return; }
+  syncPagosDatesFromPickers();
 
   const $ = v => v||'';
   const money = n => n!=null&&n!=='' ? '$'+Math.round(+n).toLocaleString('es-CL') : '—';
@@ -4864,7 +4902,7 @@ function generarRecibo(){
   const pagosHtml = _pagos.filter(p=>+p.amount>0).map(p=>`
     <tr>
       <td style="padding:.45rem .6rem;text-transform:capitalize">${p.method||'—'}</td>
-      <td style="padding:.45rem .6rem">${p.date||'—'}</td>
+      <td style="padding:.45rem .6rem">${p.date ? fmtDateDisplay(normalizePagoDate(p.date)||p.date) : '—'}</td>
       <td style="padding:.45rem .6rem;text-align:right;font-weight:700;color:#1a7a3a">${money(p.amount)}</td>
     </tr>`).join('') || `<tr><td colspan="3" style="padding:.45rem .6rem;color:#888">Sin pagos registrados</td></tr>`;
 
@@ -5444,13 +5482,6 @@ function initAddonDatePickers(){
   });
   initDP('aloj-addon-exit');
   initDP('exp-addon-date');
-}
-
-// Init date inputs inside dynamically-rendered content (payments, etc.)
-function initDynamicDPs(){
-  document.querySelectorAll('.p-date').forEach(el => {
-    if(!el._flatpickr) flatpickr(el, Object.assign({}, FP_BASE));
-  });
 }
 
 // Convert yyyy-mm-dd → dd/mm/yyyy for display in rendered lists
