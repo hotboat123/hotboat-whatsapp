@@ -107,45 +107,98 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
             return rows
 
 
+_DATE_COL_CANDIDATES   = ("fecha", "date", "day", "dia", "cost_date", "fecha_costo", "report_date", "cost_day")
+_AMOUNT_COL_CANDIDATES = ("amount", "total_amount", "monto", "costo", "cost", "total", "sum_amount", "total_cost")
+
+
+def _detect_col(available: set, candidates) -> Optional[str]:
+    """Return the first matching column name (case-insensitive) from candidates."""
+    lowered = {c.lower(): c for c in available}
+    for cand in candidates:
+        if cand in lowered:
+            return lowered[cand]
+    return None
+
+
 def _get_marketing_costs_range(date_from: date, date_to: date) -> List[Dict]:
+    """
+    Read marketing costs for a date range. Tries the `marketing_costs_daily`
+    view first (auto-detects date/amount column names); if the view is
+    missing or has no recognizable columns, falls back to the base
+    `marketing_costs` table.
+    """
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Inspect columns available in the view
             cur.execute("""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name = 'marketing_costs_daily'
-                ORDER BY ordinal_position
             """)
             view_cols = {r[0] for r in cur.fetchall()}
 
-            has_id       = "id"       in view_cols
-            has_category = "category" in view_cols
-            has_notes    = "notes"    in view_cols
+            source_table = None
+            date_col     = None
+            amount_col   = None
+
+            if view_cols:
+                date_col   = _detect_col(view_cols, _DATE_COL_CANDIDATES)
+                amount_col = _detect_col(view_cols, _AMOUNT_COL_CANDIDATES)
+                if date_col and amount_col:
+                    source_table = "marketing_costs_daily"
+                    source_cols  = view_cols
+
+            if source_table is None:
+                # Fallback to the base table
+                cur.execute("""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_name = 'marketing_costs'
+                """)
+                base_cols = {r[0] for r in cur.fetchall()}
+                if not base_cols:
+                    logger.warning("No marketing_costs source available; returning empty")
+                    return []
+                date_col   = _detect_col(base_cols, _DATE_COL_CANDIDATES) or "fecha"
+                amount_col = _detect_col(base_cols, _AMOUNT_COL_CANDIDATES) or "amount"
+                source_table = "marketing_costs"
+                source_cols  = base_cols
+
+            has_id       = "id"       in source_cols
+            has_category = "category" in source_cols
+            has_notes    = "notes"    in source_cols
 
             select_parts = []
-            if has_id:       select_parts.append("id")
-            select_parts.append("fecha::text")
-            select_parts.append("amount")
+            if has_id: select_parts.append("id")
+            select_parts.append(f"{date_col}::text AS fecha")
+            select_parts.append(f"{amount_col} AS amount")
             if has_category: select_parts.append("category")
             if has_notes:    select_parts.append("notes")
 
-            cur.execute(f"""
-                SELECT {', '.join(select_parts)}
-                FROM marketing_costs_daily
-                WHERE fecha BETWEEN %s AND %s
-                ORDER BY fecha
-            """, (date_from, date_to))
+            try:
+                cur.execute(
+                    f"""
+                    SELECT {', '.join(select_parts)}
+                    FROM {source_table}
+                    WHERE {date_col} BETWEEN %s AND %s
+                    ORDER BY {date_col}
+                    """,
+                    (date_from, date_to),
+                )
+                rows = cur.fetchall()
+            except Exception as e:
+                logger.warning("marketing costs query failed on %s: %s — returning empty",
+                               source_table, e)
+                return []
 
             results = []
-            for r in cur.fetchall():
+            for r in rows:
                 idx = 0
                 row: Dict = {}
-                if has_id:       row["id"]       = r[idx]; idx += 1
-                else:            row["id"]       = None
-                row["fecha"]  = r[idx]; idx += 1
-                row["amount"] = float(r[idx]);   idx += 1
-                row["category"] = r[idx] if has_category else None; idx += (1 if has_category else 0)
-                row["notes"]    = r[idx] if has_notes    else None
+                if has_id: row["id"] = r[idx]; idx += 1
+                else:      row["id"] = None
+                row["fecha"]    = r[idx]; idx += 1
+                row["amount"]   = float(r[idx] or 0); idx += 1
+                row["category"] = r[idx] if has_category else None
+                if has_category: idx += 1
+                row["notes"]    = r[idx] if has_notes else None
                 results.append(row)
             return results
 
