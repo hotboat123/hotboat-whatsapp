@@ -2338,7 +2338,13 @@ def fix_pago_dates(x_admin_key: str = Header("")):
                 changed = False
                 for p in pagos:
                     d = (p.get("date") or "")
-                    if not d or d < "2024-01-01":
+                    # Bad date: empty, pre-2024, or "YYYY-01-01" when reservation wasn't in January
+                    bad = (
+                        not d
+                        or d < "2024-01-01"
+                        or (d[5:] == "01-01" and created_at_str and created_at_str[5:7] != "01")
+                    )
+                    if bad:
                         p["date"] = created_at_str or ""
                         changed = True
                 if changed:

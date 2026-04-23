@@ -1187,6 +1187,26 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
         <div id="vac-list" style="margin-top:1rem"></div>
       </div>
+
+      <!-- ── Herramientas de mantenimiento ─────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">🔧 Herramientas de mantenimiento</div>
+        <div style="display:flex;flex-direction:column;gap:.7rem">
+          <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+            <div style="flex:1;min-width:220px">
+              <div style="font-size:.88rem;font-weight:600">Corregir fechas de pago inválidas</div>
+              <div style="font-size:.77rem;color:var(--muted);margin-top:.15rem">
+                Reemplaza fechas vacías, anteriores a 2024, o "YYYY-01-01" por la fecha de creación de la reserva.
+              </div>
+            </div>
+            <button id="btn-fix-pago-dates" onclick="runFixPagoDates()"
+              style="background:#1e3a5f;border:1px solid #2a5a8f;color:#60a5fa;border-radius:8px;padding:.45rem 1rem;font-size:.82rem;cursor:pointer;white-space:nowrap">
+              🔧 Corregir fechas
+            </button>
+          </div>
+          <div id="fix-pago-result" style="display:none;font-size:.8rem;padding:.55rem .75rem;border-radius:8px;background:#0d1f33;color:#60a5fa;border:1px solid #1e3a5f"></div>
+        </div>
+      </div>
     </div>
 
 
@@ -2483,6 +2503,13 @@ async function saveModal(id){
     extras_json:extrasJson,
   };
   // Pagos y descuentos
+  // Sync pago dates from flatpickr instances (source of truth) before saving
+  document.querySelectorAll('.p-date').forEach(el => {
+    const idx = +el.dataset.idx;
+    if(el._flatpickr && el._flatpickr.selectedDates.length > 0 && idx < _pagos.length){
+      _pagos[idx].date = el._flatpickr.formatDate(el._flatpickr.selectedDates[0], 'Y-m-d');
+    }
+  });
   body.pagos = _pagos.filter(p=>p.amount||p.method);
   body.descuentos = _descuentos.filter(d=>d.amount||d.type||d.note);
   // Cupón
@@ -3325,16 +3352,23 @@ function renderPagos(){
         style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none;flex:1">
         ${METODOS.map(m=>`<option value="${m}"${p.method===m?' selected':''}>${m}</option>`).join('')}
       </select>
-      <input class="p-date" type="text" value="${p.date||''}" data-idx="${i}" placeholder="Fecha pago" readonly>
+      <input class="p-date" type="text" data-idx="${i}" placeholder="Fecha pago" readonly>
       <button class="p-del" onclick="_pagos.splice(${i},1);renderPagos()" title="Eliminar">✕</button>
     </div>`).join('');
-  // Init flatpickr with onChange instead of oninput — avoids date corruption
+  // Init flatpickr using defaultDate (not el.value) — reliable with altInput:true
   setTimeout(() => {
     document.querySelectorAll('.p-date').forEach(el => {
       const idx = +el.dataset.idx;
+      const curDate = (_pagos[idx]||{}).date || null;
       if(el._flatpickr) el._flatpickr.destroy();
       flatpickr(el, Object.assign({}, FP_BASE, {
-        onChange(sel, dateStr){ if(idx >= 0 && idx < _pagos.length) _pagos[idx].date = dateStr; }
+        defaultDate: curDate,
+        onChange(sel, dateStr){
+          if(idx >= 0 && idx < _pagos.length && dateStr) _pagos[idx].date = dateStr;
+        },
+        onClose(sel, dateStr){
+          if(idx >= 0 && idx < _pagos.length && dateStr) _pagos[idx].date = dateStr;
+        }
       }));
     });
   }, 30);
@@ -6006,6 +6040,26 @@ async function saveCommissions(){
 }
 
 // ── Marketing costs modal ─────────────────────────────────────
+async function runFixPagoDates(){
+  const btn = document.getElementById('btn-fix-pago-dates');
+  const res = document.getElementById('fix-pago-result');
+  btn.disabled = true; btn.textContent = '⏳ Procesando…';
+  try{
+    const d = await api('/api/admin/fix-pago-dates', {method:'POST'});
+    res.style.display = '';
+    res.textContent = d.fixed > 0
+      ? `✅ ${d.fixed} reserva(s) corregidas: ${(d.examples||[]).map(e=>e.nombre||e.id).join(', ')}`
+      : '✅ No se encontraron fechas inválidas — todo está correcto.';
+  }catch(e){
+    res.style.display = '';
+    res.style.color = '#f87171';
+    res.textContent = '❌ Error: ' + e.message;
+  }finally{
+    btn.disabled = false; btn.textContent = '🔧 Corregir fechas';
+    setTimeout(()=>loadReservas(), 500);
+  }
+}
+
 function openMarketingModal(){
   const today = new Date();
   const yearSel  = document.getElementById('fin-mkt-year');
