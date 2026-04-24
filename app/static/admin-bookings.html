@@ -1248,6 +1248,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <button onclick="openCommissionsModal()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.35rem .8rem;font-size:.79rem;cursor:pointer">
           ⚙️ Comisiones
         </button>
+        <button onclick="openFinStructureModal()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.35rem .8rem;font-size:.79rem;cursor:pointer" title="Costo fijo diario (estructura) y slugs de experiencia">
+          🏗️ Estructura P&amp;L
+        </button>
       </div>
     </div>
 
@@ -1262,7 +1265,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div id="fin-pnl-panel">
 
       <!-- KPI cards -->
-      <div id="fin-pnl-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.8rem;margin-bottom:1.2rem"></div>
+      <div id="fin-pnl-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.8rem;margin-bottom:.6rem"></div>
+      <div id="fin-pnl-kpis-2" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.6rem;margin-bottom:1.2rem"></div>
 
       <!-- Tabla P&L -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
@@ -1273,16 +1277,25 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div style="overflow-x:auto">
           <table id="fin-pnl-table" style="width:100%;border-collapse:collapse;font-size:.81rem">
             <thead>
-              <tr style="background:var(--card);color:var(--muted);font-size:.73rem;text-transform:uppercase;letter-spacing:.05em">
-                <th style="padding:.6rem 1rem;text-align:left">Período</th>
-                <th style="padding:.6rem .8rem;text-align:right">Reservas</th>
-                <th style="padding:.6rem .8rem;text-align:right">Ingreso Bruto</th>
-                <th style="padding:.6rem .8rem;text-align:right;color:#e74c3c">Comisiones</th>
-                <th style="padding:.6rem .8rem;text-align:right">Ingreso Neto</th>
-                <th style="padding:.6rem .8rem;text-align:right;color:#e74c3c">Costos Op.</th>
-                <th style="padding:.6rem .8rem;text-align:right;color:#e74c3c">Marketing</th>
-                <th style="padding:.6rem .8rem;text-align:right">Resultado</th>
-                <th style="padding:.6rem .8rem;text-align:center">Margen</th>
+              <tr style="background:var(--card);color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em">
+                <th style="padding:.55rem .6rem;text-align:left">Período</th>
+                <th style="padding:.55rem .45rem;text-align:right">#</th>
+                <th style="padding:.55rem .45rem;text-align:right">I.Bruto</th>
+                <th style="padding:.55rem .45rem;text-align:right" title="Ingreso experiencia / barco">I.Reserva</th>
+                <th style="padding:.55rem .45rem;text-align:right">I.Aloj.</th>
+                <th style="padding:.55rem .45rem;text-align:right">I.Exp.</th>
+                <th style="padding:.55rem .45rem;text-align:right">I.Ext.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Comis.</th>
+                <th style="padding:.55rem .45rem;text-align:right">I.Neto</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Suma costo operativo total por reserva">C.Op</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo operativo fijo por reserva">C.Fijo</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable alojamiento">v.Aloj</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable experiencia">v.Exp</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable otros extras">v.Ext</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo estructura (día × tarifa)">Estr.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Mkt</th>
+                <th style="padding:.55rem .45rem;text-align:right">Result.</th>
+                <th style="padding:.55rem .45rem;text-align:center">%</th>
               </tr>
             </thead>
             <tbody id="fin-pnl-tbody"></tbody>
@@ -1316,14 +1329,17 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div style="overflow-x:auto">
           <table id="fin-cf-table" style="width:100%;border-collapse:collapse;font-size:.81rem">
             <thead>
-              <tr style="background:var(--card);color:var(--muted);font-size:.73rem;text-transform:uppercase;letter-spacing:.05em">
-                <th style="padding:.6rem 1rem;text-align:left">Período</th>
-                <th style="padding:.6rem .8rem;text-align:right">Saldo Inicial</th>
-                <th style="padding:.6rem .8rem;text-align:right;color:#2ecc71">Entradas Netas</th>
-                <th style="padding:.6rem .8rem;text-align:right;color:#e74c3c">Salidas</th>
-                <th style="padding:.6rem .8rem;text-align:right">Flujo Neto</th>
-                <th style="padding:.6rem .8rem;text-align:right;font-weight:700">Saldo Final</th>
-                <th style="padding:.6rem .8rem;text-align:center">Detalle</th>
+              <tr style="background:var(--card);color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em">
+                <th style="padding:.55rem .6rem;text-align:left">Período</th>
+                <th style="padding:.55rem .45rem;text-align:right">Saldo ini.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#2ecc71">Entr. neto</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costos operativos reservas (fecha salida)">Op.res.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo estructura por día calendario">Estr.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Mkt</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Σ salidas</th>
+                <th style="padding:.55rem .45rem;text-align:right">Flujo neto</th>
+                <th style="padding:.55rem .45rem;text-align:right;font-weight:700">Saldo fin.</th>
+                <th style="padding:.55rem .45rem;text-align:center">Det.</th>
               </tr>
             </thead>
             <tbody id="fin-cf-tbody"></tbody>
@@ -5616,6 +5632,33 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 
+<!-- ═══ FINANCIAL: P&L STRUCTURE (fixed daily + experience whitelist) ═══ -->
+<div id="fin-structure-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+  <div style="background:var(--card);border-radius:14px;max-width:520px;margin:auto;padding:1.5rem">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:.4rem">🏗️ Parámetros P&amp;L / Flujo</div>
+    <div style="color:var(--muted);font-size:.78rem;margin-bottom:1rem">
+      <strong>Costo fijo diario (estructura):</strong> se aplica a cada día calendario del rango (D × tarifa) y resta en resultado y en flujo de caja.<br>
+      <strong>Slugs experiencia:</strong> claves en <code>extras_json</code> que cuentan como experiencia además de los prefijos <code>exp__</code>, <code>experiencia…</code>, <code>pack_exp…</code>.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.85rem">
+      <div>
+        <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Costo fijo diario prorrateado (CLP / día)</label>
+        <input type="number" id="fin-str-daily" min="0" step="1" placeholder="0"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Lista blanca de slugs (experiencias), separados por coma</label>
+        <textarea id="fin-str-whitelist" rows="3" placeholder="ej: pack_vip, tour_marina"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.82rem;outline:none;box-sizing:border-box;resize:vertical;font-family:monospace"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:.6rem;margin-top:1.2rem">
+      <button class="btn-primary" onclick="saveFinStructure()" style="flex:1">💾 Guardar</button>
+      <button class="btn-secondary" style="flex:1" onclick="document.getElementById('fin-structure-modal').style.display='none'">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ FINANCIAL: MARKETING COSTS MODAL ═══ -->
 <div id="fin-mkt-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
   <div style="background:var(--card);border-radius:14px;max-width:560px;margin:auto;padding:1.5rem">
@@ -5767,7 +5810,9 @@ async function loadPnl(){
   if(!from||!to) return;
   document.getElementById('fin-pnl-loading').textContent = 'Cargando…';
   try {
-    const r = await fetch(`/api/admin/financial/pnl?date_from=${from}&date_to=${to}&view=${_finView}`);
+    const r = await fetch(`/api/admin/financial/pnl?date_from=${from}&date_to=${to}&view=${_finView}`, {
+      headers: { 'x-admin-key': getKey() },
+    });
     if(!r.ok){
       const err = await r.text();
       console.error('P&L API error:', r.status, err);
@@ -5776,39 +5821,89 @@ async function loadPnl(){
     }
     const d = await r.json();
     if(!d.totals){ console.error('P&L: respuesta inesperada', d); return; }
-    renderPnlKpis(d.totals);
-    renderPnlTable(d.data || [], d.view);
+    renderPnlKpis(d.totals, d.period_calendar_days, d.structure);
+    renderPnlTable(d.data || [], d.view, d.totals);
+    const pd = d.period_calendar_days || 0;
+    const dr = (d.structure && d.structure.costo_fijo_diario_prorrateado) || 0;
     document.getElementById('fin-pnl-loading').textContent =
-      (d.data||[]).length === 0 ? 'Sin reservas en este período' : '';
+      (d.data||[]).length === 0 ? 'Sin filas en este período' :
+      (dr && pd ? `${pd} días cal. · estructura ${fmtClp(dr)}/día` : '');
   } catch(e){
     console.error('loadPnl error:', e);
     document.getElementById('fin-pnl-loading').textContent = 'Error al cargar';
   }
 }
 
-function renderPnlKpis(t){
+function _pnlKpiCard(c){
+  return `<div class="fin-kpi">
+    <div class="fk-label">${c.label}</div>
+    <div class="fk-value" style="color:${c.color||'var(--text)'}">${c.value}</div>
+    ${c.sub ? `<div class="fk-sub">${c.sub}</div>` : ''}
+  </div>`;
+}
+
+function renderPnlKpis(t, periodDays, structure){
   const margin = t.gross ? Math.round(t.resultado/t.gross*100) : 0;
   renderKpis('fin-pnl-kpis', [
     {label:'Ingreso Bruto',    value: fmtClp(t.gross),               color:'var(--text)'},
     {label:'Comisiones',       value: '-'+fmtClp(t.commission_deduction), color:'var(--red)'},
     {label:'Ingreso Neto',     value: fmtClp(t.net_income),          color:'var(--gold)'},
-    {label:'Costos Operac.',   value: '-'+fmtClp(t.costo_operacional),color:'var(--red)'},
+    {label:'Costos Op. (reservas)', value: '-'+fmtClp(t.costo_operacional), color:'var(--red)'},
+    {label:'Costo estructura', value: '-'+fmtClp(t.costo_estructural||0), color:'var(--red)',
+     sub: periodDays ? `${periodDays} días calendario` : ''},
     {label:'Marketing',        value: '-'+fmtClp(t.marketing),       color:'var(--red)'},
     {label:'Resultado',        value: fmtClp(t.resultado),           color: colorNum(t.resultado),
      sub: `Margen ${margin}%`},
   ]);
+  const el2 = document.getElementById('fin-pnl-kpis-2');
+  if(el2){
+    const cards = [
+      {label:'Ingreso reserva (core)', value: fmtClp(t.ingreso_reserva||0), color:'var(--text)'},
+      {label:'Ingreso alojamientos',   value: fmtClp(t.ingreso_aloj||0),    color:'var(--text)'},
+      {label:'Ingreso experiencias',   value: fmtClp(t.ingreso_exp||0),     color:'#5dade2'},
+      {label:'Ingreso extras',         value: fmtClp(t.ingreso_extra||0),   color:'var(--muted)'},
+      {label:'C. fijo por reserva',    value: '-'+fmtClp(t.costo_fijo_reservas||0), color:'var(--red)'},
+      {label:'C. var. aloj / exp / ext', value: '-'+fmtClp((t.cv_aloj||0)+(t.cv_exp||0)+(t.cv_extra||0)),
+       color:'var(--red)', sub: `${fmtClp(t.cv_aloj||0)} · ${fmtClp(t.cv_exp||0)} · ${fmtClp(t.cv_extra||0)}`},
+    ];
+    el2.innerHTML = cards.map(_pnlKpiCard).join('');
+  }
 }
 
-function renderPnlTable(data, view){
+function _pnlRowTds(row, sm){
+  const p = sm ? 'padding:.4rem .4rem;font-size:.74rem' : 'padding:.5rem .4rem';
+  const margin = row.gross ? Math.round(row.resultado/row.gross*100) : 0;
+  const v = (k)=> Math.round(Number(row[k])||0);
+  return `
+    <td style="${p};text-align:right;color:var(--muted)">${row.n_reservas}</td>
+    <td style="${p};text-align:right">${fmtClp(row.gross)}</td>
+    <td style="${p};text-align:right">${fmtClp(v('ingreso_reserva'))}</td>
+    <td style="${p};text-align:right">${fmtClp(v('ingreso_aloj'))}</td>
+    <td style="${p};text-align:right">${fmtClp(v('ingreso_exp'))}</td>
+    <td style="${p};text-align:right">${fmtClp(v('ingreso_extra'))}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.commission_deduction)}</td>
+    <td style="${p};text-align:right;color:var(--gold)">${fmtClp(row.net_income)}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.costo_operacional)}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('costo_fijo_reservas'))}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('cv_aloj'))}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('cv_exp'))}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('cv_extra'))}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('costo_estructural'))}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.marketing)}</td>
+    <td style="${p};text-align:right;font-weight:600;color:${colorNum(row.resultado)}">${fmtClp(row.resultado)}</td>
+    <td style="${p};text-align:center;color:${colorNum(margin)}">${margin}%</td>`;
+}
+
+function renderPnlTable(data, view, totals){
   const tbody = document.getElementById('fin-pnl-tbody');
   const tfoot = document.getElementById('fin-pnl-tfoot');
+  const COLSP = 18;
   tbody.innerHTML = '';
 
   data.forEach((row, idx) => {
     const label  = view==='daily'   ? row.fecha :
                    view==='weekly'  ? `${row.week} (${row.week_start} → ${row.week_end})` :
                                       row.month;
-    const margin = row.gross ? Math.round(row.resultado/row.gross*100) : 0;
     const hasDetail = view!=='daily' && row.days && row.days.length>0;
     const detailId = `pnl-detail-${idx}`;
 
@@ -5817,42 +5912,49 @@ function renderPnlTable(data, view){
     tr.style.borderTop = '1px solid var(--border)';
     if(hasDetail) tr.setAttribute('onclick', `togglePnlDetail('${detailId}')`);
     tr.innerHTML = `
-      <td style="padding:.6rem 1rem;color:var(--text)">${hasDetail?'▶ ':''}<strong>${label}</strong></td>
-      <td style="padding:.6rem .8rem;text-align:right;color:var(--muted)">${row.n_reservas}</td>
-      <td style="padding:.6rem .8rem;text-align:right">${fmtClp(row.gross)}</td>
-      <td style="padding:.6rem .8rem;text-align:right;color:var(--red)">-${fmtClp(row.commission_deduction)}</td>
-      <td style="padding:.6rem .8rem;text-align:right;color:var(--gold)">${fmtClp(row.net_income)}</td>
-      <td style="padding:.6rem .8rem;text-align:right;color:var(--red)">-${fmtClp(row.costo_operacional)}</td>
-      <td style="padding:.6rem .8rem;text-align:right;color:var(--red)">-${fmtClp(row.marketing)}</td>
-      <td style="padding:.6rem .8rem;text-align:right;font-weight:600;color:${colorNum(row.resultado)}">${fmtClp(row.resultado)}</td>
-      <td style="padding:.6rem .8rem;text-align:center;color:${colorNum(margin)}">${margin}%</td>`;
+      <td style="padding:.55rem .7rem;color:var(--text)">${hasDetail?'▶ ':''}<strong>${label}</strong></td>
+      ${_pnlRowTds(row, false)}`;
     tbody.appendChild(tr);
 
     if(hasDetail){
       const trDetail = document.createElement('tr');
       trDetail.id = detailId;
       trDetail.className = 'fin-tr-detail';
-      const subdaysHtml = row.days.map(d=>{
-        const dm = d.gross ? Math.round(d.resultado/d.gross*100) : 0;
-        return `<tr style="background:rgba(0,0,0,.25)">
-          <td style="padding:.4rem 1rem .4rem 2rem;color:var(--muted)">${d.fecha}</td>
-          <td style="padding:.4rem .8rem;text-align:right;color:var(--muted)">${d.n_reservas}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem">${fmtClp(d.gross)}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--red)">-${fmtClp(d.commission_deduction)}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--gold)">${fmtClp(d.net_income)}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--red)">-${fmtClp(d.costo_operacional)}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--red)">-${fmtClp(d.marketing)}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:${colorNum(d.resultado)}">${fmtClp(d.resultado)}</td>
-          <td style="padding:.4rem .8rem;text-align:center;font-size:.78rem;color:${colorNum(dm)}">${dm}%</td>
-        </tr>`;
-      }).join('');
-      trDetail.innerHTML = `<td colspan="9" style="padding:0"><table style="width:100%;border-collapse:collapse">${subdaysHtml}</table></td>`;
+      const subdaysHtml = row.days.map(d=>`<tr style="background:rgba(0,0,0,.25)">
+          <td style="padding:.4rem 1rem .4rem 2rem;color:var(--muted);font-size:.76rem">${d.fecha}</td>
+          ${_pnlRowTds(d, true)}
+        </tr>`).join('');
+      trDetail.innerHTML = `<td colspan="${COLSP}" style="padding:0"><table style="width:100%;border-collapse:collapse">${subdaysHtml}</table></td>`;
       tbody.appendChild(trDetail);
     }
   });
 
-  // Totals footer
   tfoot.innerHTML = '';
+  if(totals && data.length){
+    const t = totals;
+    const margin = t.gross ? Math.round(t.resultado/t.gross*100) : 0;
+    const tv = (k)=> Math.round(Number(t[k])||0);
+    tfoot.innerHTML = `<tr style="background:var(--card);font-weight:600;font-size:.8rem;border-top:2px solid var(--border)">
+      <td style="padding:.55rem .7rem">Σ período</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--muted)">${t.n_reservas}</td>
+      <td style="padding:.5rem .4rem;text-align:right">${fmtClp(t.gross)}</td>
+      <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_reserva'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_aloj'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_exp'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_extra'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.commission_deduction)}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--gold)">${fmtClp(t.net_income)}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.costo_operacional)}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('costo_fijo_reservas'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('cv_aloj'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('cv_exp'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('cv_extra'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('costo_estructural'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.marketing)}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:${colorNum(t.resultado)}">${fmtClp(t.resultado)}</td>
+      <td style="padding:.5rem .4rem;text-align:center;color:${colorNum(margin)}">${margin}%</td>
+    </tr>`;
+  }
 }
 
 function togglePnlDetail(id){
@@ -5877,7 +5979,9 @@ async function loadCashFlow(){
   if(!from||!to) return;
   document.getElementById('fin-cf-loading').textContent = 'Cargando…';
   try {
-    const r = await fetch(`/api/admin/financial/cashflow?date_from=${from}&date_to=${to}&view=${_finView}&opening_balance=${ob}`);
+    const r = await fetch(`/api/admin/financial/cashflow?date_from=${from}&date_to=${to}&view=${_finView}&opening_balance=${ob}`, {
+      headers: { 'x-admin-key': getKey() },
+    });
     if(!r.ok){
       const err = await r.text();
       console.error('CashFlow API error:', r.status, err);
@@ -5898,22 +6002,29 @@ async function loadCashFlow(){
 function renderCfKpis(data){
   if(!data||!data.length){ renderKpis('fin-cf-kpis',[]); return; }
   const totalIn  = data.reduce((s,d)=>s+(d.inflow_neto||0),0);
+  const opOut    = data.reduce((s,d)=>s+(d.outflow_opex||0),0);
+  const estrOut  = data.reduce((s,d)=>s+(d.outflow_estructural||0),0);
+  const mktOut   = data.reduce((s,d)=>s+(d.outflow_marketing||0),0);
   const totalOut = data.reduce((s,d)=>s+(d.total_outflow||0),0);
   const netFlow  = data.reduce((s,d)=>s+(d.net_cashflow||0),0);
   const last     = data[data.length-1];
   renderKpis('fin-cf-kpis',[
     {label:'Total Entradas Netas', value: fmtClp(totalIn),           color:'var(--green)'},
-    {label:'Total Salidas',        value: '-'+fmtClp(totalOut),      color:'var(--red)'},
-    {label:'Flujo Neto',           value: fmtClp(netFlow),           color: colorNum(netFlow)},
-    {label:'Saldo Final',          value: fmtClp(last.ending_balance||last.ending_balance), color:'var(--gold)'},
+    {label:'Op. reservas (egreso)', value: '-'+fmtClp(opOut),         color:'var(--red)'},
+    {label:'Estructura (días)',     value: '-'+fmtClp(estrOut),       color:'var(--red)'},
+    {label:'Marketing',            value: '-'+fmtClp(mktOut),        color:'var(--red)'},
+    {label:'Σ Salidas',             value: '-'+fmtClp(totalOut),     color:'var(--red)'},
+    {label:'Flujo Neto',           value: fmtClp(netFlow),             color: colorNum(netFlow)},
+    {label:'Saldo Final',          value: fmtClp(last.ending_balance), color:'var(--gold)'},
   ]);
 }
 
 function renderCfTable(data, view){
   const tbody = document.getElementById('fin-cf-tbody');
+  const CF_COLS = 10;
   tbody.innerHTML = '';
   if(!data||!data.length){
-    tbody.innerHTML = '<tr><td colspan="7" style="padding:1.5rem;text-align:center;color:var(--muted)">Sin datos en el período</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${CF_COLS}" style="padding:1.5rem;text-align:center;color:var(--muted)">Sin datos en el período</td></tr>`;
     return;
   }
 
@@ -5930,13 +6041,16 @@ function renderCfTable(data, view){
     tr.style.borderTop = '1px solid var(--border)';
     if(hasDetail) tr.setAttribute('onclick', `toggleCfDetail('${detailId}')`);
     tr.innerHTML = `
-      <td style="padding:.6rem 1rem">${hasDetail?'▶ ':''}<strong>${label}</strong></td>
-      <td style="padding:.6rem .8rem;text-align:right;color:var(--muted)">${fmtClp(row.beginning_balance)}</td>
-      <td style="padding:.6rem .8rem;text-align:right;color:var(--green)">+${fmtClp(row.inflow_neto)}</td>
-      <td style="padding:.6rem .8rem;text-align:right;color:var(--red)">-${fmtClp(row.total_outflow)}</td>
-      <td style="padding:.6rem .8rem;text-align:right;color:${colorNum(row.net_cashflow)}">${fmtClp(row.net_cashflow)}</td>
-      <td style="padding:.6rem .8rem;text-align:right;font-weight:700;font-size:.92rem;color:var(--gold)">${fmtClp(endBal)}</td>
-      <td style="padding:.6rem .8rem;text-align:center">
+      <td style="padding:.55rem .7rem">${hasDetail?'▶ ':''}<strong>${label}</strong></td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--muted)">${fmtClp(row.beginning_balance)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--green)">+${fmtClp(row.inflow_neto)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.outflow_opex)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.outflow_estructural||0)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.outflow_marketing)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.total_outflow)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:${colorNum(row.net_cashflow)}">${fmtClp(row.net_cashflow)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;font-weight:700;font-size:.9rem;color:var(--gold)">${fmtClp(endBal)}</td>
+      <td style="padding:.55rem .45rem;text-align:center">
         ${!hasDetail && row.pagos_detail && row.pagos_detail.length ?
           `<button onclick='showCfDetail(${JSON.stringify(row.pagos_detail)})' style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.75rem">👁</button>` : ''}
       </td>`;
@@ -5948,18 +6062,21 @@ function renderCfTable(data, view){
       trDetail.className = 'fin-tr-detail';
       const subHtml = row.days.map(d=>`
         <tr style="background:rgba(0,0,0,.25)">
-          <td style="padding:.4rem 1rem .4rem 2rem;color:var(--muted)">${d.fecha}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--muted)">${fmtClp(d.beginning_balance)}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--green)">+${fmtClp(d.inflow_neto)}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:var(--red)">-${fmtClp(d.total_outflow)}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-size:.78rem;color:${colorNum(d.net_cashflow)}">${fmtClp(d.net_cashflow)}</td>
-          <td style="padding:.4rem .8rem;text-align:right;font-weight:600;font-size:.78rem;color:var(--gold)">${fmtClp(d.ending_balance)}</td>
-          <td style="padding:.4rem .8rem;text-align:center">
+          <td style="padding:.4rem 1rem .4rem 2rem;color:var(--muted);font-size:.76rem">${d.fecha}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--muted)">${fmtClp(d.beginning_balance)}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--green)">+${fmtClp(d.inflow_neto)}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.outflow_opex)}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.outflow_estructural||0)}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.outflow_marketing)}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.total_outflow)}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:${colorNum(d.net_cashflow)}">${fmtClp(d.net_cashflow)}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-weight:600;font-size:.75rem;color:var(--gold)">${fmtClp(d.ending_balance)}</td>
+          <td style="padding:.4rem .45rem;text-align:center">
             ${d.pagos_detail&&d.pagos_detail.length ?
               `<button onclick='showCfDetail(${JSON.stringify(d.pagos_detail)})' style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.75rem">👁</button>` : ''}
           </td>
         </tr>`).join('');
-      trDetail.innerHTML = `<td colspan="7" style="padding:0"><table style="width:100%;border-collapse:collapse">${subHtml}</table></td>`;
+      trDetail.innerHTML = `<td colspan="${CF_COLS}" style="padding:0"><table style="width:100%;border-collapse:collapse">${subHtml}</table></td>`;
       tbody.appendChild(trDetail);
     }
   });
@@ -5983,6 +6100,41 @@ function showCfDetail(pagos){
     `${p.nombre_cliente} · ${p.method} · Bruto: ${fmtClp(p.amount_bruto)} → Neto: ${fmtClp(p.amount_neto)}`
   ).join('\n');
   alert('Detalle de pagos del día:\n\n' + lines);
+}
+
+async function openFinStructureModal(){
+  document.getElementById('fin-structure-modal').style.display = '';
+  try {
+    const r = await fetch('/api/admin/financial/structure', { headers: { 'x-admin-key': getKey() } });
+    const s = await r.json();
+    document.getElementById('fin-str-daily').value = s.costo_fijo_diario_prorrateado ?? 0;
+    document.getElementById('fin-str-whitelist').value = (s.experience_slug_whitelist || []).join(', ');
+  } catch(e) { console.error(e); }
+}
+
+async function saveFinStructure(){
+  const daily = parseFloat(String(document.getElementById('fin-str-daily').value || '0')) || 0;
+  const wl = document.getElementById('fin-str-whitelist').value.split(',')
+    .map(x => x.trim().toLowerCase()).filter(Boolean);
+  try {
+    const r = await fetch('/api/admin/financial/structure', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': getKey() },
+      body: JSON.stringify({
+        costo_fijo_diario_prorrateado: daily,
+        experience_slug_whitelist: wl,
+      }),
+    });
+    if (!r.ok) {
+      alert('Error al guardar: ' + (await r.text()));
+      return;
+    }
+    document.getElementById('fin-structure-modal').style.display = 'none';
+    loadFinancial();
+  } catch(e) {
+    console.error(e);
+    alert('Error de red al guardar');
+  }
 }
 
 // ── Forecast ──────────────────────────────────────────────────

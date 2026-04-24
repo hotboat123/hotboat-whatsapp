@@ -3,7 +3,6 @@ import json
 import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
@@ -11,6 +10,17 @@ from pydantic import BaseModel
 
 from app.db.connection import get_connection
 from app.booking.operator_settings import get_setting, set_setting
+from app.booking.financial_breakdown import (
+    aggregate_breakdown_into_week_month,
+    apply_structural_to_days,
+    finalize_pnl_day,
+    get_financial_structure,
+    iso_dates_inclusive,
+    load_extra_cost_catalog,
+    merge_day_breakdown,
+    new_empty_day,
+    split_booking_financials,
+)
 
 logger = logging.getLogger(__name__)
 financial_router = APIRouter()
@@ -80,7 +90,8 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
                     COALESCE(descuentos, '[]'::jsonb),
                     COALESCE(nombre_cliente, ''),
                     COALESCE(status, ''),
-                    COALESCE(num_personas::text, '0')
+                    COALESCE(num_personas::text, '0'),
+                    COALESCE(extras_json, '{}'::jsonb)
                 FROM all_appointments
                 WHERE fecha BETWEEN %s AND %s
                   AND status = ANY(%s)
@@ -88,7 +99,8 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
             """, (date_from, date_to, list(CONFIRMED_STATUSES)))
             cols = ["id", "fecha", "ingreso_reserva", "ingreso_extras",
                     "ingreso_total", "costo_fijo", "costo_variable", "costo_total",
-                    "pagos", "descuentos", "nombre_cliente", "status", "num_personas"]
+                    "pagos", "descuentos", "nombre_cliente", "status", "num_personas",
+                    "extras_json"]
             rows = []
             for r in cur.fetchall():
                 d = dict(zip(cols, r))
@@ -106,6 +118,13 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
                 if isinstance(desc, str):
                     desc = json.loads(desc)
                 d["descuentos"] = desc if isinstance(desc, list) else []
+                ex = d["extras_json"]
+                if isinstance(ex, str):
+                    try:
+                        ex = json.loads(ex) if ex.strip() else {}
+                    except Exception:
+                        ex = {}
+                d["extras_json"] = ex if isinstance(ex, dict) else {}
                 rows.append(d)
             return rows
 
@@ -257,9 +276,19 @@ def _calc_booking_pnl(booking: Dict, commissions: Dict) -> Dict:
     }
 
 
-def _build_pnl_days(bookings: List[Dict], marketing: List[Dict],
-                    commissions: Dict) -> Dict[str, Dict]:
-    """Build per-day P&L dict."""
+def _build_pnl_days(
+    bookings: List[Dict],
+    marketing: List[Dict],
+    commissions: Dict,
+    d_from: date,
+    d_to: date,
+) -> Dict[str, Dict]:
+    """Build per-day P&L dict with income/cost breakdown and structural daily cost."""
+    structure = get_financial_structure()
+    daily_struct = float(structure.get("costo_fijo_diario_prorrateado") or 0)
+    wl = set(structure.get("experience_slug_whitelist") or [])
+    cost_catalog = load_extra_cost_catalog()
+
     mkt_by_day: Dict[str, float] = defaultdict(float)
     for m in marketing:
         mkt_by_day[m["fecha"]] += m["amount"]
@@ -268,24 +297,16 @@ def _build_pnl_days(bookings: List[Dict], marketing: List[Dict],
     for b in bookings:
         day = b["fecha"]
         if day not in days:
-            days[day] = {
-                "fecha": day,
-                "n_reservas": 0,
-                "gross": 0,
-                "commission_deduction": 0,
-                "net_income": 0,
-                "costo_operacional": 0,
-                "marketing": 0,
-                "resultado": 0,
-                "bookings": [],
-            }
+            days[day] = new_empty_day(day)
         pnl = _calc_booking_pnl(b, commissions)
+        sp = split_booking_financials(b, cost_catalog, wl)
         d = days[day]
-        d["n_reservas"]           += 1
-        d["gross"]                += pnl["gross"]
+        d["n_reservas"] += 1
+        d["gross"] += pnl["gross"]
         d["commission_deduction"] += pnl["commission_deduction"]
-        d["net_income"]           += pnl["net_income"]
-        d["costo_operacional"]    += pnl["costo_operacional"]
+        d["net_income"] += pnl["net_income"]
+        d["costo_operacional"] += pnl["costo_operacional"]
+        merge_day_breakdown(d, sp)
         d["bookings"].append({
             "id":               b["id"],
             "nombre_cliente":   b["nombre_cliente"],
@@ -294,18 +315,24 @@ def _build_pnl_days(bookings: List[Dict], marketing: List[Dict],
             "net_income":       pnl["net_income"],
             "costo":            pnl["costo_operacional"],
             "pagos":            b["pagos"],
+            "ingreso_reserva":  sp["ingreso_reserva"],
+            "ingreso_aloj":     sp["ingreso_aloj"],
+            "ingreso_exp":      sp["ingreso_exp"],
+            "ingreso_extra":    sp["ingreso_extra"],
+            "cv_aloj":          sp["cv_aloj"],
+            "cv_exp":           sp["cv_exp"],
+            "cv_extra":         sp["cv_extra"],
+            "costo_fijo_reserva": sp["costo_fijo_reserva"],
         })
 
-    # Add marketing and compute resultado
-    all_days_with_mkt = set(list(days.keys()) + list(mkt_by_day.keys()))
+    apply_structural_to_days(days, d_from, d_to, daily_struct)
+
+    all_days_with_mkt = set(days.keys()) | set(mkt_by_day.keys())
     for day in all_days_with_mkt:
         if day not in days:
-            days[day] = {"fecha": day, "n_reservas": 0, "gross": 0,
-                         "commission_deduction": 0, "net_income": 0,
-                         "costo_operacional": 0, "marketing": 0, "resultado": 0, "bookings": []}
+            days[day] = new_empty_day(day)
         days[day]["marketing"] = _fmt_int(mkt_by_day.get(day, 0))
-        d = days[day]
-        d["resultado"] = d["net_income"] - d["costo_operacional"] - d["marketing"]
+        finalize_pnl_day(days[day])
 
     return days
 
@@ -323,6 +350,9 @@ def _aggregate_weeks(days: Dict[str, Dict]) -> List[Dict]:
                 "week": week_key, "week_start": week_start, "week_end": week_end,
                 "n_reservas": 0, "gross": 0, "commission_deduction": 0,
                 "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
+                "costo_estructural": 0,
+                "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
+                "costo_fijo_reservas": 0, "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0,
                 "days": [],
             }
         w = weeks[week_key]
@@ -333,6 +363,7 @@ def _aggregate_weeks(days: Dict[str, Dict]) -> List[Dict]:
         w["costo_operacional"]    += d["costo_operacional"]
         w["marketing"]            += d["marketing"]
         w["resultado"]            += d["resultado"]
+        aggregate_breakdown_into_week_month(w, d)
         w["days"].append(d)
     return list(weeks.values())
 
@@ -346,6 +377,9 @@ def _aggregate_months(days: Dict[str, Dict]) -> List[Dict]:
                 "month": month_key,
                 "n_reservas": 0, "gross": 0, "commission_deduction": 0,
                 "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
+                "costo_estructural": 0,
+                "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
+                "costo_fijo_reservas": 0, "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0,
                 "days": [],
             }
         m = months[month_key]
@@ -356,19 +390,39 @@ def _aggregate_months(days: Dict[str, Dict]) -> List[Dict]:
         m["costo_operacional"]    += d["costo_operacional"]
         m["marketing"]            += d["marketing"]
         m["resultado"]            += d["resultado"]
+        aggregate_breakdown_into_week_month(m, d)
         m["days"].append(d)
     return list(months.values())
 
 
 # ── Cash Flow calculation core ────────────────────────────────────────────────
 
-def _build_cashflow_days(bookings: List[Dict], marketing: List[Dict],
-                          commissions: Dict) -> Dict[str, Dict]:
+def _build_cashflow_days(
+    bookings: List[Dict],
+    marketing: List[Dict],
+    commissions: Dict,
+    d_from: date,
+    d_to: date,
+) -> Dict[str, Dict]:
     """Build per-day cash flow based on actual payment dates."""
-    # Outflows: operational costs on booking date
+    structure = get_financial_structure()
+    daily_struct = float(structure.get("costo_fijo_diario_prorrateado") or 0)
+    wl = set(structure.get("experience_slug_whitelist") or [])
+    cost_catalog = load_extra_cost_catalog()
+
+    # Outflows: operational costs on booking date (total) + breakdown
     opex_by_day: Dict[str, float] = defaultdict(float)
+    cf_opex_detail: Dict[str, Dict[str, int]] = defaultdict(
+        lambda: {"cv_aloj": 0, "cv_exp": 0, "cv_extra": 0, "costo_fijo": 0}
+    )
     for b in bookings:
         opex_by_day[b["fecha"]] += b["costo_total"]
+        sp = split_booking_financials(b, cost_catalog, wl)
+        od = cf_opex_detail[b["fecha"]]
+        od["cv_aloj"] += sp["cv_aloj"]
+        od["cv_exp"] += sp["cv_exp"]
+        od["cv_extra"] += sp["cv_extra"]
+        od["costo_fijo"] += sp["costo_fijo_reserva"]
 
     # Outflows: marketing
     mkt_by_day: Dict[str, float] = defaultdict(float)
@@ -411,27 +465,45 @@ def _build_cashflow_days(bookings: List[Dict], marketing: List[Dict],
                     "method":         method,
                 })
 
-    all_days = (set(opex_by_day.keys()) | set(mkt_by_day.keys()) |
-                set(inflows_by_day.keys()))
+    all_days = (
+        set(opex_by_day.keys())
+        | set(mkt_by_day.keys())
+        | set(inflows_by_day.keys())
+        | set(iso_dates_inclusive(d_from, d_to))
+    )
 
     days: Dict[str, Dict] = {}
+    struct_int = int(round(daily_struct))
     for day in all_days:
+        try:
+            dt = date.fromisoformat(day)
+            in_range = d_from <= dt <= d_to
+        except ValueError:
+            in_range = False
+        out_struct = struct_int if in_range else 0
+
         total_inflow_neto = sum(p["amount_neto"] for p in inflows_by_day[day])
         total_inflow_bruto = sum(p["amount_bruto"] for p in inflows_by_day[day])
         total_commission = sum(p["commission"] for p in inflows_by_day[day])
         outflow_opex = _fmt_int(opex_by_day[day])
-        outflow_mkt  = _fmt_int(mkt_by_day[day])
-        total_outflow = outflow_opex + outflow_mkt
+        outflow_mkt = _fmt_int(mkt_by_day[day])
+        det = cf_opex_detail[day]
+        total_outflow = outflow_opex + outflow_mkt + out_struct
         days[day] = {
-            "fecha":           day,
-            "inflow_bruto":    _fmt_int(total_inflow_bruto),
-            "inflow_commission": _fmt_int(total_commission),
-            "inflow_neto":     _fmt_int(total_inflow_neto),
-            "outflow_opex":    outflow_opex,
-            "outflow_marketing": outflow_mkt,
-            "total_outflow":   total_outflow,
-            "net_cashflow":    _fmt_int(total_inflow_neto) - total_outflow,
-            "pagos_detail":    inflows_by_day[day],
+            "fecha":              day,
+            "inflow_bruto":       _fmt_int(total_inflow_bruto),
+            "inflow_commission":  _fmt_int(total_commission),
+            "inflow_neto":        _fmt_int(total_inflow_neto),
+            "outflow_opex":       outflow_opex,
+            "outflow_marketing":  outflow_mkt,
+            "outflow_estructural": out_struct,
+            "outflow_cv_aloj":    int(det["cv_aloj"]),
+            "outflow_cv_exp":     int(det["cv_exp"]),
+            "outflow_cv_extra":   int(det["cv_extra"]),
+            "outflow_costo_fijo_reservas": int(det["costo_fijo"]),
+            "total_outflow":      total_outflow,
+            "net_cashflow":       _fmt_int(total_inflow_neto) - total_outflow,
+            "pagos_detail":       inflows_by_day[day],
         }
     return days
 
@@ -460,12 +532,18 @@ def _aggregate_cf_weeks(days_list: List[Dict]) -> List[Dict]:
             weeks[week_key] = {
                 "week": week_key, "week_start": week_start, "week_end": week_end,
                 "inflow_bruto": 0, "inflow_commission": 0, "inflow_neto": 0,
-                "outflow_opex": 0, "outflow_marketing": 0, "total_outflow": 0,
-                "net_cashflow": 0, "beginning_balance": d["beginning_balance"], "days": [],
+                "outflow_opex": 0, "outflow_marketing": 0, "outflow_estructural": 0,
+                "outflow_cv_aloj": 0, "outflow_cv_exp": 0, "outflow_cv_extra": 0,
+                "outflow_costo_fijo_reservas": 0,
+                "total_outflow": 0, "net_cashflow": 0,
+                "beginning_balance": d["beginning_balance"], "days": [],
             }
         w = weeks[week_key]
         for k in ("inflow_bruto", "inflow_commission", "inflow_neto",
-                  "outflow_opex", "outflow_marketing", "total_outflow", "net_cashflow"):
+                  "outflow_opex", "outflow_marketing", "outflow_estructural",
+                  "outflow_cv_aloj", "outflow_cv_exp", "outflow_cv_extra",
+                  "outflow_costo_fijo_reservas",
+                  "total_outflow", "net_cashflow"):
             w[k] += d[k]
         w["ending_balance"] = d["ending_balance"]
         w["days"].append(d)
@@ -480,12 +558,18 @@ def _aggregate_cf_months(days_list: List[Dict]) -> List[Dict]:
             months[month_key] = {
                 "month": month_key,
                 "inflow_bruto": 0, "inflow_commission": 0, "inflow_neto": 0,
-                "outflow_opex": 0, "outflow_marketing": 0, "total_outflow": 0,
-                "net_cashflow": 0, "beginning_balance": d["beginning_balance"], "days": [],
+                "outflow_opex": 0, "outflow_marketing": 0, "outflow_estructural": 0,
+                "outflow_cv_aloj": 0, "outflow_cv_exp": 0, "outflow_cv_extra": 0,
+                "outflow_costo_fijo_reservas": 0,
+                "total_outflow": 0, "net_cashflow": 0,
+                "beginning_balance": d["beginning_balance"], "days": [],
             }
         m = months[month_key]
         for k in ("inflow_bruto", "inflow_commission", "inflow_neto",
-                  "outflow_opex", "outflow_marketing", "total_outflow", "net_cashflow"):
+                  "outflow_opex", "outflow_marketing", "outflow_estructural",
+                  "outflow_cv_aloj", "outflow_cv_exp", "outflow_cv_extra",
+                  "outflow_costo_fijo_reservas",
+                  "total_outflow", "net_cashflow"):
             m[k] += d[k]
         m["ending_balance"] = d["ending_balance"]
         m["days"].append(d)
@@ -511,7 +595,9 @@ async def get_pnl(
     bookings  = _get_bookings_range(d_from, d_to)
     marketing = _get_marketing_costs_range(d_from, d_to)
 
-    days = _build_pnl_days(bookings, marketing, commissions)
+    days = _build_pnl_days(bookings, marketing, commissions, d_from, d_to)
+    struct = get_financial_structure()
+    period_days = (d_to - d_from).days + 1
 
     totals = {
         "n_reservas": sum(d["n_reservas"] for d in days.values()),
@@ -520,6 +606,15 @@ async def get_pnl(
         "net_income": sum(d["net_income"] for d in days.values()),
         "costo_operacional": sum(d["costo_operacional"] for d in days.values()),
         "marketing": sum(d["marketing"] for d in days.values()),
+        "costo_estructural": sum(d.get("costo_estructural", 0) for d in days.values()),
+        "ingreso_reserva": sum(d.get("ingreso_reserva", 0) for d in days.values()),
+        "ingreso_aloj": sum(d.get("ingreso_aloj", 0) for d in days.values()),
+        "ingreso_exp": sum(d.get("ingreso_exp", 0) for d in days.values()),
+        "ingreso_extra": sum(d.get("ingreso_extra", 0) for d in days.values()),
+        "costo_fijo_reservas": sum(d.get("costo_fijo_reservas", 0) for d in days.values()),
+        "cv_aloj": sum(d.get("cv_aloj", 0) for d in days.values()),
+        "cv_exp": sum(d.get("cv_exp", 0) for d in days.values()),
+        "cv_extra": sum(d.get("cv_extra", 0) for d in days.values()),
         "resultado": sum(d["resultado"] for d in days.values()),
     }
 
@@ -530,8 +625,16 @@ async def get_pnl(
     else:
         data = sorted(days.values(), key=lambda x: x["fecha"])
 
-    return {"view": view, "date_from": date_from, "date_to": date_to,
-            "totals": totals, "data": data, "commissions": commissions}
+    return {
+        "view": view,
+        "date_from": date_from,
+        "date_to": date_to,
+        "period_calendar_days": period_days,
+        "structure": struct,
+        "totals": totals,
+        "data": data,
+        "commissions": commissions,
+    }
 
 
 # ── Cash Flow endpoints ───────────────────────────────────────────────────────
@@ -554,7 +657,7 @@ async def get_cashflow(
     bookings  = _get_bookings_range(d_from, d_to)
     marketing = _get_marketing_costs_range(d_from, d_to)
 
-    days = _build_cashflow_days(bookings, marketing, commissions)
+    days = _build_cashflow_days(bookings, marketing, commissions, d_from, d_to)
     days_list = _add_running_balance(days, opening_balance)
 
     if view == "weekly":
@@ -564,8 +667,15 @@ async def get_cashflow(
     else:
         data = days_list
 
-    return {"view": view, "date_from": date_from, "date_to": date_to,
-            "opening_balance": opening_balance, "data": data}
+    return {
+        "view": view,
+        "date_from": date_from,
+        "date_to": date_to,
+        "opening_balance": opening_balance,
+        "period_calendar_days": (d_to - d_from).days + 1,
+        "structure": get_financial_structure(),
+        "data": data,
+    }
 
 
 # ── Forecast endpoint ─────────────────────────────────────────────────────────
@@ -733,6 +843,33 @@ async def upsert_budget(year: int, month: int, body: BudgetIn,
                   body.marketing_budget, body.notes))
             conn.commit()
     return {"year": year, "month": month, **body.dict()}
+
+
+# ── P&L structure (fixed daily + experience whitelist) ───────────────────────
+
+@financial_router.get("/api/admin/financial/structure")
+async def get_financial_structure_endpoint(x_admin_key: str = Header("")):
+    return get_financial_structure()
+
+
+@financial_router.put("/api/admin/financial/structure")
+async def put_financial_structure(request: Request, x_admin_key: str = Header("")):
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "JSON object expected")
+    merged = get_financial_structure()
+    if "costo_fijo_diario_prorrateado" in body:
+        merged["costo_fijo_diario_prorrateado"] = float(body["costo_fijo_diario_prorrateado"] or 0)
+    if "experience_slug_whitelist" in body:
+        wl = body["experience_slug_whitelist"]
+        if isinstance(wl, str):
+            merged["experience_slug_whitelist"] = [
+                x.strip().lower() for x in wl.split(",") if x.strip()
+            ]
+        elif isinstance(wl, list):
+            merged["experience_slug_whitelist"] = [str(x).lower() for x in wl]
+    set_setting("financial_structure", json.dumps(merged))
+    return merged
 
 
 # ── Commission settings ───────────────────────────────────────────────────────
