@@ -225,7 +225,7 @@ def get_bookings_for_followup(hours_after: int) -> list:
                   AND (booking_date + COALESCE(booking_time, '12:00:00'::time))
                         AT TIME ZONE 'America/Santiago'
                         + make_interval(hours => %s)
-                      <= NOW() AT TIME ZONE 'America/Santiago'
+                      <= NOW()
 
                 UNION ALL
 
@@ -254,7 +254,7 @@ def get_bookings_for_followup(hours_after: int) -> list:
                   AND (fecha + COALESCE(hora, '12:00:00'::time))
                         AT TIME ZONE 'America/Santiago'
                         + make_interval(hours => %s)
-                      <= NOW() AT TIME ZONE 'America/Santiago'
+                      <= NOW()
             """, (hours_after, hours_after))
             cols = [
                 "id", "booking_ref", "customer_name", "customer_phone", "customer_email",
@@ -304,8 +304,13 @@ def get_bookings_starting_soon(window_minutes: int = 20, target_minutes_ahead: i
     that haven't had a pre-booking notification sent yet.
     Checks both hotboat_appointments and all_appointments.
     window_minutes=20 with a 10-min scheduler gives safe overlap without duplicates.
+
+    Window bounds must use timestamptz (NOW() + interval). Do NOT use
+    (NOW() AT TIME ZONE 'America/Santiago') + interval: that yields timestamp
+    without time zone and, when compared to booking start as timestamptz,
+    PostgreSQL coerces using the session timezone (often UTC), shifting the
+    window by ~3–4h vs Chile.
     """
-    from datetime import timezone
     # Ensure the column exists on all_appointments too (safe guard)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -327,8 +332,8 @@ def get_bookings_starting_soon(window_minutes: int = 20, target_minutes_ahead: i
                        notes
                 FROM hotboat_appointments
                 WHERE (booking_date + booking_time) AT TIME ZONE 'America/Santiago'
-                      BETWEEN (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead - half} minutes')
-                          AND (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead + half} minutes')
+                      BETWEEN (NOW() + INTERVAL '{target_minutes_ahead - half} minutes')
+                          AND (NOW() + INTERVAL '{target_minutes_ahead + half} minutes')
                   AND status IN ('confirmed','pending_payment')
                   AND pre_booking_notif_sent_at IS NULL
 
@@ -351,8 +356,8 @@ def get_bookings_starting_soon(window_minutes: int = 20, target_minutes_ahead: i
                        observaciones                   AS notes
                 FROM all_appointments
                 WHERE (fecha + hora) AT TIME ZONE 'America/Santiago'
-                      BETWEEN (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead - half} minutes')
-                          AND (NOW() AT TIME ZONE 'America/Santiago' + INTERVAL '{target_minutes_ahead + half} minutes')
+                      BETWEEN (NOW() + INTERVAL '{target_minutes_ahead - half} minutes')
+                          AND (NOW() + INTERVAL '{target_minutes_ahead + half} minutes')
                   AND status IN ('confirmed','pending_payment')
                   AND pre_booking_notif_sent_at IS NULL
             """)
