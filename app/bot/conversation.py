@@ -682,7 +682,7 @@ O elige:
                 elif menu_number == 6:
                     # Option 6: Alojamientos Pucón — redirect to booking page
                     logger.info("User selected accommodations from menu - redirecting to booking page")
-                    response = "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n👉 https://wa.hotbook.cl/booking\n\n¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
+                    response = "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n👉 https://whatsapp.hotboat.cl/booking\n\n¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
                 elif menu_number == 7:
                     # Option 7: Otras Experiencias Pucón
                     logger.info("User selected experiences and activities from menu")
@@ -705,7 +705,7 @@ O elige:
             # Check if asking about accommodations — redirect to booking page
             elif self._is_accommodation_query(message_text):
                 logger.info("User asking about accommodations - redirecting to booking page")
-                response = "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n👉 https://wa.hotbook.cl/booking\n\n¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
+                response = "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n👉 https://whatsapp.hotboat.cl/booking\n\n¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
             # Check if user wants to make a reservation (but didn't specify date/time yet)
             # THIS MUST BE EARLY to catch "quiero reservar", "reservar" before other parsers
             elif self._is_reservation_intent(message_text):
