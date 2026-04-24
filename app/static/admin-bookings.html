@@ -745,9 +745,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <input id="aloj-owner-wa" placeholder="+56 9 XXXX XXXX" style="font-family:monospace">
             <small style="color:var(--muted);font-size:.72rem">Se usa para generar el enlace wa.me en los emails de consulta de disponibilidad</small>
           </div>
-          <div style="display:grid;grid-template-columns:60px 1fr;gap:.75rem">
+          <div style="display:grid;grid-template-columns:60px 1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Icono</label><input id="aloj-icon" placeholder="🏠"></div>
-            <div class="form-group-adm"><label>Capacidad (personas)</label><input id="aloj-capacity" type="number" min="1" value="2"></div>
+            <div class="form-group-adm"><label>Capacidad (pers.)</label><input id="aloj-capacity" type="number" min="1" value="2"></div>
+            <div class="form-group-adm">
+              <label>Unidades disponibles</label>
+              <input id="aloj-units" type="number" min="1" value="1">
+              <small style="color:var(--muted);font-size:.7rem">Ej: 8 si hay 8 domos. Una reserva no bloquea las demás.</small>
+            </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Precio/noche ($)</label><input id="aloj-price" type="number" min="0" value="0"></div>
@@ -4462,6 +4467,7 @@ function openAlojModal(id){
   document.getElementById('aloj-desc').value = a ? (a.description||'') : '';
   document.getElementById('aloj-owner-wa').value = a ? (a.owner_whatsapp||'') : '';
   document.getElementById('aloj-capacity').value = a ? (a.capacity||2) : 2;
+  document.getElementById('aloj-units').value = a ? (a.total_units||1) : 1;
   document.getElementById('aloj-price').value = a ? (a.price_from||0) : 0;
   document.getElementById('aloj-cost').value = a ? (a.cost_from||0) : 0;
   document.getElementById('aloj-order').value = a ? (a.display_order||0) : 0;
@@ -4494,6 +4500,7 @@ async function saveAloj(){
     description: document.getElementById('aloj-desc').value.trim(),
     owner_whatsapp: document.getElementById('aloj-owner-wa').value.trim(),
     capacity: +document.getElementById('aloj-capacity').value||2,
+    total_units: +document.getElementById('aloj-units').value||1,
     price_from: +document.getElementById('aloj-price').value||0,
     cost_from: +document.getElementById('aloj-cost').value||0,
     display_order: +document.getElementById('aloj-order').value||0,
@@ -4531,6 +4538,7 @@ async function toggleAloj(id, active){
   const body = {
     slug:a.slug, name:a.name, group_name:a.group_name||'', icon:a.icon||'🏠',
     description:a.description||'', owner_whatsapp:a.owner_whatsapp||'', capacity:a.capacity||2,
+    total_units:a.total_units||1,
     price_from:a.price_from||0, cost_from:a.cost_from||0,
     display_order:a.display_order||0, is_active:active, image_path:a.image_path||null,
   };

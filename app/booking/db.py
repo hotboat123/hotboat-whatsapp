@@ -520,6 +520,10 @@ def ensure_db_columns() -> None:
                 ALTER TABLE alojamientos
                     ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]';
 
+                -- 032: units per accommodation (e.g. 8 domos at Open Sky)
+                ALTER TABLE alojamientos
+                    ADD COLUMN IF NOT EXISTS total_units INTEGER DEFAULT 1;
+
                 -- 028: coupons
                 CREATE TABLE IF NOT EXISTS coupons (
                     id SERIAL PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT DEFAULT '',

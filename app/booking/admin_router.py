@@ -1898,6 +1898,7 @@ class AlojamientoBody(BaseModel):
     price_from: int = 0
     cost_from: int = 0
     capacity: int = 2
+    total_units: int = 1
     owner_whatsapp: str = ""
     image_path: Optional[str] = None
     extra_images: List[str] = []
@@ -1912,11 +1913,11 @@ async def admin_create_alojamiento(body: AlojamientoBody, x_admin_key: str = Hea
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO alojamientos"
-                " (slug,name,group_name,icon,description,price_from,cost_from,capacity,owner_whatsapp,"
+                " (slug,name,group_name,icon,description,price_from,cost_from,capacity,total_units,owner_whatsapp,"
                 "  image_path,extra_images,is_active,display_order)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
                 (body.slug, body.name, body.group_name, body.icon, body.description,
-                 body.price_from, body.cost_from, body.capacity, body.owner_whatsapp,
+                 body.price_from, body.cost_from, body.capacity, body.total_units, body.owner_whatsapp,
                  body.image_path, json.dumps(body.extra_images),
                  body.is_active, body.display_order),
             )
@@ -1932,10 +1933,10 @@ async def admin_update_alojamiento(aloj_id: int, body: AlojamientoBody, x_admin_
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE alojamientos SET slug=%s,name=%s,group_name=%s,icon=%s,description=%s,"
-                "price_from=%s,cost_from=%s,capacity=%s,owner_whatsapp=%s,image_path=%s,"
+                "price_from=%s,cost_from=%s,capacity=%s,total_units=%s,owner_whatsapp=%s,image_path=%s,"
                 "extra_images=%s::jsonb,is_active=%s,display_order=%s WHERE id=%s",
                 (body.slug, body.name, body.group_name, body.icon, body.description,
-                 body.price_from, body.cost_from, body.capacity, body.owner_whatsapp,
+                 body.price_from, body.cost_from, body.capacity, body.total_units, body.owner_whatsapp,
                  body.image_path, json.dumps(body.extra_images),
                  body.is_active, body.display_order, aloj_id),
             )

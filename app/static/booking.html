@@ -858,7 +858,8 @@ async function showAlojamiento(id){
       _alojAvailCache[id] = avail;
     }
     _alojState = {a, dynA, pricePerNight, alojId,
-      occupied: avail.occupied||[], blocked: avail.blocked||[],
+      fullyBooked: new Set(avail.fully_booked_dates||[]),
+      blocked: avail.blocked||[],
       checkIn:null, checkOut:null, nights:0, hotboat:null};
     document.getElementById('aloj-avail-status').style.display='none';
     document.getElementById('aloj-date-pickers').style.display='block';
@@ -869,12 +870,9 @@ async function showAlojamiento(id){
 }
 
 function _initAlojFlatpickr(){
-  const {occupied} = _alojState;
-  // Only occupied (confirmed bookings) are truly disabled
-  const disableFn = date => {
-    const d = flatpickr.formatDate(date,'Y-m-d');
-    return occupied.some(r => d >= r.start && d < r.end);
-  };
+  const {fullyBooked} = _alojState;
+  // Only disable dates where ALL units are taken
+  const disableFn = date => fullyBooked.has(flatpickr.formatDate(date,'Y-m-d'));
   const fpCfg = {
     minDate:'today', dateFormat:'Y-m-d',
     altInput:true, altFormat:'d/m/Y',

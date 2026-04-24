@@ -102,27 +102,41 @@ def list_alojamientos(active_only: bool = True):
 @content_router.get("/api/content/accommodation-availability/{slug}")
 def get_accommodation_availability(slug: str):
     """
-    Returns occupied date ranges (confirmed bookings — disabled in calendar)
-    and admin-blocked date ranges (solicitud flow — look normal in calendar).
+    Returns fully_booked_dates (all units taken — disabled in calendar)
+    and admin-blocked ranges (solicitud flow — look normal, different outcome).
     """
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id FROM alojamientos WHERE slug=%s AND is_active=TRUE",
+                "SELECT id, COALESCE(total_units,1) FROM alojamientos WHERE slug=%s AND is_active=TRUE",
                 (slug,)
             )
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Alojamiento no encontrado")
-            aloj_id = row[0]
+            aloj_id, total_units = row[0], max(int(row[1]), 1)
 
+            # Dates where every unit is booked (count of overlapping confirmed bookings >= total_units)
             cur.execute(
-                "SELECT check_in::text, check_out::text FROM accommodation_bookings"
-                " WHERE accommodation_id=%s AND status NOT IN ('cancelled') AND check_out >= CURRENT_DATE"
-                " ORDER BY check_in",
-                (aloj_id,)
+                """
+                SELECT gs.d::text
+                FROM generate_series(
+                    CURRENT_DATE,
+                    CURRENT_DATE + INTERVAL '365 days',
+                    INTERVAL '1 day'
+                ) AS gs(d)
+                WHERE (
+                    SELECT COUNT(*) FROM accommodation_bookings ab
+                    WHERE ab.accommodation_id = %s
+                      AND ab.status NOT IN ('cancelled')
+                      AND ab.check_in  <= gs.d
+                      AND ab.check_out  > gs.d
+                ) >= %s
+                ORDER BY gs.d
+                """,
+                (aloj_id, total_units)
             )
-            occupied = [{"start": r[0], "end": r[1]} for r in cur.fetchall()]
+            fully_booked = [r[0] for r in cur.fetchall()]
 
             cur.execute(
                 "SELECT start_date::text, end_date::text, reason"
@@ -133,7 +147,12 @@ def get_accommodation_availability(slug: str):
             )
             blocked = [{"start": r[0], "end": r[1], "reason": r[2]} for r in cur.fetchall()]
 
-            return {"alojamiento_id": aloj_id, "occupied": occupied, "blocked": blocked}
+            return {
+                "alojamiento_id": aloj_id,
+                "total_units": total_units,
+                "fully_booked_dates": fully_booked,
+                "blocked": blocked,
+            }
 
 
 @content_router.get("/api/content/experiencias")
