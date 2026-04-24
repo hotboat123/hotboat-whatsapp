@@ -680,22 +680,9 @@ O elige:
                     # Option 5: Ubicación y Reseñas HotBoat
                     response = self.faq_handler.get_response("ubicación", language)
                 elif menu_number == 6:
-                    # Option 6: Alojamientos Pucón
-                    logger.info("User selected accommodations from menu")
-                    conversation["metadata"]["accommodation_flow"] = {
-                        "step": "choosing_property",
-                        "property": None,
-                        "room_type": None,
-                        "guests": None,
-                        "checkin_date": None,
-                        "checkout_date": None,
-                    }
-                    for k in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
-                        conversation["metadata"].pop(k, None)
-                    response = {
-                        "type": "accommodations_pdf",
-                        "text": get_text("accommodations_only_intro", language)
-                    }
+                    # Option 6: Alojamientos Pucón — redirect to booking page
+                    logger.info("User selected accommodations from menu - redirecting to booking page")
+                    response = "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n👉 https://wa.hotbook.cl/booking\n\n¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
                 elif menu_number == 7:
                     # Option 7: Otras Experiencias Pucón
                     logger.info("User selected experiences and activities from menu")
@@ -715,15 +702,10 @@ O elige:
                     response = self.faq_handler.get_response("llamar a tomas", language)
                 else:
                     response = "No entendí esa opción. Por favor elige un número del 1 al 9, grumete ⚓"
-            # Check if asking about accommodations (special handling with images)
+            # Check if asking about accommodations — redirect to booking page
             elif self._is_accommodation_query(message_text):
-                logger.info("User asking about accommodations - will send with images")
-                # Return special response object that indicates images should be sent
-                return {
-                    "type": "accommodations",
-                    "text": accommodations_handler.get_text_response(),
-                    "images": get_accommodations_handler().get_accommodations_with_images()
-                }
+                logger.info("User asking about accommodations - redirecting to booking page")
+                response = "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n👉 https://wa.hotbook.cl/booking\n\n¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
             # Check if user wants to make a reservation (but didn't specify date/time yet)
             # THIS MUST BE EARLY to catch "quiero reservar", "reservar" before other parsers
             elif self._is_reservation_intent(message_text):
