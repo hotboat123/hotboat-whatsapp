@@ -830,80 +830,196 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
 
 # ── Booking page visitor tracking ─────────────────────────────────────────────
 
+# In-memory session store: session_id → {events, start_time, ...}
+_visitor_sessions: dict = {}
+_visitor_tasks: dict = {}  # session_id → asyncio.Task
+
+
 class TrackEventRequest(BaseModel):
-    event: str          # "page_visit" | "date_selected"
-    date: Optional[str] = None   # only for date_selected
+    event: str
+    date: Optional[str] = None
     lang: Optional[str] = "es"
     referrer: Optional[str] = ""
+    session_id: Optional[str] = ""
+    is_returning: Optional[bool] = False
 
 
 @router.post("/api/booking/track")
 async def track_booking_event(body: TrackEventRequest):
     """
-    Called by the booking page JS on page load and date selection.
-    Sends an admin email notification if booking_visitor_notif is enabled.
-    Returns immediately (fire-and-forget email in background).
+    Collects visitor events per session, then after 5 min of inactivity
+    sends a single summary email with activity timeline and classification.
     """
+    import asyncio
     from app.booking.operator_settings import get_setting
     if get_setting("booking_visitor_notif", "false").lower() != "true":
         return {"ok": True, "sent": False}
 
+    sid = (body.session_id or "").strip()[:64]
+    if not sid:
+        return {"ok": True, "sent": False}
+
+    now_cl = datetime.now(CHILE_TZ)
+
+    if sid not in _visitor_sessions:
+        _visitor_sessions[sid] = {
+            "session_id": sid,
+            "start_time": now_cl,
+            "lang": body.lang or "es",
+            "referrer": (body.referrer or "")[:200],
+            "is_returning": body.is_returning or False,
+            "events": [],
+        }
+
+    _visitor_sessions[sid]["events"].append({
+        "event": body.event,
+        "date": body.date,
+        "time": now_cl.strftime("%H:%M"),
+    })
+    _visitor_sessions[sid]["last_time"] = now_cl
+
+    # Cancel existing 5-min timer, restart it (reset on each new event)
+    if sid in _visitor_tasks and not _visitor_tasks[sid].done():
+        _visitor_tasks[sid].cancel()
+    _visitor_tasks[sid] = asyncio.create_task(_delayed_session_email(sid, 300))
+
+    return {"ok": True, "sent": False}
+
+
+async def _delayed_session_email(session_id: str, delay: int = 300):
     import asyncio
-    asyncio.get_event_loop().run_in_executor(None, _send_visitor_notif, body.event,
-                                             body.date, body.lang, body.referrer)
-    return {"ok": True, "sent": True}
+    try:
+        await asyncio.sleep(delay)
+        session = _visitor_sessions.pop(session_id, None)
+        _visitor_tasks.pop(session_id, None)
+        if session and session.get("events"):
+            await asyncio.get_event_loop().run_in_executor(
+                None, _send_session_summary, session
+            )
+    except asyncio.CancelledError:
+        pass  # timer was reset by a new event; a new task was already scheduled
 
 
-def _send_visitor_notif(event: str, date_sel: Optional[str],
-                        lang: str, referrer: str):
+def _classify_visitor(events: list) -> tuple:
+    types = {e["event"] for e in events}
+    if "booking_completed" in types:
+        return "✅ Reservó", "Completó una reserva en la página"
+    if "solicitud_form" in types:
+        return "🎯 Listo para reservar", "Abrió el formulario de solicitud de reserva"
+    if "date_selected" in types:
+        return "⭐ Muy interesado", "Seleccionó una fecha en el calendario"
+    deep = types & {"view_prices", "view_alojamientos", "view_alojamiento_detail",
+                    "view_experiencias", "view_packs", "view_arma_pack"}
+    if "view_reservar" in types or len(deep) >= 2:
+        return "🔍 Explorando activamente", "Visitó varias secciones y mostró interés real"
+    if deep:
+        return "🔍 Explorando", "Revisó algunas secciones de la página"
+    return "👀 Solo mirando", "Entró a la página pero no interactuó mucho"
+
+
+def _referrer_label(referrer: str) -> str:
+    if not referrer:
+        return ""
+    r = referrer.lower()
+    if "instagram" in r:      return "📸 Instagram"
+    if "facebook" in r or "fb.com" in r: return "👥 Facebook"
+    if "tiktok" in r:         return "🎵 TikTok"
+    if "google" in r:         return "🔍 Google"
+    if "whatsapp" in r or "wa.me" in r:  return "💬 WhatsApp"
+    return referrer[:80]
+
+
+_EVENT_LABELS = {
+    "page_visit":             ("👀", "Entró a la página"),
+    "view_reservar":          ("🗓️", "Fue al calendario de reservas"),
+    "date_selected":          ("📅", "Seleccionó una fecha"),
+    "view_prices":            ("💰", "Vio los precios"),
+    "view_features":          ("⚡", "Vio las características del HotBoat"),
+    "view_ubicacion":         ("📍", "Vio cómo llegar"),
+    "view_alojamientos":      ("🏠", "Vio la lista de alojamientos"),
+    "view_alojamiento_detail":("🔍", "Vio el detalle de un alojamiento"),
+    "view_experiencias":      ("🎭", "Vio otras experiencias"),
+    "view_packs":             ("📦", "Vio los packs completos"),
+    "view_arma_pack":         ("🛠️", "Exploró Arma tu Pack"),
+    "solicitud_form":         ("📋", "Abrió formulario de solicitud"),
+    "booking_completed":      ("🎉", "Completó una reserva"),
+    "exit":                   ("🚪", "Salió de la página"),
+}
+
+
+def _send_session_summary(session: dict):
     try:
         from app.config import get_settings
         from app.booking.booking_email import _get_admin_email, _get_from_addr
         from app.email.resend_booking import send_booking_html
 
-        settings = get_settings()
-        api_key  = (getattr(settings, "resend_api_key", "") or "").strip()
-        to_addr  = _get_admin_email(settings)
-        from_addr = _get_from_addr(settings)
-
+        cfg = get_settings()
+        api_key   = (getattr(cfg, "resend_api_key", "") or "").strip()
+        to_addr   = _get_admin_email(cfg)
+        from_addr = _get_from_addr(cfg)
         if not api_key or not to_addr:
-            logger.warning("booking_visitor_notif: no resend key or admin email configured")
             return
 
-        now_cl = datetime.now(CHILE_TZ).strftime("%d/%m/%Y %H:%M")
+        events       = session.get("events", [])
+        lang         = (session.get("lang") or "es").upper()
+        referrer     = session.get("referrer", "")
+        is_returning = session.get("is_returning", False)
+        start_time   = session.get("start_time")
+        start_str    = start_time.strftime("%d/%m/%Y %H:%M") if start_time else "—"
 
-        if event == "page_visit":
-            subject = f"👀 Visita a página de reservas — {now_cl}"
-            html = f"""
-            <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:1.5rem">
-              <h2 style="color:#f5c842;margin-bottom:.5rem">👀 Nuevo visitante</h2>
-              <p>Alguien entró a tu página de reservas.</p>
-              <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-top:1rem">
-                <tr><td style="color:#666;padding:.3rem 0">Hora</td><td><strong>{now_cl}</strong></td></tr>
-                <tr><td style="color:#666;padding:.3rem 0">Idioma</td><td>{lang.upper()}</td></tr>
-                {"<tr><td style='color:#666;padding:.3rem 0'>Referrer</td><td>" + referrer + "</td></tr>" if referrer else ""}
-              </table>
-            </div>"""
-        elif event == "date_selected":
-            subject = f"📅 Cliente eligió fecha {date_sel or ''} — {now_cl}"
-            html = f"""
-            <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:1.5rem">
-              <h2 style="color:#f5c842;margin-bottom:.5rem">📅 Fecha seleccionada</h2>
-              <p>Un cliente eligió una fecha en tu página de reservas.</p>
-              <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-top:1rem">
-                <tr><td style="color:#666;padding:.3rem 0">Fecha elegida</td><td><strong>{date_sel or '—'}</strong></td></tr>
-                <tr><td style="color:#666;padding:.3rem 0">Hora</td><td>{now_cl}</td></tr>
-                <tr><td style="color:#666;padding:.3rem 0">Idioma</td><td>{lang.upper()}</td></tr>
-              </table>
-              <p style="color:#999;font-size:.8rem;margin-top:1rem">
-                Si el cliente completó la reserva verás una nueva entrada en el panel admin.
-              </p>
-            </div>"""
-        else:
-            return
+        classification, cls_desc = _classify_visitor(events)
+        ref_label = _referrer_label(referrer)
+
+        rows = ""
+        for ev in events:
+            icon, label = _EVENT_LABELS.get(ev["event"], ("•", ev["event"]))
+            extra = f" — <strong>{ev['date']}</strong>" if ev.get("date") else ""
+            rows += (f'<tr>'
+                     f'<td style="color:#888;font-size:.8rem;padding:.25rem .6rem;white-space:nowrap">{ev["time"]}</td>'
+                     f'<td style="padding:.25rem .6rem">{icon} {label}{extra}</td>'
+                     f'</tr>')
+
+        ref_row = (f'<tr><td style="color:#888;padding:.3rem 0">Origen</td>'
+                   f'<td><strong>{ref_label}</strong></td></tr>') if ref_label else ""
+
+        subject = f"{classification} · {start_str}"
+        html = f"""
+<div style="font-family:sans-serif;max-width:520px;margin:auto;padding:1.5rem;
+            background:#1a1a2e;color:#e0e0e0;border-radius:12px">
+  <h2 style="color:#f5c842;margin-bottom:.2rem">Resumen de visita</h2>
+  <p style="color:#888;margin-top:0;font-size:.85rem">{start_str}</p>
+
+  <div style="background:#252540;border-radius:8px;padding:1rem;margin:1rem 0">
+    <div style="font-size:1.3rem;margin-bottom:.3rem">{classification}</div>
+    <div style="color:#aaa;font-size:.85rem">{cls_desc}</div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem;margin-bottom:1rem">
+    <tr>
+      <td style="color:#888;padding:.3rem 0;width:45%">Idioma</td>
+      <td><strong>{lang}</strong></td>
+    </tr>
+    <tr>
+      <td style="color:#888;padding:.3rem 0">Tipo de visita</td>
+      <td><strong>{'🔁 Visitante recurrente' if is_returning else '🆕 Primera visita'}</strong></td>
+    </tr>
+    {ref_row}
+    <tr>
+      <td style="color:#888;padding:.3rem 0">Acciones</td>
+      <td><strong>{len(events)}</strong></td>
+    </tr>
+  </table>
+
+  <div style="font-size:.8rem;color:#888;margin-bottom:.4rem">📋 Actividad registrada:</div>
+  <table style="width:100%;font-size:.85rem;background:#252540;border-radius:8px;
+                padding:.4rem;border-collapse:collapse">
+    {rows}
+  </table>
+</div>"""
 
         send_booking_html(to=to_addr, subject=subject, html=html,
                           from_address=from_addr, api_key=api_key)
-        logger.info("booking_visitor_notif sent: event=%s date=%s", event, date_sel)
+        logger.info("visitor_session_summary sent: sid=%s events=%d cls=%s",
+                    session.get("session_id", "?"), len(events), classification)
     except Exception as e:
-        logger.warning("_send_visitor_notif error: %s", e)
+        logger.warning("_send_session_summary error: %s", e)

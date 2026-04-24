@@ -360,18 +360,29 @@ function mediaBlock(id, imgSrc, pdfSrc){
   return imgBtn + pdfLink;
 }
 
+// Visitor session: one UUID per browser tab, stored in sessionStorage
+const _sessionId = (()=>{
+  try{
+    let id = sessionStorage.getItem('hb_sid');
+    if(!id){ id = crypto.randomUUID(); sessionStorage.setItem('hb_sid', id); }
+    return id;
+  }catch(e){ return 'anon-'+Math.random().toString(36).slice(2); }
+})();
+const _isReturning = (()=>{
+  try{ const v=!!localStorage.getItem('hb_visited'); localStorage.setItem('hb_visited','1'); return v; }
+  catch(e){ return false; }
+})();
+
 function _trackEvent(event, date){
   try{
-    fetch('/api/booking/track', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        event,
-        date: date || null,
-        lang: S.lang || 'es',
-        referrer: document.referrer ? document.referrer.substring(0,200) : '',
-      })
-    }).catch(()=>{});
+    const payload = JSON.stringify({
+      event, date: date||null,
+      lang: (typeof S!=='undefined'&&S.lang)||'es',
+      referrer: document.referrer?document.referrer.substring(0,200):'',
+      session_id: _sessionId,
+      is_returning: _isReturning,
+    });
+    fetch('/api/booking/track',{method:'POST',headers:{'Content-Type':'application/json'},body:payload}).catch(()=>{});
   }catch(e){}
 }
 
@@ -458,6 +469,7 @@ function renderMenu(){
 }
 
 function showPrices(){
+  _trackEvent('view_prices');
   const rows = Object.entries(S.prices).map(([n,p])=>`
     <div class="summary-row">
       <span>👥 ${n} persona${n>1?'s':''}</span>
@@ -475,6 +487,7 @@ function showPrices(){
 }
 
 function showFeatures(){
+  _trackEvent('view_features');
   mc.innerHTML = `
   <div class="card">
     <div class="card-title">⚡ Caracteristicas HotBoat</div>
@@ -495,6 +508,7 @@ function showFeatures(){
 }
 
 function showUbicacion(){
+  _trackEvent('view_ubicacion');
   mc.innerHTML = `
   <div class="card">
     <div class="card-title">📍 Como llegar</div>
@@ -575,6 +589,7 @@ async function loadDynamicContent(){
 }
 
 function showExperiencias(){
+  _trackEvent('view_experiencias');
   const list = DYN_EXPERIENCIAS.length ? DYN_EXPERIENCIAS : [
     {slug:'rafting',icon:'🚣',name:'Rafting',description:'Rio Trancura · Bajo o Alto',price_per_person:30000,image_path:'/media/images/experiencias/rafting/Rafting.jpg'},
     {slug:'cabalgata',icon:'🐴',name:'Cabalgata',description:'Parque Ojos del Caburguá',price_per_person:50000,image_path:'/media/images/experiencias/cabalgata/CAbalgatas.jpg'},
@@ -685,6 +700,7 @@ const ACTIVIDADES = [
 ];
 
 function showAlojamientos(){
+  _trackEvent('view_alojamientos');
   const cards = ALOJAMIENTOS.map(a=>`
     <button class="menu-btn" onclick="showAlojamiento('${a.id}')" style="flex-direction:row;align-items:flex-start;gap:.75rem;padding:.6rem">
       ${a.image_path
@@ -777,6 +793,7 @@ function _galGoto(gid, dir){
 })();
 
 function showAlojamiento(id){
+  _trackEvent('view_alojamiento_detail', id);
   const a = ALOJAMIENTOS.find(x=>x.id===id);
   if(!a) return showAlojamientos();
   const imgs = (a.all_images && a.all_images.length) ? a.all_images : (a.image_path ? [a.image_path] : []);
@@ -796,6 +813,7 @@ function showAlojamiento(id){
 }
 
 function showPacks(){
+  _trackEvent('view_packs');
   const list = PACKS.length ? PACKS : [];
   if(!list.length){
     mc.innerHTML = `<div class="card"><p style="color:var(--muted);text-align:center">No hay packs disponibles por el momento.</p></div>
@@ -866,6 +884,7 @@ function showPackDetail(id){
 }
 
 function showArmaPack(){
+  _trackEvent('view_arma_pack');
   if(!S.armaActividades) S.armaActividades = {};
   const acts = ACTIVIDADES.map(a=>`
     <div class="extra-item ${S.armaActividades[a.id]?'selected':''}" onclick="toggleActividad('${a.id}')">
@@ -1117,6 +1136,7 @@ async function enviarExtrasForm(slug, name, type){
 }
 
 function showSolicitudForm(title, ctx, prefill){
+  _trackEvent('solicitud_form');
   mc.innerHTML = `
   <div class="card">
     <div class="card-title">📋 ${title}</div>
@@ -1169,6 +1189,7 @@ async function enviarSolicitud(){
 }
 
 function goReservar(){
+  _trackEvent('view_reservar');
   S.step = 'fecha';
   renderCal();
 }
@@ -1546,6 +1567,7 @@ async function submitBooking(){
     S.bookingRef = data.booking_ref;
     S.paymentUrl = data.payment_url;
     S.totalPrice = total;
+    _trackEvent('booking_completed', S.selectedDate);
     renderPayment();
   }catch(e){
     mc.innerHTML = `<div class="card"><p style="color:red">Error: ${e.message}</p></div>`;
@@ -1633,6 +1655,15 @@ async function init(){
     mc.innerHTML = `<div class="card" style="text-align:center"><p>${t('loading')}</p></div>`;
     await Promise.all([loadPricesAndAvail(), loadDynamicContent()]);
     renderMenu();
+
+    // Track page exit via sendBeacon (survives page unload)
+    window.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState==='hidden'){
+        const d = JSON.stringify({event:'exit',session_id:_sessionId,is_returning:_isReturning,
+          lang:S.lang||'es',referrer:''});
+        navigator.sendBeacon('/api/booking/track', new Blob([d],{type:'application/json'}));
+      }
+    });
 
     // Show test mode banner
     const tp = new URLSearchParams(location.search).get('test_price');
