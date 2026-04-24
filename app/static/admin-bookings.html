@@ -1251,6 +1251,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <button onclick="openFinStructureModal()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.35rem .8rem;font-size:.79rem;cursor:pointer" title="Costo fijo diario (estructura) y slugs de experiencia">
           🏗️ Estructura P&amp;L
         </button>
+        <button onclick="exportFinancialTableCsv()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.35rem .8rem;font-size:.79rem;cursor:pointer" title="Descarga CSV de la tabla del tab activo (P&amp;L, Flujo o Forecast)">
+          📥 Exportar CSV
+        </button>
       </div>
     </div>
 
@@ -5735,6 +5738,9 @@ let _finView = 'daily';
 let _finTab  = 'pnl';
 let _finCommissions = null;
 let _mktCosts = [];   // editing buffer for marketing costs
+let _finLastPnl = null;      // { data, view, totals, date_from, date_to }
+let _finLastCf = null;       // { data, view, date_from, date_to, opening_balance }
+let _finLastForecast = null; // array from /forecast
 
 function fmtClp(n){
   const v = Math.round(Number(n)||0);
@@ -5792,6 +5798,165 @@ function loadFinancial(){
   if(_finTab==='cashflow') loadCashFlow();
 }
 
+// ── CSV export (tabla actual P&L / Flujo / Forecast) ─────────
+function finCsvEscape(val){
+  const s = val === undefined || val === null ? '' : String(val);
+  if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function finCsvNum(n){
+  return Math.round(Number(n) || 0);
+}
+function finDownloadCsv(filename, rows){
+  const BOM = '\uFEFF';
+  const body = rows.map(r => r.map(finCsvEscape).join(',')).join('\r\n');
+  const blob = new Blob([BOM + body], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function _finPnlPeriodLabel(row, view){
+  if (view === 'daily') return row.fecha || '';
+  if (view === 'weekly') return `${row.week || ''} (${row.week_start || ''} → ${row.week_end || ''})`;
+  return row.month || '';
+}
+
+function exportFinancialTableCsv(){
+  const from = document.getElementById('fin-date-from')?.value || '';
+  const to = document.getElementById('fin-date-to')?.value || '';
+  const vLabel = _finView === 'daily' ? 'diario' : (_finView === 'weekly' ? 'semanal' : 'mensual');
+
+  if (_finTab === 'pnl') {
+    if (!_finLastPnl || !(_finLastPnl.data || []).length) {
+      alert('No hay datos de P&L cargados. Abre la pestaña P&L y espera a que cargue la tabla.');
+      return;
+    }
+    const { data, view, totals } = _finLastPnl;
+    const headers = [
+      'periodo', 'vista_agregacion', 'fecha_desde', 'fecha_hasta', 'n_reservas', 'ingreso_bruto',
+      'ingreso_reserva', 'ingreso_aloj', 'ingreso_exp', 'ingreso_extra', 'comisiones', 'ingreso_neto',
+      'costo_operacional', 'costo_fijo_reservas', 'cv_aloj', 'cv_exp', 'cv_extra', 'costo_estructural',
+      'marketing', 'resultado', 'margen_pct_sobre_bruto',
+    ];
+    const rows = [headers];
+    data.forEach(row => {
+      const margin = row.gross ? Math.round(row.resultado / row.gross * 100) : 0;
+      rows.push([
+        _finPnlPeriodLabel(row, view), vLabel, from, to,
+        finCsvNum(row.n_reservas),
+        finCsvNum(row.gross),
+        finCsvNum(row.ingreso_reserva),
+        finCsvNum(row.ingreso_aloj),
+        finCsvNum(row.ingreso_exp),
+        finCsvNum(row.ingreso_extra),
+        finCsvNum(row.commission_deduction),
+        finCsvNum(row.net_income),
+        finCsvNum(row.costo_operacional),
+        finCsvNum(row.costo_fijo_reservas),
+        finCsvNum(row.cv_aloj),
+        finCsvNum(row.cv_exp),
+        finCsvNum(row.cv_extra),
+        finCsvNum(row.costo_estructural),
+        finCsvNum(row.marketing),
+        finCsvNum(row.resultado),
+        margin,
+      ]);
+    });
+    if (totals && data.length) {
+      const t = totals;
+      const margin = t.gross ? Math.round(t.resultado / t.gross * 100) : 0;
+      rows.push([
+        'TOTAL_PERIODO', vLabel, from, to,
+        finCsvNum(t.n_reservas),
+        finCsvNum(t.gross),
+        finCsvNum(t.ingreso_reserva),
+        finCsvNum(t.ingreso_aloj),
+        finCsvNum(t.ingreso_exp),
+        finCsvNum(t.ingreso_extra),
+        finCsvNum(t.commission_deduction),
+        finCsvNum(t.net_income),
+        finCsvNum(t.costo_operacional),
+        finCsvNum(t.costo_fijo_reservas),
+        finCsvNum(t.cv_aloj),
+        finCsvNum(t.cv_exp),
+        finCsvNum(t.cv_extra),
+        finCsvNum(t.costo_estructural),
+        finCsvNum(t.marketing),
+        finCsvNum(t.resultado),
+        margin,
+      ]);
+    }
+    finDownloadCsv(`hotboat-pnl-${vLabel}_${from}_${to}.csv`, rows);
+    return;
+  }
+
+  if (_finTab === 'cashflow') {
+    if (!_finLastCf || !(_finLastCf.data || []).length) {
+      alert('No hay datos de flujo de caja. Abre la pestaña Flujo de Caja y espera a que cargue.');
+      return;
+    }
+    const { data, view, opening_balance } = _finLastCf;
+    const headers = [
+      'periodo', 'vista_agregacion', 'fecha_desde', 'fecha_hasta', 'saldo_inicial_parametro',
+      'saldo_inicial_dia', 'entradas_neto', 'salida_op_reservas', 'salida_estructura', 'salida_marketing',
+      'total_salidas', 'flujo_neto', 'saldo_final',
+    ];
+    const rows = [headers];
+    data.forEach(row => {
+      rows.push([
+        view === 'daily' ? row.fecha : (view === 'weekly'
+          ? `${row.week || ''} (${row.week_start || ''} → ${row.week_end || ''})`
+          : (row.month || '')),
+        vLabel, from, to, finCsvNum(opening_balance),
+        finCsvNum(row.beginning_balance),
+        finCsvNum(row.inflow_neto),
+        finCsvNum(row.outflow_opex),
+        finCsvNum(row.outflow_estructural),
+        finCsvNum(row.outflow_marketing),
+        finCsvNum(row.total_outflow),
+        finCsvNum(row.net_cashflow),
+        finCsvNum(row.ending_balance),
+      ]);
+    });
+    finDownloadCsv(`hotboat-flujo-caja-${vLabel}_${from}_${to}_ob${finCsvNum(opening_balance)}.csv`, rows);
+    return;
+  }
+
+  if (_finTab === 'forecast') {
+    if (!_finLastForecast || !_finLastForecast.length) {
+      alert('No hay datos de forecast. Abre la pestaña Forecast y espera a que cargue.');
+      return;
+    }
+    const headers = [
+      'mes', 'n_reservas', 'confirmadas', 'pendientes', 'ingreso_bruto', 'ingreso_neto', 'costo',
+      'resultado_forecast', 'presupuesto_ingreso', 'presupuesto_costos', 'presupuesto_marketing', 'vs_presupuesto_ingreso',
+    ];
+    const rows = [headers];
+    _finLastForecast.forEach(m => {
+      const b = m.budget || {};
+      rows.push([
+        m.month || '',
+        finCsvNum(m.n_reservas),
+        finCsvNum(m.confirmed),
+        finCsvNum(m.pending),
+        finCsvNum(m.gross),
+        finCsvNum(m.net_income),
+        finCsvNum(m.costo),
+        finCsvNum(m.resultado_forecast),
+        finCsvNum(b.income_budget),
+        finCsvNum(b.costs_budget),
+        finCsvNum(b.marketing_budget),
+        finCsvNum(m.vs_budget),
+      ]);
+    });
+    finDownloadCsv(`hotboat-forecast_${from}_${to}.csv`, rows);
+    return;
+  }
+}
+
 // ── KPI cards ─────────────────────────────────────────────────
 function renderKpis(containerId, cards){
   const el = document.getElementById(containerId);
@@ -5821,6 +5986,13 @@ async function loadPnl(){
     }
     const d = await r.json();
     if(!d.totals){ console.error('P&L: respuesta inesperada', d); return; }
+    _finLastPnl = {
+      data: d.data || [],
+      view: d.view || _finView,
+      totals: d.totals,
+      date_from: from,
+      date_to: to,
+    };
     renderPnlKpis(d.totals, d.period_calendar_days, d.structure);
     renderPnlTable(d.data || [], d.view, d.totals);
     const pd = d.period_calendar_days || 0;
@@ -5989,6 +6161,13 @@ async function loadCashFlow(){
       return;
     }
     const d = await r.json();
+    _finLastCf = {
+      data: d.data || [],
+      view: d.view || _finView,
+      date_from: from,
+      date_to: to,
+      opening_balance: parseFloat(String(ob)) || 0,
+    };
     renderCfKpis(d.data);
     renderCfTable(d.data, d.view);
     document.getElementById('fin-cf-loading').textContent =
@@ -6144,7 +6323,8 @@ async function loadForecast(){
   try {
     const r = await fetch('/api/admin/financial/forecast?months_ahead=3');
     const d = await r.json();
-    renderForecast(d.data);
+    _finLastForecast = d.data || [];
+    renderForecast(_finLastForecast);
   } catch(e){
     el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar</div>';
   }
