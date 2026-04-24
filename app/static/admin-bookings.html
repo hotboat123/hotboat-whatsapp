@@ -371,6 +371,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('alojamientos-admin')" id="nav-alojamientos-admin">
       <span class="ni">🏠</span> Alojamientos
     </div>
+    <div class="nav-item" onclick="showSection('aloj-bookings');loadAlojBookingsSection()" id="nav-aloj-bookings">
+      <span class="ni">📋</span> Reservas Aloj.
+    </div>
     <div class="nav-item" onclick="showSection('experiencias')" id="nav-experiencias">
       <span class="ni">🏔️</span> Experiencias
     </div>
@@ -773,6 +776,46 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveAloj()">Guardar</button>
             <button class="sync-btn" style="flex:1" onclick="closeAlojModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Accommodation bookings + blocked dates ───────────────────────── -->
+    <div id="section-aloj-bookings" class="section">
+      <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+        <h2 style="font-size:1rem;margin:0">📋 Reservas de Alojamientos</h2>
+        <button class="sync-btn" onclick="loadAlojBookingsSection()" style="font-size:.78rem;padding:.3rem .7rem">↺ Actualizar</button>
+      </div>
+
+      <!-- Blocked dates management -->
+      <div style="background:var(--card);border-radius:12px;padding:1rem;margin-bottom:1.2rem">
+        <div style="font-weight:700;margin-bottom:.6rem;font-size:.9rem">🚫 Fechas bloqueadas por alojamiento</div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem">
+          <select id="block-aloj-sel" style="background:var(--bg-input,#1a2a45);border:1px solid var(--border,#2a3f6f);color:var(--text,#e8f0ff);border-radius:8px;padding:.4rem .6rem;font-size:.85rem" onchange="loadBlockedDates()">
+            <option value="">— Selecciona alojamiento —</option>
+          </select>
+          <button class="sync-btn" style="background:var(--green);font-size:.78rem;padding:.3rem .7rem" onclick="openAddBlockModal()">+ Añadir bloqueo</button>
+        </div>
+        <div id="blocked-dates-list" style="display:flex;flex-direction:column;gap:.4rem"></div>
+      </div>
+
+      <!-- Booking list -->
+      <div id="aloj-bookings-list" style="display:flex;flex-direction:column;gap:.6rem"></div>
+
+      <!-- Add blocked date modal -->
+      <div id="block-date-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;padding:2rem 1rem;overflow-y:auto">
+        <div style="max-width:420px;margin:0 auto;background:var(--card);border-radius:14px;padding:1.5rem">
+          <div style="font-weight:700;margin-bottom:1rem">🚫 Bloquear fechas</div>
+          <div class="form-group-adm"><label>Desde</label>
+            <input type="date" id="block-start"></div>
+          <div class="form-group-adm"><label>Hasta (inclusive)</label>
+            <input type="date" id="block-end"></div>
+          <div class="form-group-adm"><label>Motivo</label>
+            <input id="block-reason" placeholder="Temporada alta" value="Temporada alta"></div>
+          <div style="display:flex;gap:.75rem;margin-top:1rem">
+            <button class="sync-btn" style="background:var(--red,#e53e3e);flex:1" onclick="saveBlockDate()">Bloquear</button>
+            <button class="sync-btn" style="flex:1" onclick="document.getElementById('block-date-modal').style.display='none'">Cancelar</button>
           </div>
         </div>
       </div>
@@ -4499,6 +4542,133 @@ async function deleteAloj(id){
   if(!confirm('¿Eliminar este alojamiento?')) return;
   await fetch(`/api/admin/alojamientos/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
   await loadAlojamientos(); showToast('Eliminado');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ACCOMMODATION BOOKINGS + BLOCKED DATES
+// ═══════════════════════════════════════════════════════════════
+let _alojBookings = [];
+let _allAlojs = [];
+
+async function loadAlojBookingsSection(){
+  try{
+    // Load alojamientos for the blocked-dates selector
+    const ar = await fetch('/api/content/alojamientos').then(r=>r.json());
+    _allAlojs = ar.alojamientos || [];
+    const sel = document.getElementById('block-aloj-sel');
+    if(sel){
+      sel.innerHTML = '<option value="">— Selecciona alojamiento —</option>' +
+        _allAlojs.map(a=>`<option value="${a.id}" data-slug="${a.slug}">${a.name}</option>`).join('');
+    }
+    // Load accommodation bookings
+    const br = await fetch('/api/admin/accommodation-bookings',{headers:{'x-admin-key':getKey()}}).then(r=>r.json());
+    _alojBookings = br.bookings || [];
+    _renderAlojBookings();
+  }catch(e){ showToast('Error cargando: '+e.message); }
+}
+
+function _renderAlojBookings(){
+  const el = document.getElementById('aloj-bookings-list');
+  if(!el) return;
+  if(!_alojBookings.length){
+    el.innerHTML='<p style="color:var(--muted);font-size:.85rem">No hay reservas de alojamientos aún.</p>';
+    return;
+  }
+  const statusColor = {confirmed:'#2ecc71',pending_payment:'#f39c12',cancelled:'#e74c3c'};
+  const statusLabel = {confirmed:'✅ Confirmada',pending_payment:'⏳ Pago pendiente',cancelled:'❌ Cancelada'};
+  const fmtDate = d => d ? d.slice(0,10).split('-').reverse().join('/') : '—';
+  const money = n => '$'+Number(n||0).toLocaleString('es-CL');
+  el.innerHTML = _alojBookings.map(b=>`
+    <div style="background:var(--card);border-radius:10px;padding:.9rem;border-left:3px solid ${statusColor[b.status]||'#888'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.4rem">
+        <div>
+          <div style="font-weight:700;font-size:.95rem">${b.accommodation_name||'?'}</div>
+          <div style="color:var(--muted);font-size:.78rem">${b.booking_ref}</div>
+        </div>
+        <span style="font-size:.78rem;font-weight:700;color:${statusColor[b.status]||'#888'}">${statusLabel[b.status]||b.status}</span>
+      </div>
+      <div style="margin-top:.5rem;font-size:.82rem;display:grid;grid-template-columns:1fr 1fr;gap:.2rem .8rem">
+        <div>👤 ${b.customer_name}</div>
+        <div>📱 ${b.customer_phone}</div>
+        <div>📅 ${fmtDate(b.check_in)} → ${fmtDate(b.check_out)}</div>
+        <div>💰 ${money(b.total_price)} (abono ${money(b.deposit_amount)})</div>
+        ${b.hotboat_ref?`<div colspan="2">🚤 HotBoat: ${b.hotboat_ref}</div>`:''}
+      </div>
+      <div style="display:flex;gap:.4rem;margin-top:.6rem;flex-wrap:wrap">
+        <select onchange="updateAlojBookingStatus(${b.id},this.value)"
+          style="background:var(--bg-input,#1a2a45);border:1px solid var(--border,#2a3f6f);color:var(--text,#e8f0ff);border-radius:6px;padding:.25rem .4rem;font-size:.75rem">
+          ${['pending_payment','confirmed','cancelled'].map(s=>`<option value="${s}"${b.status===s?' selected':''}>${statusLabel[s]}</option>`).join('')}
+        </select>
+      </div>
+    </div>`).join('');
+}
+
+async function updateAlojBookingStatus(id, status){
+  try{
+    await fetch(`/api/admin/accommodation-bookings/${id}`,{method:'PUT',
+      headers:{'Content-Type':'application/json','x-admin-key':getKey()},
+      body:JSON.stringify({status})});
+    showToast('Estado actualizado ✅');
+    await loadAlojBookingsSection();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function loadBlockedDates(){
+  const sel = document.getElementById('block-aloj-sel');
+  const alojId = sel?.value;
+  const aloj = _allAlojs.find(a=>String(a.id)===String(alojId));
+  if(!alojId||!aloj){
+    document.getElementById('blocked-dates-list').innerHTML='';
+    return;
+  }
+  try{
+    const r = await fetch(`/api/admin/accommodation-blocked-dates/${alojId}`,{headers:{'x-admin-key':getKey()}}).then(d=>d.json());
+    const blocked = r.blocked||[];
+    const el = document.getElementById('blocked-dates-list');
+    if(!blocked.length){
+      el.innerHTML='<p style="color:var(--muted);font-size:.8rem">Sin fechas bloqueadas para este alojamiento.</p>';
+      return;
+    }
+    const fmt = d => d?d.slice(0,10).split('-').reverse().join('/'):'-';
+    el.innerHTML = blocked.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(229,62,62,.12);border:1px solid rgba(229,62,62,.3);border-radius:8px;padding:.4rem .7rem;font-size:.82rem">
+        <span>🚫 ${fmt(b.start_date)} → ${fmt(b.end_date)} &nbsp;·&nbsp; <em>${b.reason||''}</em></span>
+        <button onclick="deleteBlockDate(${b.id})"
+          style="background:none;border:1px solid rgba(229,62,62,.5);color:#e53e3e;border-radius:6px;padding:.15rem .4rem;cursor:pointer;font-size:.75rem">✕</button>
+      </div>`).join('');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function openAddBlockModal(){
+  const alojId = document.getElementById('block-aloj-sel')?.value;
+  if(!alojId){ showToast('Selecciona un alojamiento primero'); return; }
+  document.getElementById('block-date-modal').style.display='block';
+}
+
+async function saveBlockDate(){
+  const alojId = document.getElementById('block-aloj-sel')?.value;
+  const start = document.getElementById('block-start').value;
+  const end   = document.getElementById('block-end').value;
+  const reason= document.getElementById('block-reason').value||'Temporada alta';
+  if(!start||!end){ showToast('Ingresa ambas fechas'); return; }
+  if(end<start){ showToast('La fecha de fin debe ser igual o posterior al inicio'); return; }
+  try{
+    await fetch(`/api/admin/accommodation-blocked-dates/${alojId}`,{method:'POST',
+      headers:{'Content-Type':'application/json','x-admin-key':getKey()},
+      body:JSON.stringify({start_date:start, end_date:end, reason})});
+    document.getElementById('block-date-modal').style.display='none';
+    await loadBlockedDates();
+    showToast('Fechas bloqueadas ✅');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function deleteBlockDate(id){
+  if(!confirm('¿Eliminar este bloqueo?')) return;
+  try{
+    await fetch(`/api/admin/accommodation-blocked-dates/entry/${id}`,{method:'DELETE',headers:{'x-admin-key':getKey()}});
+    await loadBlockedDates();
+    showToast('Bloqueo eliminado');
+  }catch(e){ showToast('Error: '+e.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════

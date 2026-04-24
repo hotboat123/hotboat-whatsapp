@@ -605,6 +605,45 @@ def ensure_db_columns() -> None:
                     updated_at TIMESTAMPTZ DEFAULT NOW(),
                     UNIQUE(year, month)
                 );
+
+                -- 031: accommodation booking tables
+                CREATE TABLE IF NOT EXISTS accommodation_bookings (
+                    id SERIAL PRIMARY KEY,
+                    booking_ref TEXT UNIQUE NOT NULL,
+                    accommodation_id INTEGER,
+                    accommodation_name TEXT DEFAULT '',
+                    customer_name TEXT NOT NULL,
+                    customer_phone TEXT NOT NULL,
+                    customer_email TEXT,
+                    check_in DATE NOT NULL,
+                    check_out DATE NOT NULL,
+                    num_people INTEGER DEFAULT 1,
+                    price_per_night INTEGER DEFAULT 0,
+                    total_price INTEGER DEFAULT 0,
+                    deposit_amount INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'pending_payment',
+                    payment_id TEXT,
+                    payment_order_id TEXT,
+                    payment_status TEXT,
+                    paid_at TIMESTAMPTZ,
+                    hotboat_ref TEXT,
+                    notes TEXT DEFAULT '',
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_accom_bookings_ref   ON accommodation_bookings(booking_ref);
+                CREATE INDEX IF NOT EXISTS idx_accom_bookings_aloj  ON accommodation_bookings(accommodation_id);
+                CREATE INDEX IF NOT EXISTS idx_accom_bookings_dates ON accommodation_bookings(check_in, check_out);
+
+                CREATE TABLE IF NOT EXISTS accommodation_blocked_dates (
+                    id SERIAL PRIMARY KEY,
+                    accommodation_id INTEGER NOT NULL,
+                    start_date DATE NOT NULL,
+                    end_date DATE NOT NULL,
+                    reason TEXT DEFAULT 'Temporada alta',
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_accom_blocked_aloj ON accommodation_blocked_dates(accommodation_id);
             """)
             conn.commit()
 

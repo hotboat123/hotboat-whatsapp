@@ -1725,6 +1725,40 @@ async def woo_webhook(request: Request):
             except Exception as he:
                 logger.error(f"WC webhook: error updating hotboat_appointments {booking_ref_wc}: {he}")
 
+        # ── 3. Update accommodation_bookings ─────────────────────────────────
+        aloj_ref_wc = meta_map.get("accommodation_booking_ref", "") or (
+            booking_ref_wc if booking_ref_wc.startswith("HA-") else ""
+        )
+        if aloj_ref_wc:
+            try:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE accommodation_bookings"
+                            " SET status='confirmed', payment_order_id=%s, payment_status=%s,"
+                            "     paid_at=NOW(), updated_at=NOW()"
+                            " WHERE booking_ref=%s RETURNING hotboat_ref",
+                            (str(wc_id), status, aloj_ref_wc)
+                        )
+                        ab_row = cur.fetchone()
+                        conn.commit()
+                        if ab_row:
+                            logger.info("WC webhook: accommodation_bookings %s confirmed", aloj_ref_wc)
+                            combined_hb_ref = ab_row[0]
+                            # If combined with HotBoat, confirm that booking too
+                            if combined_hb_ref:
+                                cur.execute(
+                                    "UPDATE hotboat_appointments"
+                                    " SET status='confirmed', payment_order_id=%s, payment_status=%s,"
+                                    "     paid_at=NOW(), updated_at=NOW()"
+                                    " WHERE booking_ref=%s",
+                                    (str(wc_id), status, combined_hb_ref)
+                                )
+                                conn.commit()
+                                logger.info("WC webhook: combined hotboat_appointments %s confirmed", combined_hb_ref)
+            except Exception as ae:
+                logger.error("WC webhook: error updating accommodation_bookings %s: %s", aloj_ref_wc, ae)
+
         logger.info(f"WC webhook: order {wc_id} processed → status={status}, amount={total}")
         return {"ok": True, "reservation_id": res_id, "booking_ref": booking_ref_wc, "status": status}
 
@@ -2396,3 +2430,92 @@ def fix_pago_dates(x_admin_key: str = Header("")):
                         examples.append({"id": rid, "nombre": nombre, "created_at": created_at_str})
             conn.commit()
     return {"fixed": fixed, "examples": examples}
+
+
+# ── Accommodation: blocked dates management ───────────────────────────────────
+
+class BlockedDateBody(BaseModel):
+    start_date: str   # YYYY-MM-DD
+    end_date:   str   # YYYY-MM-DD
+    reason:     str   = "Temporada alta"
+
+
+@admin_router.get("/api/admin/accommodation-blocked-dates/{aloj_id}")
+def admin_list_blocked_dates(aloj_id: int, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, start_date::text, end_date::text, reason, created_at::text"
+                " FROM accommodation_blocked_dates WHERE accommodation_id=%s ORDER BY start_date",
+                (aloj_id,)
+            )
+            cols = [d.name for d in cur.description]
+            return {"blocked": [dict(zip(cols, r)) for r in cur.fetchall()]}
+
+
+@admin_router.post("/api/admin/accommodation-blocked-dates/{aloj_id}")
+def admin_add_blocked_date(aloj_id: int, body: BlockedDateBody, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO accommodation_blocked_dates (accommodation_id, start_date, end_date, reason)"
+                " VALUES (%s,%s,%s,%s) RETURNING id",
+                (aloj_id, body.start_date, body.end_date, body.reason)
+            )
+            new_id = cur.fetchone()[0]
+            conn.commit()
+    return {"ok": True, "id": new_id}
+
+
+@admin_router.delete("/api/admin/accommodation-blocked-dates/entry/{block_id}")
+def admin_delete_blocked_date(block_id: int, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM accommodation_blocked_dates WHERE id=%s", (block_id,))
+            conn.commit()
+    return {"ok": True}
+
+
+# ── Accommodation: booking list & management ──────────────────────────────────
+
+@admin_router.get("/api/admin/accommodation-bookings")
+def admin_list_accommodation_bookings(
+    limit: int = Query(100, ge=1, le=500),
+    x_admin_key: str = Header(...)
+):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, booking_ref, accommodation_id, accommodation_name,"
+                "       customer_name, customer_phone, customer_email,"
+                "       check_in::text, check_out::text, num_people,"
+                "       price_per_night, total_price, deposit_amount,"
+                "       status, payment_status, hotboat_ref,"
+                "       created_at::text"
+                " FROM accommodation_bookings ORDER BY created_at DESC LIMIT %s",
+                (limit,)
+            )
+            cols = [d.name for d in cur.description]
+            return {"bookings": [dict(zip(cols, r)) for r in cur.fetchall()]}
+
+
+@admin_router.put("/api/admin/accommodation-bookings/{bid}")
+def admin_update_accommodation_booking(bid: int, body: dict, x_admin_key: str = Header(...)):
+    _check_auth(x_admin_key)
+    allowed = {"status", "notes"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    set_clause = ", ".join(f"{k}=%s" for k in updates)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE accommodation_bookings SET {set_clause}, updated_at=NOW() WHERE id=%s",
+                (*updates.values(), bid)
+            )
+            conn.commit()
+    return {"ok": True}

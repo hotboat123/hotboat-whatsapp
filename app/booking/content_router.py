@@ -99,6 +99,43 @@ def list_alojamientos(active_only: bool = True):
             return {"alojamientos": [dict(zip(cols, r)) for r in cur.fetchall()]}
 
 
+@content_router.get("/api/content/accommodation-availability/{slug}")
+def get_accommodation_availability(slug: str):
+    """
+    Returns occupied date ranges (confirmed bookings — disabled in calendar)
+    and admin-blocked date ranges (solicitud flow — look normal in calendar).
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM alojamientos WHERE slug=%s AND is_active=TRUE",
+                (slug,)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Alojamiento no encontrado")
+            aloj_id = row[0]
+
+            cur.execute(
+                "SELECT check_in::text, check_out::text FROM accommodation_bookings"
+                " WHERE accommodation_id=%s AND status NOT IN ('cancelled') AND check_out >= CURRENT_DATE"
+                " ORDER BY check_in",
+                (aloj_id,)
+            )
+            occupied = [{"start": r[0], "end": r[1]} for r in cur.fetchall()]
+
+            cur.execute(
+                "SELECT start_date::text, end_date::text, reason"
+                " FROM accommodation_blocked_dates"
+                " WHERE accommodation_id=%s AND end_date >= CURRENT_DATE"
+                " ORDER BY start_date",
+                (aloj_id,)
+            )
+            blocked = [{"start": r[0], "end": r[1], "reason": r[2]} for r in cur.fetchall()]
+
+            return {"alojamiento_id": aloj_id, "occupied": occupied, "blocked": blocked}
+
+
 @content_router.get("/api/content/experiencias")
 def list_experiencias(active_only: bool = True):
     with get_connection() as conn:

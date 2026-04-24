@@ -828,6 +828,146 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
         logger.warning(f"_email_accommodation_solicitud send error: {e}")
 
 
+# ── Accommodation booking ─────────────────────────────────────────────────────
+
+class AlojBookingRequest(BaseModel):
+    accommodation_id: int
+    accommodation_name: str
+    accommodation_slug: str
+    check_in: str        # YYYY-MM-DD
+    check_out: str       # YYYY-MM-DD
+    num_people: int = 1
+    price_per_night: int
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[str] = None
+    hotboat_date: Optional[str] = None
+    hotboat_time: Optional[str] = None
+    hotboat_people: Optional[int] = None
+    test_price: Optional[int] = None
+
+
+@router.post("/api/booking/accommodation-create")
+async def create_accommodation_booking(request: AlojBookingRequest):
+    import random, string
+    from datetime import date as _date
+    from app.db.connection import get_connection as _gc
+
+    check_in  = _date.fromisoformat(request.check_in)
+    check_out = _date.fromisoformat(request.check_out)
+    nights    = (check_out - check_in).days
+    if nights < 1:
+        raise HTTPException(status_code=400, detail="Mínimo 1 noche")
+
+    total_aloj   = request.price_per_night * nights
+    deposit_aloj = round(total_aloj * 0.5)
+
+    # Generate accommodation booking ref
+    year    = datetime.now(CHILE_TZ).year
+    suffix  = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    aloj_ref = f"HA-{year}-{suffix}"
+
+    # Optional HotBoat add-on
+    hotboat_ref     = None
+    hotboat_deposit = 0
+    if request.hotboat_date and request.hotboat_time and request.hotboat_people:
+        from app.booking.db import create_booking, PRICES
+        n        = int(request.hotboat_people)
+        price_pp = PRICES.get(n, 69990)
+        hb_sub   = price_pp * n
+        hotboat_deposit = round(hb_sub * 0.5)
+        hb_result = create_booking({
+            "customer_name":  request.customer_name,
+            "customer_phone": request.customer_phone,
+            "customer_email": request.customer_email,
+            "booking_date":   request.hotboat_date,
+            "booking_time":   request.hotboat_time,
+            "num_people":     n,
+            "price_per_person": price_pp,
+            "subtotal":       hb_sub,
+            "extras_total":   0,
+            "has_flex":       False,
+            "flex_amount":    0,
+            "total_price":    hb_sub,
+            "source":         "web",
+            "notes":          f"Combinado con alojamiento: {request.accommodation_name}",
+        })
+        hotboat_ref = hb_result["booking_ref"]
+        try:
+            from app.booking.booking_email import send_email_for_trigger
+            send_email_for_trigger("admin_new_lead", hotboat_ref)
+        except Exception:
+            pass
+
+    # Save accommodation booking
+    with _gc() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO accommodation_bookings"
+                " (booking_ref, accommodation_id, accommodation_name,"
+                "  customer_name, customer_phone, customer_email,"
+                "  check_in, check_out, num_people,"
+                "  price_per_night, total_price, deposit_amount, hotboat_ref)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (aloj_ref, request.accommodation_id, request.accommodation_name,
+                 request.customer_name, request.customer_phone, request.customer_email,
+                 check_in, check_out, request.num_people,
+                 request.price_per_night, total_aloj, deposit_aloj, hotboat_ref)
+            )
+            conn.commit()
+
+    # Build WooCommerce order
+    total_deposit = deposit_aloj + hotboat_deposit
+    if request.test_price and request.test_price > 0:
+        total_deposit = request.test_price
+
+    fee_lines = [
+        {
+            "name": f"Alojamiento: {request.accommodation_name} ({nights}n · {check_in.strftime('%d/%m')}→{check_out.strftime('%d/%m')})",
+            "total": str(deposit_aloj),
+        }
+    ]
+    if hotboat_ref and hotboat_deposit:
+        fee_lines.append({
+            "name": f"HotBoat {request.hotboat_people}p · {request.hotboat_date} {request.hotboat_time}",
+            "total": str(hotboat_deposit),
+        })
+
+    extra_meta = [{"key": "accommodation_booking_ref", "value": aloj_ref}]
+    if hotboat_ref:
+        extra_meta.append({"key": "hotboat_combined_ref", "value": hotboat_ref})
+
+    payment_url = None
+    try:
+        from app.payment.woocommerce import create_order as woo_create_order
+        woo_order = await woo_create_order(
+            reservation_id=0,
+            booking_ref=aloj_ref,
+            nombre=request.customer_name,
+            telefono=request.customer_phone,
+            email=request.customer_email,
+            monto_reserva=0,
+            custom_fee_lines=fee_lines,
+            extra_meta=extra_meta,
+        )
+        payment_url  = woo_order.get("payment_url")
+        woo_order_id = woo_order.get("order_id")
+        if woo_order_id:
+            with _gc() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE accommodation_bookings SET payment_order_id=%s WHERE booking_ref=%s",
+                        (str(woo_order_id), aloj_ref)
+                    )
+                    conn.commit()
+    except Exception as pe:
+        logger.warning(f"WooCommerce accommodation skip: {pe}")
+
+    logger.info("accommodation-create: %s nights=%d aloj_deposit=%d hotboat_deposit=%d",
+                aloj_ref, nights, deposit_aloj, hotboat_deposit)
+    return {"booking_ref": aloj_ref, "total_price": total_aloj, "payment_url": payment_url}
+
+
 # ── Booking page visitor tracking ─────────────────────────────────────────────
 
 # In-memory session store: session_id → {events, start_time, ...}

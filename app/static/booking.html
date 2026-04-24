@@ -124,7 +124,14 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem;font-
 .info-box{background:rgba(255,92,53,.08);border:1px solid rgba(255,92,53,.25);border-radius:var(--r);padding:1rem;margin:.5rem 0;font-size:.9rem;line-height:1.6}
 .cal-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem}
 .cal-nav button{background:none;border:none;color:var(--text);font-size:1.3rem;cursor:pointer;padding:.2rem .5rem}
+.fp-dark{background:var(--deep)!important;border-color:var(--border)!important;color:var(--text)!important}
+.flatpickr-day.selected,.flatpickr-day.selected:hover{background:var(--coral)!important;border-color:var(--coral)!important}
+.flatpickr-day.inRange{background:rgba(255,92,53,.15)!important;border-color:transparent!important}
+.flatpickr-day.startRange,.flatpickr-day.endRange{background:var(--coral)!important;border-color:var(--coral)!important}
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 </head>
 <body>
 <div id="app">
@@ -792,24 +799,402 @@ function _galGoto(gid, dir){
   },{passive:true});
 })();
 
-function showAlojamiento(id){
+// ── Accommodation booking state & calendar ───────────────────────────────────
+let _alojState = null;
+const _alojAvailCache = {};
+
+async function showAlojamiento(id){
   _trackEvent('view_alojamiento_detail', id);
   const a = ALOJAMIENTOS.find(x=>x.id===id);
   if(!a) return showAlojamientos();
-  const imgs = (a.all_images && a.all_images.length) ? a.all_images : (a.image_path ? [a.image_path] : []);
-  const gid = 'gal-' + a.id;
+  const dynA = DYN_ALOJAMIENTOS.find(x=>x.slug===id) || {};
+  const pricePerNight = Number(dynA.price_from || 0);
+  const alojId = Number(dynA.id || a.dbId || 0);
+  const imgs = (a.all_images&&a.all_images.length)?a.all_images:(a.image_path?[a.image_path]:[]);
+  const gid = 'gal-'+a.id;
   const imgHtml = _galBuild(gid, imgs, a.icon);
+  const money = n=>'$'+Number(n).toLocaleString('es-CL');
+
   mc.innerHTML = `
   <div class="card">
     ${imgHtml}
     <div class="card-title">${a.name}</div>
-    <div class="price-tag"><div class="price-big">${a.price}</div>
-      <div class="price-sub">${a.unit} · hasta ${a.cap} pers.</div></div>
+    <div class="price-tag"><div class="price-big">${money(pricePerNight)}</div>
+      <div class="price-sub">/noche · hasta ${a.cap} pers.</div></div>
     <p style="color:var(--muted);font-size:.85rem;margin-top:.8rem;line-height:1.5">${a.desc}</p>
     ${a.features.filter(f=>f).map(f=>`<div style="font-size:.82rem;margin-top:.3rem">✓ ${f}</div>`).join('')}
   </div>
-  <button class="btn" onclick="showSolicitudForm('${a.name}','alojamiento:${a.dbId||a.id}')">Solicitar Reserva</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showAlojamientos()">Ver mas opciones</button>`;
+  <div class="card" id="aloj-cal-card">
+    <div class="card-title" style="font-size:1rem;margin-bottom:.6rem">📅 Selecciona tus fechas</div>
+    <div id="aloj-avail-status" style="color:var(--muted);font-size:.85rem;text-align:center;padding:.5rem">
+      Cargando disponibilidad...
+    </div>
+    <div id="aloj-date-pickers" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div>
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">Check-in</div>
+          <input type="text" id="aloj-checkin" readonly placeholder="Llegada"
+            style="width:100%;background:var(--deep);border:1px solid var(--border);
+                   color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
+        </div>
+        <div>
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">Check-out</div>
+          <input type="text" id="aloj-checkout" readonly placeholder="Salida"
+            style="width:100%;background:var(--deep);border:1px solid var(--border);
+                   color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
+        </div>
+      </div>
+      <div id="aloj-nights-label" style="font-size:.8rem;color:var(--muted);text-align:center;margin-top:.4rem"></div>
+    </div>
+  </div>
+  <div id="aloj-booking-result"></div>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showAlojamientos()">← Ver más opciones</button>`;
+
+  // Load availability
+  try {
+    let avail = _alojAvailCache[id];
+    if(!avail){
+      avail = await fetch(`/api/content/accommodation-availability/${id}`).then(r=>r.json());
+      _alojAvailCache[id] = avail;
+    }
+    _alojState = {a, dynA, pricePerNight, alojId,
+      occupied: avail.occupied||[], blocked: avail.blocked||[],
+      checkIn:null, checkOut:null, nights:0, hotboat:null};
+    document.getElementById('aloj-avail-status').style.display='none';
+    document.getElementById('aloj-date-pickers').style.display='block';
+    _initAlojFlatpickr();
+  } catch(e){
+    document.getElementById('aloj-avail-status').textContent='Error cargando disponibilidad.';
+  }
+}
+
+function _initAlojFlatpickr(){
+  const {occupied} = _alojState;
+  // Only occupied (confirmed bookings) are truly disabled
+  const disableFn = date => {
+    const d = flatpickr.formatDate(date,'Y-m-d');
+    return occupied.some(r => d >= r.start && d < r.end);
+  };
+  const fpCfg = {
+    minDate:'today', dateFormat:'Y-m-d',
+    altInput:true, altFormat:'d/m/Y',
+    locale:'es', disable:[disableFn],
+    disableMobile:true,
+  };
+  let fpOut;
+  const fpIn = flatpickr('#aloj-checkin', {
+    ...fpCfg,
+    onChange(sel){
+      if(!sel.length) return;
+      _alojState.checkIn = flatpickr.formatDate(sel[0],'Y-m-d');
+      _alojState.checkOut = null;
+      document.getElementById('aloj-booking-result').innerHTML='';
+      document.getElementById('aloj-nights-label').textContent='';
+      const minOut = new Date(sel[0]); minOut.setDate(minOut.getDate()+1);
+      fpOut.set('minDate', minOut);
+      fpOut.clear();
+      setTimeout(()=>fpOut.open(), 120);
+    }
+  });
+  fpOut = flatpickr('#aloj-checkout', {
+    ...fpCfg,
+    minDate: new Date(Date.now()+86400000),
+    onChange(sel){
+      if(!sel.length||!_alojState.checkIn) return;
+      _alojState.checkOut = flatpickr.formatDate(sel[0],'Y-m-d');
+      const nights = Math.round((sel[0]-new Date(_alojState.checkIn))/86400000);
+      _alojState.nights = nights;
+      document.getElementById('aloj-nights-label').textContent =
+        `${nights} noche${nights!==1?'s':''} seleccionada${nights!==1?'s':''}`;
+      _onAlojDatesSelected();
+    }
+  });
+}
+
+function _isRangeBlocked(checkIn, checkOut, blockedRanges){
+  for(const r of blockedRanges){
+    if(checkIn < r.end && checkOut > r.start) return true;
+  }
+  return false;
+}
+
+function _onAlojDatesSelected(){
+  const {checkIn,checkOut,nights,pricePerNight,a,blocked} = _alojState;
+  if(!checkIn||!checkOut||nights<1) return;
+  if(_isRangeBlocked(checkIn, checkOut, blocked)){
+    _renderAlojSolicitud();
+  } else {
+    _renderAlojAvailable();
+  }
+}
+
+function _fmtDate(d){ const [y,m,dd]=d.split('-'); return `${dd}/${m}/${y}`; }
+const _alojMoney = n=>'$'+Number(n).toLocaleString('es-CL');
+
+function _renderAlojSolicitud(){
+  const {a, checkIn, checkOut, nights} = _alojState;
+  document.getElementById('aloj-booking-result').innerHTML = `
+  <div class="card" style="border-color:var(--gold)">
+    <div class="card-title" style="font-size:1rem;color:var(--gold)">📋 Consultar disponibilidad</div>
+    <div class="info-box" style="margin-bottom:.8rem;font-size:.85rem">
+      Las fechas seleccionadas (${_fmtDate(checkIn)} → ${_fmtDate(checkOut)}, ${nights} noche${nights!==1?'s':''})
+      requieren confirmación. Te contactamos a la brevedad 👨‍✈️
+    </div>
+    <div class="form-group"><label>Nombre completo *</label>
+      <input type="text" id="as-name" placeholder="Tu nombre"></div>
+    <div class="form-group"><label>WhatsApp *</label>
+      <input type="tel" id="as-phone" placeholder="+56 9 xxxx xxxx"></div>
+    <div class="form-group"><label>Email</label>
+      <input type="email" id="as-email" placeholder="tu@email.com"></div>
+    <div class="form-group"><label>N° de personas</label>
+      <input type="number" id="as-people" value="2" min="1" max="${a.cap}"></div>
+    <div class="form-group"><label>Mensaje adicional</label>
+      <textarea id="as-notes" rows="2" placeholder="Dudas o preferencias..."
+        style="width:100%;background:var(--deep);border:1px solid var(--border);
+               color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem;resize:vertical"></textarea></div>
+    <button class="btn" id="as-btn" onclick="_submitAlojSolicitud()">Enviar consulta 📩</button>
+  </div>`;
+}
+
+async function _submitAlojSolicitud(){
+  const name=(document.getElementById('as-name')?.value||'').trim();
+  const phone=(document.getElementById('as-phone')?.value||'').trim();
+  if(!name||!phone){showToast('Ingresa nombre y WhatsApp');return;}
+  const btn=document.getElementById('as-btn');
+  if(btn){btn.disabled=true;btn.textContent='Enviando...';}
+  const {a,checkIn,checkOut} = _alojState;
+  try{
+    const r = await fetch('/api/booking/solicitud',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        customer_name:name, customer_phone:phone,
+        customer_email:document.getElementById('as-email')?.value||null,
+        dates_preference:`${_fmtDate(checkIn)} → ${_fmtDate(checkOut)}`,
+        people:document.getElementById('as-people')?.value||'2',
+        notes:document.getElementById('as-notes')?.value||'',
+        service_type:'alojamiento', title:a.name,
+      })
+    }).then(d=>d.json());
+    if(r.status==='ok'||r.booking_ref){
+      document.getElementById('aloj-booking-result').innerHTML=`
+        <div class="card" style="text-align:center">
+          <div class="success-icon">✅</div>
+          <h3>¡Consulta enviada!</h3>
+          <p style="color:var(--muted);margin-top:.5rem">El Capitán Tomás revisará disponibilidad y te contactará pronto 👨‍✈️</p>
+        </div>`;
+    } else {
+      showToast('Error al enviar. Intenta de nuevo.');
+      if(btn){btn.disabled=false;btn.textContent='Enviar consulta 📩';}
+    }
+  }catch(e){
+    showToast('Error de conexión.');
+    if(btn){btn.disabled=false;btn.textContent='Enviar consulta 📩';}
+  }
+}
+
+function _renderAlojAvailable(){
+  const {a, checkIn, checkOut, nights, pricePerNight} = _alojState;
+  const total   = pricePerNight * nights;
+  const deposit = Math.round(total * 0.5);
+  document.getElementById('aloj-booking-result').innerHTML = `
+  <div class="card">
+    <div class="card-title" style="font-size:1rem">💰 Resumen</div>
+    <div class="summary-row">
+      <span>📅 ${_fmtDate(checkIn)} → ${_fmtDate(checkOut)}</span>
+      <span>${nights} noche${nights!==1?'s':''}</span>
+    </div>
+    <div class="summary-row">
+      <span>${_alojMoney(pricePerNight)}/noche × ${nights}</span>
+      <span><strong>${_alojMoney(total)}</strong></span>
+    </div>
+    <div class="summary-row" style="color:var(--gold)">
+      <span>💳 Abono ahora (50%)</span>
+      <span><strong>${_alojMoney(deposit)}</strong></span>
+    </div>
+    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">
+      Saldo ${_alojMoney(total-deposit)} al llegar
+    </div>
+  </div>
+
+  <div class="card" id="hba-card">
+    <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer">
+      <input type="checkbox" id="add-hotboat" style="accent-color:var(--coral);width:18px;height:18px;flex-shrink:0"
+        onchange="_toggleAlojHotboat()">
+      <div>
+        <div style="font-weight:700">🚤 Agregar paseo HotBoat (+50% abono)</div>
+        <div style="font-size:.8rem;color:var(--muted)">2 horas en el lago Villarrica · Se suma al pago</div>
+      </div>
+    </label>
+    <div id="hba-section" style="display:none;margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border)"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title" style="font-size:1rem">👤 Tus datos</div>
+    <div class="form-group"><label>Nombre completo *</label>
+      <input type="text" id="ab-name" placeholder="Tu nombre"></div>
+    <div class="form-group"><label>WhatsApp *</label>
+      <input type="tel" id="ab-phone" placeholder="+56 9 xxxx xxxx"></div>
+    <div class="form-group"><label>Email (opcional)</label>
+      <input type="email" id="ab-email" placeholder="tu@email.com"></div>
+  </div>
+  <button class="btn" id="ab-pay-btn" onclick="_submitAlojBooking()">
+    💳 Ir al pago → ${_alojMoney(deposit)}
+  </button>`;
+}
+
+function _toggleAlojHotboat(){
+  const checked = document.getElementById('add-hotboat').checked;
+  const section = document.getElementById('hba-section');
+  if(!checked){
+    section.style.display='none';
+    _alojState.hotboat=null;
+    _updateAlojPayBtn();
+    return;
+  }
+  section.style.display='block';
+  _alojState.hotboat={date:null,time:null,people:2};
+  _renderHbaSection();
+}
+
+function _renderHbaSection(){
+  const section=document.getElementById('hba-section');
+  section.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem">
+      <div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">Personas</div>
+        <select id="hba-people" onchange="_onHbaChange()"
+          style="width:100%;background:var(--deep);border:1px solid var(--border);
+                 color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem">
+          ${[2,3,4,5,6,7].map(n=>`<option value="${n}"${n===2?' selected':''}>${n} pers.</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">Fecha HotBoat</div>
+        <input type="text" id="hba-date" readonly placeholder="Elegir fecha"
+          style="width:100%;background:var(--deep);border:1px solid var(--border);
+                 color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
+      </div>
+    </div>
+    <div id="hba-times"></div>
+    <div id="hba-price" style="font-size:.85rem;color:var(--gold);margin-top:.4rem;min-height:1.2rem"></div>`;
+  setTimeout(()=>{
+    flatpickr('#hba-date',{
+      minDate:'today', dateFormat:'Y-m-d',
+      altInput:true, altFormat:'d/m/Y', locale:'es',
+      onChange(sel){
+        if(!sel.length) return;
+        _alojState.hotboat.date=flatpickr.formatDate(sel[0],'Y-m-d');
+        _alojState.hotboat.time=null;
+        _loadHbaTimes(_alojState.hotboat.date);
+      }
+    });
+  },30);
+}
+
+async function _loadHbaTimes(date){
+  const el=document.getElementById('hba-times');
+  if(!el) return;
+  el.innerHTML=`<div style="color:var(--muted);font-size:.8rem">Cargando horarios...</div>`;
+  try{
+    const av=await fetch(`/api/booking/availability?days=90`).then(r=>r.json());
+    const daySlots=(av.availability&&av.availability[date])||[];
+    const free=daySlots.filter(s=>s.available);
+    if(!free.length){
+      el.innerHTML=`<div style="color:var(--muted);font-size:.8rem">Sin horarios disponibles ese día</div>`;
+      return;
+    }
+    el.innerHTML=`
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem">Elige horario:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.4rem">
+        ${free.map(s=>`<button class="time-btn" data-t="${s.time}"
+          onclick="_selectHbaTime('${s.time}')">${s.time}</button>`).join('')}
+      </div>`;
+  }catch(e){
+    el.innerHTML=`<div style="color:var(--muted);font-size:.8rem">Error cargando horarios</div>`;
+  }
+}
+
+function _selectHbaTime(time){
+  document.querySelectorAll('#hba-times .time-btn').forEach(b=>{
+    b.style.background = b.dataset.t===time?'var(--coral)':'';
+    b.style.color = b.dataset.t===time?'#fff':'';
+  });
+  _alojState.hotboat.time=time;
+  _updateHbaPrice();
+  _updateAlojPayBtn();
+}
+
+function _onHbaChange(){
+  const n=+document.getElementById('hba-people').value;
+  _alojState.hotboat.people=n;
+  _updateHbaPrice();
+  _updateAlojPayBtn();
+}
+
+function _updateHbaPrice(){
+  const hba=_alojState.hotboat;
+  const el=document.getElementById('hba-price');
+  if(!hba||!el) return;
+  const n=hba.people||2;
+  const pp=(S.prices&&S.prices[n])||69990;
+  const total=pp*n;
+  const dep=Math.round(total*0.5);
+  el.textContent=hba.time?`🚤 HotBoat ${n}p: ${_alojMoney(total)} (abono ${_alojMoney(dep)})`:
+                           `🚤 HotBoat ${n}p: ${_alojMoney(total)} — elige horario`;
+}
+
+function _updateAlojPayBtn(){
+  const btn=document.getElementById('ab-pay-btn');
+  if(!btn) return;
+  const {pricePerNight,nights,hotboat}=_alojState;
+  const alojDep=Math.round(pricePerNight*nights*0.5);
+  let hbaDep=0;
+  if(hotboat&&hotboat.time){
+    const n=hotboat.people||2;
+    const pp=(S.prices&&S.prices[n])||69990;
+    hbaDep=Math.round(pp*n*0.5);
+  }
+  btn.textContent=`💳 Ir al pago → ${_alojMoney(alojDep+hbaDep)}`;
+}
+
+async function _submitAlojBooking(){
+  const name=(document.getElementById('ab-name')?.value||'').trim();
+  const phone=(document.getElementById('ab-phone')?.value||'').trim();
+  if(!name) return showToast('Ingresa tu nombre');
+  if(!phone) return showToast('Ingresa tu WhatsApp');
+  const btn=document.getElementById('ab-pay-btn');
+  if(btn){btn.disabled=true;btn.textContent='Procesando...';}
+  const {alojId,a,checkIn,checkOut,nights,pricePerNight,hotboat}=_alojState;
+  const payload={
+    accommodation_id:alojId,
+    accommodation_name:a.name,
+    accommodation_slug:a.id,
+    check_in:checkIn, check_out:checkOut,
+    num_people:a.cap,
+    price_per_night:pricePerNight,
+    customer_name:name, customer_phone:phone,
+    customer_email:document.getElementById('ab-email')?.value||null,
+  };
+  if(hotboat&&hotboat.date&&hotboat.time){
+    payload.hotboat_date=hotboat.date;
+    payload.hotboat_time=hotboat.time;
+    payload.hotboat_people=hotboat.people||2;
+  }
+  try{
+    const r=await fetch('/api/booking/accommodation-create',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    }).then(d=>d.json());
+    if(r.payment_url){
+      window.location.href=r.payment_url;
+    } else {
+      showToast('Error al procesar. Intenta de nuevo.');
+      if(btn){btn.disabled=false;btn.textContent='💳 Ir al pago';}
+    }
+  }catch(e){
+    showToast('Error de conexión. Intenta de nuevo.');
+    if(btn){btn.disabled=false;btn.textContent='💳 Ir al pago';}
+  }
 }
 
 function showPacks(){
