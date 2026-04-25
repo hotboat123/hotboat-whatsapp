@@ -94,29 +94,49 @@ async function init(){
   const payUrl = wooUrl || (orderData?.payment_url) ||
     `https://hotboatchile.com/checkout/order-pay/${orderId}/?pay_for_order=true&key=${key||''}`;
 
-  const nombre    = orderData?.billing?.first_name || '';
-  const apellido  = orderData?.billing?.last_name  || '';
-  const fecha     = orderData?.meta?.fecha || '';
-  const personas  = orderData?.meta?.personas || '';
-  const total     = orderData?.total ? parseInt(orderData.total).toLocaleString('es-CL') : '—';
-  const extras    = orderData?.meta?.extras || '';
-  const hora      = orderData?.meta?.hora || '';
+  const nombre   = orderData?.billing?.first_name || '';
+  const feeLines = orderData?.fee_lines || [];
+  const total    = orderData?.total ? parseInt(orderData.total) : null;
+
+  // Build fee line rows (each is a 50% deposit line item)
+  const feeRows = feeLines.map(fl => {
+    const amt = parseInt(fl.total || '0');
+    const fullAmt = amt * 2;  // fee total is already the 50% deposit amount
+    return `<div class="detail-row">
+      <span class="detail-icon">📋</span>
+      <span class="detail-label" style="font-size:.83rem">${fl.name}</span>
+      <span class="detail-val" style="white-space:nowrap">$${amt.toLocaleString('es-CL')}</span>
+    </div>`;
+  }).join('');
+
+  // Fallback rows if no fee_lines (older orders)
+  const fecha    = orderData?.meta?.fecha || '';
+  const personas = orderData?.meta?.personas || '';
+  const hora     = orderData?.meta?.hora || '';
+  const fallbackRows = feeLines.length === 0 ? `
+    ${fecha?`<div class="detail-row"><span class="detail-icon">📅</span><span class="detail-label">Fecha</span><span class="detail-val">${fecha}</span></div>`:''}
+    ${hora?`<div class="detail-row"><span class="detail-icon">⏰</span><span class="detail-label">Hora</span><span class="detail-val">${hora}</span></div>`:''}
+    ${personas?`<div class="detail-row"><span class="detail-icon">👥</span><span class="detail-label">Personas</span><span class="detail-val">${personas}</span></div>`:''}
+  ` : '';
 
   card.innerHTML = `
     <div class="rsv-badge">🎟️ RESERVA CONFIRMADA</div>
     <div class="rsv-title">¡Hola${nombre?' '+nombre:''}! Tu lugar está reservado 🎉</div>
-    <div class="rsv-sub">Solo falta completar el pago para asegurar tu experiencia.</div>
+    <div class="rsv-sub">Solo falta completar el pago para asegurar tu lugar.</div>
 
-    ${fecha?`<div class="detail-row"><span class="detail-icon">📅</span><span class="detail-label">Fecha</span><span class="detail-val">${fecha}</span></div>`:''}
-    ${hora?`<div class="detail-row"><span class="detail-icon">⏰</span><span class="detail-label">Hora</span><span class="detail-val">${hora}</span></div>`:''}
-    ${personas?`<div class="detail-row"><span class="detail-icon">👥</span><span class="detail-label">Personas</span><span class="detail-val">${personas}</span></div>`:''}
-    ${extras?`<div class="detail-row"><span class="detail-icon">✨</span><span class="detail-label">Extras</span><span class="detail-val">${extras}</span></div>`:''}
+    ${feeRows || fallbackRows}
 
     <div class="divider"></div>
 
+    <div style="background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.2);border-radius:10px;
+      padding:.6rem .9rem;margin-bottom:1.2rem;font-size:.8rem;color:#c8a84b;line-height:1.5">
+      🔑 Se cobra el <strong>50% ahora</strong> para reservar. El saldo restante
+      se paga al terminar la experiencia HotBoat, en efectivo o transferencia.
+    </div>
+
     <div class="total-row">
-      <span class="total-label">Total a pagar</span>
-      <span class="total-amount">$${total}</span>
+      <span class="total-label">Depósito ahora (50%)</span>
+      <span class="total-amount">$${total !== null ? total.toLocaleString('es-CL') : '—'}</span>
     </div>
 
     <a href="${payUrl}" class="btn-pay">💳 Pagar ahora</a>

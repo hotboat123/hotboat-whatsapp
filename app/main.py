@@ -551,6 +551,7 @@ async def pago_order_proxy(order_id: int):
             "payment_url": data.get("payment_url") or
                 f"{WOO_URL}/checkout/order-pay/{order_id}/?pay_for_order=true&key={data.get('order_key','')}",
             "billing":    data.get("billing", {}),
+            "fee_lines":  [{"name": fl["name"], "total": fl.get("total","0")} for fl in fee_lines],
             "meta": {
                 "fecha":    match_f.group(1) if match_f else meta_map.get("hotboat_fecha",""),
                 "personas": match_p.group(1) if match_p else "",
