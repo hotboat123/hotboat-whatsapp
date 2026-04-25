@@ -1816,7 +1816,7 @@ async function applyCoupon(){
   const discountBase = sub;
 
   try{
-    const r = await fetch(`/api/booking/coupon/${encodeURIComponent(code)}`);
+    const r = await fetch(`/api/booking/coupon/${encodeURIComponent(code)}?booking_date=${S.selectedDate||''}`);
     const d = await r.json();
     if(!r.ok){ if(msg){ msg.style.color='#f87171'; msg.textContent=d.detail||'Cupón no válido'; } }
     else{

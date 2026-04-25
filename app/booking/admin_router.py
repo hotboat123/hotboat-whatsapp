@@ -2295,6 +2295,9 @@ def _ensure_coupons_table():
                     updated_at        TIMESTAMPTZ DEFAULT NOW()
                 );
                 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS rules JSONB DEFAULT NULL;
+                ALTER TABLE coupons ADD COLUMN IF NOT EXISTS valid_from DATE DEFAULT NULL;
+                ALTER TABLE coupons ADD COLUMN IF NOT EXISTS booking_date_from DATE DEFAULT NULL;
+                ALTER TABLE coupons ADD COLUMN IF NOT EXISTS booking_date_to DATE DEFAULT NULL;
                 ALTER TABLE hotboat_appointments
                     ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
                 ALTER TABLE hotboat_appointments
@@ -2314,7 +2317,10 @@ class CouponBody(BaseModel):
     discount_fixed: float = 0
     extra_description: str = ""
     max_uses: int = 0
-    expires_at: Optional[str] = None   # ISO date string or None
+    valid_from: Optional[str] = None       # ISO date: first day code can be used
+    expires_at: Optional[str] = None       # ISO date: last day code can be used
+    booking_date_from: Optional[str] = None  # ISO date: earliest valid booking date
+    booking_date_to: Optional[str] = None    # ISO date: latest valid booking date
     is_active: bool = True
     rules: list = []  # per-people-count overrides: [{num_people, discount_percent, discount_fixed}]
 
@@ -2327,14 +2333,15 @@ def list_coupons(x_admin_key: str = Header("")):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, code, name, discount_percent, discount_fixed,
-                       extra_description, max_uses, uses_count, expires_at,
+                       extra_description, max_uses, uses_count,
+                       valid_from, expires_at, booking_date_from, booking_date_to,
                        is_active, created_at, rules
                 FROM coupons ORDER BY created_at DESC
             """)
             cols = [d.name for d in cur.description]
             rows = [dict(zip(cols, r)) for r in cur.fetchall()]
             for r in rows:
-                for k in ("expires_at", "created_at"):
+                for k in ("valid_from", "expires_at", "booking_date_from", "booking_date_to", "created_at"):
                     if r.get(k):
                         r[k] = str(r[k])
                 if r.get("rules") is None:
@@ -2347,17 +2354,19 @@ def create_coupon(body: CouponBody, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     _ensure_coupons_table()
     import json as _json
-    expires = body.expires_at or None
     rules_json = _json.dumps(body.rules) if body.rules else None
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO coupons
-                   (code, name, discount_percent, discount_fixed,
-                    extra_description, max_uses, expires_at, is_active, rules)
-                   VALUES (UPPER(%s),%s,%s,%s,%s,%s,%s,%s,%s::jsonb) RETURNING id""",
+                   (code, name, discount_percent, discount_fixed, extra_description, max_uses,
+                    valid_from, expires_at, booking_date_from, booking_date_to, is_active, rules)
+                   VALUES (UPPER(%s),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) RETURNING id""",
                 (body.code.strip(), body.name, body.discount_percent, body.discount_fixed,
-                 body.extra_description, body.max_uses, expires, body.is_active, rules_json)
+                 body.extra_description, body.max_uses,
+                 body.valid_from or None, body.expires_at or None,
+                 body.booking_date_from or None, body.booking_date_to or None,
+                 body.is_active, rules_json)
             )
             new_id = cur.fetchone()[0]
             conn.commit()
@@ -2368,18 +2377,22 @@ def create_coupon(body: CouponBody, x_admin_key: str = Header("")):
 def update_coupon(cid: int, body: CouponBody, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     import json as _json
-    expires = body.expires_at or None
     rules_json = _json.dumps(body.rules) if body.rules else None
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """UPDATE coupons
                    SET code=UPPER(%s), name=%s, discount_percent=%s, discount_fixed=%s,
-                       extra_description=%s, max_uses=%s, expires_at=%s,
+                       extra_description=%s, max_uses=%s,
+                       valid_from=%s, expires_at=%s,
+                       booking_date_from=%s, booking_date_to=%s,
                        is_active=%s, rules=%s::jsonb, updated_at=NOW()
                    WHERE id=%s""",
                 (body.code.strip(), body.name, body.discount_percent, body.discount_fixed,
-                 body.extra_description, body.max_uses, expires, body.is_active, rules_json, cid)
+                 body.extra_description, body.max_uses,
+                 body.valid_from or None, body.expires_at or None,
+                 body.booking_date_from or None, body.booking_date_to or None,
+                 body.is_active, rules_json, cid)
             )
             conn.commit()
     return {"ok": True}

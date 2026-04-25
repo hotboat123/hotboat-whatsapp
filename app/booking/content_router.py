@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from app.db.connection import get_connection
 
@@ -476,13 +476,16 @@ async def public_create_extras_booking(body: PublicExtrasBookingBody):
 # ─── Public coupon validation ────────────────────────────────────────────────
 
 @content_router.get("/api/booking/coupon/{code}")
-def validate_coupon(code: str):
-    """Validate a coupon code and return its discount info (public endpoint)."""
+def validate_coupon(code: str, booking_date: str = Query(None)):
+    """Validate a coupon code and return its discount info (public endpoint).
+    Pass booking_date=YYYY-MM-DD to also validate against booking date constraints.
+    """
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, code, name, discount_percent, discount_fixed,
-                       extra_description, max_uses, uses_count, expires_at, rules
+                       extra_description, max_uses, uses_count,
+                       valid_from, expires_at, booking_date_from, booking_date_to, rules
                 FROM coupons
                 WHERE UPPER(code)=UPPER(%s) AND is_active=TRUE
             """, (code.strip(),))
@@ -490,15 +493,33 @@ def validate_coupon(code: str):
             if not row:
                 raise HTTPException(status_code=404, detail="Cupón no válido o inactivo")
             cols = ["id","code","name","discount_percent","discount_fixed",
-                    "extra_description","max_uses","uses_count","expires_at","rules"]
+                    "extra_description","max_uses","uses_count",
+                    "valid_from","expires_at","booking_date_from","booking_date_to","rules"]
             c = dict(zip(cols, row))
-            # Check expiry
             from datetime import date
-            if c["expires_at"] and c["expires_at"] < date.today():
+            today = date.today()
+            # Check code window: not yet active
+            if c["valid_from"] and c["valid_from"] > today:
+                raise HTTPException(status_code=410,
+                    detail=f"Este cupón estará activo a partir del {c['valid_from'].strftime('%d/%m/%Y')}")
+            # Check code window: expired
+            if c["expires_at"] and c["expires_at"] < today:
                 raise HTTPException(status_code=410, detail="Este cupón ha expirado")
             # Check max uses
             if c["max_uses"] and c["uses_count"] >= c["max_uses"]:
                 raise HTTPException(status_code=410, detail="Este cupón ya alcanzó el límite de usos")
+            # Check booking date constraints
+            if booking_date:
+                try:
+                    bdate = date.fromisoformat(booking_date)
+                    if c["booking_date_from"] and bdate < c["booking_date_from"]:
+                        raise HTTPException(status_code=410,
+                            detail=f"Este cupón aplica para reservas desde el {c['booking_date_from'].strftime('%d/%m/%Y')}")
+                    if c["booking_date_to"] and bdate > c["booking_date_to"]:
+                        raise HTTPException(status_code=410,
+                            detail=f"Este cupón solo aplica para reservas hasta el {c['booking_date_to'].strftime('%d/%m/%Y')}")
+                except ValueError:
+                    pass
             return {
                 "valid": True,
                 "code": c["code"],
