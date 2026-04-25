@@ -100,12 +100,12 @@ async function init(){
 
   // Build fee line rows (each is a 50% deposit line item)
   const feeRows = feeLines.map(fl => {
-    const amt = parseInt(fl.total || '0');
-    const fullAmt = amt * 2;  // fee total is already the 50% deposit amount
+    const depositAmt = parseInt(fl.total || '0');
+    const fullAmt = depositAmt * 2;  // fee_line stores the 50% deposit; show full price here
     return `<div class="detail-row">
       <span class="detail-icon">📋</span>
       <span class="detail-label" style="font-size:.83rem">${fl.name}</span>
-      <span class="detail-val" style="white-space:nowrap">$${amt.toLocaleString('es-CL')}</span>
+      <span class="detail-val" style="white-space:nowrap">$${fullAmt.toLocaleString('es-CL')}</span>
     </div>`;
   }).join('');
 
