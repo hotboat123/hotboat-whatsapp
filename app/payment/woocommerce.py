@@ -82,8 +82,10 @@ async def create_order(
         "customer_note": f"Reserva #{reservation_id} – HotBoat Chile",
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(f"{_API}/orders", auth=_AUTH, json=payload)
+        if not resp.is_success:
+            logger.error("WooCommerce order error %s: %s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
         data = resp.json()
 

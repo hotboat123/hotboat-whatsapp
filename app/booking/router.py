@@ -940,7 +940,7 @@ async def create_accommodation_booking(request: AlojBookingRequest):
 
     fee_lines = [
         {
-            "name": f"Alojamiento: {request.accommodation_name} ({nights}n · {check_in.strftime('%d/%m')}→{check_out.strftime('%d/%m')})",
+            "name": f"Alojamiento: {request.accommodation_name} ({nights}n {check_in.strftime('%d/%m')} al {check_out.strftime('%d/%m')})",
             "total": str(deposit_aloj),
         }
     ]
@@ -984,7 +984,9 @@ async def create_accommodation_booking(request: AlojBookingRequest):
                         )
                     conn.commit()
     except Exception as pe:
-        logger.warning(f"WooCommerce accommodation skip: {pe}")
+        import traceback
+        logger.warning("WooCommerce accommodation skip [%s]: %r\n%s",
+                       type(pe).__name__, str(pe), traceback.format_exc())
 
     logger.info("accommodation-create: %s nights=%d aloj_deposit=%d hotboat_deposit=%d",
                 aloj_ref, nights, deposit_aloj, hotboat_deposit)
