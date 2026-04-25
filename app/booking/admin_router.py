@@ -2361,7 +2361,7 @@ def create_coupon(body: CouponBody, x_admin_key: str = Header("")):
                 """INSERT INTO coupons
                    (code, name, discount_percent, discount_fixed, extra_description, max_uses,
                     valid_from, expires_at, booking_date_from, booking_date_to, is_active, rules)
-                   VALUES (UPPER(%s),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) RETURNING id""",
+                   VALUES (UPPER(%s),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,CAST(%s AS jsonb)) RETURNING id""",
                 (body.code.strip(), body.name, body.discount_percent, body.discount_fixed,
                  body.extra_description, body.max_uses,
                  body.valid_from or None, body.expires_at or None,
@@ -2376,6 +2376,7 @@ def create_coupon(body: CouponBody, x_admin_key: str = Header("")):
 @admin_router.put("/api/admin/coupons/{cid}")
 def update_coupon(cid: int, body: CouponBody, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
+    _ensure_coupons_table()
     import json as _json
     rules_json = _json.dumps(body.rules) if body.rules else None
     with get_connection() as conn:
@@ -2386,7 +2387,7 @@ def update_coupon(cid: int, body: CouponBody, x_admin_key: str = Header("")):
                        extra_description=%s, max_uses=%s,
                        valid_from=%s, expires_at=%s,
                        booking_date_from=%s, booking_date_to=%s,
-                       is_active=%s, rules=%s::jsonb, updated_at=NOW()
+                       is_active=%s, rules=CAST(%s AS jsonb), updated_at=NOW()
                    WHERE id=%s""",
                 (body.code.strip(), body.name, body.discount_percent, body.discount_fixed,
                  body.extra_description, body.max_uses,
