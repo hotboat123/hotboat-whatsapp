@@ -348,42 +348,43 @@ async def create_booking_endpoint(request: CreateBookingRequest):
 
         payment_url = None
         woo_order_id = None
-        try:
-            from app.payment.woocommerce import create_order as woo_create_order
-            woo_order = await woo_create_order(
-                reservation_id=0,
-                booking_ref=booking_ref,
-                nombre=request.customer_name,
-                telefono=request.customer_phone,
-                email=request.customer_email,
-                monto_reserva=woo_monto_reserva,
-                monto_extras=woo_monto_extras,
-                fecha=request.booking_date,
-                num_personas=request.num_people,
-            )
-            payment_url  = woo_order.get("payment_url")
-            woo_order_id = woo_order.get("order_id")
-        except Exception as pe:
-            logger.warning(f"WooCommerce skip: {pe}")
+        if not request.skip_payment:
             try:
-                deposit = round(total * 0.5)
-                payment_url = await _create_mp_preference(booking_ref, request, deposit)
-            except Exception as mpe:
-                logger.warning(f"MercadoPago skip: {mpe}")
+                from app.payment.woocommerce import create_order as woo_create_order
+                woo_order = await woo_create_order(
+                    reservation_id=0,
+                    booking_ref=booking_ref,
+                    nombre=request.customer_name,
+                    telefono=request.customer_phone,
+                    email=request.customer_email,
+                    monto_reserva=woo_monto_reserva,
+                    monto_extras=woo_monto_extras,
+                    fecha=request.booking_date,
+                    num_personas=request.num_people,
+                )
+                payment_url  = woo_order.get("payment_url")
+                woo_order_id = woo_order.get("order_id")
+            except Exception as pe:
+                logger.warning(f"WooCommerce skip: {pe}")
+                try:
+                    deposit = round(total * 0.5)
+                    payment_url = await _create_mp_preference(booking_ref, request, deposit)
+                except Exception as mpe:
+                    logger.warning(f"MercadoPago skip: {mpe}")
 
-        # Store WooCommerce order ID so the webhook can find this booking
-        if woo_order_id:
-            try:
-                from app.db.connection import get_connection as _gc
-                with _gc() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
-                            (str(woo_order_id), booking_ref)
-                        )
-                        conn.commit()
-            except Exception as ue:
-                logger.warning(f"Could not save woo_order_id for {booking_ref}: {ue}")
+            # Store WooCommerce order ID so the webhook can find this booking
+            if woo_order_id:
+                try:
+                    from app.db.connection import get_connection as _gc
+                    with _gc() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
+                                (str(woo_order_id), booking_ref)
+                            )
+                            conn.commit()
+                except Exception as ue:
+                    logger.warning(f"Could not save woo_order_id for {booking_ref}: {ue}")
 
         # NOTE: we do NOT sync to all_appointments here.
         # _sync_hotboat_to_all is called by the WooCommerce webhook once payment is confirmed.
@@ -841,6 +842,7 @@ class AlojBookingRequest(BaseModel):
     customer_name: str
     customer_phone: str
     customer_email: Optional[str] = None
+    hotboat_booking_ref: Optional[str] = None   # existing HotBoat booking (skip_payment=True)
     hotboat_date: Optional[str] = None
     hotboat_time: Optional[str] = None
     hotboat_people: Optional[int] = None
@@ -870,7 +872,22 @@ async def create_accommodation_booking(request: AlojBookingRequest):
     # Optional HotBoat add-on
     hotboat_ref     = None
     hotboat_deposit = 0
-    if request.hotboat_date and request.hotboat_time and request.hotboat_people:
+    if request.hotboat_booking_ref:
+        # HotBoat booking already created in DB (skip_payment=True); look up its total
+        hotboat_ref = request.hotboat_booking_ref
+        try:
+            with _gc() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
+                        (hotboat_ref,)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        hotboat_deposit = round(row[0] * 0.5)
+        except Exception as le:
+            logger.warning(f"Could not look up hotboat booking {hotboat_ref}: {le}")
+    elif request.hotboat_date and request.hotboat_time and request.hotboat_people:
         from app.booking.db import create_booking, PRICES
         n        = int(request.hotboat_people)
         price_pp = PRICES.get(n, 69990)
@@ -959,6 +976,12 @@ async def create_accommodation_booking(request: AlojBookingRequest):
                         "UPDATE accommodation_bookings SET payment_order_id=%s WHERE booking_ref=%s",
                         (str(woo_order_id), aloj_ref)
                     )
+                    # Also link the combined order to the HotBoat booking
+                    if hotboat_ref:
+                        cur.execute(
+                            "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
+                            (str(woo_order_id), hotboat_ref)
+                        )
                     conn.commit()
     except Exception as pe:
         logger.warning(f"WooCommerce accommodation skip: {pe}")
