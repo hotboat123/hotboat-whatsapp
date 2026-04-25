@@ -1702,11 +1702,42 @@ function renderForm(){
     return `<div class="summary-row"><span>${e.icon} ${e.name}${qty>1?` <span style="opacity:.7">×${qty}</span>`:''}</span><span>$${linePrice.toLocaleString('es-CL')}</span></div>`;
   }).join('');
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
-  const total = sub + extTotal + flex;
+  const hbTotal = sub + extTotal + flex - (S.couponDiscount||0);
+  const total = hbTotal;
   const [yr,mo,dy] = S.selectedDate.split('-');
+
+  // Accommodation block (shown when coming from aloj flow)
+  let alojBlock = '';
+  let combinedDepositNote = '';
+  if(_pendingAlojBooking){
+    const p = _pendingAlojBooking;
+    const alojNights = (new Date(p.check_out) - new Date(p.check_in)) / 86400000;
+    const alojTotal = p.price_per_night * alojNights;
+    const alojDeposit = Math.round(alojTotal * 0.5);
+    const hbDeposit = Math.round(hbTotal * 0.5);
+    const combinedTotal = hbTotal + alojTotal;
+    const combinedDeposit = hbDeposit + alojDeposit;
+    const [ciY,ciM,ciD] = p.check_in.split('-');
+    const [coY,coM,coD] = p.check_out.split('-');
+    alojBlock = `
+    <div class="card" style="border-color:var(--coral)">
+      <div class="card-title" style="font-size:.95rem">🏠 ${p.accommodation_name}</div>
+      <div class="summary-row"><span>📅 Check-in</span><span>${ciD}/${ciM}/${ciY}</span></div>
+      <div class="summary-row"><span>📅 Check-out</span><span>${coD}/${coM}/${coY}</span></div>
+      <div class="summary-row"><span>🌙 Noches</span><span>${alojNights}</span></div>
+      <div class="summary-row"><span>$${p.price_per_night.toLocaleString('es-CL')}/noche × ${alojNights}</span><span><strong>$${alojTotal.toLocaleString('es-CL')}</strong></span></div>
+      <div class="summary-row" style="color:var(--gold)"><span>Abono alojamiento (50%)</span><span>$${alojDeposit.toLocaleString('es-CL')}</span></div>
+    </div>`;
+    combinedDepositNote = `
+    <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
+      🏠🚤 <strong style="color:var(--gold)">Total abono ahora: $${combinedDeposit.toLocaleString('es-CL')}</strong><br>
+      <span style="font-size:.75rem">Alojamiento $${alojDeposit.toLocaleString('es-CL')} + HotBoat $${hbDeposit.toLocaleString('es-CL')} · Total combinado $${combinedTotal.toLocaleString('es-CL')}</span>
+    </div>`;
+  }
 
   mc.innerHTML = `
   ${stepsHtml('datos')}
+  ${alojBlock}
   <div class="card">
     <div class="card-title">${t('formTitle')}</div>
     <div class="summary-row"><span>${t('labelDate')}</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
@@ -1715,10 +1746,11 @@ function renderForm(){
     ${extRows}
     ${flex ? `<div class="summary-row"><span>${t('labelFlex')}</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
     ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón <strong>${S.couponCode}</strong></span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>` : ''}
-    <div class="summary-row total" id="summary-total-row"><span>${t('labelTotal')}</span><span id="summary-total-val">$${(total - (S.couponDiscount||0)).toLocaleString('es-CL')}</span></div>
+    <div class="summary-row total" id="summary-total-row"><span>${t('labelTotal')}</span><span id="summary-total-val">$${hbTotal.toLocaleString('es-CL')}</span></div>
+    ${combinedDepositNote || `
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
-      🚤 <strong style="color:var(--gold)">50% ($${Math.round((total-(S.couponDiscount||0))*0.5).toLocaleString('es-CL')})</strong> — ${t('depositNote')}
-    </div>
+      🚤 <strong style="color:var(--gold)">50% ($${Math.round(hbTotal*0.5).toLocaleString('es-CL')})</strong> — ${t('depositNote')}
+    </div>`}
     ${S.couponExtra ? `<div style="margin-top:.6rem;padding:.6rem .9rem;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:10px;font-size:.85rem;color:#a5b4fc">🎁 <strong>${LANG==='en'?'Bonus':'Beneficio'}:</strong> ${S.couponExtra}</div>` : ''}
     <!-- Cupón input -->
     <div style="margin-top:.9rem">
@@ -1757,7 +1789,7 @@ function renderForm(){
       <input type="date" id="f-birthday" max="${new Date().toISOString().split('T')[0]}" value="${S.customerBirthday||''}">
     </div>
   </div>
-  <button class="btn" onclick="submitBooking()">${t('pay')} 💳</button>
+  <button class="btn" onclick="submitBooking()">${_pendingAlojBooking ? '💳 Pagar alojamiento + HotBoat' : t('pay') + ' 💳'}</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderExtras()">${t('back')}</button>`;
 }
 
