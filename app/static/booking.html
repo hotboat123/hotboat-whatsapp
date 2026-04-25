@@ -1658,6 +1658,12 @@ function renderExtras(){
     </div>`;
   }).join('');
   const flexCls = S.hasFlex ? 'selected' : '';
+  // Calculate actual flex price to display (same formula as renderForm)
+  const _basepp = S.prices[S.numPeople] || 69990;
+  const _mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
+  const _pp = Math.round(_basepp * _mult / 1000) * 1000;
+  const _sub = _pp * S.numPeople;
+  const flexPrice = Math.round(_sub * 0.1);
   mc.innerHTML = `
   ${stepsHtml('personas')}
   <div class="card">
@@ -1667,7 +1673,7 @@ function renderExtras(){
       <div><div class="extra-name">${t('flexName')}</div>
         <div style="font-size:.75rem;color:var(--muted)">${t('flexDesc')}</div>
       </div>
-      <div class="extra-price">+10%</div>
+      <div class="extra-price">+$${flexPrice.toLocaleString('es-CL')}</div>
     </div>
   </div>
   <button class="btn" onclick="renderForm()">${t('nextData')}</button>
@@ -1843,7 +1849,9 @@ async function submitBooking(){
     showToast('Por favor ingresa nombre y telefono');
     return;
   }
-  const pp = S.prices[S.numPeople] || 69990;
+  const basepp = S.prices[S.numPeople] || 69990;
+  const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
+  const pp = Math.round(basepp * mult / 1000) * 1000;
   const sub = pp * S.numPeople;
   const extrasArr = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>({name:e.name,price:e.price,quantity:S.extras[e.id]}));
   const extTotal = extrasArr.reduce((a,e)=>a+e.price*e.quantity,0);
