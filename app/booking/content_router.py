@@ -482,7 +482,7 @@ def validate_coupon(code: str):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, code, name, discount_percent, discount_fixed,
-                       extra_description, max_uses, uses_count, expires_at
+                       extra_description, max_uses, uses_count, expires_at, rules
                 FROM coupons
                 WHERE UPPER(code)=UPPER(%s) AND is_active=TRUE
             """, (code.strip(),))
@@ -490,7 +490,7 @@ def validate_coupon(code: str):
             if not row:
                 raise HTTPException(status_code=404, detail="Cupón no válido o inactivo")
             cols = ["id","code","name","discount_percent","discount_fixed",
-                    "extra_description","max_uses","uses_count","expires_at"]
+                    "extra_description","max_uses","uses_count","expires_at","rules"]
             c = dict(zip(cols, row))
             # Check expiry
             from datetime import date
@@ -506,4 +506,5 @@ def validate_coupon(code: str):
                 "discount_percent": float(c["discount_percent"] or 0),
                 "discount_fixed": float(c["discount_fixed"] or 0),
                 "extra_description": c["extra_description"] or "",
+                "rules": c["rules"] or [],
             }

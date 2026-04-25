@@ -1821,17 +1821,30 @@ async function applyCoupon(){
     if(!r.ok){ if(msg){ msg.style.color='#f87171'; msg.textContent=d.detail||'Cupón no válido'; } }
     else{
       S.couponCode = d.code;
-      S.couponPercent = d.discount_percent || 0;
       S.couponExtra = d.extra_description || '';
-      S.couponDiscount = d.discount_fixed > 0
-        ? Math.min(d.discount_fixed, discountBase)
-        : Math.round(discountBase * (d.discount_percent / 100));
+
+      // Per-people-count rule overrides global discount if a matching rule exists
+      let discPct = d.discount_percent || 0;
+      let discFixed = d.discount_fixed || 0;
+      if(d.rules && d.rules.length > 0){
+        const rule = d.rules.find(r => Number(r.num_people) === S.numPeople);
+        if(rule){
+          discPct = rule.discount_percent || 0;
+          discFixed = rule.discount_fixed || 0;
+        }
+      }
+
+      S.couponPercent = discPct;
+      S.couponDiscount = discFixed > 0
+        ? Math.min(discFixed, discountBase)
+        : Math.round(discountBase * (discPct / 100));
       if(msg){
         msg.style.color='#4ade80';
         const parts = [];
         if(S.couponDiscount > 0) parts.push(`−$${S.couponDiscount.toLocaleString('es-CL')}`);
+        if(discPct > 0) parts.push(`${discPct}% descuento`);
         if(S.couponExtra) parts.push(S.couponExtra);
-        msg.textContent = `✅ Cupón aplicado${parts.length?' · '+parts.join(' + '):''}`;}
+        msg.textContent = `✅ Cupón aplicado${parts.length?' · '+parts.join(' · '):''}`;}
       // Re-render summary to update totals
       const fn = window._lastSummaryFn;
       if(fn) fn(); else renderSolicitudDatos();

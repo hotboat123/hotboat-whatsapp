@@ -533,6 +533,7 @@ def ensure_db_columns() -> None:
                     is_active BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
                 );
+                ALTER TABLE coupons ADD COLUMN IF NOT EXISTS rules JSONB DEFAULT NULL;
                 ALTER TABLE hotboat_appointments
                     ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
                 ALTER TABLE hotboat_appointments

@@ -5304,11 +5304,15 @@ function renderCoupons(list){
     return;
   }
   tbody.innerHTML = list.map(c=>{
+    const hasRules = c.rules && c.rules.length > 0;
+    const rulesBadge = hasRules
+      ? `<span style="background:rgba(96,165,250,.12);color:#60a5fa;border-radius:12px;padding:2px 7px;font-size:.72rem;font-weight:700;margin-left:4px" title="${c.rules.map(r=>`${r.num_people}p: ${r.discount_percent||0}%${r.discount_fixed>0?' / $'+Number(r.discount_fixed).toLocaleString('es-CL'):''}`).join(', ')}">Var.</span>`
+      : '';
     const discTxt = c.discount_percent > 0
-      ? `<span style="background:rgba(34,197,94,.12);color:#4ade80;border-radius:12px;padding:2px 8px;font-weight:700">${c.discount_percent}%</span>`
+      ? `<span style="background:rgba(34,197,94,.12);color:#4ade80;border-radius:12px;padding:2px 8px;font-weight:700">${c.discount_percent}%</span>${rulesBadge}`
       : c.discount_fixed > 0
-        ? `<span style="background:rgba(34,197,94,.12);color:#4ade80;border-radius:12px;padding:2px 8px;font-weight:700">$${Number(c.discount_fixed).toLocaleString('es-CL')}</span>`
-        : '—';
+        ? `<span style="background:rgba(34,197,94,.12);color:#4ade80;border-radius:12px;padding:2px 8px;font-weight:700">$${Number(c.discount_fixed).toLocaleString('es-CL')}</span>${rulesBadge}`
+        : hasRules ? rulesBadge : '—';
     const maxUses = c.max_uses > 0 ? `${c.uses_count}/${c.max_uses}` : `${c.uses_count}/∞`;
     const status = c.is_active
       ? `<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 8px;font-size:.75rem;font-weight:700">✓ Activo</span>`
@@ -5343,6 +5347,13 @@ function openCouponModal(id){
   document.getElementById('cm-maxuses').value = c?.max_uses||0;
   document.getElementById('cm-expires').value = c?.expires_at ? c.expires_at.substring(0,10) : '';
   document.getElementById('cm-active').checked = c ? c.is_active : true;
+  // Populate per-people rules
+  const rules = c?.rules || [];
+  [2,3,4,5,6,7].forEach(n => {
+    const rule = rules.find(r => Number(r.num_people) === n);
+    document.getElementById(`cm-rule-pct-${n}`).value = rule?.discount_percent || '';
+    document.getElementById(`cm-rule-fixed-${n}`).value = rule?.discount_fixed || '';
+  });
   document.getElementById('coupon-modal').style.display='';
 }
 
@@ -5352,6 +5363,13 @@ function closeCouponModal(){
 
 async function saveCoupon(){
   const id = document.getElementById('cm-id').value;
+  // Collect per-people rules (only rows with at least one non-zero value)
+  const rules = [];
+  [2,3,4,5,6,7].forEach(n => {
+    const pct   = +document.getElementById(`cm-rule-pct-${n}`).value || 0;
+    const fixed = +document.getElementById(`cm-rule-fixed-${n}`).value || 0;
+    if(pct > 0 || fixed > 0) rules.push({num_people: n, discount_percent: pct, discount_fixed: fixed});
+  });
   const body = {
     code: document.getElementById('cm-code').value.trim().toUpperCase(),
     name: document.getElementById('cm-name').value.trim(),
@@ -5361,10 +5379,11 @@ async function saveCoupon(){
     max_uses: +document.getElementById('cm-maxuses').value||0,
     expires_at: document.getElementById('cm-expires').value||null,
     is_active: document.getElementById('cm-active').checked,
+    rules,
   };
   if(!body.code){ showToast('El código es obligatorio'); return; }
-  if(!body.discount_percent && !body.discount_fixed && !body.extra_description){
-    showToast('Agrega al menos un descuento o beneficio'); return;
+  if(!body.discount_percent && !body.discount_fixed && !body.extra_description && !rules.length){
+    showToast('Agrega al menos un descuento, beneficio o regla por personas'); return;
   }
   try{
     const url = id ? `/api/admin/coupons/${id}` : '/api/admin/coupons';
@@ -5719,7 +5738,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- ═══ COUPON MODAL ═══ -->
 <div id="coupon-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
-  <div style="background:var(--card);border-radius:14px;max-width:460px;margin:auto;padding:1.5rem">
+  <div style="background:var(--card);border-radius:14px;max-width:500px;margin:auto;padding:1.5rem">
     <div style="font-size:1rem;font-weight:700;margin-bottom:1.2rem" id="cm-title">Nuevo Cupón</div>
     <input type="hidden" id="cm-id">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
@@ -5727,12 +5746,45 @@ document.addEventListener('DOMContentLoaded', () => {
         <input id="cm-code" type="text" placeholder="ej: VERANO20" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase().replace(/\s/g,'')"></div>
       <div class="form-group-adm" style="grid-column:1/-1"><label>Nombre interno</label>
         <input id="cm-name" type="text" placeholder="ej: Descuento verano 2026"></div>
-      <div class="form-group-adm"><label>% Descuento</label>
+      <div class="form-group-adm"><label>% Descuento (global)</label>
         <input id="cm-pct" type="number" min="0" max="100" step="1" value="0" placeholder="0"></div>
-      <div class="form-group-adm"><label>Descuento fijo ($)</label>
+      <div class="form-group-adm"><label>Descuento fijo $ (global)</label>
         <input id="cm-fixed" type="number" min="0" value="0" placeholder="0"></div>
     </div>
-    <div class="form-group-adm"><label>Beneficio extra <span style="color:var(--muted);font-weight:400;font-size:.75rem">(texto que ve el cliente, ej: 🎰 Tiro en la ruleta)</span></label>
+
+    <!-- Per-people rules -->
+    <div style="margin-top:.9rem;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:.8rem">
+      <div style="font-size:.78rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem">
+        🎯 Descuento por número de personas
+        <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0"> — sobreescribe el global si hay coincidencia</span>
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:.35rem .5rem;align-items:center">
+        <div style="font-size:.72rem;color:var(--muted);font-weight:600">Personas</div>
+        <div style="font-size:.72rem;color:var(--muted);font-weight:600">% Descuento</div>
+        <div style="font-size:.72rem;color:var(--muted);font-weight:600">Fijo ($)</div>
+        <div style="font-size:.82rem;font-weight:700;color:var(--text);text-align:center;background:rgba(255,255,255,.07);border-radius:6px;padding:.25rem .4rem">2p</div>
+        <input id="cm-rule-pct-2" type="number" min="0" max="100" step="1" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <input id="cm-rule-fixed-2" type="number" min="0" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text);text-align:center;background:rgba(255,255,255,.07);border-radius:6px;padding:.25rem .4rem">3p</div>
+        <input id="cm-rule-pct-3" type="number" min="0" max="100" step="1" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <input id="cm-rule-fixed-3" type="number" min="0" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text);text-align:center;background:rgba(255,255,255,.07);border-radius:6px;padding:.25rem .4rem">4p</div>
+        <input id="cm-rule-pct-4" type="number" min="0" max="100" step="1" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <input id="cm-rule-fixed-4" type="number" min="0" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text);text-align:center;background:rgba(255,255,255,.07);border-radius:6px;padding:.25rem .4rem">5p</div>
+        <input id="cm-rule-pct-5" type="number" min="0" max="100" step="1" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <input id="cm-rule-fixed-5" type="number" min="0" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text);text-align:center;background:rgba(255,255,255,.07);border-radius:6px;padding:.25rem .4rem">6p</div>
+        <input id="cm-rule-pct-6" type="number" min="0" max="100" step="1" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <input id="cm-rule-fixed-6" type="number" min="0" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text);text-align:center;background:rgba(255,255,255,.07);border-radius:6px;padding:.25rem .4rem">7p</div>
+        <input id="cm-rule-pct-7" type="number" min="0" max="100" step="1" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+        <input id="cm-rule-fixed-7" type="number" min="0" placeholder="0" style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:100%;outline:none">
+      </div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:.5rem">Deja en blanco (o 0) las personas sin regla específica.</div>
+    </div>
+
+    <div class="form-group-adm" style="margin-top:.8rem"><label>Beneficio extra <span style="color:var(--muted);font-weight:400;font-size:.75rem">(texto que ve el cliente, ej: 🎰 Tiro en la ruleta)</span></label>
       <input id="cm-extra" type="text" placeholder="ej: 🎰 Un tiro en la ruleta de los premios"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
       <div class="form-group-adm"><label>Máx. usos <span style="color:var(--muted);font-size:.72rem">(0 = ilimitado)</span></label>

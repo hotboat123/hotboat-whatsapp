@@ -2294,6 +2294,7 @@ def _ensure_coupons_table():
                     created_at        TIMESTAMPTZ DEFAULT NOW(),
                     updated_at        TIMESTAMPTZ DEFAULT NOW()
                 );
+                ALTER TABLE coupons ADD COLUMN IF NOT EXISTS rules JSONB DEFAULT NULL;
                 ALTER TABLE hotboat_appointments
                     ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
                 ALTER TABLE hotboat_appointments
@@ -2315,6 +2316,7 @@ class CouponBody(BaseModel):
     max_uses: int = 0
     expires_at: Optional[str] = None   # ISO date string or None
     is_active: bool = True
+    rules: list = []  # per-people-count overrides: [{num_people, discount_percent, discount_fixed}]
 
 
 @admin_router.get("/api/admin/coupons")
@@ -2326,7 +2328,7 @@ def list_coupons(x_admin_key: str = Header("")):
             cur.execute("""
                 SELECT id, code, name, discount_percent, discount_fixed,
                        extra_description, max_uses, uses_count, expires_at,
-                       is_active, created_at
+                       is_active, created_at, rules
                 FROM coupons ORDER BY created_at DESC
             """)
             cols = [d.name for d in cur.description]
@@ -2335,6 +2337,8 @@ def list_coupons(x_admin_key: str = Header("")):
                 for k in ("expires_at", "created_at"):
                     if r.get(k):
                         r[k] = str(r[k])
+                if r.get("rules") is None:
+                    r["rules"] = []
             return {"coupons": rows}
 
 
@@ -2342,16 +2346,18 @@ def list_coupons(x_admin_key: str = Header("")):
 def create_coupon(body: CouponBody, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     _ensure_coupons_table()
+    import json as _json
     expires = body.expires_at or None
+    rules_json = _json.dumps(body.rules) if body.rules else None
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO coupons
                    (code, name, discount_percent, discount_fixed,
-                    extra_description, max_uses, expires_at, is_active)
-                   VALUES (UPPER(%s),%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    extra_description, max_uses, expires_at, is_active, rules)
+                   VALUES (UPPER(%s),%s,%s,%s,%s,%s,%s,%s,%s::jsonb) RETURNING id""",
                 (body.code.strip(), body.name, body.discount_percent, body.discount_fixed,
-                 body.extra_description, body.max_uses, expires, body.is_active)
+                 body.extra_description, body.max_uses, expires, body.is_active, rules_json)
             )
             new_id = cur.fetchone()[0]
             conn.commit()
@@ -2361,17 +2367,19 @@ def create_coupon(body: CouponBody, x_admin_key: str = Header("")):
 @admin_router.put("/api/admin/coupons/{cid}")
 def update_coupon(cid: int, body: CouponBody, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
+    import json as _json
     expires = body.expires_at or None
+    rules_json = _json.dumps(body.rules) if body.rules else None
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """UPDATE coupons
                    SET code=UPPER(%s), name=%s, discount_percent=%s, discount_fixed=%s,
                        extra_description=%s, max_uses=%s, expires_at=%s,
-                       is_active=%s, updated_at=NOW()
+                       is_active=%s, rules=%s::jsonb, updated_at=NOW()
                    WHERE id=%s""",
                 (body.code.strip(), body.name, body.discount_percent, body.discount_fixed,
-                 body.extra_description, body.max_uses, expires, body.is_active, cid)
+                 body.extra_description, body.max_uses, expires, body.is_active, rules_json, cid)
             )
             conn.commit()
     return {"ok": True}
