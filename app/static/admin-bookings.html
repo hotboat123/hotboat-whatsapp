@@ -5125,6 +5125,92 @@ function generarRecibo(){
        </div>`
     : `<div style="margin-top:1rem;padding:.7rem 1rem;background:#d4edda;border:1px solid #4caf50;border-radius:8px;text-align:center;font-weight:700;color:#1a7a3a">✅ Pago completo</div>`;
 
+  // ── Email-safe version (all inline styles, table layout — no CSS classes) ──
+  const _eTh = 'background:#f0f2f8;padding:7px 9px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#7070a0;border:none';
+  const _eSec = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7070a0;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e8e8f0';
+  const _eTotalTd = 'padding:8px 9px;font-weight:700;font-size:15px;background:#f0f2f8';
+
+  const emailSaldo = saldoPend > 0
+    ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px;background:#fff3cd;border:1px solid #f0c040;border-radius:6px"><tr>
+         <td style="padding:10px 14px;font-weight:600;color:#7a5a00">💸 Saldo pendiente</td>
+         <td style="padding:10px 14px;text-align:right;font-weight:800;font-size:16px;color:#b85000">${money(saldoPend)}</td>
+       </tr></table>`
+    : `<div style="margin-top:14px;padding:10px 14px;background:#d4edda;border:1px solid #4caf50;border-radius:6px;text-align:center;font-weight:700;color:#1a7a3a">✅ Pago completo</div>`;
+
+  const emailHtml = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Recibo HotBoat #${ref}</title></head>
+<body style="margin:0;padding:0;background:#f5f7fa;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a2e">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7fa"><tr><td align="center" style="padding:24px 8px">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #e0e0e0">
+<tr><td style="background:#0d1b4e;padding:28px;text-align:center">
+  <img src="${window.location.origin}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png" alt="HotBoat" style="height:70px;display:block;margin:0 auto 8px;object-fit:contain">
+  <div style="color:#a8c4ff;font-size:13px">Hot Boat Villarrica · Pucón</div>
+  <div style="display:inline-block;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 14px;font-size:12px;margin-top:8px;color:#e8d87a;font-weight:700;letter-spacing:.05em">RECIBO #${ref}</div>
+</td></tr>
+<tr><td style="padding:20px 28px">
+  <div style="${_eSec}">Datos del cliente</div>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="padding:4px 0;width:50%"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Cliente</span><strong>${$(r.nombre_cliente)||'—'}</strong></td>
+      <td style="padding:4px 0;width:50%"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Teléfono</span><strong>${$(r.telefono)||'—'}</strong></td>
+    </tr>
+    <tr>
+      <td style="padding:4px 0"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Email</span><strong>${$(r.email)||'—'}</strong></td>
+      <td style="padding:4px 0"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Personas</span><strong>${r.num_personas||'—'}</strong></td>
+    </tr>
+    <tr>
+      <td style="padding:4px 0"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Fecha</span><strong>${fechaFmt}</strong></td>
+      <td style="padding:4px 0"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Hora</span><strong>${horaFmt}</strong></td>
+    </tr>
+  </table>
+  <div style="${_eSec}">Detalle del servicio</div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+    <thead><tr>
+      <th style="${_eTh}">Descripción</th>
+      <th style="${_eTh};text-align:center">Cant.</th>
+      <th style="${_eTh};text-align:right">P. Unit.</th>
+      <th style="${_eTh};text-align:right">Subtotal</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td style="padding:7px 9px">HotBoat Trip — experiencia náutica</td>
+        <td style="padding:7px 9px;text-align:center">${r.num_personas||1} persona(s)</td>
+        <td style="padding:7px 9px;text-align:right">${r.num_personas>0?money(Math.round(precioBase/(r.num_personas||1))):'—'}</td>
+        <td style="padding:7px 9px;text-align:right;font-weight:600">${money(precioBase)}</td>
+      </tr>
+      ${extrasHtml}
+      ${descHtml}
+      <tr>
+        <td colspan="3" style="${_eTotalTd}">TOTAL</td>
+        <td style="${_eTotalTd};text-align:right;color:#1a3a7a;font-size:16px">${money(totalFinal)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div style="${_eSec}">Pagos recibidos</div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+    <thead><tr>
+      <th style="${_eTh}">Método de pago</th>
+      <th style="${_eTh}">Fecha</th>
+      <th style="${_eTh};text-align:right">Monto</th>
+    </tr></thead>
+    <tbody>
+      ${pagosHtml}
+      <tr style="border-top:2px solid #e8e8f0">
+        <td colspan="2" style="padding:8px 9px;font-weight:700">Total pagado</td>
+        <td style="padding:8px 9px;text-align:right;font-weight:800;color:#1a7a3a;font-size:15px">${money(totalPagado)}</td>
+      </tr>
+    </tbody>
+  </table>
+  ${emailSaldo}
+</td></tr>
+<tr><td style="background:#f5f7fa;padding:14px 28px;text-align:center;font-size:11px;color:#999;border-top:1px solid #e8e8f0">
+  Documento generado el ${new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}
+  &nbsp;·&nbsp; HotBoat Chile &nbsp;·&nbsp; hotboatchile.com
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -5248,9 +5334,6 @@ function generarRecibo(){
         st.textContent='Sin email del cliente registrado.';
         return;
       }
-      const clone = win.document.documentElement.cloneNode(true);
-      clone.querySelectorAll('.no-print').forEach(function(el){ el.remove(); });
-      const cleanHtml = '<!DOCTYPE html>' + clone.outerHTML;
       btn.disabled = true;
       btn.textContent = '⏳ Enviando…';
       st.textContent = '';
@@ -5258,7 +5341,7 @@ function generarRecibo(){
         const resp = await fetch('/api/admin/recibo/send', {
           method: 'POST',
           headers: {'Content-Type':'application/json','x-admin-key': getKey()},
-          body: JSON.stringify({ to: _to, subject: _subject, html: cleanHtml }),
+          body: JSON.stringify({ to: _to, subject: _subject, html: emailHtml }),
         });
         const data = await resp.json().catch(function(){ return {}; });
         if(resp.ok && data.ok){
