@@ -649,6 +649,61 @@ def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):
             conn.commit()
 
 
+async def _notify_aloj_booking(
+    *,
+    aloj_ref: str,
+    accommodation_name: str,
+    customer_name: str,
+    customer_phone: str,
+    check_in: str,
+    check_out: str,
+    nights: int,
+    total: float,
+    deposit: float,
+    hotboat_ref: str | None = None,
+    confirmed: bool = False,
+):
+    """Send WhatsApp notification to admin for accommodation booking events."""
+    import os as _os, httpx as _httpx
+    token    = _os.getenv("WHATSAPP_API_TOKEN", "")
+    phone_id = _os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+    admin    = _os.getenv("ADMIN_PHONE", "56974950762")
+    if not token or not phone_id:
+        return
+
+    if confirmed:
+        header = f"✅ *Pago Confirmado — Alojamiento* ({aloj_ref})"
+        status_line = f"💳 Depósito pagado: *${int(deposit):,}*".replace(",", ".")
+    else:
+        header = f"🏠 *Nueva Reserva Alojamiento* ({aloj_ref})"
+        status_line = f"⏳ Pendiente de pago · Depósito: *${int(deposit):,}*".replace(",", ".")
+
+    lines = [
+        header,
+        "",
+        f"🏠 *Alojamiento:* {accommodation_name}",
+        f"👤 *Cliente:* {customer_name}",
+        f"📱 *Teléfono:* {customer_phone}",
+        f"📅 *Check-in:* {check_in}  →  *Check-out:* {check_out} ({nights} noche{'s' if nights!=1 else ''})",
+        f"💰 *Total:* ${int(total):,}".replace(",", "."),
+        status_line,
+    ]
+    if hotboat_ref:
+        lines.append(f"🚤 *HotBoat add-on:* {hotboat_ref}")
+
+    msg = "\n".join(lines)
+    try:
+        async with _httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"https://graph.facebook.com/v17.0/{phone_id}/messages",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"messaging_product": "whatsapp", "to": admin,
+                      "type": "text", "text": {"body": msg}},
+            )
+    except Exception as _wa_err:
+        logger.warning("WhatsApp aloj notify failed %s: %s", aloj_ref, _wa_err)
+
+
 async def _notify_solicitud(req: SolicitudRequest, ref: str):
     import os, httpx as _httpx
     token = os.getenv("WHATSAPP_API_TOKEN", "")
@@ -990,6 +1045,25 @@ async def create_accommodation_booking(request: AlojBookingRequest):
 
     logger.info("accommodation-create: %s nights=%d aloj_deposit=%d hotboat_deposit=%d",
                 aloj_ref, nights, deposit_aloj, hotboat_deposit)
+
+    # Notify admin via WhatsApp
+    try:
+        await _notify_aloj_booking(
+            aloj_ref=aloj_ref,
+            accommodation_name=request.accommodation_name,
+            customer_name=request.customer_name,
+            customer_phone=request.customer_phone,
+            check_in=check_in.strftime("%d/%m/%Y"),
+            check_out=check_out.strftime("%d/%m/%Y"),
+            nights=nights,
+            total=total_aloj,
+            deposit=deposit_aloj,
+            hotboat_ref=hotboat_ref,
+            confirmed=False,
+        )
+    except Exception as _ne:
+        logger.warning("aloj notify error: %s", _ne)
+
     return {"booking_ref": aloj_ref, "total_price": total_aloj, "payment_url": payment_url}
 
 
