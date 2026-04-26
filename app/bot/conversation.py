@@ -684,22 +684,23 @@ O elige:
                     logger.info("User selected accommodations from menu - redirecting to booking page")
                     response = "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n👉 https://whatsapp.hotboat.cl/booking\n\n¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
                 elif menu_number == 7:
-                    # Option 7: Otras Experiencias Pucón
+                    # Option 7: Llamar al Capitán Tomás
+                    logger.info("User selected call Capitán Tomás from menu")
+                    await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
+                    response = self.faq_handler.get_response("llamar a tomas", language)
+                elif menu_number == 8:
+                    # Option 8: Otras Experiencias Pucón
                     logger.info("User selected experiences and activities from menu")
                     conversation["metadata"]["awaiting_experience_menu"] = True
                     response = {
                         "type": "experiences_pdf",
                         "text": get_text("experiences_menu", language)
                     }
-                elif menu_number == 8:
-                    # Option 8: Packs Completos + Arma tu Pack
+                elif menu_number == 9:
+                    # Option 9: Packs Completos + Arma tu Pack
                     logger.info("User selected packs from menu")
                     conversation["metadata"]["awaiting_packages_submenu"] = True
                     response = get_text("accommodations_and_packages_menu", language)
-                elif menu_number == 9:
-                    # Option 9: Llamar al Capitán Tomás
-                    await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
-                    response = self.faq_handler.get_response("llamar a tomas", language)
                 else:
                     response = "No entendí esa opción. Por favor elige un número del 1 al 9, grumete ⚓"
             # Check if asking about accommodations — redirect to booking page
@@ -994,16 +995,16 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         if show_aloj:
             num_aloj = next_num; next_num += 1
             lines += ["", f"{num_aloj}️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*"]
+        # Llamar a Tomás is always option 7 (or next after alojamientos)
+        capitan_num = next_num; next_num += 1
+        lines += ["", f"{capitan_num}️⃣ 📞 *Llamar al Capitán Tomás*"]
         if show_exp:
             num_exp = next_num; next_num += 1
             lines += ["", f"{num_exp}️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*"]
         if show_packs:
             num_packs = next_num; next_num += 1
             lines += ["", f"{num_packs}️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*"]
-        capitan_num = next_num
         lines += [
-            "",
-            f"Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *{capitan_num}️⃣* 👨‍✈️🌿",
             "",
             "¿Listo para zarpar, grumete? ⛵",
             "",

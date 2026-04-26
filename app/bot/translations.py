@@ -71,11 +71,11 @@ Puedes preguntarme por:
 
 6️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*
 
-7️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*
+7️⃣ 📞 *Llamar al Capitán Tomás*
 
-8️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*
+8️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*
 
-Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *9️⃣* 👨‍✈️🌿
+9️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*
 
 ¿Listo para zarpar, grumete? ⛵
 
@@ -85,7 +85,7 @@ Si quieres cambiar de idioma, escribe:
 
 🇧🇷 portugués
 🇺🇸 inglés""",
-        
+
         "en": """🥬 Ahoy, sailor! ⚓
 
 I'm *Popeye the Sailor*, second mate of *HotBoat Chile* 🚤🔥
@@ -106,11 +106,11 @@ You can ask me about:
 
 6️⃣ *Pucón Accommodations (Domes · Cabins · Hostel)*
 
-7️⃣ *Other Pucón Experiences (Rafting, horseback riding, sailing)*
+7️⃣ 📞 *Call Captain Tomás*
 
-8️⃣ *Complete Packages Pucón (Romantic · Family · Friends · Build Your Pack)*
+8️⃣ *Other Pucón Experiences (Rafting, horseback riding, sailing)*
 
-If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *9️⃣* 👨‍✈️🌿
+9️⃣ *Complete Packages Pucón (Romantic · Family · Friends · Build Your Pack)*
 
 Ready to set sail, sailor? ⛵
 
@@ -120,7 +120,7 @@ If you'd like to switch languages, type:
 
 🇪🇸 spanish
 🇧🇷 portuguese""",
-        
+
         "pt": """🥬 Ahoy, marujo! ⚓
 
 Eu sou *Popeye o Marinheiro*, segundo imediato do *HotBoat Chile* 🚤🔥
@@ -141,11 +141,11 @@ Você pode me perguntar sobre:
 
 6️⃣ *Hospedagens Pucón (Domos · Cabanas · Hostel)*
 
-7️⃣ *Outras Experiências Pucón (Rafting, cavalgadas, vela)*
+7️⃣ 📞 *Ligar para o Capitão Tomás*
 
-8️⃣ *Pacotes Completos Pucón (Romântico · Familiar · Amigos · Monte seu Pacote)*
+8️⃣ *Outras Experiências Pucón (Rafting, cavalgadas, vela)*
 
-Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *9️⃣* 👨‍✈️🌿
+9️⃣ *Pacotes Completos Pucón (Romântico · Familiar · Amigos · Monte seu Pacote)*
 
 Pronto para zarpar, marujo? ⛵
 
