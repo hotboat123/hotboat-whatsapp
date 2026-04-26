@@ -1738,7 +1738,7 @@ async def woo_webhook(request: Request):
                             " SET status='confirmed', payment_order_id=%s, payment_status=%s,"
                             "     paid_at=NOW(), updated_at=NOW()"
                             " WHERE booking_ref=%s"
-                            " RETURNING hotboat_ref, customer_name, customer_phone,"
+                            " RETURNING hotboat_ref, customer_name, customer_phone, customer_email,"
                             "           accommodation_name, check_in, check_out,"
                             "           total_price, deposit_amount",
                             (str(wc_id), status, aloj_ref_wc)
@@ -1747,7 +1747,7 @@ async def woo_webhook(request: Request):
                         conn.commit()
                         if ab_row:
                             logger.info("WC webhook: accommodation_bookings %s confirmed", aloj_ref_wc)
-                            (combined_hb_ref, ab_cname, ab_cphone,
+                            (combined_hb_ref, ab_cname, ab_cphone, ab_cemail,
                              ab_aloj_name, ab_checkin, ab_checkout,
                              ab_total, ab_deposit) = ab_row
                             # If combined with HotBoat, confirm that booking too
@@ -1761,10 +1761,10 @@ async def woo_webhook(request: Request):
                                 )
                                 conn.commit()
                                 logger.info("WC webhook: combined hotboat_appointments %s confirmed", combined_hb_ref)
+                            nights_ab = (ab_checkout - ab_checkin).days if ab_checkin and ab_checkout else 0
                             # WhatsApp notification to admin
                             try:
                                 from app.booking.router import _notify_aloj_booking
-                                nights_ab = (ab_checkout - ab_checkin).days if ab_checkin and ab_checkout else 0
                                 await _notify_aloj_booking(
                                     aloj_ref=aloj_ref_wc,
                                     accommodation_name=ab_aloj_name or "",
@@ -1780,6 +1780,30 @@ async def woo_webhook(request: Request):
                                 )
                             except Exception as _wn:
                                 logger.warning("WC webhook: aloj WhatsApp notify error: %s", _wn)
+                            # Email notification to admin
+                            try:
+                                import threading
+                                from app.booking.router import _email_aloj_booking
+                                threading.Thread(
+                                    target=_email_aloj_booking,
+                                    kwargs=dict(
+                                        aloj_ref=aloj_ref_wc,
+                                        accommodation_name=ab_aloj_name or "",
+                                        customer_name=ab_cname or "",
+                                        customer_phone=ab_cphone or "",
+                                        customer_email=ab_cemail or "",
+                                        check_in=ab_checkin.strftime("%d/%m/%Y") if ab_checkin else "",
+                                        check_out=ab_checkout.strftime("%d/%m/%Y") if ab_checkout else "",
+                                        nights=nights_ab,
+                                        total=float(ab_total or 0),
+                                        deposit=float(ab_deposit or 0),
+                                        hotboat_ref=combined_hb_ref,
+                                        confirmed=True,
+                                    ),
+                                    daemon=True,
+                                ).start()
+                            except Exception as _en:
+                                logger.warning("WC webhook: aloj email notify error: %s", _en)
             except Exception as ae:
                 logger.error("WC webhook: error updating accommodation_bookings %s: %s", aloj_ref_wc, ae)
 

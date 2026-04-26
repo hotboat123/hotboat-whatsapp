@@ -704,6 +704,94 @@ async def _notify_aloj_booking(
         logger.warning("WhatsApp aloj notify failed %s: %s", aloj_ref, _wa_err)
 
 
+def _email_aloj_booking(
+    *,
+    aloj_ref: str,
+    accommodation_name: str,
+    customer_name: str,
+    customer_phone: str,
+    customer_email: str,
+    check_in: str,
+    check_out: str,
+    nights: int,
+    total: float,
+    deposit: float,
+    hotboat_ref: str | None = None,
+    confirmed: bool = False,
+):
+    """Send email notification to admin for accommodation booking events."""
+    from app.config import get_settings
+    from app.email.resend_booking import send_booking_html
+
+    settings = get_settings()
+    resend_key = (getattr(settings, "resend_api_key", "") or "").strip()
+    if not resend_key:
+        logger.warning("_email_aloj_booking: no RESEND key, skipping")
+        return
+
+    from_addr = (getattr(settings, "resend_from_confirmations", "") or
+                 getattr(settings, "email_from", "onboarding@resend.dev")).strip()
+    notif_emails = (getattr(settings, "notification_emails", "") or "").strip()
+    recipients = [e.strip() for e in notif_emails.split(",") if e.strip()]
+    if not recipients:
+        recipients = ["hotboatnotification@gmail.com"]
+
+    total_fmt   = f"${int(total):,}".replace(",", ".")
+    deposit_fmt = f"${int(deposit):,}".replace(",", ".")
+
+    if confirmed:
+        subject     = f"✅ Pago Confirmado — {accommodation_name} · {aloj_ref}"
+        status_html = f"""
+        <div style="background:#ecfdf5;padding:16px;border-radius:8px;margin:16px 0;border-left:4px solid #10b981">
+          <strong style="color:#065f46">✅ Pago confirmado</strong><br>
+          Depósito recibido: <strong>{deposit_fmt}</strong>
+        </div>"""
+    else:
+        subject     = f"🏠 Nueva Reserva Alojamiento — {accommodation_name} · {aloj_ref}"
+        status_html = f"""
+        <div style="background:#fffbeb;padding:16px;border-radius:8px;margin:16px 0;border-left:4px solid #f59e0b">
+          <strong style="color:#92400e">⏳ Pendiente de pago</strong><br>
+          Depósito a cobrar: <strong>{deposit_fmt}</strong>
+        </div>"""
+
+    hotboat_row = f"<p><strong>🚤 HotBoat add-on:</strong> {hotboat_ref}</p>" if hotboat_ref else ""
+    email_row   = f"<p><strong>📧 Email:</strong> {customer_email}</p>" if customer_email else ""
+
+    html = f"""
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <h2 style="color:#1d4ed8">{'✅ Pago Confirmado — Alojamiento' if confirmed else '🏠 Nueva Reserva de Alojamiento'}</h2>
+  {status_html}
+  <div style="background:#f3f4f6;padding:20px;border-radius:8px;margin:16px 0">
+    <h3 style="margin-top:0">Detalles de la reserva</h3>
+    <p><strong>📋 Ref:</strong> {aloj_ref}</p>
+    <p><strong>🏠 Alojamiento:</strong> {accommodation_name}</p>
+    <p><strong>📅 Check-in:</strong> {check_in}</p>
+    <p><strong>📅 Check-out:</strong> {check_out} ({nights} noche{'s' if nights != 1 else ''})</p>
+    <p><strong>💰 Total:</strong> {total_fmt}</p>
+    <p><strong>👤 Cliente:</strong> {customer_name}</p>
+    <p><strong>📱 Teléfono:</strong> {customer_phone}</p>
+    {email_row}
+    {hotboat_row}
+  </div>
+  <p style="color:#9ca3af;font-size:12px;margin-top:24px">
+    Notificación automática desde la app de reservas HotBoat.
+  </p>
+</div>"""
+
+    try:
+        for recipient in recipients:
+            send_booking_html(
+                to=recipient,
+                subject=subject,
+                html=html,
+                from_address=from_addr,
+                api_key=resend_key,
+            )
+        logger.info("_email_aloj_booking sent for %s (confirmed=%s) to %s", aloj_ref, confirmed, recipients)
+    except Exception as e:
+        logger.warning("_email_aloj_booking send error %s: %s", aloj_ref, e)
+
+
 async def _notify_solicitud(req: SolicitudRequest, ref: str):
     import os, httpx as _httpx
     token = os.getenv("WHATSAPP_API_TOKEN", "")
@@ -1063,6 +1151,30 @@ async def create_accommodation_booking(request: AlojBookingRequest):
         )
     except Exception as _ne:
         logger.warning("aloj notify error: %s", _ne)
+
+    # Notify admin via email
+    try:
+        import threading
+        threading.Thread(
+            target=_email_aloj_booking,
+            kwargs=dict(
+                aloj_ref=aloj_ref,
+                accommodation_name=request.accommodation_name,
+                customer_name=request.customer_name,
+                customer_phone=request.customer_phone,
+                customer_email=request.customer_email or "",
+                check_in=check_in.strftime("%d/%m/%Y"),
+                check_out=check_out.strftime("%d/%m/%Y"),
+                nights=nights,
+                total=total_aloj,
+                deposit=deposit_aloj,
+                hotboat_ref=hotboat_ref,
+                confirmed=False,
+            ),
+            daemon=True,
+        ).start()
+    except Exception as _ee:
+        logger.warning("aloj email notify error: %s", _ee)
 
     return {"booking_ref": aloj_ref, "total_price": total_aloj, "payment_url": payment_url}
 
