@@ -840,10 +840,15 @@ async def update_op_hours(body: OperatingHoursRequest, x_admin_key: str = Header
 
 
 @admin_router.get("/api/admin/availability-debug")
-async def availability_debug(x_admin_key: str = Header(""), days: int = Query(7, ge=1, le=14)):
-    """Diagnostic: shows operating hours, booked slots, and generated available slots."""
+async def availability_debug(
+    x_admin_key: str = Header(""),
+    fecha: str = Query(None, description="Specific date YYYY-MM-DD to inspect raw DB rows"),
+    days: int = Query(7, ge=1, le=14),
+):
+    """Diagnostic: shows operating hours, booked slots seen by the checker,
+    and (when fecha= is given) raw rows from all three tables for that date."""
     _check_auth(x_admin_key)
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, date as _date
     from zoneinfo import ZoneInfo
     from app.db.queries import get_booked_slots
     from app.booking.operator_settings import get_operating_hours, get_operating_hours_as_ints
@@ -869,12 +874,55 @@ async def availability_debug(x_admin_key: str = Header(""), days: int = Query(7,
                 "service": s.get("service_name"),
             })
 
-    return {
+    result = {
         "operating_hours_db_strings": op_hours_str,
         "operating_hours_as_ints": op_hours_int,
-        "booked_slots": booked_summary,
+        "booked_slots_seen_by_checker": booked_summary,
         "period": {"from": str(start.date()), "to": str(end.date())},
     }
+
+    # When a specific date is requested, dump raw rows from all three tables
+    if fecha:
+        raw = {"booknetic_appointments": [], "hotboat_appointments": [], "all_appointments": []}
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, starts_at, service_name, customer_name, status FROM booknetic_appointments"
+                        " WHERE starts_at::date = %s OR starts_at::date = %s ORDER BY starts_at",
+                        (fecha, fecha)
+                    )
+                    for r in cur.fetchall():
+                        raw["booknetic_appointments"].append({
+                            "id": r[0], "starts_at": str(r[1]), "service": r[2],
+                            "customer": r[3], "status": r[4],
+                        })
+                    cur.execute(
+                        "SELECT booking_ref, booking_date, booking_time, customer_name, status"
+                        " FROM hotboat_appointments WHERE booking_date = %s ORDER BY booking_time",
+                        (fecha,)
+                    )
+                    for r in cur.fetchall():
+                        raw["hotboat_appointments"].append({
+                            "ref": r[0], "date": str(r[1]), "time": str(r[2]),
+                            "customer": r[3], "status": r[4],
+                        })
+                    cur.execute(
+                        "SELECT id, source, source_id, fecha, hora, nombre_cliente, status"
+                        " FROM all_appointments WHERE fecha = %s ORDER BY hora",
+                        (fecha,)
+                    )
+                    for r in cur.fetchall():
+                        raw["all_appointments"].append({
+                            "id": r[0], "source": r[1], "source_id": r[2],
+                            "date": str(r[3]), "time": str(r[4]),
+                            "customer": r[5], "status": r[6],
+                        })
+        except Exception as e:
+            raw["error"] = str(e)
+        result["raw_db_rows"] = raw
+
+    return result
 
 
 # ── Urgency config ─────────────────────────────────────────────────────────────
