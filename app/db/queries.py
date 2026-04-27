@@ -249,7 +249,7 @@ async def get_booked_slots(
                     WHERE booking_date >= %s::date
                       AND booking_date <= %s::date
                       AND booking_time IS NOT NULL
-                      AND status NOT IN ('cancelled','rejected','solicitud')
+                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud','pending_payment')
                     ORDER BY booking_date, booking_time
                 """, (start_date, end_date))
                 for row in cur.fetchall():
@@ -283,7 +283,7 @@ async def get_booked_slots(
                       AND fecha >= %s::date
                       AND fecha <= %s::date
                       AND hora IS NOT NULL
-                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud')
+                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud','pending_payment')
                     ORDER BY fecha, hora
                 """, (start_date, end_date))
                 for row in cur.fetchall():
