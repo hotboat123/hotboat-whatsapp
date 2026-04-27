@@ -404,25 +404,65 @@ async def delete_reserva(rid: int, x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"SELECT nombre_cliente, fecha, source, source_id FROM {TABLE} WHERE id=%s", (rid,))
+                cur.execute(f"SELECT nombre_cliente, fecha, hora, source, source_id FROM {TABLE} WHERE id=%s", (rid,))
                 row = cur.fetchone()
                 if not row:
                     raise HTTPException(status_code=404, detail="Not found")
-                _, _, source, source_id = row
+                nombre_cliente, fecha, hora, source, source_id = row
                 cur.execute(f"DELETE FROM {TABLE} WHERE id=%s", (rid,))
-                # If this was a web booking, also cancel it in hotboat_appointments
-                # so the auto-sync doesn't re-insert it on the next run
-                if source == "hotboat_web" and source_id:
-                    cur.execute(
-                        "UPDATE hotboat_appointments SET status='cancelled' WHERE booking_ref=%s",
-                        (source_id,)
-                    )
+                # Cancel the matching hotboat_appointments entry so it doesn't
+                # re-appear via sync and doesn't block availability.
+                if source == "hotboat_web":
+                    if source_id:
+                        cur.execute(
+                            "UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW() WHERE booking_ref=%s",
+                            (source_id,)
+                        )
+                    elif fecha and hora:
+                        # Fallback: no source_id stored — match by date/time/customer
+                        cur.execute(
+                            """UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW()
+                               WHERE booking_date=%s AND booking_time=%s::time
+                                 AND (customer_name=%s OR %s IS NULL)
+                                 AND status NOT IN ('cancelled','rejected','cancelada')""",
+                            (fecha, hora, nombre_cliente, nombre_cliente)
+                        )
                 conn.commit()
         return {"ok": True, "deleted": rid}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error deleting reserva {rid}: {e}")
+
+
+@admin_router.post("/api/admin/hotboat-cancel-orphan")
+async def cancel_orphan_hotboat(
+    x_admin_key: str = Header(""),
+    fecha: str = Query(...),
+    hora: str = Query(...),
+):
+    """Cancel hotboat_appointments entries at a given date/time that have no matching all_appointments row."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW()
+                       WHERE booking_date=%s::date AND booking_time=%s::time
+                         AND status NOT IN ('cancelled','rejected','cancelada')
+                         AND NOT EXISTS (
+                             SELECT 1 FROM all_appointments
+                             WHERE source='hotboat_web' AND source_id=hotboat_appointments.booking_ref
+                         )
+                       RETURNING booking_ref, customer_name, status""",
+                    (fecha, hora)
+                )
+                rows = cur.fetchall()
+                conn.commit()
+        return {"ok": True, "cancelled": [{"ref": r[0], "customer": r[1], "new_status": r[2]} for r in rows]}
+    except Exception as e:
+        logger.error(f"cancel_orphan_hotboat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1273,7 +1313,7 @@ async def sync_tables(x_admin_key: str = Header("")):
                     WHERE booking_date IS NOT NULL
                       AND booking_date >= (CURRENT_DATE - INTERVAL '3 years')
                       AND booking_date <= (CURRENT_DATE + INTERVAL '3 years')
-                      AND status != 'solicitud'
+                      AND status NOT IN ('solicitud','cancelled','cancelada','rejected','rechazada')
                 """)
                 for row in cur.fetchall():
                     (ref, nombre, email, phone, fecha, hora, num_p,
