@@ -863,7 +863,14 @@ async def availability_debug(
     from datetime import datetime, timedelta, date as _date
     from zoneinfo import ZoneInfo
     from app.db.queries import get_booked_slots
-    from app.booking.operator_settings import get_operating_hours, get_operating_hours_as_ints
+    from app.booking.operator_settings import (
+        get_operating_hours,
+        get_operating_hours_as_ints,
+        get_urgency_days,
+        is_urgency_mode,
+        get_urgency_config,
+    )
+    from app.bot.availability import AvailabilityChecker
 
     CHILE_TZ = ZoneInfo("America/Santiago")
     now = datetime.now(CHILE_TZ)
@@ -889,6 +896,9 @@ async def availability_debug(
     result = {
         "operating_hours_db_strings": op_hours_str,
         "operating_hours_as_ints": op_hours_int,
+        "urgency_mode_global": is_urgency_mode(),
+        "urgency_config": get_urgency_config(),
+        "urgency_day_overrides": get_urgency_days(start.date(), end.date()),
         "booked_slots_seen_by_checker": booked_summary,
         "period": {"from": str(start.date()), "to": str(end.date())},
     }
@@ -897,6 +907,7 @@ async def availability_debug(
     if fecha:
         raw = {"booknetic_appointments": [], "hotboat_appointments": [], "all_appointments": []}
         try:
+            fd = _date.fromisoformat(fecha)
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -933,6 +944,23 @@ async def availability_debug(
         except Exception as e:
             raw["error"] = str(e)
         result["raw_db_rows"] = raw
+        # Also include effective slot-level diagnosis for this specific day
+        try:
+            checker = AvailabilityChecker()
+            start_day = datetime(fd.year, fd.month, fd.day, 0, 0, 0, tzinfo=CHILE_TZ)
+            end_day = datetime(fd.year, fd.month, fd.day, 23, 59, 59, tzinfo=CHILE_TZ)
+            avail_slots = await checker.get_available_slots(start_day, end_day)
+            avail_times = sorted({s["time"] for s in avail_slots if str(s["date"]) == fecha})
+            op_times = sorted({f"{h:02d}:00" for h in op_hours_int})
+            blocked_times = [t for t in op_times if t not in avail_times]
+            result["slot_diagnosis"] = {
+                "date": fecha,
+                "operating_times": op_times,
+                "available_times": avail_times,
+                "blocked_times": blocked_times,
+            }
+        except Exception as e:
+            result["slot_diagnosis_error"] = str(e)
 
     return result
 
