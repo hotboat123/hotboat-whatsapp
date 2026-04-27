@@ -463,6 +463,56 @@ async def cancel_orphan_hotboat(
     except Exception as e:
         logger.error(f"cancel_orphan_hotboat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.post("/api/admin/fix-blocked-slot")
+async def fix_blocked_slot(
+    x_admin_key: str = Header(""),
+    fecha: str = Query(...),
+    hora: str = Query(...),
+):
+    """Force-cancel any active booking at the given date/time in both hotboat_appointments
+    and all_appointments so the slot shows as available."""
+    _check_auth(x_admin_key)
+    try:
+        updated = []
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Cancel in hotboat_appointments
+                cur.execute(
+                    """UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW()
+                       WHERE booking_date=%s::date AND booking_time=%s::time
+                         AND status NOT IN ('cancelled','rejected','cancelada')
+                       RETURNING booking_ref, customer_name""",
+                    (fecha, hora)
+                )
+                for r in cur.fetchall():
+                    updated.append({"table": "hotboat_appointments", "ref": r[0], "customer": r[1]})
+
+                # Cancel in all_appointments
+                cur.execute(
+                    """UPDATE all_appointments SET status='cancelled', updated_at=NOW()
+                       WHERE fecha=%s::date AND hora=%s::time
+                         AND status NOT IN ('cancelled','rejected','cancelada')
+                       RETURNING id, nombre_cliente, source""",
+                    (fecha, hora)
+                )
+                for r in cur.fetchall():
+                    updated.append({"table": "all_appointments", "id": r[0], "customer": r[1], "source": r[2]})
+
+                conn.commit()
+
+        # Clear availability cache
+        try:
+            from app.booking import router as _br
+            _br._avail_cache.clear()
+        except Exception:
+            pass
+
+        return {"ok": True, "updated": updated, "slot_should_now_be_free": f"{fecha} {hora}"}
+    except Exception as e:
+        logger.error(f"fix_blocked_slot error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
