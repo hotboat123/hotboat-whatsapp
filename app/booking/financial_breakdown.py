@@ -242,11 +242,11 @@ def split_booking_financials(
     """
     Returns integer CLP fields for one booking row.
     ingreso_* from extras reconcile to ingreso_extras; ingreso_reserva passthrough.
-    Variable cost split sums to costo_variable (within tolerance); row total drift to extra.
+    Variable costs are summed from each extras line (catalog / unit_cost), without
+    redistributing to match booking.costo_variable.
     """
     ing_res = float(booking.get("ingreso_reserva") or 0)
     inc = float(booking.get("ingreso_extras") or 0)
-    var_total = float(booking.get("costo_variable") or 0)
     j = _extras_json_as_dict(booking.get("extras_json"))
     aloj_map = aloj_cost_catalog or {}
 
@@ -296,34 +296,6 @@ def split_booking_financials(
 
     rev_a, rev_e, rev_x = _reconcile_three(inc, rev_a, rev_e, rev_x)
 
-    cat_soft = cv_a_soft + cv_e + cv_x
-    var_allow = var_total - cv_a_locked
-    if var_total > TOL:
-        if var_allow < -TOL:
-            var_allow = 0.0
-        if cat_soft > TOL:
-            if var_allow > TOL and cat_soft > var_allow + TOL:
-                s = var_allow / cat_soft
-                cv_a_soft, cv_e, cv_x = cv_a_soft * s, cv_e * s, cv_x * s
-            elif var_allow > TOL:
-                rem = var_allow - cat_soft
-                inc_cat = rev_a + rev_e + rev_x
-                if inc_cat > TOL:
-                    cv_a_soft += rem * rev_a / inc_cat
-                    cv_e += rem * rev_e / inc_cat
-                    cv_x += rem * rev_x / inc_cat
-                else:
-                    cv_x += rem
-            elif var_allow <= TOL:
-                cv_a_soft, cv_e, cv_x = 0.0, 0.0, 0.0
-        elif cat_soft <= TOL and var_allow > TOL:
-            inc_cat = rev_a + rev_e + rev_x
-            if inc_cat > TOL:
-                cv_a_soft = var_allow * rev_a / inc_cat
-                cv_e = var_allow * rev_e / inc_cat
-                cv_x = var_allow * rev_x / inc_cat
-            else:
-                cv_x = var_allow
     cv_a = cv_a_locked + cv_a_soft
 
     return {
