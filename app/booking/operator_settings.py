@@ -215,7 +215,6 @@ def apply_urgency_filter(
         return []
 
     cfg = config if config is not None else get_urgency_config()
-    seed_times: list = cfg.get("seed_times") or get_operating_hours()
     gap_hours: float = float(cfg.get("gap_hours", 3))
 
     def _to_min(t: str) -> int:
@@ -224,6 +223,13 @@ def apply_urgency_filter(
 
     def _from_min(total_min: int) -> str:
         return f"{total_min // 60:02d}:{total_min % 60:02d}"
+
+    # Merge urgency seeds with configured operating_hours so that any slot the admin
+    # explicitly enabled in operating_hours always appears when free, even under urgency.
+    _explicit_seeds = set(cfg.get("seed_times") or [])
+    seed_times: list = sorted(_explicit_seeds | set(get_operating_hours()), key=_to_min)
+    if not seed_times:
+        seed_times = get_operating_hours()
 
     booked_set = set(booked_times)
     free_set = set(t for t in available_times if t not in booked_set)
