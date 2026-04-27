@@ -740,7 +740,51 @@ async def update_op_hours(body: OperatingHoursRequest, x_admin_key: str = Header
     if not body.hours:
         raise HTTPException(status_code=400, detail="Debe haber al menos un horario")
     set_operating_hours(body.hours)
+    # Invalidate availability cache so new hours take effect immediately
+    try:
+        from app.booking import router as _booking_router
+        _booking_router._avail_cache.clear()
+    except Exception:
+        pass
     return {"ok": True, "hours": get_operating_hours()}
+
+
+@admin_router.get("/api/admin/availability-debug")
+async def availability_debug(x_admin_key: str = Header(""), days: int = Query(7, ge=1, le=14)):
+    """Diagnostic: shows operating hours, booked slots, and generated available slots."""
+    _check_auth(x_admin_key)
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    from app.db.queries import get_booked_slots
+    from app.booking.operator_settings import get_operating_hours, get_operating_hours_as_ints
+
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    now = datetime.now(CHILE_TZ)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=days)
+
+    op_hours_str = get_operating_hours()
+    op_hours_int = get_operating_hours_as_ints()
+
+    booked_raw = await get_booked_slots(start, end)
+    booked_summary = []
+    for s in booked_raw:
+        dt = s.get("starts_at")
+        if dt:
+            booked_summary.append({
+                "date": str(dt.date()),
+                "time": dt.strftime("%H:%M"),
+                "status": s.get("status"),
+                "customer": s.get("customer_name"),
+                "service": s.get("service_name"),
+            })
+
+    return {
+        "operating_hours_db_strings": op_hours_str,
+        "operating_hours_as_ints": op_hours_int,
+        "booked_slots": booked_summary,
+        "period": {"from": str(start.date()), "to": str(end.date())},
+    }
 
 
 # ── Urgency config ─────────────────────────────────────────────────────────────
