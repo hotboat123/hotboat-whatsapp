@@ -1339,11 +1339,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Comis.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Neto</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Suma costo operativo total por reserva">C.Op</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo operativo fijo por reserva">C.Fijo</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable alojamiento">v.Aloj</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable experiencia">v.Exp</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable otros extras">v.Ext</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo estructura (día × tarifa)">Estr.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo operativo fijo por reserva (config: costo_operativo_por_reserva)">C.Op x Res</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable alojamiento (desde extras_json/catálogo)">CV Aloj</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable experiencia (desde extras_json/catálogo)">CV Exp</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable otros extras (desde extras_json/catálogo)">CV Extra</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo diario prorrateado (día calendario × tarifa)">C.Fijo día</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Mkt</th>
                 <th style="padding:.55rem .45rem;text-align:right">Result.</th>
                 <th style="padding:.55rem .45rem;text-align:center">%</th>
@@ -1385,7 +1385,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right">Saldo ini.</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#2ecc71">Entr. neto</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costos operativos reservas (fecha salida)">Op.res.</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo estructura por día calendario">Estr.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo diario prorrateado por día calendario">C.Fijo día</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Mkt</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Σ salidas</th>
                 <th style="padding:.55rem .45rem;text-align:right">Flujo neto</th>
@@ -5985,12 +5985,18 @@ document.addEventListener('DOMContentLoaded', () => {
     <div style="font-size:1rem;font-weight:700;margin-bottom:.4rem">🏗️ Parámetros P&amp;L / Flujo</div>
     <div style="color:var(--muted);font-size:.78rem;margin-bottom:1rem">
       <strong>Costo fijo diario (estructura):</strong> se aplica a cada día calendario del rango (D × tarifa) y resta en resultado y en flujo de caja.<br>
+      <strong>Costo operativo por reserva:</strong> se aplica por cada reserva confirmada del período (N × tarifa).<br>
       <strong>Slugs experiencia:</strong> claves en <code>extras_json</code> que cuentan como experiencia además de los prefijos <code>exp__</code>, <code>experiencia…</code>, <code>pack_exp…</code>.
     </div>
     <div style="display:flex;flex-direction:column;gap:.85rem">
       <div>
         <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Costo fijo diario prorrateado (CLP / día)</label>
-        <input type="number" id="fin-str-daily" min="0" step="1" placeholder="0"
+        <input type="number" id="fin-str-daily" min="0" step="1" placeholder="21700"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Costo operativo por reserva (CLP / reserva)</label>
+        <input type="number" id="fin-str-per-booking" min="0" step="1" placeholder="18000"
           style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box">
       </div>
       <div>
@@ -6364,7 +6370,7 @@ function renderPnlKpis(t, periodDays, structure){
     {label:'Ingreso Bruto',    value: fmtClp(t.gross),               color:'var(--text)'},
     {label:'Comisiones',       value: '-'+fmtClp(t.commission_deduction), color:'var(--red)'},
     {label:'Ingreso Neto',     value: fmtClp(t.net_income),          color:'var(--gold)'},
-    {label:'Costos Op. (reservas)', value: '-'+fmtClp(t.costo_operacional), color:'var(--red)'},
+    {label:'Costos Op. (N x $18.000)', value: '-'+fmtClp(t.costo_operacional), color:'var(--red)'},
     {label:'Costo estructura', value: '-'+fmtClp(t.costo_estructural||0), color:'var(--red)',
      sub: periodDays ? `${periodDays} días calendario` : ''},
     {label:'Marketing',        value: '-'+fmtClp(t.marketing),       color:'var(--red)'},
@@ -6378,7 +6384,7 @@ function renderPnlKpis(t, periodDays, structure){
       {label:'Ingreso alojamientos',   value: fmtClp(t.ingreso_aloj||0),    color:'var(--text)'},
       {label:'Ingreso experiencias',   value: fmtClp(t.ingreso_exp||0),     color:'#5dade2'},
       {label:'Ingreso extras',         value: fmtClp(t.ingreso_extra||0),   color:'var(--muted)'},
-      {label:'C. fijo por reserva',    value: '-'+fmtClp(t.costo_fijo_reservas||0), color:'var(--red)'},
+      {label:'C.Op por reserva',    value: '-'+fmtClp(t.costo_fijo_reservas||0), color:'var(--red)'},
       {label:'C. var. aloj / exp / ext', value: '-'+fmtClp((t.cv_aloj||0)+(t.cv_exp||0)+(t.cv_extra||0)),
        color:'var(--red)', sub: `${fmtClp(t.cv_aloj||0)} · ${fmtClp(t.cv_exp||0)} · ${fmtClp(t.cv_extra||0)}`},
     ];
@@ -6630,13 +6636,15 @@ async function openFinStructureModal(){
   try {
     const r = await fetch('/api/admin/financial/structure', { headers: { 'x-admin-key': getKey() } });
     const s = await r.json();
-    document.getElementById('fin-str-daily').value = s.costo_fijo_diario_prorrateado ?? 0;
+    document.getElementById('fin-str-daily').value = s.costo_fijo_diario_prorrateado ?? 21700;
+    document.getElementById('fin-str-per-booking').value = s.costo_operativo_por_reserva ?? 18000;
     document.getElementById('fin-str-whitelist').value = (s.experience_slug_whitelist || []).join(', ');
   } catch(e) { console.error(e); }
 }
 
 async function saveFinStructure(){
   const daily = parseFloat(String(document.getElementById('fin-str-daily').value || '0')) || 0;
+  const perBooking = parseFloat(String(document.getElementById('fin-str-per-booking').value || '0')) || 0;
   const wl = document.getElementById('fin-str-whitelist').value.split(',')
     .map(x => x.trim().toLowerCase()).filter(Boolean);
   try {
@@ -6645,6 +6653,7 @@ async function saveFinStructure(){
       headers: { 'Content-Type': 'application/json', 'x-admin-key': getKey() },
       body: JSON.stringify({
         costo_fijo_diario_prorrateado: daily,
+        costo_operativo_por_reserva: perBooking,
         experience_slug_whitelist: wl,
       }),
     });

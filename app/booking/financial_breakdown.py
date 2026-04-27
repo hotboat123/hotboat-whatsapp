@@ -30,7 +30,8 @@ def _slugify(s: str) -> str:
 def get_financial_structure() -> Dict[str, Any]:
     raw = get_setting(FIN_STRUCTURE_KEY, "")
     default: Dict[str, Any] = {
-        "costo_fijo_diario_prorrateado": 0,
+        "costo_fijo_diario_prorrateado": 21700,
+        "costo_operativo_por_reserva": 18000,
         "experience_slug_whitelist": [],
     }
     if not raw:
@@ -198,9 +199,6 @@ def split_booking_financials(
     ing_res = float(booking.get("ingreso_reserva") or 0)
     inc = float(booking.get("ingreso_extras") or 0)
     var_total = float(booking.get("costo_variable") or 0)
-    c_fijo = float(booking.get("costo_fijo") or 0)
-    c_total = float(booking.get("costo_total") or 0)
-
     j = _extras_json_as_dict(booking.get("extras_json"))
 
     rev_a = rev_e = rev_x = 0.0
@@ -249,17 +247,11 @@ def split_booking_financials(
             else:
                 cv_x = var_total
 
-    parts = c_fijo + cv_a + cv_e + cv_x
-    drift = c_total - parts
-    if abs(drift) > TOL:
-        cv_x += drift
-
     return {
         "ingreso_reserva": int(round(ing_res)),
         "ingreso_aloj": int(round(rev_a)),
         "ingreso_exp": int(round(rev_e)),
         "ingreso_extra": int(round(rev_x)),
-        "costo_fijo_reserva": int(round(c_fijo)),
         "cv_aloj": int(round(cv_a)),
         "cv_exp": int(round(cv_e)),
         "cv_extra": int(round(cv_x)),
@@ -303,7 +295,6 @@ def merge_day_breakdown(dst: Dict[str, Any], split: Dict[str, int]) -> None:
     dst["ingreso_aloj"] = dst.get("ingreso_aloj", 0) + split["ingreso_aloj"]
     dst["ingreso_exp"] = dst.get("ingreso_exp", 0) + split["ingreso_exp"]
     dst["ingreso_extra"] = dst.get("ingreso_extra", 0) + split["ingreso_extra"]
-    dst["costo_fijo_reservas"] = dst.get("costo_fijo_reservas", 0) + split["costo_fijo_reserva"]
     dst["cv_aloj"] = dst.get("cv_aloj", 0) + split["cv_aloj"]
     dst["cv_exp"] = dst.get("cv_exp", 0) + split["cv_exp"]
     dst["cv_extra"] = dst.get("cv_extra", 0) + split["cv_extra"]

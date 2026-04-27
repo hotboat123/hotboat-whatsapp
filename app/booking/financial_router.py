@@ -252,9 +252,14 @@ def _get_budget(year: int, month: int) -> Dict:
 
 # ── P&L calculation core ──────────────────────────────────────────────────────
 
-def _calc_booking_pnl(booking: Dict, commissions: Dict) -> Dict:
+def _calc_booking_pnl(
+    booking: Dict,
+    commissions: Dict,
+    gross_override: Optional[float] = None,
+    costo_override: Optional[float] = None,
+) -> Dict:
     """Calculate P&L fields for a single booking."""
-    gross = booking["ingreso_total"]
+    gross = float(gross_override if gross_override is not None else booking["ingreso_total"])
     # Commission deduction based on pagos methods
     total_pago_amount = sum(float(p.get("amount", 0) or 0) for p in booking["pagos"])
     commission_deduction = 0.0
@@ -266,7 +271,7 @@ def _calc_booking_pnl(booking: Dict, commissions: Dict) -> Dict:
 
     # If there are no pagos yet, assume transferencia (no commission)
     net_income = gross - commission_deduction
-    costo = booking["costo_total"]
+    costo = float(costo_override if costo_override is not None else booking["costo_total"])
     return {
         "gross":                _fmt_int(gross),
         "commission_deduction": _fmt_int(commission_deduction),
@@ -286,6 +291,7 @@ def _build_pnl_days(
     """Build per-day P&L dict with income/cost breakdown and structural daily cost."""
     structure = get_financial_structure()
     daily_struct = float(structure.get("costo_fijo_diario_prorrateado") or 0)
+    costo_por_reserva = float(structure.get("costo_operativo_por_reserva") or 18000)
     wl = set(structure.get("experience_slug_whitelist") or [])
     cost_catalog = load_extra_cost_catalog()
 
@@ -298,14 +304,26 @@ def _build_pnl_days(
         day = b["fecha"]
         if day not in days:
             days[day] = new_empty_day(day)
-        pnl = _calc_booking_pnl(b, commissions)
         sp = split_booking_financials(b, cost_catalog, wl)
+        gross_split = (
+            float(sp["ingreso_reserva"]) +
+            float(sp["ingreso_aloj"]) +
+            float(sp["ingreso_exp"]) +
+            float(sp["ingreso_extra"])
+        )
+        pnl = _calc_booking_pnl(
+            b,
+            commissions,
+            gross_override=gross_split,
+            costo_override=costo_por_reserva,
+        )
         d = days[day]
         d["n_reservas"] += 1
         d["gross"] += pnl["gross"]
         d["commission_deduction"] += pnl["commission_deduction"]
         d["net_income"] += pnl["net_income"]
         d["costo_operacional"] += pnl["costo_operacional"]
+        d["costo_fijo_reservas"] += pnl["costo_operacional"]
         merge_day_breakdown(d, sp)
         d["bookings"].append({
             "id":               b["id"],
@@ -322,7 +340,7 @@ def _build_pnl_days(
             "cv_aloj":          sp["cv_aloj"],
             "cv_exp":           sp["cv_exp"],
             "cv_extra":         sp["cv_extra"],
-            "costo_fijo_reserva": sp["costo_fijo_reserva"],
+            "costo_fijo_reserva": pnl["costo_operacional"],
         })
 
     apply_structural_to_days(days, d_from, d_to, daily_struct)
@@ -407,6 +425,7 @@ def _build_cashflow_days(
     """Build per-day cash flow based on actual payment dates."""
     structure = get_financial_structure()
     daily_struct = float(structure.get("costo_fijo_diario_prorrateado") or 0)
+    costo_por_reserva = float(structure.get("costo_operativo_por_reserva") or 18000)
     wl = set(structure.get("experience_slug_whitelist") or [])
     cost_catalog = load_extra_cost_catalog()
 
@@ -416,13 +435,13 @@ def _build_cashflow_days(
         lambda: {"cv_aloj": 0, "cv_exp": 0, "cv_extra": 0, "costo_fijo": 0}
     )
     for b in bookings:
-        opex_by_day[b["fecha"]] += b["costo_total"]
+        opex_by_day[b["fecha"]] += costo_por_reserva
         sp = split_booking_financials(b, cost_catalog, wl)
         od = cf_opex_detail[b["fecha"]]
         od["cv_aloj"] += sp["cv_aloj"]
         od["cv_exp"] += sp["cv_exp"]
         od["cv_extra"] += sp["cv_extra"]
-        od["costo_fijo"] += sp["costo_fijo_reserva"]
+        od["costo_fijo"] += _fmt_int(costo_por_reserva)
 
     # Outflows: marketing
     mkt_by_day: Dict[str, float] = defaultdict(float)
@@ -860,6 +879,8 @@ async def put_financial_structure(request: Request, x_admin_key: str = Header(""
     merged = get_financial_structure()
     if "costo_fijo_diario_prorrateado" in body:
         merged["costo_fijo_diario_prorrateado"] = float(body["costo_fijo_diario_prorrateado"] or 0)
+    if "costo_operativo_por_reserva" in body:
+        merged["costo_operativo_por_reserva"] = float(body["costo_operativo_por_reserva"] or 0)
     if "experience_slug_whitelist" in body:
         wl = body["experience_slug_whitelist"]
         if isinstance(wl, str):
