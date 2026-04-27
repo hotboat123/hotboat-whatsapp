@@ -688,21 +688,8 @@ O elige:
                     logger.info("User selected call Capitán Tomás from menu")
                     await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
                     response = self.faq_handler.get_response("llamar a tomas", language)
-                elif menu_number == 8:
-                    # Option 8: Otras Experiencias Pucón
-                    logger.info("User selected experiences and activities from menu")
-                    conversation["metadata"]["awaiting_experience_menu"] = True
-                    response = {
-                        "type": "experiences_pdf",
-                        "text": get_text("experiences_menu", language)
-                    }
-                elif menu_number == 9:
-                    # Option 9: Packs Completos + Arma tu Pack
-                    logger.info("User selected packs from menu")
-                    conversation["metadata"]["awaiting_packages_submenu"] = True
-                    response = get_text("accommodations_and_packages_menu", language)
                 else:
-                    response = "No entendí esa opción. Por favor elige un número del 1 al 9, grumete ⚓"
+                    response = "No entendí esa opción. Por favor elige un número del 1 al 7, grumete ⚓"
             # Check if asking about accommodations — redirect to booking page
             elif self._is_accommodation_query(message_text):
                 logger.info("User asking about accommodations - redirecting to booking page")
@@ -991,20 +978,13 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             "5️⃣ *Ubicación y Reseñas HotBoat*",
         ]
         next_num = 6
-        num_aloj = num_exp = num_packs = None
         if show_aloj:
-            num_aloj = next_num; next_num += 1
-            lines += ["", f"{num_aloj}️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*"]
-        # Llamar a Tomás is always option 7 (or next after alojamientos)
-        capitan_num = next_num; next_num += 1
-        lines += ["", f"{capitan_num}️⃣ 📞 *Llamar al Capitán Tomás*"]
-        if show_exp:
-            num_exp = next_num; next_num += 1
-            lines += ["", f"{num_exp}️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*"]
-        if show_packs:
-            num_packs = next_num; next_num += 1
-            lines += ["", f"{num_packs}️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*"]
+            lines += ["", f"{next_num}️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*"]
+            next_num += 1
+        capitan_num = next_num
         lines += [
+            "",
+            f"Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *{capitan_num}️⃣* 👨‍✈️🌿",
             "",
             "¿Listo para zarpar, grumete? ⛵",
             "",

@@ -55,8 +55,6 @@ Digite o número do seu idioma"""
 
 Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥
 
-Estoy al mando para ayudarte con todas tus dudas sobre nuestras experiencias flotantes en la laguna 🌊
-
 Puedes preguntarme por:
 
 1️⃣ *Disponibilidad y horarios HotBoat*
@@ -71,11 +69,7 @@ Puedes preguntarme por:
 
 6️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*
 
-7️⃣ 📞 *Llamar al Capitán Tomás*
-
-8️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*
-
-9️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*
+Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *7️⃣* 👨‍✈️🌿
 
 ¿Listo para zarpar, grumete? ⛵
 
@@ -89,8 +83,6 @@ Si quieres cambiar de idioma, escribe:
         "en": """🥬 Ahoy, sailor! ⚓
 
 I'm *Popeye the Sailor*, second mate of *HotBoat Chile* 🚤🔥
-
-I'm here to help you with every question about our floating experiences on the lagoon 🌊
 
 You can ask me about:
 
@@ -106,11 +98,7 @@ You can ask me about:
 
 6️⃣ *Pucón Accommodations (Domes · Cabins · Hostel)*
 
-7️⃣ 📞 *Call Captain Tomás*
-
-8️⃣ *Other Pucón Experiences (Rafting, horseback riding, sailing)*
-
-9️⃣ *Complete Packages Pucón (Romantic · Family · Friends · Build Your Pack)*
+If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *7️⃣* 👨‍✈️🌿
 
 Ready to set sail, sailor? ⛵
 
@@ -124,8 +112,6 @@ If you'd like to switch languages, type:
         "pt": """🥬 Ahoy, marujo! ⚓
 
 Eu sou *Popeye o Marinheiro*, segundo imediato do *HotBoat Chile* 🚤🔥
-
-Estou no comando para ajudar com todas as tuas dúvidas sobre nossas experiências flutuantes na lagoa 🌊
 
 Você pode me perguntar sobre:
 
@@ -141,11 +127,7 @@ Você pode me perguntar sobre:
 
 6️⃣ *Hospedagens Pucón (Domos · Cabanas · Hostel)*
 
-7️⃣ 📞 *Ligar para o Capitão Tomás*
-
-8️⃣ *Outras Experiências Pucón (Rafting, cavalgadas, vela)*
-
-9️⃣ *Pacotes Completos Pucón (Romântico · Familiar · Amigos · Monte seu Pacote)*
+Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *7️⃣* 👨‍✈️🌿
 
 Pronto para zarpar, marujo? ⛵
 
