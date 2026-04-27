@@ -49,6 +49,28 @@ def get_financial_structure() -> Dict[str, Any]:
         return default.copy()
 
 
+def load_aloj_cost_catalog() -> Dict[str, float]:
+    """slug (varias formas) -> cost_from por noche (tabla alojamientos)."""
+    out: Dict[str, float] = {}
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT slug, COALESCE(cost_from, 0)
+                    FROM alojamientos
+                """)
+                for slug, cost in cur.fetchall():
+                    s = str(slug or "").strip().lower()
+                    if not s:
+                        continue
+                    c = float(cost or 0)
+                    out[s] = c
+                    out[_slugify(s)] = c
+    except Exception as e:
+        logger.warning("load_aloj_cost_catalog: %s", e)
+    return out
+
+
 def load_extra_cost_catalog() -> Dict[str, float]:
     """Normalized keys -> unit cost (extras_visibility.costo)."""
     out: Dict[str, float] = {}
@@ -142,6 +164,31 @@ def _classify_line(key: str, val: Any, wl: Set[str]) -> str:
     return "extra"
 
 
+def _aloj_slug_from_key(key: str) -> str:
+    lk = str(key).lower()
+    if lk.startswith("aloj__"):
+        return lk.split("__", 1)[-1].strip()
+    return ""
+
+
+def _aloj_db_cost_per_night(slug: str, aloj_map: Dict[str, float]) -> float:
+    if not slug or not aloj_map:
+        return 0.0
+    s = slug.strip().lower()
+    if s in aloj_map:
+        return float(aloj_map[s] or 0)
+    ss = _slugify(s)
+    if ss in aloj_map:
+        return float(aloj_map[ss] or 0)
+    t = s.replace("-", "_")
+    if t in aloj_map:
+        return float(aloj_map[t] or 0)
+    ts = _slugify(t)
+    if ts in aloj_map:
+        return float(aloj_map[ts] or 0)
+    return 0.0
+
+
 def _catalog_cost_for_key(key: str, val: Any, cmap: Dict[str, float]) -> float | None:
     lk = str(key).lower()
     candidates = [
@@ -190,6 +237,7 @@ def split_booking_financials(
     booking: Dict[str, Any],
     cost_catalog: Dict[str, float],
     exp_whitelist: Set[str],
+    aloj_cost_catalog: Dict[str, float] | None = None,
 ) -> Dict[str, int]:
     """
     Returns integer CLP fields for one booking row.
@@ -200,52 +248,83 @@ def split_booking_financials(
     inc = float(booking.get("ingreso_extras") or 0)
     var_total = float(booking.get("costo_variable") or 0)
     j = _extras_json_as_dict(booking.get("extras_json"))
+    aloj_map = aloj_cost_catalog or {}
 
     rev_a = rev_e = rev_x = 0.0
-    cv_a = cv_e = cv_x = 0.0
+    cv_a_locked = 0.0  # aloj: cost_from en BD o cost_per_night/unit_cost en JSON (no se reduce a costo_variable)
+    cv_a_soft = 0.0  # aloj: coste desde extras_visibility / catálogo
+    cv_e = cv_x = 0.0
 
     for key, val in j.items():
         cat = _classify_line(key, val, exp_whitelist)
         rev = _line_revenue(val)
         qty = _line_qty(val)
-        uc = _catalog_cost_for_key(key, val, cost_catalog)
-        line_cost = (uc * qty) if uc is not None else 0.0
-
         if cat == "aloj":
             rev_a += rev
-            cv_a += line_cost
+            slug = _aloj_slug_from_key(key)
+            db_night = _aloj_db_cost_per_night(slug, aloj_map)
+            locked = 0.0
+            line_cost = 0.0
+            if db_night > 0:
+                line_cost = qty * db_night
+                locked = line_cost
+            elif isinstance(val, dict):
+                if val.get("cost_per_night") is not None:
+                    line_cost = qty * float(val.get("cost_per_night") or 0)
+                    locked = line_cost
+                elif val.get("unit_cost") is not None:
+                    line_cost = qty * float(val.get("unit_cost") or 0)
+                    locked = line_cost
+            if line_cost <= TOL:
+                uc = _catalog_cost_for_key(key, val, cost_catalog)
+                if uc is not None:
+                    line_cost = uc * qty
+            if locked > TOL:
+                cv_a_locked += locked
+                if line_cost > locked + TOL:
+                    cv_a_soft += line_cost - locked
+            else:
+                cv_a_soft += line_cost
         elif cat == "exp":
             rev_e += rev
-            cv_e += line_cost
+            uc = _catalog_cost_for_key(key, val, cost_catalog)
+            cv_e += (uc * qty) if uc is not None else 0.0
         else:
             rev_x += rev
-            cv_x += line_cost
+            uc = _catalog_cost_for_key(key, val, cost_catalog)
+            cv_x += (uc * qty) if uc is not None else 0.0
 
     rev_a, rev_e, rev_x = _reconcile_three(inc, rev_a, rev_e, rev_x)
 
-    cat_cv = cv_a + cv_e + cv_x
+    cat_soft = cv_a_soft + cv_e + cv_x
+    var_allow = var_total - cv_a_locked
     if var_total > TOL:
-        if cat_cv > TOL:
-            if cat_cv > var_total + TOL:
-                s = var_total / cat_cv
-                cv_a, cv_e, cv_x = cv_a * s, cv_e * s, cv_x * s
-            else:
-                rem = var_total - cat_cv
+        if var_allow < -TOL:
+            var_allow = 0.0
+        if cat_soft > TOL:
+            if var_allow > TOL and cat_soft > var_allow + TOL:
+                s = var_allow / cat_soft
+                cv_a_soft, cv_e, cv_x = cv_a_soft * s, cv_e * s, cv_x * s
+            elif var_allow > TOL:
+                rem = var_allow - cat_soft
                 inc_cat = rev_a + rev_e + rev_x
                 if inc_cat > TOL:
-                    cv_a += rem * rev_a / inc_cat
+                    cv_a_soft += rem * rev_a / inc_cat
                     cv_e += rem * rev_e / inc_cat
                     cv_x += rem * rev_x / inc_cat
                 else:
                     cv_x += rem
-        else:
+            elif var_allow <= TOL:
+                cv_a_soft, cv_e, cv_x = 0.0, 0.0, 0.0
+        elif cat_soft <= TOL and var_allow > TOL:
             inc_cat = rev_a + rev_e + rev_x
             if inc_cat > TOL:
-                cv_a = var_total * rev_a / inc_cat
-                cv_e = var_total * rev_e / inc_cat
-                cv_x = var_total * rev_x / inc_cat
+                cv_a_soft = var_allow * rev_a / inc_cat
+                cv_e = var_allow * rev_e / inc_cat
+                cv_x = var_allow * rev_x / inc_cat
             else:
-                cv_x = var_total
+                cv_x = var_allow
+    cv_a = cv_a_locked + cv_a_soft
 
     return {
         "ingreso_reserva": int(round(ing_res)),
@@ -281,7 +360,6 @@ def new_empty_day(fecha: str) -> Dict[str, Any]:
         "ingreso_aloj": 0,
         "ingreso_exp": 0,
         "ingreso_extra": 0,
-        "costo_fijo_reservas": 0,
         "cv_aloj": 0,
         "cv_exp": 0,
         "cv_extra": 0,
@@ -333,7 +411,6 @@ def aggregate_breakdown_into_week_month(
         "ingreso_aloj",
         "ingreso_exp",
         "ingreso_extra",
-        "costo_fijo_reservas",
         "cv_aloj",
         "cv_exp",
         "cv_extra",

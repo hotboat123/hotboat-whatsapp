@@ -16,6 +16,7 @@ from app.booking.financial_breakdown import (
     finalize_pnl_day,
     get_financial_structure,
     iso_dates_inclusive,
+    load_aloj_cost_catalog,
     load_extra_cost_catalog,
     merge_day_breakdown,
     new_empty_day,
@@ -294,6 +295,7 @@ def _build_pnl_days(
     costo_por_reserva = float(structure.get("costo_operativo_por_reserva") or 18000)
     wl = set(structure.get("experience_slug_whitelist") or [])
     cost_catalog = load_extra_cost_catalog()
+    aloj_cost_catalog = load_aloj_cost_catalog()
 
     mkt_by_day: Dict[str, float] = defaultdict(float)
     for m in marketing:
@@ -304,7 +306,7 @@ def _build_pnl_days(
         day = b["fecha"]
         if day not in days:
             days[day] = new_empty_day(day)
-        sp = split_booking_financials(b, cost_catalog, wl)
+        sp = split_booking_financials(b, cost_catalog, wl, aloj_cost_catalog)
         gross_split = (
             float(sp["ingreso_reserva"]) +
             float(sp["ingreso_aloj"]) +
@@ -323,7 +325,6 @@ def _build_pnl_days(
         d["commission_deduction"] += pnl["commission_deduction"]
         d["net_income"] += pnl["net_income"]
         d["costo_operacional"] += pnl["costo_operacional"]
-        d["costo_fijo_reservas"] += pnl["costo_operacional"]
         merge_day_breakdown(d, sp)
         d["bookings"].append({
             "id":               b["id"],
@@ -340,7 +341,6 @@ def _build_pnl_days(
             "cv_aloj":          sp["cv_aloj"],
             "cv_exp":           sp["cv_exp"],
             "cv_extra":         sp["cv_extra"],
-            "costo_fijo_reserva": pnl["costo_operacional"],
         })
 
     apply_structural_to_days(days, d_from, d_to, daily_struct)
@@ -370,7 +370,7 @@ def _aggregate_weeks(days: Dict[str, Dict]) -> List[Dict]:
                 "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
                 "costo_estructural": 0,
                 "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
-                "costo_fijo_reservas": 0, "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0,
+                "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0,
                 "days": [],
             }
         w = weeks[week_key]
@@ -397,7 +397,7 @@ def _aggregate_months(days: Dict[str, Dict]) -> List[Dict]:
                 "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
                 "costo_estructural": 0,
                 "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
-                "costo_fijo_reservas": 0, "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0,
+                "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0,
                 "days": [],
             }
         m = months[month_key]
@@ -428,6 +428,7 @@ def _build_cashflow_days(
     costo_por_reserva = float(structure.get("costo_operativo_por_reserva") or 18000)
     wl = set(structure.get("experience_slug_whitelist") or [])
     cost_catalog = load_extra_cost_catalog()
+    aloj_cost_catalog = load_aloj_cost_catalog()
 
     # Outflows: operational costs on booking date (total) + breakdown
     opex_by_day: Dict[str, float] = defaultdict(float)
@@ -436,12 +437,12 @@ def _build_cashflow_days(
     )
     for b in bookings:
         opex_by_day[b["fecha"]] += costo_por_reserva
-        sp = split_booking_financials(b, cost_catalog, wl)
+        sp = split_booking_financials(b, cost_catalog, wl, aloj_cost_catalog)
         od = cf_opex_detail[b["fecha"]]
         od["cv_aloj"] += sp["cv_aloj"]
         od["cv_exp"] += sp["cv_exp"]
         od["cv_extra"] += sp["cv_extra"]
-        od["costo_fijo"] += _fmt_int(costo_por_reserva)
+        od["costo_fijo"] = 0
 
     # Outflows: marketing
     mkt_by_day: Dict[str, float] = defaultdict(float)
@@ -630,7 +631,6 @@ async def get_pnl(
         "ingreso_aloj": sum(d.get("ingreso_aloj", 0) for d in days.values()),
         "ingreso_exp": sum(d.get("ingreso_exp", 0) for d in days.values()),
         "ingreso_extra": sum(d.get("ingreso_extra", 0) for d in days.values()),
-        "costo_fijo_reservas": sum(d.get("costo_fijo_reservas", 0) for d in days.values()),
         "cv_aloj": sum(d.get("cv_aloj", 0) for d in days.values()),
         "cv_exp": sum(d.get("cv_exp", 0) for d in days.values()),
         "cv_extra": sum(d.get("cv_extra", 0) for d in days.values()),

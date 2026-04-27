@@ -1338,8 +1338,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right">I.Ext.</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Comis.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Neto</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Suma costo operativo total por reserva">C.Op</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo operativo fijo por reserva (config: costo_operativo_por_reserva)">C.Op x Res</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo operativo: N reservas × costo_operativo_por_reserva (config)">C.Op</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable alojamiento (desde extras_json/catálogo)">CV Aloj</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable experiencia (desde extras_json/catálogo)">CV Exp</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable otros extras (desde extras_json/catálogo)">CV Extra</th>
@@ -6188,7 +6187,7 @@ function exportFinancialTableCsv(){
     const headers = [
       'periodo', 'vista_agregacion', 'fecha_desde', 'fecha_hasta', 'n_reservas', 'ingreso_bruto',
       'ingreso_reserva', 'ingreso_aloj', 'ingreso_exp', 'ingreso_extra', 'comisiones', 'ingreso_neto',
-      'costo_operacional', 'costo_fijo_reservas', 'cv_aloj', 'cv_exp', 'cv_extra', 'costo_estructural',
+      'costo_operacional', 'cv_aloj', 'cv_exp', 'cv_extra', 'costo_estructural',
       'marketing', 'resultado', 'margen_pct_sobre_bruto',
     ];
     const rows = [headers];
@@ -6205,7 +6204,6 @@ function exportFinancialTableCsv(){
         finCsvNum(row.commission_deduction),
         finCsvNum(row.net_income),
         finCsvNum(row.costo_operacional),
-        finCsvNum(row.costo_fijo_reservas),
         finCsvNum(row.cv_aloj),
         finCsvNum(row.cv_exp),
         finCsvNum(row.cv_extra),
@@ -6229,7 +6227,6 @@ function exportFinancialTableCsv(){
         finCsvNum(t.commission_deduction),
         finCsvNum(t.net_income),
         finCsvNum(t.costo_operacional),
-        finCsvNum(t.costo_fijo_reservas),
         finCsvNum(t.cv_aloj),
         finCsvNum(t.cv_exp),
         finCsvNum(t.cv_extra),
@@ -6384,7 +6381,6 @@ function renderPnlKpis(t, periodDays, structure){
       {label:'Ingreso alojamientos',   value: fmtClp(t.ingreso_aloj||0),    color:'var(--text)'},
       {label:'Ingreso experiencias',   value: fmtClp(t.ingreso_exp||0),     color:'#5dade2'},
       {label:'Ingreso extras',         value: fmtClp(t.ingreso_extra||0),   color:'var(--muted)'},
-      {label:'C.Op por reserva',    value: '-'+fmtClp(t.costo_fijo_reservas||0), color:'var(--red)'},
       {label:'C. var. aloj / exp / ext', value: '-'+fmtClp((t.cv_aloj||0)+(t.cv_exp||0)+(t.cv_extra||0)),
        color:'var(--red)', sub: `${fmtClp(t.cv_aloj||0)} · ${fmtClp(t.cv_exp||0)} · ${fmtClp(t.cv_extra||0)}`},
     ];
@@ -6406,7 +6402,6 @@ function _pnlRowTds(row, sm){
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.commission_deduction)}</td>
     <td style="${p};text-align:right;color:var(--gold)">${fmtClp(row.net_income)}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.costo_operacional)}</td>
-    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('costo_fijo_reservas'))}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('cv_aloj'))}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('cv_exp'))}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('cv_extra'))}</td>
@@ -6419,7 +6414,7 @@ function _pnlRowTds(row, sm){
 function renderPnlTable(data, view, totals){
   const tbody = document.getElementById('fin-pnl-tbody');
   const tfoot = document.getElementById('fin-pnl-tfoot');
-  const COLSP = 18;
+  const COLSP = 17;
   tbody.innerHTML = '';
 
   data.forEach((row, idx) => {
@@ -6467,7 +6462,6 @@ function renderPnlTable(data, view, totals){
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.commission_deduction)}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--gold)">${fmtClp(t.net_income)}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.costo_operacional)}</td>
-      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('costo_fijo_reservas'))}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('cv_aloj'))}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('cv_exp'))}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('cv_extra'))}</td>
