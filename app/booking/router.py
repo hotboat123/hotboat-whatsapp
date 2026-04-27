@@ -224,7 +224,7 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
                             FROM booknetic_appointments
                             WHERE starts_at IS NOT NULL
                               AND starts_at >= %s AND starts_at <= %s
-                              AND (status IS NULL OR status NOT IN ('cancelled','rejected'))
+                              AND (status IS NULL OR status NOT IN ('cancelled','rejected','cancelada','pending_payment','solicitud'))
                         """, (start.date(), end.date()))
                         for row in cur.fetchall():
                             booked_by_day.setdefault(row[0], []).append(row[1])
@@ -236,7 +236,7 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
                             WHERE source NOT IN ('booknetic', 'hotboat_web')
                               AND fecha >= %s AND fecha <= %s
                               AND hora IS NOT NULL
-                              AND status NOT IN ('cancelled','rejected','cancelada','solicitud')
+                              AND status NOT IN ('cancelled','rejected','cancelada','solicitud','pending_payment')
                         """, (start.date(), end.date()))
                         for row in cur.fetchall():
                             booked_by_day.setdefault(row[0], []).append(row[1])

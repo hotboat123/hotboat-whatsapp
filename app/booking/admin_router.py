@@ -767,6 +767,12 @@ async def add_urgency_day_route(body: UrgencyDayRequest, x_admin_key: str = Head
     ok = set_urgency_day(d, body.enabled, body.reason or "")
     if not ok:
         raise HTTPException(status_code=500, detail="Error setting urgency day")
+    # Invalidate cached availability so day override applies immediately.
+    try:
+        from app.booking import router as _booking_router
+        _booking_router._avail_cache.clear()
+    except Exception:
+        pass
     return {"ok": True, "date": body.date, "enabled": body.enabled}
 
 
@@ -776,6 +782,12 @@ async def delete_urgency_day_route(fecha: str, x_admin_key: str = Header("")):
     from datetime import date as _date
     d = _date.fromisoformat(fecha)
     ok = remove_urgency_day(d)
+    # Invalidate cached availability so day override removal applies immediately.
+    try:
+        from app.booking import router as _booking_router
+        _booking_router._avail_cache.clear()
+    except Exception:
+        pass
     return {"ok": ok, "date": fecha}
 
 
@@ -949,6 +961,12 @@ async def update_urgency_cfg(body: UrgencyConfigRequest, x_admin_key: str = Head
     if body.gap_hours is not None:
         cfg["gap_hours"] = max(0.5, float(body.gap_hours))
     set_urgency_config(cfg)
+    # Invalidate cached availability so urgency config takes effect immediately.
+    try:
+        from app.booking import router as _booking_router
+        _booking_router._avail_cache.clear()
+    except Exception:
+        pass
     return {"ok": True, "config": cfg}
 
 
