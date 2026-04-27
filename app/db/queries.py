@@ -272,13 +272,14 @@ async def get_booked_slots(
                     except Exception:
                         pass
 
-                # Include manual reservations from all_appointments (source='manual' or 'sheets').
-                # These are NOT in booknetic_appointments or hotboat_appointments so would
-                # otherwise be invisible to the availability checker.
+                # Include all_appointments entries (manual entries AND hotboat_web as safety net).
+                # hotboat_web is included because a booking may exist in all_appointments but
+                # be missing from hotboat_appointments due to a sync gap — without this it
+                # would be invisible to the availability checker.
                 cur.execute("""
                     SELECT fecha, hora, nombre_cliente, status
                     FROM all_appointments
-                    WHERE source NOT IN ('booknetic', 'hotboat_web')
+                    WHERE source NOT IN ('booknetic')
                       AND fecha >= %s::date
                       AND fecha <= %s::date
                       AND hora IS NOT NULL
