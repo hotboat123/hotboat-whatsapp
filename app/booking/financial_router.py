@@ -541,6 +541,82 @@ def _add_running_balance(days: Dict[str, Dict], opening_balance: float = 0) -> L
     return result
 
 
+def _normalize_payment_method(method: Any) -> str:
+    m = str(method or "otro").strip().lower()
+    aliases = {
+        "mp": "mercadopago",
+        "mercado_pago": "mercadopago",
+        "tbk": "transbank",
+        "transbank_credito": "transbank",
+        "transbank_debito": "transbank",
+        "cash": "efectivo",
+        "transfer": "transferencia",
+        "sin registro": "sin_registro",
+        "sin_registro": "sin_registro",
+    }
+    return aliases.get(m, m if m else "otro")
+
+
+def _parse_pago_date(raw_date: Any, fallback_date: Any) -> Optional[date]:
+    val = raw_date or fallback_date
+    if not val:
+        return None
+    try:
+        return date.fromisoformat(str(val)[:10])
+    except ValueError:
+        return None
+
+
+def _build_inflows_by_method(
+    bookings: List[Dict],
+    commissions: Dict,
+    d_from: date,
+    d_to: date,
+) -> Dict[str, Dict[str, int]]:
+    """
+    Aggregate inflows by payment method for a date range using payment date.
+    Returns dict method -> {count, inflow_bruto, inflow_commission, inflow_neto}.
+    """
+    grouped: Dict[str, Dict[str, int]] = defaultdict(
+        lambda: {"count": 0, "inflow_bruto": 0, "inflow_commission": 0, "inflow_neto": 0}
+    )
+    for b in bookings:
+        pagos = b.get("pagos") or []
+        if not pagos:
+            pago_dt = _parse_pago_date(None, b.get("fecha"))
+            if not pago_dt or not (d_from <= pago_dt <= d_to):
+                continue
+            amt = float(b.get("ingreso_total") or 0)
+            if amt <= 0:
+                continue
+            method = "sin_registro"
+            net = _net_amount(amt, "transferencia", commissions)
+            commission = amt - net
+            g = grouped[method]
+            g["count"] += 1
+            g["inflow_bruto"] += _fmt_int(amt)
+            g["inflow_commission"] += _fmt_int(commission)
+            g["inflow_neto"] += _fmt_int(net)
+            continue
+
+        for p in pagos:
+            pago_dt = _parse_pago_date(p.get("date"), b.get("fecha"))
+            if not pago_dt or not (d_from <= pago_dt <= d_to):
+                continue
+            amt = float(p.get("amount", 0) or 0)
+            if amt <= 0:
+                continue
+            method = _normalize_payment_method(p.get("method", "otro"))
+            net = _net_amount(amt, method, commissions)
+            commission = amt - net
+            g = grouped[method]
+            g["count"] += 1
+            g["inflow_bruto"] += _fmt_int(amt)
+            g["inflow_commission"] += _fmt_int(commission)
+            g["inflow_neto"] += _fmt_int(net)
+    return grouped
+
+
 def _aggregate_cf_weeks(days_list: List[Dict]) -> List[Dict]:
     weeks: Dict[str, Dict] = {}
     for d in days_list:
@@ -694,6 +770,54 @@ async def get_cashflow(
         "period_calendar_days": (d_to - d_from).days + 1,
         "structure": get_financial_structure(),
         "data": data,
+    }
+
+
+@financial_router.get("/api/admin/financial/inflows-by-method")
+async def get_inflows_by_method(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    x_admin_key: str = Header(""),
+):
+    try:
+        d_from = date.fromisoformat(date_from)
+        d_to = date.fromisoformat(date_to)
+    except ValueError:
+        raise HTTPException(400, "Invalid date format, use YYYY-MM-DD")
+
+    commissions = _get_commissions()
+    bookings = _get_bookings_range(d_from, d_to)
+    grouped = _build_inflows_by_method(bookings, commissions, d_from, d_to)
+
+    ordered_methods = [
+        "efectivo",
+        "mercadopago",
+        "transbank",
+        "transferencia",
+        "cheque",
+        "otro",
+        "sin_registro",
+    ]
+    methods_sorted = sorted(
+        grouped.keys(),
+        key=lambda m: (ordered_methods.index(m) if m in ordered_methods else len(ordered_methods), m),
+    )
+
+    totals = {"count": 0, "inflow_bruto": 0, "inflow_commission": 0, "inflow_neto": 0}
+    rows = []
+    for method in methods_sorted:
+        row = {"method": method, **grouped[method]}
+        rows.append(row)
+        totals["count"] += row["count"]
+        totals["inflow_bruto"] += row["inflow_bruto"]
+        totals["inflow_commission"] += row["inflow_commission"]
+        totals["inflow_neto"] += row["inflow_neto"]
+
+    return {
+        "date_from": date_from,
+        "date_to": date_to,
+        "totals": totals,
+        "data": rows,
     }
 
 

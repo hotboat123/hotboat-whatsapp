@@ -1396,6 +1396,30 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </table>
         </div>
       </div>
+
+      <!-- Entradas por método de pago -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-top:1rem">
+        <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:.92rem">Entradas por método de pago</span>
+          <span id="fin-cf-methods-loading" style="color:var(--muted);font-size:.78rem"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.81rem">
+            <thead>
+              <tr style="background:var(--card);color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em">
+                <th style="padding:.55rem .7rem;text-align:left">Método</th>
+                <th style="padding:.55rem .45rem;text-align:right">Mov.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:var(--green)">Entradas bruto</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Comisión</th>
+                <th style="padding:.55rem .45rem;text-align:right">Entradas neto</th>
+                <th style="padding:.55rem .45rem;text-align:right">%</th>
+              </tr>
+            </thead>
+            <tbody id="fin-cf-methods-tbody"></tbody>
+            <tfoot id="fin-cf-methods-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ── Forecast Panel ─────────────────────────────────────────────── -->
@@ -6089,6 +6113,7 @@ let _finCommissions = null;
 let _mktCosts = [];   // editing buffer for marketing costs
 let _finLastPnl = null;      // { data, view, totals, date_from, date_to }
 let _finLastCf = null;       // { data, view, date_from, date_to, opening_balance }
+let _finLastCfMethods = null; // { date_from, date_to, totals, data }
 let _finLastForecast = null; // array from /forecast
 
 function fmtClp(n){
@@ -6514,12 +6539,95 @@ async function loadCashFlow(){
     };
     renderCfKpis(d.data);
     renderCfTable(d.data, d.view);
+    loadCfMethodsBreakdown(from, to);
     document.getElementById('fin-cf-loading').textContent =
       (d.data||[]).length === 0 ? 'Sin movimientos en este período' : '';
   } catch(e){
     console.error('loadCashFlow error:', e);
     document.getElementById('fin-cf-loading').textContent = 'Error al cargar';
   }
+}
+
+function _cfMethodLabel(method){
+  const labels = {
+    efectivo: 'Efectivo',
+    mercadopago: 'MercadoPago',
+    transbank: 'Transbank',
+    transferencia: 'Transferencia',
+    cheque: 'Cheque',
+    otro: 'Otro',
+    sin_registro: 'Sin registro de pago',
+  };
+  return labels[method] || method || 'Otro';
+}
+
+async function loadCfMethodsBreakdown(from, to){
+  const loadingEl = document.getElementById('fin-cf-methods-loading');
+  if(!from || !to){
+    renderCfMethodsBreakdown([], { inflow_bruto: 0, inflow_commission: 0, inflow_neto: 0, count: 0 });
+    return;
+  }
+  loadingEl.textContent = 'Cargando…';
+  try{
+    const r = await fetch(`/api/admin/financial/inflows-by-method?date_from=${from}&date_to=${to}`, {
+      headers: { 'x-admin-key': getKey() },
+    });
+    if(!r.ok){
+      const err = await r.text();
+      console.error('inflows-by-method API error:', r.status, err);
+      loadingEl.textContent = `Error ${r.status}`;
+      renderCfMethodsBreakdown([], { inflow_bruto: 0, inflow_commission: 0, inflow_neto: 0, count: 0 });
+      return;
+    }
+    const d = await r.json();
+    _finLastCfMethods = d;
+    renderCfMethodsBreakdown(d.data || [], d.totals || { inflow_bruto: 0, inflow_commission: 0, inflow_neto: 0, count: 0 });
+    loadingEl.textContent = (d.data || []).length ? '' : 'Sin ingresos en este período';
+  }catch(e){
+    console.error('loadCfMethodsBreakdown error:', e);
+    loadingEl.textContent = 'Error al cargar';
+    renderCfMethodsBreakdown([], { inflow_bruto: 0, inflow_commission: 0, inflow_neto: 0, count: 0 });
+  }
+}
+
+function renderCfMethodsBreakdown(rows, totals){
+  const tbody = document.getElementById('fin-cf-methods-tbody');
+  const tfoot = document.getElementById('fin-cf-methods-tfoot');
+  tbody.innerHTML = '';
+  tfoot.innerHTML = '';
+
+  if(!rows || !rows.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:1rem;text-align:center;color:var(--muted)">Sin ingresos registrados por método para este período</td></tr>';
+    return;
+  }
+
+  const totalNeto = Math.round(Number(totals?.inflow_neto || 0));
+  rows.forEach(row=>{
+    const neto = Math.round(Number(row.inflow_neto || 0));
+    const pct = totalNeto > 0 ? Math.round((neto / totalNeto) * 100) : 0;
+    const tr = document.createElement('tr');
+    tr.style.borderTop = '1px solid var(--border)';
+    tr.innerHTML = `
+      <td style="padding:.55rem .7rem">${_cfMethodLabel(row.method)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--muted)">${Math.round(Number(row.count||0))}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--green)">+${fmtClp(row.inflow_bruto)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.inflow_commission)}</td>
+      <td style="padding:.55rem .45rem;text-align:right">${fmtClp(row.inflow_neto)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--muted)">${pct}%</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tfoot.innerHTML = `
+    <tr style="background:var(--card);font-weight:600;font-size:.8rem;border-top:2px solid var(--border)">
+      <td style="padding:.55rem .7rem">Σ período</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--muted)">${Math.round(Number(totals?.count||0))}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--green)">+${fmtClp(totals?.inflow_bruto||0)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(totals?.inflow_commission||0)}</td>
+      <td style="padding:.55rem .45rem;text-align:right">${fmtClp(totals?.inflow_neto||0)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--muted)">100%</td>
+    </tr>
+  `;
 }
 
 function renderCfKpis(data){
