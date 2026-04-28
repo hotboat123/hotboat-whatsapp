@@ -1201,17 +1201,35 @@ async def track_booking_event(body: TrackEventRequest):
     """
     Collects visitor events per session, then after 5 min of inactivity
     sends a single summary email with activity timeline and classification.
+    Events are persisted to the DB for analytics on every tracked call (when session_id exists).
     """
     import asyncio
     from app.booking.operator_settings import get_setting
-    if get_setting("booking_visitor_notif", "false").lower() != "true":
-        return {"ok": True, "sent": False}
 
     sid = (body.session_id or "").strip()[:64]
     if not sid:
         return {"ok": True, "sent": False}
 
     now_cl = datetime.now(CHILE_TZ)
+
+    try:
+        from app.booking.visitor_tracking import persist_booking_visitor_event
+
+        persist_booking_visitor_event(
+            sid,
+            (body.event or "").strip(),
+            extra_date=(body.date or "").strip() or None,
+            time_label=now_cl.strftime("%H:%M"),
+            lang=str(body.lang or "es"),
+            referrer=str(body.referrer or ""),
+            is_returning=bool(body.is_returning),
+            recorded_at=now_cl,
+        )
+    except Exception as _persist_e:
+        logger.warning("visitor event persist failed: %s", _persist_e)
+
+    if get_setting("booking_visitor_notif", "false").lower() != "true":
+        return {"ok": True, "sent": False}
 
     if sid not in _visitor_sessions:
         _visitor_sessions[sid] = {
@@ -1300,6 +1318,13 @@ _EVENT_LABELS = {
 
 
 def _send_session_summary(session: dict):
+    from app.booking.visitor_tracking import persist_booking_visitor_session_closed
+
+    ended_at = datetime.now(CHILE_TZ)
+    events = session.get("events", []) or []
+    classification, cls_desc = _classify_visitor(events)
+    sent_ok = False
+
     try:
         from app.config import get_settings
         from app.booking.booking_email import _get_admin_email, _get_from_addr
@@ -1309,33 +1334,31 @@ def _send_session_summary(session: dict):
         api_key   = (getattr(cfg, "resend_api_key", "") or "").strip()
         to_addr   = _get_admin_email(cfg)
         from_addr = _get_from_addr(cfg)
-        if not api_key or not to_addr:
-            return
-
-        events       = session.get("events", [])
         lang         = (session.get("lang") or "es").upper()
         referrer     = session.get("referrer", "")
         is_returning = session.get("is_returning", False)
         start_time   = session.get("start_time")
         start_str    = start_time.strftime("%d/%m/%Y %H:%M") if start_time else "—"
 
-        classification, cls_desc = _classify_visitor(events)
-        ref_label = _referrer_label(referrer)
+        if not api_key or not to_addr:
+            logger.warning("visitor_session_summary: email not configured; skipping send")
+        else:
+            ref_label = _referrer_label(referrer)
 
-        rows = ""
-        for ev in events:
-            icon, label = _EVENT_LABELS.get(ev["event"], ("•", ev["event"]))
-            extra = f" — <strong>{ev['date']}</strong>" if ev.get("date") else ""
-            rows += (f'<tr>'
-                     f'<td style="color:#888;font-size:.8rem;padding:.25rem .6rem;white-space:nowrap">{ev["time"]}</td>'
-                     f'<td style="padding:.25rem .6rem">{icon} {label}{extra}</td>'
-                     f'</tr>')
+            rows = ""
+            for ev in events:
+                icon, label = _EVENT_LABELS.get(ev["event"], ("•", ev["event"]))
+                extra = f" — <strong>{ev['date']}</strong>" if ev.get("date") else ""
+                rows += (f'<tr>'
+                         f'<td style="color:#888;font-size:.8rem;padding:.25rem .6rem;white-space:nowrap">{ev["time"]}</td>'
+                         f'<td style="padding:.25rem .6rem">{icon} {label}{extra}</td>'
+                         f'</tr>')
 
-        ref_row = (f'<tr><td style="color:#888;padding:.3rem 0">Origen</td>'
-                   f'<td><strong>{ref_label}</strong></td></tr>') if ref_label else ""
+            ref_row = (f'<tr><td style="color:#888;padding:.3rem 0">Origen</td>'
+                       f'<td><strong>{ref_label}</strong></td></tr>') if ref_label else ""
 
-        subject = f"{classification} · {start_str}"
-        html = f"""
+            subject = f"{classification} · {start_str}"
+            html = f"""
 <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:1.5rem;
             background:#1a1a2e;color:#e0e0e0;border-radius:12px">
   <h2 style="color:#f5c842;margin-bottom:.2rem">Resumen de visita</h2>
@@ -1369,9 +1392,17 @@ def _send_session_summary(session: dict):
   </table>
 </div>"""
 
-        send_booking_html(to=to_addr, subject=subject, html=html,
-                          from_address=from_addr, api_key=api_key)
-        logger.info("visitor_session_summary sent: sid=%s events=%d cls=%s",
-                    session.get("session_id", "?"), len(events), classification)
+            send_booking_html(to=to_addr, subject=subject, html=html,
+                              from_address=from_addr, api_key=api_key)
+            sent_ok = True
+            logger.info("visitor_session_summary sent: sid=%s events=%d cls=%s",
+                        session.get("session_id", "?"), len(events), classification)
     except Exception as e:
         logger.warning("_send_session_summary error: %s", e)
+
+    try:
+        persist_booking_visitor_session_closed(
+            session, classification, cls_desc, sent_ok, ended_at,
+        )
+    except Exception as pe:
+        logger.warning("visitor_session DB persist failed: %s", pe)

@@ -652,6 +652,43 @@ def ensure_db_columns() -> None:
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 );
                 CREATE INDEX IF NOT EXISTS idx_accom_blocked_aloj ON accommodation_blocked_dates(accommodation_id);
+
+                -- 033: booking page visitor funnel (analytics)
+                CREATE TABLE IF NOT EXISTS booking_visitor_events (
+                    id               SERIAL PRIMARY KEY,
+                    session_id       VARCHAR(64) NOT NULL,
+                    event_type       VARCHAR(96) NOT NULL,
+                    extra_date       TEXT,
+                    time_label       VARCHAR(16),
+                    lang             VARCHAR(8) DEFAULT 'es',
+                    referrer         TEXT DEFAULT '',
+                    is_returning     BOOLEAN DEFAULT FALSE,
+                    recorded_at      TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_booking_visitor_events_session
+                    ON booking_visitor_events (session_id);
+                CREATE INDEX IF NOT EXISTS idx_booking_visitor_events_recorded
+                    ON booking_visitor_events (recorded_at);
+
+                CREATE TABLE IF NOT EXISTS booking_visitor_sessions (
+                    id                   SERIAL PRIMARY KEY,
+                    session_id           VARCHAR(64) NOT NULL,
+                    started_at           TIMESTAMPTZ NOT NULL,
+                    ended_at             TIMESTAMPTZ NOT NULL,
+                    lang                 VARCHAR(8) DEFAULT 'es',
+                    referrer             TEXT DEFAULT '',
+                    is_returning         BOOLEAN DEFAULT FALSE,
+                    classification     TEXT DEFAULT '',
+                    classification_desc  TEXT DEFAULT '',
+                    event_count          INTEGER DEFAULT 0,
+                    events_json          JSONB DEFAULT '[]'::jsonb,
+                    email_sent           BOOLEAN DEFAULT FALSE,
+                    created_at           TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_booking_visitor_sessions_started
+                    ON booking_visitor_sessions (started_at);
+                CREATE INDEX IF NOT EXISTS idx_booking_visitor_sessions_class
+                    ON booking_visitor_sessions (classification);
             """)
             conn.commit()
 
