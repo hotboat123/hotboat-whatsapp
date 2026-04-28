@@ -130,6 +130,76 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
             return rows
 
 
+def _get_bookings_cashflow_range(date_from: date, date_to: date) -> List[Dict]:
+    """
+    Return bookings relevant for cashflow/inflows in a date range.
+    Includes:
+    - bookings whose `fecha` is within range (needed for opex + no-pagos fallback)
+    - bookings with any pago `date` within range (anticipos/abonos for other booking dates)
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    id,
+                    COALESCE(fecha::text, ''),
+                    COALESCE(ingreso_reserva, 0),
+                    COALESCE(ingreso_extras, 0),
+                    COALESCE(ingreso_total, 0),
+                    COALESCE(costo_operativo_fijo, 0),
+                    COALESCE(costo_operativo_variable, 0),
+                    COALESCE(costo_operativo_total, 0),
+                    COALESCE(pagos,      '[]'::jsonb),
+                    COALESCE(descuentos, '[]'::jsonb),
+                    COALESCE(nombre_cliente, ''),
+                    COALESCE(status, ''),
+                    COALESCE(num_personas::text, '0'),
+                    COALESCE(extras_json, '{}'::jsonb)
+                FROM all_appointments
+                WHERE status = ANY(%s)
+                  AND (
+                    fecha BETWEEN %s AND %s
+                    OR EXISTS (
+                        SELECT 1
+                        FROM jsonb_array_elements(COALESCE(pagos, '[]'::jsonb)) AS p
+                        WHERE (p->>'date') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                          AND LEFT(p->>'date', 10)::date BETWEEN %s AND %s
+                    )
+                  )
+                ORDER BY fecha, id
+            """, (list(CONFIRMED_STATUSES), date_from, date_to, date_from, date_to))
+            cols = ["id", "fecha", "ingreso_reserva", "ingreso_extras",
+                    "ingreso_total", "costo_fijo", "costo_variable", "costo_total",
+                    "pagos", "descuentos", "nombre_cliente", "status", "num_personas",
+                    "extras_json"]
+            rows = []
+            for r in cur.fetchall():
+                d = dict(zip(cols, r))
+                d["ingreso_total"] = float(d["ingreso_total"])
+                d["ingreso_reserva"] = float(d["ingreso_reserva"])
+                d["ingreso_extras"] = float(d["ingreso_extras"])
+                d["costo_total"] = float(d["costo_total"])
+                d["costo_fijo"] = float(d["costo_fijo"])
+                d["costo_variable"] = float(d["costo_variable"])
+                pagos = d["pagos"]
+                if isinstance(pagos, str):
+                    pagos = json.loads(pagos)
+                d["pagos"] = pagos if isinstance(pagos, list) else []
+                desc = d["descuentos"]
+                if isinstance(desc, str):
+                    desc = json.loads(desc)
+                d["descuentos"] = desc if isinstance(desc, list) else []
+                ex = d["extras_json"]
+                if isinstance(ex, str):
+                    try:
+                        ex = json.loads(ex) if ex.strip() else {}
+                    except Exception:
+                        ex = {}
+                d["extras_json"] = ex if isinstance(ex, dict) else {}
+                rows.append(d)
+            return rows
+
+
 _DATE_COL_CANDIDATES   = ("fecha", "date", "day", "dia", "cost_date", "fecha_costo", "report_date", "cost_day")
 # total_spent first: marketing_costs_daily view (Meta ads rollup)
 _AMOUNT_COL_CANDIDATES = (
@@ -572,13 +642,19 @@ def _build_inflows_by_method(
     commissions: Dict,
     d_from: date,
     d_to: date,
-) -> Dict[str, Dict[str, int]]:
+) -> Dict[str, Dict[str, Any]]:
     """
     Aggregate inflows by payment method for a date range using payment date.
     Returns dict method -> {count, inflow_bruto, inflow_commission, inflow_neto}.
     """
-    grouped: Dict[str, Dict[str, int]] = defaultdict(
-        lambda: {"count": 0, "inflow_bruto": 0, "inflow_commission": 0, "inflow_neto": 0}
+    grouped: Dict[str, Dict[str, Any]] = defaultdict(
+        lambda: {
+            "count": 0,
+            "inflow_bruto": 0,
+            "inflow_commission": 0,
+            "inflow_neto": 0,
+            "details": [],
+        }
     )
     for b in bookings:
         pagos = b.get("pagos") or []
@@ -594,9 +670,22 @@ def _build_inflows_by_method(
             commission = amt - net
             g = grouped[method]
             g["count"] += 1
-            g["inflow_bruto"] += _fmt_int(amt)
-            g["inflow_commission"] += _fmt_int(commission)
-            g["inflow_neto"] += _fmt_int(net)
+            amt_bruto = _fmt_int(amt)
+            amt_comm = _fmt_int(commission)
+            amt_neto = _fmt_int(net)
+            g["inflow_bruto"] += amt_bruto
+            g["inflow_commission"] += amt_comm
+            g["inflow_neto"] += amt_neto
+            g["details"].append({
+                "booking_id": b.get("id"),
+                "booking_date": b.get("fecha"),
+                "payment_date": pago_dt.isoformat(),
+                "nombre_cliente": b.get("nombre_cliente"),
+                "method_original": "sin registro",
+                "inflow_bruto": amt_bruto,
+                "inflow_commission": amt_comm,
+                "inflow_neto": amt_neto,
+            })
             continue
 
         for p in pagos:
@@ -611,9 +700,22 @@ def _build_inflows_by_method(
             commission = amt - net
             g = grouped[method]
             g["count"] += 1
-            g["inflow_bruto"] += _fmt_int(amt)
-            g["inflow_commission"] += _fmt_int(commission)
-            g["inflow_neto"] += _fmt_int(net)
+            amt_bruto = _fmt_int(amt)
+            amt_comm = _fmt_int(commission)
+            amt_neto = _fmt_int(net)
+            g["inflow_bruto"] += amt_bruto
+            g["inflow_commission"] += amt_comm
+            g["inflow_neto"] += amt_neto
+            g["details"].append({
+                "booking_id": b.get("id"),
+                "booking_date": b.get("fecha"),
+                "payment_date": pago_dt.isoformat(),
+                "nombre_cliente": b.get("nombre_cliente"),
+                "method_original": p.get("method", "otro"),
+                "inflow_bruto": amt_bruto,
+                "inflow_commission": amt_comm,
+                "inflow_neto": amt_neto,
+            })
     return grouped
 
 
@@ -749,7 +851,7 @@ async def get_cashflow(
         raise HTTPException(400, "Invalid date format, use YYYY-MM-DD")
 
     commissions = _get_commissions()
-    bookings  = _get_bookings_range(d_from, d_to)
+    bookings  = _get_bookings_cashflow_range(d_from, d_to)
     marketing = _get_marketing_costs_range(d_from, d_to)
 
     days = _build_cashflow_days(bookings, marketing, commissions, d_from, d_to)
@@ -786,7 +888,7 @@ async def get_inflows_by_method(
         raise HTTPException(400, "Invalid date format, use YYYY-MM-DD")
 
     commissions = _get_commissions()
-    bookings = _get_bookings_range(d_from, d_to)
+    bookings = _get_bookings_cashflow_range(d_from, d_to)
     grouped = _build_inflows_by_method(bookings, commissions, d_from, d_to)
 
     ordered_methods = [

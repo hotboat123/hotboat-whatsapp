@@ -6602,6 +6602,17 @@ function renderCfMethodsBreakdown(rows, totals){
   }
 
   const totalNeto = Math.round(Number(totals?.inflow_neto || 0));
+  const amountCellBtnStyle = [
+    'background:none',
+    'border:none',
+    'padding:0',
+    'margin:0',
+    'color:inherit',
+    'font:inherit',
+    'cursor:pointer',
+    'text-decoration:underline',
+    'text-underline-offset:2px',
+  ].join(';');
   rows.forEach(row=>{
     const neto = Math.round(Number(row.inflow_neto || 0));
     const pct = totalNeto > 0 ? Math.round((neto / totalNeto) * 100) : 0;
@@ -6609,13 +6620,37 @@ function renderCfMethodsBreakdown(rows, totals){
     tr.style.borderTop = '1px solid var(--border)';
     tr.innerHTML = `
       <td style="padding:.55rem .7rem">${_cfMethodLabel(row.method)}</td>
-      <td style="padding:.55rem .45rem;text-align:right;color:var(--muted)">${Math.round(Number(row.count||0))}</td>
-      <td style="padding:.55rem .45rem;text-align:right;color:var(--green)">+${fmtClp(row.inflow_bruto)}</td>
-      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.inflow_commission)}</td>
-      <td style="padding:.55rem .45rem;text-align:right">${fmtClp(row.inflow_neto)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--muted)">
+        <button type="button" class="fin-cf-method-detail-btn" data-method="${String(row.method||'')}" data-field="count" style="${amountCellBtnStyle}">
+          ${Math.round(Number(row.count||0))}
+        </button>
+      </td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--green)">
+        <button type="button" class="fin-cf-method-detail-btn" data-method="${String(row.method||'')}" data-field="inflow_bruto" style="${amountCellBtnStyle}">
+          +${fmtClp(row.inflow_bruto)}
+        </button>
+      </td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">
+        <button type="button" class="fin-cf-method-detail-btn" data-method="${String(row.method||'')}" data-field="inflow_commission" style="${amountCellBtnStyle}">
+          -${fmtClp(row.inflow_commission)}
+        </button>
+      </td>
+      <td style="padding:.55rem .45rem;text-align:right">
+        <button type="button" class="fin-cf-method-detail-btn" data-method="${String(row.method||'')}" data-field="inflow_neto" style="${amountCellBtnStyle}">
+          ${fmtClp(row.inflow_neto)}
+        </button>
+      </td>
       <td style="padding:.55rem .45rem;text-align:right;color:var(--muted)">${pct}%</td>
     `;
     tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.fin-cf-method-detail-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const method = btn.getAttribute('data-method') || '';
+      const field = btn.getAttribute('data-field') || 'inflow_neto';
+      showCfMethodDetail(method, field);
+    });
   });
 
   tfoot.innerHTML = `
@@ -6628,6 +6663,38 @@ function renderCfMethodsBreakdown(rows, totals){
       <td style="padding:.55rem .45rem;text-align:right;color:var(--muted)">100%</td>
     </tr>
   `;
+}
+
+function showCfMethodDetail(method, field){
+  const rows = (_finLastCfMethods && Array.isArray(_finLastCfMethods.data)) ? _finLastCfMethods.data : [];
+  const row = rows.find(r => String(r?.method || '') === String(method || ''));
+  const details = Array.isArray(row?.details) ? row.details : [];
+  if(!details.length){
+    alert('No hay detalle disponible para este método en el período seleccionado.');
+    return;
+  }
+  const fieldLabels = {
+    count: 'Cantidad de pagos',
+    inflow_bruto: 'Entradas Brutas',
+    inflow_commission: 'Comisiones',
+    inflow_neto: 'Entradas Netas',
+  };
+  const title = `${_cfMethodLabel(method)} · ${fieldLabels[field] || 'Detalle'}`;
+  const ordered = [...details].sort((a,b)=> Number(b?.[field] || 0) - Number(a?.[field] || 0));
+  const lines = ordered.map(d => {
+    const bookingId = d.booking_id != null ? `#${d.booking_id}` : '(sin id)';
+    const cliente = d.nombre_cliente || 'Sin nombre';
+    const pDate = d.payment_date || '-';
+    const bDate = d.booking_date || '-';
+    const bruto = fmtClp(d.inflow_bruto || 0);
+    const com = fmtClp(d.inflow_commission || 0);
+    const neto = fmtClp(d.inflow_neto || 0);
+    const mOrig = d.method_original || method;
+    return `${bookingId} · ${cliente}\n` +
+      `Pago: ${pDate} · Reserva: ${bDate} · Método: ${mOrig}\n` +
+      `Bruto: ${bruto} · Comisión: ${com} · Neto: ${neto}`;
+  });
+  alert(`${title}\n\n${lines.join('\n\n')}`);
 }
 
 function renderCfKpis(data){
