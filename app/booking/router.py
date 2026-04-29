@@ -1263,9 +1263,12 @@ async def _delayed_session_email(session_id: str, delay: int = 300):
         session = _visitor_sessions.pop(session_id, None)
         _visitor_tasks.pop(session_id, None)
         if session and session.get("events"):
-            await asyncio.get_event_loop().run_in_executor(
-                None, _send_session_summary, session
-            )
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    None, _send_session_summary, session
+                )
+            except Exception as e:
+                logger.warning("_delayed_session_email summary failed: %s", e)
     except asyncio.CancelledError:
         pass  # timer was reset by a new event; a new task was already scheduled
 

@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from psycopg2.extras import Json
+from psycopg.types.json import Jsonb as PgJson
 
 from app.db.connection import get_connection
 
@@ -107,7 +107,7 @@ def persist_booking_visitor_session_closed(
                     (classification or "")[:200],
                     (classification_desc or "")[:500],
                     cnt,
-                    Json(events),
+                    PgJson(events),
                     bool(email_sent),
                 ),
             )
