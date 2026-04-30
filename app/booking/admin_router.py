@@ -1117,6 +1117,41 @@ async def post_email_workflow_test(trigger: str, body: EmailWorkflowTestBody,
     return {"ok": True, **result}
 
 
+@admin_router.post("/api/admin/resend-confirmation/{booking_ref}")
+async def resend_real_confirmation(booking_ref: str, x_admin_key: str = Header("")):
+    """Resend the real booking confirmation email for an existing booking_ref.
+    Clears confirmation_email_sent_at so the idempotency guard doesn't block it."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE hotboat_appointments SET confirmation_email_sent_at=NULL WHERE booking_ref=%s"
+                    " RETURNING booking_ref, customer_name, customer_email, status",
+                    (booking_ref,)
+                )
+                row = cur.fetchone()
+                conn.commit()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Booking {booking_ref} not found")
+        _, cname, cemail, cstatus = row
+        from app.booking.booking_email import try_send_booking_confirmation_after_payment
+        result = try_send_booking_confirmation_after_payment(booking_ref)
+        return {
+            "ok": True,
+            "booking_ref": booking_ref,
+            "customer": cname,
+            "email": cemail,
+            "booking_status": cstatus,
+            "email_result": result,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"resend_confirmation {booking_ref}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @admin_router.post("/api/admin/pre-booking-notif/test")
 async def test_pre_booking_notif(x_admin_key: str = Header("")):
     """Send a test pre-booking notification using a fake booking (for visual preview)."""

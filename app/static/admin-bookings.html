@@ -2994,12 +2994,12 @@ function renderWorkflowCards(d){
           <button onclick="saveWorkflowFull('${trigger}')"
             style="background:var(--gold);color:#000;border:none;border-radius:9px;
                    padding:.42rem 1.1rem;font-size:.83rem;font-weight:700;cursor:pointer">Guardar</button>
-          <input type="email" id="wf-test-to-${trigger}" placeholder="correo de prueba (opcional)"
-            style="background:var(--bg);border:1px solid var(--border);color:var(--text);
+          <input type="email" id="wf-test-to-${trigger}" placeholder="⚠️ TU email de prueba (no del cliente)"
+            style="background:#2a1a00;border:1px solid #ff9900;color:var(--text);
                    border-radius:8px;padding:.38rem .6rem;font-size:.8rem;flex:1;min-width:160px">
-          <button onclick="sendWorkflowTest('${trigger}')"
-            style="background:var(--card);border:1px solid var(--border);color:var(--text);
-                   border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer">Enviar prueba</button>
+          <button onclick="sendWorkflowTestSafe('${trigger}')"
+            style="background:#7a3000;border:1px solid #ff6600;color:#ffaa44;
+                   border-radius:9px;padding:.38rem .9rem;font-size:.8rem;cursor:pointer;font-weight:700">⚠️ Prueba (datos FALSOS)</button>
           ${runBtn}
         </div>
       </div>`:''}`;
@@ -3085,6 +3085,22 @@ async function sendWorkflowTest(trigger){
     const r = await api('/api/admin/email-workflows/'+trigger+'/test',
       {method:'POST',body:JSON.stringify({to:to||null})});
     showToast(r.sent ? `Prueba "${trigger}" enviada ✓` : 'Estado: '+(r.reason||''));
+  }catch(e){ showToast('Error prueba: '+(e.message||e)); }
+}
+
+async function sendWorkflowTestSafe(trigger){
+  const inp = document.getElementById('wf-test-to-'+trigger);
+  const to = inp && inp.value.trim();
+  if(!to){
+    showToast('⚠️ Ingresa TU email de prueba primero — no el del cliente');
+    inp && inp.focus();
+    return;
+  }
+  if(!confirm(`⚠️ ATENCIÓN: Se enviará un email con DATOS FALSOS (demo) a:\n\n${to}\n\n¿Continuar?`)) return;
+  try{
+    const r = await api('/api/admin/email-workflows/'+trigger+'/test',
+      {method:'POST',body:JSON.stringify({to})});
+    showToast(r.sent ? `Prueba "${trigger}" enviada a ${to} ✓` : 'Estado: '+(r.reason||''));
   }catch(e){ showToast('Error prueba: '+(e.message||e)); }
 }
 
