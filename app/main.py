@@ -514,14 +514,42 @@ async def chat_ui():
         }
 
 
+def _meta_pixel_head_html(pixel_id: str) -> str:
+    """Official Meta Pixel base snippet; omitted if META_PIXEL_ID is unset or invalid."""
+    pid = (pixel_id or "").strip()
+    if not pid.isdigit():
+        return ""
+    return (
+        "<!-- Meta Pixel Code -->\n"
+        "<script>\n"
+        "!function(f,b,e,v,n,t,s)\n"
+        "{if(f.fbq)return;n=f.fbq=function(){n.callMethod?\n"
+        "n.callMethod.apply(n,arguments):n.queue.push(arguments)};\n"
+        "if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';\n"
+        "n.queue=[];t=b.createElement(e);t.async=!0;\n"
+        "t.src=v;s=b.getElementsByTagName(e)[0];\n"
+        "s.parentNode.insertBefore(t,s)}(window, document,'script',\n"
+        "'https://connect.facebook.net/en_US/fbevents.js');\n"
+        f"fbq('init', '{pid}');\n"
+        "fbq('track', 'PageView');\n"
+        "</script>\n"
+        f'<noscript><img height="1" width="1" style="display:none"\n'
+        f'src="https://www.facebook.com/tr?id={pid}&ev=PageView&noscript=1"\n'
+        "/></noscript>\n"
+        "<!-- End Meta Pixel Code -->"
+    )
+
+
 @app.get("/pagar", response_class=HTMLResponse)
 async def pago_page():
     """Serve branded payment landing page"""
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     path = os.path.join(static_dir, "pagar.html")
     if os.path.exists(path):
+        pixel = _meta_pixel_head_html(get_settings().meta_pixel_id)
         with open(path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+            content = f.read().replace("<!--META_PIXEL_HEAD-->", pixel)
+        return HTMLResponse(content=content)
     return HTMLResponse("<h1>Página no encontrada</h1>", status_code=404)
 
 

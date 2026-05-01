@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     business_phone: str = "+56 9 75780920"
     business_email: str = "info@hotboatchile.com"
     business_website: str = "https://hotboatchile.com/es/"
+    # Meta Pixel (optional). Injected on /pagar for PageView + InitiateCheckout.
+    meta_pixel_id: str = ""
     
     # Automations
     automation_phone_numbers: str = ""  # Comma-separated phone numbers for automation notifications
