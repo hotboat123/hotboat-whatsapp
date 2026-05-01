@@ -12,6 +12,14 @@ signatures_router = APIRouter()
 FIRMA_HTML_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "firma.html")
 
 
+def _firma_html() -> str:
+    from app.config import get_settings
+    from app.meta_pixel import apply_meta_pixel_placeholder
+
+    with open(FIRMA_HTML_PATH, "r", encoding="utf-8") as f:
+        return apply_meta_pixel_placeholder(f.read(), get_settings().meta_pixel_id)
+
+
 class SignaturePayload(BaseModel):
     passenger_name: str
     passenger_email: Optional[str] = None
@@ -75,8 +83,7 @@ def _resolve_booking(booking_ref: str) -> Optional[dict]:
 async def serve_firma_generic():
     """Serve the T&C signing page without a booking ref (generic QR code on-site)."""
     try:
-        with open(FIRMA_HTML_PATH, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+        return HTMLResponse(content=_firma_html())
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Página de firma no encontrada")
 
@@ -85,8 +92,7 @@ async def serve_firma_generic():
 async def serve_firma_form(booking_ref: str):
     """Serve the T&C signing page pre-linked to a specific booking."""
     try:
-        with open(FIRMA_HTML_PATH, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+        return HTMLResponse(content=_firma_html())
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Página de firma no encontrada")
 
