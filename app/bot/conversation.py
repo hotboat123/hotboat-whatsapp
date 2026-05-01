@@ -491,34 +491,17 @@ class ConversationManager:
                     ],
                     "delay": 1.5
                 }
-            # PRIORITY 0.665: Rain / weather question — same multi-message pattern as niños / seguridad
-            elif any(
-                w in message_text.lower()
-                for w in (
-                    "lluvia",
-                    "llover",
-                    "llueve",
-                    "llueva",
-                    "llovió",
-                    "llovio",
-                    "lloviera",
-                    "lluvioso",
-                    "lluviosa",
-                    "paraguas",
-                    "impermeable",
-                    "raining",
-                    "rainy",
-                )
-            ):
-                logger.info("Rain / weather question detected - sending rain info sequence")
+            # PRIORITY 0.67: Rain / weather question — always answer regardless of active flow
+            elif "lluvia" in message_text.lower() or "llueve" in message_text.lower() or "lloviendo" in message_text.lower() or "llover" in message_text.lower() or "lluvioso" in message_text.lower() or "lluviosa" in message_text.lower() or "paraguas" in message_text.lower() or "impermeabl" in message_text.lower() or "mojarse" in message_text.lower() or "mojar" in message_text.lower():
+                logger.info("Rain question detected - sending rain info sequence")
                 response = {
                     "type": "sequence",
                     "messages": [
-                        "¡Buena pregunta! ☔ En general la experiencia HotBoat se puede hacer con lluvia ligera: el lago suele estar más tranquilo y el entorno se ve hermoso.",
-                        "Te recomendamos ropa abrigada y algo impermeable o cortaviento, así vas cómodo/a 🧥",
-                        "Solo ante condiciones muy extremas (tormenta eléctrica, viento muy fuerte, etc.) podríamos reprogramar — en ese caso siempre te avisamos con tiempo 📲",
+                        "Con lluvia la experiencia es aún mejor ☔🔥",
+                        "¡El HotBoat es una tina de agua caliente! La lluvia se siente increíble desde adentro 🌧️🛁",
+                        "Te pasamos sombreros para que no te llegue el agua en la cara todo el tiempo 🎩😄",
                     ],
-                    "delay": 1.5,
+                    "delay": 1.5
                 }
             # PRIORITY 0.7: Check if user wants to return to main menu
             elif self._is_menu_request(message_text):
