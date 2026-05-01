@@ -15,7 +15,7 @@ from app.booking.content_router import content_router
 from app.booking.signatures_router import signatures_router
 from app.booking.stock_router import stock_router
 from app.booking.financial_router import financial_router
-from app.meta_pixel import apply_meta_pixel_placeholder
+from app.meta_pixel import apply_meta_pixel_placeholder, is_meta_pixel_enabled
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
@@ -53,11 +53,19 @@ _install_log_buffer()
 
 # Get settings
 settings = get_settings()
-if settings.is_production and not (settings.meta_pixel_id or "").strip():
-    logger.warning(
-        "META_PIXEL_ID is empty — Meta Pixel will not load on /booking, /pagar, /chat, /firma. "
-        "Set META_PIXEL_ID in production."
+if is_meta_pixel_enabled(settings.meta_pixel_id):
+    logger.info(
+        "Meta Pixel: enabled — HTML pages will include the base code (booking, pagar, chat, firma)."
     )
+else:
+    msg = (
+        "Meta Pixel: disabled — set META_PIXEL_ID to your numeric Pixel ID in Railway "
+        "(same service as this app). No WordPress plugin is required here."
+    )
+    if settings.is_production:
+        logger.warning(msg)
+    else:
+        logger.info(msg)
 
 # ── Auto-sync background task ──────────────────────────────────────────────────
 SYNC_INTERVAL_MINUTES = 30

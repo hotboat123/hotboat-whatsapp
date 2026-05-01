@@ -1,6 +1,6 @@
 """Optional Meta Pixel base snippet for public HTML pages."""
 
-__all__ = ["meta_pixel_head_html", "apply_meta_pixel_placeholder"]
+__all__ = ["meta_pixel_head_html", "apply_meta_pixel_placeholder", "is_meta_pixel_enabled"]
 
 
 MARKER_COMMENT = "<!--META_PIXEL_HEAD-->"
@@ -17,6 +17,11 @@ def _sanitize_pixel_id(pixel_id: str) -> str:
         return ""
     s = str(pixel_id).strip().strip('"').strip("'").replace(" ", "")
     return s if s.isdigit() else ""
+
+
+def is_meta_pixel_enabled(pixel_id: str) -> bool:
+    """True when pixel_id is usable (non-empty, numeric after sanitize)."""
+    return bool(_sanitize_pixel_id(pixel_id))
 
 
 def meta_pixel_head_html(pixel_id: str) -> str:
