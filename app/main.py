@@ -58,10 +58,24 @@ if is_meta_pixel_enabled(settings.meta_pixel_id):
         "Meta Pixel: enabled — HTML pages will include the base code (booking, pagar, chat, firma)."
     )
 else:
-    msg = (
-        "Meta Pixel: disabled — set META_PIXEL_ID to your numeric Pixel ID in Railway "
-        "(same service as this app). No WordPress plugin is required here."
-    )
+    import os
+
+    present = [
+        k
+        for k in ("META_PIXEL_ID", "FACEBOOK_PIXEL_ID", "FB_PIXEL_ID")
+        if (os.environ.get(k) or "").strip() != ""
+    ]
+    if not present:
+        msg = (
+            "Meta Pixel: disabled — no META_PIXEL_ID / FACEBOOK_PIXEL_ID / FB_PIXEL_ID in "
+            "this service's environment (check Railway → correct service + redeploy)."
+        )
+    else:
+        msg = (
+            "Meta Pixel: disabled — env var(s) set (%s) but value is not a usable numeric "
+            "Pixel ID (copy only the digits from Events Manager; save + redeploy)."
+            % ", ".join(present)
+        )
     if settings.is_production:
         logger.warning(msg)
     else:

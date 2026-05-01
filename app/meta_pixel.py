@@ -12,11 +12,12 @@ def apply_meta_pixel_placeholder(html: str, pixel_id: str) -> str:
 
 
 def _sanitize_pixel_id(pixel_id: str) -> str:
-    """Normalize env/UI copy-paste (quotes, spaces) — Meta Pixel IDs are numeric."""
+    """Extract Meta Pixel ID: digits only (strips BOM, zero-width chars, labels like \"ID: …\" )."""
     if not pixel_id:
         return ""
-    s = str(pixel_id).strip().strip('"').strip("'").replace(" ", "")
-    return s if s.isdigit() else ""
+    digits = "".join(c for c in str(pixel_id) if c.isdigit())
+    # Real Meta pixels are typically 15–16 digits; allow 10+ to avoid accidental short matches
+    return digits if len(digits) >= 10 else ""
 
 
 def is_meta_pixel_enabled(pixel_id: str) -> bool:
