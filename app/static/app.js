@@ -407,7 +407,8 @@ async function selectConversation(phoneNumber) {
             messages: normalizeMessages(data.messages),
             hasMore: Boolean(data.has_more),
             nextCursor: data.next_cursor || null,
-            priority: data.lead?.priority || 0
+            priority: data.lead?.priority || 0,
+            ad_source: data.lead?.ad_source || null,
         };
 
         // Update bot toggle state from lead info

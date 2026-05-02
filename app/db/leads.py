@@ -43,11 +43,12 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # Try to get existing lead
-                cur.execute("""
-                    SELECT 
-                        id, phone_number, customer_name, lead_status, 
+                _ad_col = "ad_source" if _ad_source_col_exists(cur) else "NULL::text AS ad_source"
+                cur.execute(f"""
+                    SELECT
+                        id, phone_number, customer_name, lead_status,
                         notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
-                        unread_count, last_read_at, priority
+                        unread_count, last_read_at, priority, {_ad_col}
                     FROM whatsapp_leads
                     WHERE phone_number = %s
                 """, (phone_number,))
@@ -86,7 +87,8 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "bot_enabled": row[9] if len(row) > 9 else True,
                         "unread_count": row[10] if len(row) > 10 else 0,
                         "last_read_at": row[11].isoformat() if len(row) > 11 and row[11] else None,
-                        "priority": row[12] if len(row) > 12 else 0
+                        "priority": row[12] if len(row) > 12 else 0,
+                        "ad_source": row[13] if len(row) > 13 else None,
                     }
                 else:
                     # Create new lead
