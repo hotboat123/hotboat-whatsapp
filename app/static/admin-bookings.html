@@ -740,6 +740,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div class="form-group-adm"><label>Grupo (para agrupar en el bot)</label><input id="aloj-group" placeholder="Ej: Open Sky o Raíces de Relikura"></div>
           <div class="form-group-adm"><label>Slug (identificador único)</label><input id="aloj-slug" placeholder="Ej: open-sky-domo-tina"></div>
           <div class="form-group-adm"><label>Descripción</label><input id="aloj-desc" placeholder="Domo transparente con tina de baño interior..."></div>
+          <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
+            <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
+            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .6rem">Si están vacías, la reserva web muestra el español. Solo afecta la página pública /booking.</p>
+            <div class="form-group-adm"><label>Nombre (English)</label><input id="aloj-name-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Nombre (Português)</label><input id="aloj-name-pt" placeholder="Opcional"></div>
+            <div class="form-group-adm"><label>Grupo (English)</label><input id="aloj-group-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Grupo (Português)</label><input id="aloj-group-pt" placeholder="Opcional"></div>
+            <div class="form-group-adm"><label>Descripción (English)</label><input id="aloj-desc-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Descripción (Português)</label><input id="aloj-desc-pt" placeholder="Opcional"></div>
+          </details>
           <div class="form-group-adm">
             <label>WhatsApp administrador del alojamiento</label>
             <input id="aloj-owner-wa" placeholder="+56 9 XXXX XXXX" style="font-family:monospace">
@@ -4504,6 +4514,12 @@ function openAlojModal(id){
   document.getElementById('aloj-slug').value = a ? a.slug : '';
   document.getElementById('aloj-icon').value = a ? (a.icon||'🏠') : '🏠';
   document.getElementById('aloj-desc').value = a ? (a.description||'') : '';
+  document.getElementById('aloj-name-en').value = a ? (a.name_en||'') : '';
+  document.getElementById('aloj-name-pt').value = a ? (a.name_pt||'') : '';
+  document.getElementById('aloj-group-en').value = a ? (a.group_name_en||'') : '';
+  document.getElementById('aloj-group-pt').value = a ? (a.group_name_pt||'') : '';
+  document.getElementById('aloj-desc-en').value = a ? (a.description_en||'') : '';
+  document.getElementById('aloj-desc-pt').value = a ? (a.description_pt||'') : '';
   document.getElementById('aloj-owner-wa').value = a ? (a.owner_whatsapp||'') : '';
   document.getElementById('aloj-capacity').value = a ? (a.capacity||2) : 2;
   document.getElementById('aloj-units').value = a ? (a.total_units||1) : 1;
@@ -4537,6 +4553,12 @@ async function saveAloj(){
     group_name: document.getElementById('aloj-group').value.trim(),
     icon: document.getElementById('aloj-icon').value.trim()||'🏠',
     description: document.getElementById('aloj-desc').value.trim(),
+    name_en: document.getElementById('aloj-name-en').value.trim(),
+    name_pt: document.getElementById('aloj-name-pt').value.trim(),
+    group_name_en: document.getElementById('aloj-group-en').value.trim(),
+    group_name_pt: document.getElementById('aloj-group-pt').value.trim(),
+    description_en: document.getElementById('aloj-desc-en').value.trim(),
+    description_pt: document.getElementById('aloj-desc-pt').value.trim(),
     owner_whatsapp: document.getElementById('aloj-owner-wa').value.trim(),
     capacity: +document.getElementById('aloj-capacity').value||2,
     total_units: +document.getElementById('aloj-units').value||1,
@@ -4580,6 +4602,13 @@ async function toggleAloj(id, active){
     total_units:a.total_units||1,
     price_from:a.price_from||0, cost_from:a.cost_from||0,
     display_order:a.display_order||0, is_active:active, image_path:a.image_path||null,
+    name_en:a.name_en||'', name_pt:a.name_pt||'',
+    description_en:a.description_en||'', description_pt:a.description_pt||'',
+    group_name_en:a.group_name_en||'', group_name_pt:a.group_name_pt||'',
+    extra_images: (()=>{ try{
+      if(Array.isArray(a.extra_images)) return a.extra_images;
+      if(typeof a.extra_images === 'string') return JSON.parse(a.extra_images||'[]');
+    }catch(_){} return []; })(),
   };
   await fetch(`/api/admin/alojamientos/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
   await loadAlojamientos(); showToast(active?'Alojamiento activado ✅':'Alojamiento desactivado');

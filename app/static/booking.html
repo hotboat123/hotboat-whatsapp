@@ -133,6 +133,8 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem;font-
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/en.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
 </head>
 <body>
 <div id="app">
@@ -242,6 +244,46 @@ const I18N = {
     failTitle: 'Pago no completado',
     failMsg: (ref) => `Tu reserva (${ref}) fue guardada. Puedes intentar el pago nuevamente o contactarnos.`,
     returnMenu: 'Volver',
+    backToMenu: 'Volver al menú',
+    alojListTitle: '🏠 Alojamientos',
+    alojListSubtitle: 'Open Sky & Raíces de Relikura · Entre Pucón y Curarrehue',
+    alojPerNight: '/noche',
+    alojUpToPeople: (n) => `Hasta ${n} persona${n!==1?'s':''}`,
+    alojPriceSub: (cap) => `/noche · hasta ${cap} pers.`,
+    alojSelectDates: '📅 Selecciona tus fechas',
+    alojLoadingAvail: 'Cargando disponibilidad...',
+    alojAvailError: 'Error cargando disponibilidad.',
+    alojLblCheckIn: 'Check-in',
+    alojLblCheckOut: 'Check-out',
+    alojPhArrival: 'Llegada',
+    alojPhDeparture: 'Salida',
+    alojMoreOptions: '← Ver más opciones',
+    alojNightsLabel: (n) => `${n} noche${n!==1?'s':''} seleccionada${n!==1?'s':''}`,
+    alojConsultTitle: '📋 Consultar disponibilidad',
+    alojConsultNote: (r1, r2, nights) =>
+      `Las fechas seleccionadas (${r1} → ${r2}, ${nights} noche${nights!==1?'s':''}) requieren confirmación. Te contactamos a la brevedad 👨‍✈️`,
+    alojPeopleShort: 'N° de personas',
+    alojMsgExtra: 'Mensaje adicional',
+    alojPhNotes: 'Dudas o preferencias...',
+    alojSendInquiry: 'Enviar consulta 📩',
+    alojSending: 'Enviando...',
+    alojNeedNamePhone: 'Ingresa nombre y WhatsApp',
+    alojSentTitle: '¡Consulta enviada!',
+    alojSentBody: 'El Capitán Tomás revisará disponibilidad y te contactará pronto 👨‍✈️',
+    alojSendErr: 'Error al enviar. Intenta de nuevo.',
+    alojYourBooking: '🛒 Tu reserva',
+    alojDepositNow: '💳 Abono ahora (50%)',
+    alojBalanceArrival: (bal) => `Saldo ${bal} al llegar`,
+    alojYourData: '👤 Tus datos',
+    alojEmailOpt: 'Email (opcional)',
+    alojPayLodging: (dep) => `💳 Pagar solo alojamiento → ${dep}`,
+    alojAddHotboat: '🚤 Agregar paseo HotBoat',
+    alojProcessing: 'Procesando...',
+    alojEnterName: 'Ingresa tu nombre',
+    alojEnterPhone: 'Ingresa tu WhatsApp',
+    alojPayErr: 'Error al procesar. Intenta de nuevo.',
+    alojConnErr: 'Error de conexión.',
+    alojPayLodgingShort: '💳 Pagar solo alojamiento',
   },
   en: {
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
@@ -276,6 +318,46 @@ const I18N = {
     failTitle: 'Payment not completed',
     failMsg: (ref) => `Your booking (${ref}) was saved. You can try again or contact us.`,
     returnMenu: 'Back to menu',
+    backToMenu: 'Back to menu',
+    alojListTitle: '🏠 Accommodation',
+    alojListSubtitle: 'Open Sky & Raíces de Relikura · Between Pucón and Curarrehue',
+    alojPerNight: '/night',
+    alojUpToPeople: (n) => `Up to ${n} guest${n!==1?'s':''}`,
+    alojPriceSub: (cap) => `/night · up to ${cap} guests`,
+    alojSelectDates: '📅 Choose your dates',
+    alojLoadingAvail: 'Loading availability...',
+    alojAvailError: 'Could not load availability.',
+    alojLblCheckIn: 'Check-in',
+    alojLblCheckOut: 'Check-out',
+    alojPhArrival: 'Arrival',
+    alojPhDeparture: 'Departure',
+    alojMoreOptions: '← More options',
+    alojNightsLabel: (n) => `${n} night${n!==1?'s':''} selected`,
+    alojConsultTitle: '📋 Request availability',
+    alojConsultNote: (r1, r2, nights) =>
+      `Your dates (${r1} → ${r2}, ${nights} night${nights!==1?'s':''}) need confirmation. We’ll contact you shortly 👨‍✈️`,
+    alojPeopleShort: 'Number of guests',
+    alojMsgExtra: 'Additional message',
+    alojPhNotes: 'Questions or preferences...',
+    alojSendInquiry: 'Send request 📩',
+    alojSending: 'Sending...',
+    alojNeedNamePhone: 'Enter name and WhatsApp',
+    alojSentTitle: 'Request sent!',
+    alojSentBody: 'Captain Tomás will check availability and contact you soon 👨‍✈️',
+    alojSendErr: 'Could not send. Try again.',
+    alojYourBooking: '🛒 Your booking',
+    alojDepositNow: '💳 Deposit now (50%)',
+    alojBalanceArrival: (bal) => `Balance ${bal} on arrival`,
+    alojYourData: '👤 Your details',
+    alojEmailOpt: 'Email (optional)',
+    alojPayLodging: (dep) => `💳 Pay lodging only → ${dep}`,
+    alojAddHotboat: '🚤 Add HotBoat trip',
+    alojProcessing: 'Processing...',
+    alojEnterName: 'Enter your name',
+    alojEnterPhone: 'Enter your WhatsApp',
+    alojPayErr: 'Could not process. Try again.',
+    alojConnErr: 'Connection error.',
+    alojPayLodgingShort: '💳 Pay lodging only',
   },
   pt: {
     days: ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],
@@ -310,11 +392,92 @@ const I18N = {
     failTitle: 'Pagamento não concluído',
     failMsg: (ref) => `Sua reserva (${ref}) foi salva. Você pode tentar o pagamento novamente ou nos contatar.`,
     returnMenu: 'Voltar',
+    backToMenu: 'Voltar ao menu',
+    alojListTitle: '🏠 Hospedagem',
+    alojListSubtitle: 'Open Sky & Raíces de Relikura · Entre Pucón e Curarrehue',
+    alojPerNight: '/noite',
+    alojUpToPeople: (n) => `Até ${n} pessoa${n!==1?'s':''}`,
+    alojPriceSub: (cap) => `/noite · até ${cap} pessoas`,
+    alojSelectDates: '📅 Escolha as datas',
+    alojLoadingAvail: 'Carregando disponibilidade...',
+    alojAvailError: 'Erro ao carregar disponibilidade.',
+    alojLblCheckIn: 'Check-in',
+    alojLblCheckOut: 'Check-out',
+    alojPhArrival: 'Chegada',
+    alojPhDeparture: 'Saída',
+    alojMoreOptions: '← Ver mais opções',
+    alojNightsLabel: (n) => `${n} noite${n!==1?'s':''} selecionada${n!==1?'s':''}`,
+    alojConsultTitle: '📋 Consultar disponibilidade',
+    alojConsultNote: (r1, r2, nights) =>
+      `As datas escolhidas (${r1} → ${r2}, ${nights} noite${nights!==1?'s':''}) precisam de confirmação. Entraremos em contato em breve 👨‍✈️`,
+    alojPeopleShort: 'N° de pessoas',
+    alojMsgExtra: 'Mensagem adicional',
+    alojPhNotes: 'Dúvidas ou preferências...',
+    alojSendInquiry: 'Enviar consulta 📩',
+    alojSending: 'Enviando...',
+    alojNeedNamePhone: 'Informe nome e WhatsApp',
+    alojSentTitle: 'Consulta enviada!',
+    alojSentBody: 'O Capitão Tomás verificará a disponibilidade e entrará em contato em breve 👨‍✈️',
+    alojSendErr: 'Erro ao enviar. Tente novamente.',
+    alojYourBooking: '🛒 Sua reserva',
+    alojDepositNow: '💳 Sinal agora (50%)',
+    alojBalanceArrival: (bal) => `Saldo ${bal} na chegada`,
+    alojYourData: '👤 Seus dados',
+    alojEmailOpt: 'E-mail (opcional)',
+    alojPayLodging: (dep) => `💳 Pagar só hospedagem → ${dep}`,
+    alojAddHotboat: '🚤 Adicionar passeio HotBoat',
+    alojProcessing: 'Processando...',
+    alojEnterName: 'Informe seu nome',
+    alojEnterPhone: 'Informe seu WhatsApp',
+    alojPayErr: 'Erro ao processar. Tente novamente.',
+    alojConnErr: 'Erro de conexão.',
+    alojPayLodgingShort: '💳 Pagar só hospedagem',
   },
 };
 let LANG = localStorage.getItem('hb_lang') || 'es';
 function t(key, ...args){ const v = I18N[LANG][key]; return typeof v === 'function' ? v(...args) : (v || I18N.es[key] || key); }
-function setLang(l){ LANG = l; localStorage.setItem('hb_lang', l); document.documentElement.lang = l; renderLangSwitcher(); renderMenu(); }
+function _moneyLocale(){ return LANG==='en'?'en-US':LANG==='pt'?'pt-BR':'es-CL'; }
+function _alojMoney(n){ return '$'+Number(n).toLocaleString(_moneyLocale()); }
+function _alojPickLang(raw){
+  if(!raw) return { name:'', desc:'', gname:'' };
+  if(LANG==='en'){
+    return {
+      name: ((raw.name_en||'')+'').trim() || raw.name || '',
+      desc: ((raw.description_en||'')+'').trim() || raw.description || '',
+      gname: ((raw.group_name_en||'')+'').trim() || raw.group_name || '',
+    };
+  }
+  if(LANG==='pt'){
+    return {
+      name: ((raw.name_pt||'')+'').trim() || raw.name || '',
+      desc: ((raw.description_pt||'')+'').trim() || raw.description || '',
+      gname: ((raw.group_name_pt||'')+'').trim() || raw.group_name || '',
+    };
+  }
+  return { name: raw.name||'', desc: raw.description||'', gname: raw.group_name||'' };
+}
+function rebuildAlojamientosFromDyn(){
+  if(!DYN_ALOJAMIENTOS.length) return;
+  ALOJAMIENTOS.length = 0;
+  DYN_ALOJAMIENTOS.forEach(a=>{
+    const loc = _alojPickLang(a);
+    const cap = a.capacity||2;
+    ALOJAMIENTOS.push({
+      id: a.slug,
+      dbId: a.id,
+      name: loc.name,
+      icon: a.icon||'🏠',
+      desc: loc.desc,
+      price: '$'+Number(a.price_from||0).toLocaleString(_moneyLocale()),
+      unit: t('alojPerNight'),
+      cap,
+      features: [loc.gname, t('alojUpToPeople', cap)].filter(Boolean),
+      image_path: a.image_path||null,
+      all_images: [a.image_path, ...(a.extra_images||[])].filter(Boolean),
+    });
+  });
+}
+function setLang(l){ LANG = l; localStorage.setItem('hb_lang', l); document.documentElement.lang = l; renderLangSwitcher(); rebuildAlojamientosFromDyn(); renderMenu(); }
 function renderLangSwitcher(){
   const el = document.getElementById('lang-switcher');
   if(!el) return;
@@ -557,26 +720,7 @@ async function loadDynamicContent(){
     if(er.experiences) DYN_EXPERIENCIAS = er.experiences;
     if(pr.packs) DYN_PACKS = pr.packs;
     if(ar.alojamientos) DYN_ALOJAMIENTOS = ar.alojamientos;
-
-    // Sync ALOJAMIENTOS static array
-    if(DYN_ALOJAMIENTOS.length){
-      ALOJAMIENTOS.length = 0;
-      DYN_ALOJAMIENTOS.forEach(a=>{
-        ALOJAMIENTOS.push({
-          id: a.slug,
-          dbId: a.id,
-          name: a.name,
-          icon: a.icon||'🏠',
-          desc: a.description||'',
-          price: '$'+Number(a.price_from||0).toLocaleString('es-CL'),
-          unit: '/noche',
-          cap: a.capacity||2,
-          features: [a.group_name||'', 'Hasta '+(a.capacity||2)+' persona'+(a.capacity>1?'s':'')].filter(Boolean),
-          image_path: a.image_path||null,
-          all_images: [a.image_path, ...(a.extra_images||[])].filter(Boolean),
-        });
-      });
-    }
+    rebuildAlojamientosFromDyn();
 
     // Sync ACTIVIDADES for arma-tu-pack using dynamic experiences
     if(DYN_EXPERIENCIAS.length){
@@ -724,11 +868,11 @@ function showAlojamientos(){
     </button>`).join('');
   mc.innerHTML = `
   <div class="card">
-    <div class="card-title">🏠 Alojamientos</div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Open Sky & Raices de Relikura · Entre Pucon y Curarrehue</p>
+    <div class="card-title">${t('alojListTitle')}</div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">${t('alojListSubtitle')}</p>
     <div style="display:flex;flex-direction:column;gap:.6rem">${cards}</div>
   </div>
-  <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
+  <button class="btn btn-secondary" onclick="renderMenu()">${t('backToMenu')}</button>`;
 }
 
 // ── Image gallery state & navigation ────────────────────────────────────────
@@ -816,33 +960,32 @@ async function showAlojamiento(id){
   const imgs = (a.all_images&&a.all_images.length)?a.all_images:(a.image_path?[a.image_path]:[]);
   const gid = 'gal-'+a.id;
   const imgHtml = _galBuild(gid, imgs, a.icon);
-  const money = n=>'$'+Number(n).toLocaleString('es-CL');
 
   mc.innerHTML = `
   <div class="card">
     ${imgHtml}
     <div class="card-title">${a.name}</div>
-    <div class="price-tag"><div class="price-big">${money(pricePerNight)}</div>
-      <div class="price-sub">/noche · hasta ${a.cap} pers.</div></div>
+    <div class="price-tag"><div class="price-big">${_alojMoney(pricePerNight)}</div>
+      <div class="price-sub">${t('alojPriceSub', a.cap)}</div></div>
     <p style="color:var(--muted);font-size:.85rem;margin-top:.8rem;line-height:1.5">${a.desc}</p>
     ${a.features.filter(f=>f).map(f=>`<div style="font-size:.82rem;margin-top:.3rem">✓ ${f}</div>`).join('')}
   </div>
   <div class="card" id="aloj-cal-card">
-    <div class="card-title" style="font-size:1rem;margin-bottom:.6rem">📅 Selecciona tus fechas</div>
+    <div class="card-title" style="font-size:1rem;margin-bottom:.6rem">${t('alojSelectDates')}</div>
     <div id="aloj-avail-status" style="color:var(--muted);font-size:.85rem;text-align:center;padding:.5rem">
-      Cargando disponibilidad...
+      ${t('alojLoadingAvail')}
     </div>
     <div id="aloj-date-pickers" style="display:none">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
         <div>
-          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">Check-in</div>
-          <input type="text" id="aloj-checkin" readonly placeholder="Llegada"
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">${t('alojLblCheckIn')}</div>
+          <input type="text" id="aloj-checkin" readonly placeholder="${t('alojPhArrival')}"
             style="width:100%;background:var(--deep);border:1px solid var(--border);
                    color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
         </div>
         <div>
-          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">Check-out</div>
-          <input type="text" id="aloj-checkout" readonly placeholder="Salida"
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">${t('alojLblCheckOut')}</div>
+          <input type="text" id="aloj-checkout" readonly placeholder="${t('alojPhDeparture')}"
             style="width:100%;background:var(--deep);border:1px solid var(--border);
                    color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
         </div>
@@ -851,7 +994,7 @@ async function showAlojamiento(id){
     </div>
   </div>
   <div id="aloj-booking-result"></div>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showAlojamientos()">← Ver más opciones</button>`;
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showAlojamientos()">${t('alojMoreOptions')}</button>`;
 
   // Load availability
   try {
@@ -868,8 +1011,19 @@ async function showAlojamiento(id){
     document.getElementById('aloj-date-pickers').style.display='block';
     _initAlojFlatpickr();
   } catch(e){
-    document.getElementById('aloj-avail-status').textContent='Error cargando disponibilidad.';
+    document.getElementById('aloj-avail-status').textContent=t('alojAvailError');
   }
+}
+
+function _fpLocaleObj(){
+  try{
+    const L = flatpickr.l10ns;
+    if(!L) return 'es';
+    if(LANG==='pt' && L.pt) return L.pt;
+    if(LANG==='en' && L.en) return L.en;
+    if(L.es) return L.es;
+  }catch(_){}
+  return 'es';
 }
 
 function _initAlojFlatpickr(){
@@ -879,7 +1033,7 @@ function _initAlojFlatpickr(){
   const fpCfg = {
     minDate:'today', dateFormat:'Y-m-d',
     altInput:true, altFormat:'d/m/Y',
-    locale:'es', disable:[disableFn],
+    locale: _fpLocaleObj(), disable:[disableFn],
     disableMobile:true,
   };
   let fpOut;
@@ -905,8 +1059,7 @@ function _initAlojFlatpickr(){
       _alojState.checkOut = flatpickr.formatDate(sel[0],'Y-m-d');
       const nights = Math.round((sel[0]-new Date(_alojState.checkIn))/86400000);
       _alojState.nights = nights;
-      document.getElementById('aloj-nights-label').textContent =
-        `${nights} noche${nights!==1?'s':''} seleccionada${nights!==1?'s':''}`;
+      document.getElementById('aloj-nights-label').textContent = t('alojNightsLabel', nights);
       _onAlojDatesSelected();
     }
   });
@@ -930,39 +1083,37 @@ function _onAlojDatesSelected(){
 }
 
 function _fmtDate(d){ const [y,m,dd]=d.split('-'); return `${dd}/${m}/${y}`; }
-const _alojMoney = n=>'$'+Number(n).toLocaleString('es-CL');
 
 function _renderAlojSolicitud(){
   const {a, checkIn, checkOut, nights} = _alojState;
   document.getElementById('aloj-booking-result').innerHTML = `
   <div class="card" style="border-color:var(--gold)">
-    <div class="card-title" style="font-size:1rem;color:var(--gold)">📋 Consultar disponibilidad</div>
+    <div class="card-title" style="font-size:1rem;color:var(--gold)">${t('alojConsultTitle')}</div>
     <div class="info-box" style="margin-bottom:.8rem;font-size:.85rem">
-      Las fechas seleccionadas (${_fmtDate(checkIn)} → ${_fmtDate(checkOut)}, ${nights} noche${nights!==1?'s':''})
-      requieren confirmación. Te contactamos a la brevedad 👨‍✈️
+      ${t('alojConsultNote', _fmtDate(checkIn), _fmtDate(checkOut), nights)}
     </div>
-    <div class="form-group"><label>Nombre completo *</label>
-      <input type="text" id="as-name" placeholder="Tu nombre"></div>
-    <div class="form-group"><label>WhatsApp *</label>
+    <div class="form-group"><label>${t('labelName')} *</label>
+      <input type="text" id="as-name" placeholder="${t('labelName')}"></div>
+    <div class="form-group"><label>${t('labelPhone')} *</label>
       <input type="tel" id="as-phone" placeholder="+56 9 xxxx xxxx"></div>
-    <div class="form-group"><label>Email</label>
+    <div class="form-group"><label>${t('labelEmail')}</label>
       <input type="email" id="as-email" placeholder="tu@email.com"></div>
-    <div class="form-group"><label>N° de personas</label>
+    <div class="form-group"><label>${t('alojPeopleShort')}</label>
       <input type="number" id="as-people" value="2" min="1" max="${a.cap}"></div>
-    <div class="form-group"><label>Mensaje adicional</label>
-      <textarea id="as-notes" rows="2" placeholder="Dudas o preferencias..."
+    <div class="form-group"><label>${t('alojMsgExtra')}</label>
+      <textarea id="as-notes" rows="2" placeholder="${t('alojPhNotes')}"
         style="width:100%;background:var(--deep);border:1px solid var(--border);
                color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem;resize:vertical"></textarea></div>
-    <button class="btn" id="as-btn" onclick="_submitAlojSolicitud()">Enviar consulta 📩</button>
+    <button class="btn" id="as-btn" onclick="_submitAlojSolicitud()">${t('alojSendInquiry')}</button>
   </div>`;
 }
 
 async function _submitAlojSolicitud(){
   const name=(document.getElementById('as-name')?.value||'').trim();
   const phone=(document.getElementById('as-phone')?.value||'').trim();
-  if(!name||!phone){showToast('Ingresa nombre y WhatsApp');return;}
+  if(!name||!phone){showToast(t('alojNeedNamePhone'));return;}
   const btn=document.getElementById('as-btn');
-  if(btn){btn.disabled=true;btn.textContent='Enviando...';}
+  if(btn){btn.disabled=true;btn.textContent=t('alojSending');}
   const {a,checkIn,checkOut} = _alojState;
   try{
     const r = await fetch('/api/booking/solicitud',{method:'POST',
@@ -980,16 +1131,16 @@ async function _submitAlojSolicitud(){
       document.getElementById('aloj-booking-result').innerHTML=`
         <div class="card" style="text-align:center">
           <div class="success-icon">✅</div>
-          <h3>¡Consulta enviada!</h3>
-          <p style="color:var(--muted);margin-top:.5rem">El Capitán Tomás revisará disponibilidad y te contactará pronto 👨‍✈️</p>
+          <h3>${t('alojSentTitle')}</h3>
+          <p style="color:var(--muted);margin-top:.5rem">${t('alojSentBody')}</p>
         </div>`;
     } else {
-      showToast('Error al enviar. Intenta de nuevo.');
-      if(btn){btn.disabled=false;btn.textContent='Enviar consulta 📩';}
+      showToast(t('alojSendErr'));
+      if(btn){btn.disabled=false;btn.textContent=t('alojSendInquiry');}
     }
   }catch(e){
-    showToast('Error de conexión.');
-    if(btn){btn.disabled=false;btn.textContent='Enviar consulta 📩';}
+    showToast(t('alojConnErr'));
+    if(btn){btn.disabled=false;btn.textContent=t('alojSendInquiry');}
   }
 }
 
@@ -999,49 +1150,49 @@ function _renderAlojAvailable(){
   const deposit = Math.round(total * 0.5);
   document.getElementById('aloj-booking-result').innerHTML = `
   <div class="card">
-    <div class="card-title" style="font-size:1rem">🛒 Tu reserva</div>
+    <div class="card-title" style="font-size:1rem">${t('alojYourBooking')}</div>
     <div class="summary-row">
       <span>📅 ${_fmtDate(checkIn)} → ${_fmtDate(checkOut)}</span>
-      <span>${nights} noche${nights!==1?'s':''}</span>
+      <span>${t('alojNightsLabel', nights)}</span>
     </div>
     <div class="summary-row">
-      <span>${_alojMoney(pricePerNight)}/noche × ${nights}</span>
+      <span>${_alojMoney(pricePerNight)}${t('alojPerNight')} × ${nights}</span>
       <span><strong>${_alojMoney(total)}</strong></span>
     </div>
     <div class="summary-row" style="color:var(--gold)">
-      <span>💳 Abono ahora (50%)</span>
+      <span>${t('alojDepositNow')}</span>
       <span><strong>${_alojMoney(deposit)}</strong></span>
     </div>
     <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">
-      Saldo ${_alojMoney(total-deposit)} al llegar
+      ${t('alojBalanceArrival', _alojMoney(total-deposit))}
     </div>
   </div>
 
   <div class="card">
-    <div class="card-title" style="font-size:1rem">👤 Tus datos</div>
-    <div class="form-group"><label>Nombre completo *</label>
-      <input type="text" id="ab-name" placeholder="Tu nombre"></div>
-    <div class="form-group"><label>WhatsApp *</label>
+    <div class="card-title" style="font-size:1rem">${t('alojYourData')}</div>
+    <div class="form-group"><label>${t('labelName')} *</label>
+      <input type="text" id="ab-name" placeholder="${t('labelName')}"></div>
+    <div class="form-group"><label>${t('labelPhone')} *</label>
       <input type="tel" id="ab-phone" placeholder="+56 9 xxxx xxxx"></div>
-    <div class="form-group"><label>Email (opcional)</label>
+    <div class="form-group"><label>${t('alojEmailOpt')}</label>
       <input type="email" id="ab-email" placeholder="tu@email.com"></div>
   </div>
 
   <button class="btn" id="ab-pay-btn" onclick="_submitAlojBooking()" style="margin-bottom:.6rem">
-    💳 Pagar solo alojamiento → ${_alojMoney(deposit)}
+    ${t('alojPayLodging', _alojMoney(deposit))}
   </button>
   <button class="btn btn-secondary" onclick="_startHotboatWithAloj()">
-    🚤 Agregar paseo HotBoat
+    ${t('alojAddHotboat')}
   </button>`;
 }
 
 async function _submitAlojBooking(){
   const name  = (document.getElementById('ab-name')?.value||'').trim();
   const phone = (document.getElementById('ab-phone')?.value||'').trim();
-  if(!name)  return showToast('Ingresa tu nombre');
-  if(!phone) return showToast('Ingresa tu WhatsApp');
+  if(!name)  return showToast(t('alojEnterName'));
+  if(!phone) return showToast(t('alojEnterPhone'));
   const btn = document.getElementById('ab-pay-btn');
-  if(btn){btn.disabled=true;btn.textContent='Procesando...';}
+  if(btn){btn.disabled=true;btn.textContent=t('alojProcessing');}
   const {alojId,a,checkIn,checkOut,pricePerNight}=_alojState;
   const payload={
     accommodation_id:   alojId,
@@ -1063,20 +1214,20 @@ async function _submitAlojBooking(){
     if(r.payment_url){
       window.location.href=r.payment_url;
     } else {
-      showToast('Error al procesar. Intenta de nuevo.');
-      if(btn){btn.disabled=false;btn.textContent='💳 Pagar solo alojamiento';}
+      showToast(t('alojPayErr'));
+      if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
     }
   }catch(e){
-    showToast('Error de conexión. Intenta de nuevo.');
-    if(btn){btn.disabled=false;btn.textContent='💳 Pagar solo alojamiento';}
+    showToast(t('alojConnErr'));
+    if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
   }
 }
 
 function _startHotboatWithAloj(){
   const name  = (document.getElementById('ab-name')?.value||'').trim();
   const phone = (document.getElementById('ab-phone')?.value||'').trim();
-  if(!name)  return showToast('Ingresa tu nombre');
-  if(!phone) return showToast('Ingresa tu WhatsApp');
+  if(!name)  return showToast(t('alojEnterName'));
+  if(!phone) return showToast(t('alojEnterPhone'));
   const email = (document.getElementById('ab-email')?.value||'').trim();
   const {alojId,a,checkIn,checkOut,pricePerNight}=_alojState;
   _pendingAlojBooking = {

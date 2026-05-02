@@ -87,6 +87,9 @@ def list_alojamientos(active_only: bool = True):
     with get_connection() as conn:
         with conn.cursor() as cur:
             q = ("SELECT id,slug,name,group_name,icon,description,"
+                 "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                 "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                 "COALESCE(group_name_en,'') AS group_name_en,COALESCE(group_name_pt,'') AS group_name_pt,"
                  "price_from,cost_from,capacity,image_path,"
                  "COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
                  "is_active,display_order"

@@ -524,6 +524,14 @@ def ensure_db_columns() -> None:
                 ALTER TABLE alojamientos
                     ADD COLUMN IF NOT EXISTS total_units INTEGER DEFAULT 1;
 
+                -- 033: EN/PT copy for booking web (fallback to ES name/description/group_name)
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS name_en TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS name_pt TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS description_en TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS description_pt TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS group_name_en TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS group_name_pt TEXT DEFAULT '';
+
                 -- 028: coupons
                 CREATE TABLE IF NOT EXISTS coupons (
                     id SERIAL PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT DEFAULT '',

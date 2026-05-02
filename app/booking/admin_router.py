@@ -2191,8 +2191,11 @@ async def admin_list_alojamientos(x_admin_key: str = Header(...)):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id,slug,name,group_name,icon,description,price_from,cost_from,"
-                "capacity,owner_whatsapp,image_path,is_active,display_order,"
+                "SELECT id,slug,name,group_name,icon,description,"
+                "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                "COALESCE(group_name_en,'') AS group_name_en,COALESCE(group_name_pt,'') AS group_name_pt,"
+                "price_from,cost_from,capacity,total_units,owner_whatsapp,image_path,is_active,display_order,"
                 "COALESCE(extra_images,'[]'::jsonb) AS extra_images"
                 " FROM alojamientos ORDER BY display_order,id"
             )
@@ -2206,6 +2209,12 @@ class AlojamientoBody(BaseModel):
     group_name: str = ""
     icon: str = "🏠"
     description: str = ""
+    name_en: str = ""
+    name_pt: str = ""
+    description_en: str = ""
+    description_pt: str = ""
+    group_name_en: str = ""
+    group_name_pt: str = ""
     price_from: int = 0
     cost_from: int = 0
     capacity: int = 2
@@ -2224,13 +2233,34 @@ async def admin_create_alojamiento(body: AlojamientoBody, x_admin_key: str = Hea
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO alojamientos"
-                " (slug,name,group_name,icon,description,price_from,cost_from,capacity,total_units,owner_whatsapp,"
+                " (slug,name,group_name,icon,description,name_en,name_pt,description_en,description_pt,"
+                "  group_name_en,group_name_pt,price_from,cost_from,capacity,total_units,owner_whatsapp,"
                 "  image_path,extra_images,is_active,display_order)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
-                (body.slug, body.name, body.group_name, body.icon, body.description,
-                 body.price_from, body.cost_from, body.capacity, body.total_units, body.owner_whatsapp,
-                 body.image_path, json.dumps(body.extra_images),
-                 body.is_active, body.display_order),
+                " VALUES ("
+                + ",".join(["%s"] * 16)
+                + ",%s,%s::jsonb,%s,%s) RETURNING id",
+                (
+                    body.slug,
+                    body.name,
+                    body.group_name,
+                    body.icon,
+                    body.description,
+                    body.name_en,
+                    body.name_pt,
+                    body.description_en,
+                    body.description_pt,
+                    body.group_name_en,
+                    body.group_name_pt,
+                    body.price_from,
+                    body.cost_from,
+                    body.capacity,
+                    body.total_units,
+                    body.owner_whatsapp,
+                    body.image_path,
+                    json.dumps(body.extra_images),
+                    body.is_active,
+                    body.display_order,
+                ),
             )
             new_id = cur.fetchone()[0]
             conn.commit()
@@ -2244,9 +2274,13 @@ async def admin_update_alojamiento(aloj_id: int, body: AlojamientoBody, x_admin_
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE alojamientos SET slug=%s,name=%s,group_name=%s,icon=%s,description=%s,"
+                "name_en=%s,name_pt=%s,description_en=%s,description_pt=%s,"
+                "group_name_en=%s,group_name_pt=%s,"
                 "price_from=%s,cost_from=%s,capacity=%s,total_units=%s,owner_whatsapp=%s,image_path=%s,"
                 "extra_images=%s::jsonb,is_active=%s,display_order=%s WHERE id=%s",
                 (body.slug, body.name, body.group_name, body.icon, body.description,
+                 body.name_en, body.name_pt, body.description_en, body.description_pt,
+                 body.group_name_en, body.group_name_pt,
                  body.price_from, body.cost_from, body.capacity, body.total_units, body.owner_whatsapp,
                  body.image_path, json.dumps(body.extra_images),
                  body.is_active, body.display_order, aloj_id),
