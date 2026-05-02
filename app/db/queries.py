@@ -376,31 +376,61 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT 
-                        latest.phone_number,
-                        latest.customer_name,
-                        latest.created_at,
-                        latest.message_text,
-                        latest.response_text,
-                        latest.direction,
-                        COALESCE(l.unread_count, 0) as unread_count,
-                        COALESCE(l.priority, 0) as priority
-                    FROM (
-                        SELECT DISTINCT ON (phone_number)
-                            phone_number,
-                            customer_name,
-                            created_at,
-                            message_text,
-                            response_text,
-                            direction
-                        FROM whatsapp_conversations
-                        ORDER BY phone_number, created_at DESC
-                    ) latest
-                    LEFT JOIN whatsapp_leads l ON latest.phone_number = l.phone_number
-                    ORDER BY latest.created_at DESC
-                    LIMIT %s
-                """, (limit,))
+                # ad_source column added dynamically; use NULL fallback if not yet present
+                try:
+                    cur.execute("""
+                        SELECT
+                            latest.phone_number,
+                            latest.customer_name,
+                            latest.created_at,
+                            latest.message_text,
+                            latest.response_text,
+                            latest.direction,
+                            COALESCE(l.unread_count, 0) as unread_count,
+                            COALESCE(l.priority, 0) as priority,
+                            l.ad_source
+                        FROM (
+                            SELECT DISTINCT ON (phone_number)
+                                phone_number,
+                                customer_name,
+                                created_at,
+                                message_text,
+                                response_text,
+                                direction
+                            FROM whatsapp_conversations
+                            ORDER BY phone_number, created_at DESC
+                        ) latest
+                        LEFT JOIN whatsapp_leads l ON latest.phone_number = l.phone_number
+                        ORDER BY latest.created_at DESC
+                        LIMIT %s
+                    """, (limit,))
+                except Exception:
+                    # Fallback: query without ad_source if column doesn't exist yet
+                    cur.execute("""
+                        SELECT
+                            latest.phone_number,
+                            latest.customer_name,
+                            latest.created_at,
+                            latest.message_text,
+                            latest.response_text,
+                            latest.direction,
+                            COALESCE(l.unread_count, 0) as unread_count,
+                            COALESCE(l.priority, 0) as priority
+                        FROM (
+                            SELECT DISTINCT ON (phone_number)
+                                phone_number,
+                                customer_name,
+                                created_at,
+                                message_text,
+                                response_text,
+                                direction
+                            FROM whatsapp_conversations
+                            ORDER BY phone_number, created_at DESC
+                        ) latest
+                        LEFT JOIN whatsapp_leads l ON latest.phone_number = l.phone_number
+                        ORDER BY latest.created_at DESC
+                        LIMIT %s
+                    """, (limit,))
                 
                 results = cur.fetchall()
                 
@@ -414,12 +444,13 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                     direction = row[5] if row[5] else 'incoming'
                     unread_count = row[6] if len(row) > 6 else 0
                     priority = row[7] if len(row) > 7 else 0
-                    
+                    ad_source = row[8] if len(row) > 8 else None
+
                     if direction == 'outgoing':
                         last_message = response_text or message_text
                     else:
                         last_message = message_text or response_text
-                    
+
                     # Convert UTC to Chilean timezone
                     if created_at:
                         if created_at.tzinfo is None:
@@ -427,7 +458,7 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                             created_at = created_at.replace(tzinfo=ZoneInfo("UTC"))
                         # Convert to Chilean time
                         created_at = created_at.astimezone(CHILE_TZ)
-                    
+
                     conversations.append({
                         "phone_number": phone_number,
                         "customer_name": customer_name,
@@ -435,7 +466,8 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                         "last_message": last_message,
                         "direction": direction,
                         "unread_count": unread_count,
-                        "priority": priority
+                        "priority": priority,
+                        "ad_source": ad_source,
                     })
                 
                 conversations.sort(key=lambda x: x["last_message_at"] or "", reverse=True)

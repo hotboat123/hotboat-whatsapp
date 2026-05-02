@@ -153,18 +153,30 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
         if message_type == "text":
             text_body = message.get("text", {}).get("body", "")
             logger.info(f"💬 Message text: {text_body}")
-            
+
+            # Extract ad referral (Click-to-WhatsApp ads send this on first message)
+            referral = message.get("referral")
+            ad_source = None
+            if referral:
+                logger.info(f"📢 Ad referral detected: {referral}")
+                try:
+                    from app.db.leads import save_lead_ad_source
+                    ad_source = await save_lead_ad_source(from_number, referral)
+                except Exception as ref_err:
+                    logger.warning(f"Could not save ad referral: {ref_err}")
+
             # Send push notification for incoming messages (replaces email)
             try:
                 from app.notifications import push_notifier
                 await push_notifier.send_new_message_notification(
                     contact_name=contact_name,
                     phone_number=from_number,
-                    message_preview=text_body
+                    message_preview=text_body,
+                    ad_source=ad_source,
                 )
             except Exception as push_error:
                 logger.warning(f"Could not send push notification: {push_error}")
-            
+
             # Check if bot is enabled for this user
             from app.db.leads import get_or_create_lead
             lead = await get_or_create_lead(from_number, contact_name)

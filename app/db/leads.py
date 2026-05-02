@@ -13,6 +13,20 @@ CHILE_TZ = ZoneInfo("America/Santiago")
 
 logger = logging.getLogger(__name__)
 
+_ad_col_cached: bool | None = None
+
+def _ad_source_col_exists(cur) -> bool:
+    """Check (once, then cache) whether whatsapp_leads.ad_source column exists."""
+    global _ad_col_cached
+    if _ad_col_cached is not None:
+        return _ad_col_cached
+    cur.execute("""
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='whatsapp_leads' AND column_name='ad_source'
+    """)
+    _ad_col_cached = cur.fetchone() is not None
+    return _ad_col_cached
+
 
 async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Dict:
     """
@@ -193,23 +207,26 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                ad_col = "ad_source" if _ad_source_col_exists(cur) else "NULL::text AS ad_source"
                 if lead_status:
-                    cur.execute("""
-                        SELECT 
-                            id, phone_number, customer_name, lead_status, 
+                    cur.execute(f"""
+                        SELECT
+                            id, phone_number, customer_name, lead_status,
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
-                            unread_count, last_read_at, priority
+                            unread_count, last_read_at, priority,
+                            {ad_col}
                         FROM whatsapp_leads
                         WHERE lead_status = %s
                         ORDER BY last_interaction_at DESC NULLS LAST
                         LIMIT %s
                     """, (lead_status, limit))
                 else:
-                    cur.execute("""
-                        SELECT 
-                            id, phone_number, customer_name, lead_status, 
+                    cur.execute(f"""
+                        SELECT
+                            id, phone_number, customer_name, lead_status,
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
-                            unread_count, last_read_at, priority
+                            unread_count, last_read_at, priority,
+                            {ad_col}
                         FROM whatsapp_leads
                         ORDER BY last_interaction_at DESC NULLS LAST
                         LIMIT %s
@@ -232,7 +249,8 @@ async def get_leads_by_status(lead_status: Optional[str] = None, limit: int = 50
                         "bot_enabled": row[9] if len(row) > 9 else True,
                         "unread_count": row[10] if len(row) > 10 else 0,
                         "last_read_at": row[11].isoformat() if len(row) > 11 and row[11] else None,
-                        "priority": row[12] if len(row) > 12 else 0
+                        "priority": row[12] if len(row) > 12 else 0,
+                        "ad_source": row[13] if len(row) > 13 else None,
                     })
                 
                 return leads
@@ -534,9 +552,61 @@ async def update_lead_priority(phone_number: str, priority: int) -> bool:
                 conn.commit()
                 logger.info(f"Updated priority to {priority} for {phone_number}")
                 return True
-    
+
     except Exception as e:
         logger.error(f"Error updating priority: {e}")
         return False
+
+
+async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
+    """
+    Persist the ad referral on first contact. Only writes once — never overwrites.
+    Returns the human-readable ad label, or None if nothing to save.
+
+    WhatsApp Cloud API sends referral.headline (the ad name from Meta Ads Manager)
+    and referral.source_id (numeric ad ID). We use headline as the display label.
+    """
+    if not referral:
+        return None
+    label = (referral.get("headline") or referral.get("source_id") or "").strip()
+    if not label:
+        return None
+    try:
+        import json as _json
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Add columns if they don't exist (safe to run every call)
+                cur.execute("""
+                    ALTER TABLE whatsapp_leads
+                    ADD COLUMN IF NOT EXISTS ad_source TEXT,
+                    ADD COLUMN IF NOT EXISTS ad_referral JSONB
+                """)
+                # Only set if not already set — first ad click wins
+                cur.execute("""
+                    UPDATE whatsapp_leads
+                    SET ad_source = %s, ad_referral = %s, updated_at = NOW()
+                    WHERE phone_number = %s AND ad_source IS NULL
+                """, (label, _json.dumps(referral), phone_number))
+            conn.commit()
+        logger.info(f"Ad source saved for {phone_number}: {label}")
+        return label
+    except Exception as e:
+        logger.warning(f"Could not save ad source for {phone_number}: {e}")
+        return None
+
+
+async def get_lead_ad_source(phone_number: str) -> str | None:
+    """Return the stored ad_source label for a lead, or None."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ad_source FROM whatsapp_leads WHERE phone_number = %s",
+                    (phone_number,)
+                )
+                row = cur.fetchone()
+                return row[0] if row else None
+    except Exception:
+        return None
 
 

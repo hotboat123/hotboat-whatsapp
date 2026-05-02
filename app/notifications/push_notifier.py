@@ -102,29 +102,27 @@ class PushNotifier:
         self,
         contact_name: str,
         phone_number: str,
-        message_preview: str
+        message_preview: str,
+        ad_source: str = None,
     ) -> bool:
         """
-        Send notification for new WhatsApp message
-        
-        Args:
-            contact_name: Name of the contact
-            phone_number: Phone number
-            message_preview: Preview of the message (first 100 chars)
-        
-        Returns:
-            True if sent successfully
+        Send notification for new WhatsApp message.
+        ad_source: optional ad label (e.g. "HotBoat Brasil") shown when message came from a CTWA ad.
         """
         title = f"💬 {contact_name}"
+        if ad_source:
+            title = f"📢 {contact_name}  ·  {ad_source}"
         body = message_preview[:100]
-        
+
         data = {
             "type": "new_message",
             "phone_number": phone_number,
             "contact_name": contact_name,
-            "timestamp": datetime.now(CHILE_TZ).isoformat()
+            "timestamp": datetime.now(CHILE_TZ).isoformat(),
         }
-        
+        if ad_source:
+            data["ad_source"] = ad_source
+
         return await self.send_notification(title, body, data, priority="high")
     
     async def send_high_priority_alert(
