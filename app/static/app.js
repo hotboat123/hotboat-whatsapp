@@ -554,6 +554,16 @@ function renderCurrentChat(options = {}) {
     
     chatName.textContent = currentConversation.customer_name;
     chatPhone.textContent = currentConversation.phone_number;
+    const adSourceEl = document.getElementById('currentChatAdSource');
+    const adSourceText = document.getElementById('currentChatAdSourceText');
+    if (adSourceEl && adSourceText) {
+        if (currentConversation.ad_source) {
+            adSourceText.textContent = currentConversation.ad_source;
+            adSourceEl.style.display = 'inline-block';
+        } else {
+            adSourceEl.style.display = 'none';
+        }
+    }
     messageInputArea.style.display = 'block';
     
     // Render messages
