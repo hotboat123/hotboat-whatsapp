@@ -617,6 +617,9 @@ async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
                     ADD COLUMN IF NOT EXISTS ad_source TEXT,
                     ADD COLUMN IF NOT EXISTS ad_referral JSONB
                 """)
+                # Column now guaranteed to exist — update cache so get_or_create_lead uses it
+                global _ad_col_cached
+                _ad_col_cached = True
                 # Only set if not already set — first ad click wins
                 cur.execute("""
                     UPDATE whatsapp_leads
