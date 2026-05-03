@@ -560,17 +560,51 @@ async def update_lead_priority(phone_number: str, priority: int) -> bool:
         return False
 
 
+_ad_name_cache: dict[str, str] = {}
+
+
+async def _fetch_meta_ad_name(source_id: str) -> str | None:
+    """Call Meta Graph API to resolve the ad name from its numeric source_id."""
+    if source_id in _ad_name_cache:
+        return _ad_name_cache[source_id]
+    try:
+        import httpx
+        from app.config import get_settings
+        s = get_settings()
+        token = s.meta_marketing_token or s.whatsapp_api_token
+        url = f"https://graph.facebook.com/v18.0/{source_id}"
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(url, params={"fields": "name", "access_token": token})
+        if resp.status_code == 200:
+            name = resp.json().get("name", "").strip()
+            if name:
+                _ad_name_cache[source_id] = name
+                logger.info(f"Meta ad name resolved: {source_id} → {name}")
+                return name
+        else:
+            logger.warning(f"Meta ad name lookup failed for {source_id}: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"Meta ad name lookup error for {source_id}: {e}")
+    return None
+
+
 async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
     """
     Persist the ad referral on first contact. Only writes once — never overwrites.
     Returns the human-readable ad label, or None if nothing to save.
 
-    WhatsApp Cloud API sends referral.headline (the ad name from Meta Ads Manager)
-    and referral.source_id (numeric ad ID). We use headline as the display label.
+    Resolves the real ad name from Meta Ads Manager via Graph API (source_id).
+    Falls back to referral.headline if the API call fails.
     """
     if not referral:
         return None
-    label = (referral.get("headline") or referral.get("source_id") or "").strip()
+
+    source_id = str(referral.get("source_id") or "").strip()
+    label = None
+    if source_id:
+        label = await _fetch_meta_ad_name(source_id)
+    if not label:
+        label = (referral.get("headline") or source_id or "").strip()
     if not label:
         return None
     try:

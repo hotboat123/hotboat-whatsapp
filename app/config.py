@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     business_website: str = "https://hotboatchile.com/es/"
     # Meta Pixel (optional). Injected on /pagar for PageView + InitiateCheckout.
     meta_pixel_id: str = ""
+    # Meta Marketing API token for ad name lookup (optional — falls back to whatsapp_api_token)
+    meta_marketing_token: str = ""
     
     # Automations
     automation_phone_numbers: str = ""  # Comma-separated phone numbers for automation notifications
