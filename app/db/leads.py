@@ -646,3 +646,53 @@ async def get_lead_ad_source(phone_number: str) -> str | None:
         return None
 
 
+async def migrate_ad_sources() -> dict:
+    """
+    One-time migration: for all leads that have ad_referral JSON stored,
+    call the Meta Graph API to resolve the real ad name and overwrite ad_source.
+    Returns a summary dict with counts.
+    """
+    import json as _json
+    updated = 0
+    skipped = 0
+    errors = 0
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT phone_number, ad_referral
+                    FROM whatsapp_leads
+                    WHERE ad_referral IS NOT NULL
+                """)
+                rows = cur.fetchall()
+
+        for phone, referral_raw in rows:
+            try:
+                referral = referral_raw if isinstance(referral_raw, dict) else _json.loads(referral_raw)
+                source_id = str(referral.get("source_id") or "").strip()
+                if not source_id:
+                    skipped += 1
+                    continue
+                name = await _fetch_meta_ad_name(source_id)
+                if not name:
+                    skipped += 1
+                    continue
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE whatsapp_leads SET ad_source = %s WHERE phone_number = %s",
+                            (name, phone)
+                        )
+                    conn.commit()
+                logger.info(f"Migrated ad_source for {phone}: {name}")
+                updated += 1
+            except Exception as e:
+                logger.warning(f"migrate_ad_sources error for {phone}: {e}")
+                errors += 1
+    except Exception as e:
+        logger.error(f"migrate_ad_sources DB error: {e}")
+        errors += 1
+
+    return {"updated": updated, "skipped": skipped, "errors": errors}
+
+

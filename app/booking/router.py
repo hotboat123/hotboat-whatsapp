@@ -1196,6 +1196,11 @@ class TrackEventRequest(BaseModel):
     referrer: Optional[str] = ""
     session_id: Optional[str] = ""
     is_returning: Optional[bool] = False
+    utm_source: Optional[str] = ""
+    utm_medium: Optional[str] = ""
+    utm_campaign: Optional[str] = ""
+    utm_content: Optional[str] = ""
+    fbclid: Optional[str] = ""  # present = clicked a Meta ad
 
 
 @router.post("/api/booking/track")
@@ -1241,6 +1246,11 @@ async def track_booking_event(body: TrackEventRequest):
             "referrer": (body.referrer or "")[:200],
             "is_returning": body.is_returning or False,
             "events": [],
+            "utm_source": (body.utm_source or "")[:100],
+            "utm_medium": (body.utm_medium or "")[:100],
+            "utm_campaign": (body.utm_campaign or "")[:200],
+            "utm_content": (body.utm_content or "")[:200],
+            "fbclid": bool(body.fbclid),
         }
 
     _visitor_sessions[sid]["events"].append({
@@ -1322,6 +1332,21 @@ _EVENT_LABELS = {
 }
 
 
+def _build_ad_label(utm_campaign: str, utm_source: str, utm_medium: str, utm_content: str, from_fbclid: bool, referrer: str) -> str:
+    """Return a human-readable ad label for the visitor session email."""
+    if utm_campaign:
+        label = utm_campaign.replace("-", " ").replace("_", " ").title()
+        if utm_content:
+            label += f" — {utm_content.replace('-', ' ').replace('_', ' ').title()}"
+        return label
+    if from_fbclid:
+        r = referrer.lower()
+        if "instagram" in r:
+            return "Anuncio de Instagram"
+        return "Anuncio de Facebook/Meta"
+    return ""
+
+
 def _send_session_summary(session: dict):
     from app.booking.visitor_tracking import persist_booking_visitor_session_closed
 
@@ -1344,11 +1369,19 @@ def _send_session_summary(session: dict):
         is_returning = session.get("is_returning", False)
         start_time   = session.get("start_time")
         start_str    = start_time.strftime("%d/%m/%Y %H:%M") if start_time else "—"
+        utm_campaign = (session.get("utm_campaign") or "").strip()
+        utm_source   = (session.get("utm_source") or "").strip()
+        utm_medium   = (session.get("utm_medium") or "").strip()
+        utm_content  = (session.get("utm_content") or "").strip()
+        from_fbclid  = bool(session.get("fbclid"))
 
         if not api_key or not to_addr:
             logger.warning("visitor_session_summary: email not configured; skipping send")
         else:
             ref_label = _referrer_label(referrer)
+
+            # Build ad source label
+            ad_label = _build_ad_label(utm_campaign, utm_source, utm_medium, utm_content, from_fbclid, referrer)
 
             rows = ""
             for ev in events:
@@ -1361,6 +1394,9 @@ def _send_session_summary(session: dict):
 
             ref_row = (f'<tr><td style="color:#888;padding:.3rem 0">Origen</td>'
                        f'<td><strong>{ref_label}</strong></td></tr>') if ref_label else ""
+
+            ad_row = (f'<tr><td style="color:#888;padding:.3rem 0">📢 Anuncio</td>'
+                      f'<td><strong style="color:#f5c842">{ad_label}</strong></td></tr>') if ad_label else ""
 
             subject = f"{classification} · {start_str}"
             html = f"""
@@ -1384,6 +1420,7 @@ def _send_session_summary(session: dict):
       <td><strong>{'🔁 Visitante recurrente' if is_returning else '🆕 Primera visita'}</strong></td>
     </tr>
     {ref_row}
+    {ad_row}
     <tr>
       <td style="color:#888;padding:.3rem 0">Acciones</td>
       <td><strong>{len(events)}</strong></td>

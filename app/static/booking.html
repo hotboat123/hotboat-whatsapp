@@ -545,6 +545,13 @@ const _isReturning = (()=>{
   catch(e){ return false; }
 })();
 
+const _urlParams = new URLSearchParams(window.location.search);
+const _utmSource   = _urlParams.get('utm_source')   || '';
+const _utmMedium   = _urlParams.get('utm_medium')   || '';
+const _utmCampaign = _urlParams.get('utm_campaign') || '';
+const _utmContent  = _urlParams.get('utm_content')  || '';
+const _fbclid      = _urlParams.get('fbclid')       || '';
+
 function _trackEvent(event, date){
   try{
     const payload = JSON.stringify({
@@ -553,6 +560,11 @@ function _trackEvent(event, date){
       referrer: document.referrer?document.referrer.substring(0,200):'',
       session_id: _sessionId,
       is_returning: _isReturning,
+      utm_source: _utmSource,
+      utm_medium: _utmMedium,
+      utm_campaign: _utmCampaign,
+      utm_content: _utmContent,
+      fbclid: _fbclid,
     });
     fetch('/api/booking/track',{method:'POST',headers:{'Content-Type':'application/json'},body:payload}).catch(()=>{});
   }catch(e){}

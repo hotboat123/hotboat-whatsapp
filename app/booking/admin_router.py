@@ -2887,3 +2887,12 @@ def admin_update_accommodation_booking(bid: int, body: dict, x_admin_key: str = 
             )
             conn.commit()
     return {"ok": True}
+
+
+@admin_router.post("/api/admin/migrate-ad-sources")
+async def migrate_ad_sources_endpoint(x_admin_key: str = Header("")):
+    """One-time migration: resolve real ad names from Meta API for all stored referrals."""
+    _check_auth(x_admin_key)
+    from app.db.leads import migrate_ad_sources
+    result = await migrate_ad_sources()
+    return result
