@@ -348,7 +348,7 @@ function renderConversations() {
         }
 
         const adBadge = conv.ad_source
-            ? `<span style="font-size:.68rem;background:#1a4f9f;color:#fff;border-radius:4px;padding:2px 7px;display:inline-block" title="Vino del anuncio: ${conv.ad_source}">📢 ${conv.ad_source}</span>`
+            ? `<span style="font-size:.62rem;background:#1a4f9f;color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:5px" title="Vino del anuncio: ${conv.ad_source}">📢 ${conv.ad_source}</span>`
             : '';
 
         return `
@@ -359,10 +359,10 @@ function renderConversations() {
                     ${conv.customer_name || conv.phone_number}
                     ${unreadBadge}
                     ${priorityBadge}
+                    ${adBadge}
                 </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
             </div>
-            ${adBadge ? `<div style="margin:.15rem 0 .1rem">${adBadge}</div>` : ''}
             <div class="conversation-preview">
                 ${truncate(conv.last_message || 'No messages', 50)}
             </div>
