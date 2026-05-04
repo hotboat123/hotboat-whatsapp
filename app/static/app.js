@@ -349,7 +349,7 @@ function renderConversations() {
         }
 
         const adBadge = conv.ad_source
-            ? `<span style="font-size:.62rem;background:#1a4f9f;color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:5px" title="Vino del anuncio: ${conv.ad_source}">📢 ${conv.ad_source}</span>`
+            ? `<span style="font-size:.43rem;background:#1a4f9f;color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:5px" title="Vino del anuncio: ${conv.ad_source}">📢 ${conv.ad_source}</span>`
             : '';
 
         return `
