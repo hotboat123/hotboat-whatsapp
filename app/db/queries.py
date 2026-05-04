@@ -353,7 +353,8 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                             latest.direction,
                             COALESCE(l.unread_count, 0) as unread_count,
                             COALESCE(l.priority, 0) as priority,
-                            l.ad_source
+                            l.ad_source,
+                            l.ad_audience
                         FROM (
                             SELECT DISTINCT ON (phone_number)
                                 phone_number,
@@ -410,6 +411,7 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                     unread_count = row[6] if len(row) > 6 else 0
                     priority = row[7] if len(row) > 7 else 0
                     ad_source = row[8] if len(row) > 8 else None
+                    ad_audience = row[9] if len(row) > 9 else None
 
                     if direction == 'outgoing':
                         last_message = response_text or message_text
@@ -433,6 +435,7 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                         "unread_count": unread_count,
                         "priority": priority,
                         "ad_source": ad_source,
+                        "ad_audience": ad_audience,
                     })
                 
                 conversations.sort(key=lambda x: x["last_message_at"] or "", reverse=True)

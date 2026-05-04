@@ -279,7 +279,8 @@ async function loadConversations(limit = null) {
                     created_at: timestamp,
                     unread_count: item.unread_count || 0,
                     priority: item.priority || 0,
-                    ad_source: item.ad_source || null
+                    ad_source: item.ad_source || null,
+                    ad_audience: item.ad_audience || null
                 });
             }
         });
@@ -349,7 +350,10 @@ function renderConversations() {
         }
 
         const adBadge = conv.ad_source
-            ? `<span style="font-size:.43rem;background:#1a4f9f;color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:5px" title="Vino del anuncio: ${conv.ad_source}">📢 ${conv.ad_source}</span>`
+            ? `<span style="font-size:.43rem;background:#1a4f9f;color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:5px" title="Anuncio: ${conv.ad_source}">📢 ${conv.ad_source}</span>`
+            : '';
+        const audienceBadge = conv.ad_audience
+            ? `<span style="font-size:.43rem;background:#1a5c3a;color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:3px" title="Audiencia: ${conv.ad_audience}">👥 ${conv.ad_audience}</span>`
             : '';
 
         return `
@@ -361,6 +365,7 @@ function renderConversations() {
                     ${unreadBadge}
                     ${priorityBadge}
                     ${adBadge}
+                    ${audienceBadge}
                 </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
             </div>
@@ -413,6 +418,7 @@ async function selectConversation(phoneNumber) {
             ad_source: data.lead?.ad_source || null,
             ad_platform: data.lead?.ad_platform || null,
             ad_media_type: data.lead?.ad_media_type || null,
+            ad_audience: data.lead?.ad_audience || null,
         };
 
         // Update bot toggle state from lead info
@@ -566,7 +572,8 @@ function renderCurrentChat(options = {}) {
         if (currentConversation.ad_source) {
             const platformIcon = currentConversation.ad_platform === 'instagram' ? '📸' : currentConversation.ad_platform === 'facebook' ? '👥' : '📢';
             const mediaIcon = currentConversation.ad_media_type === 'video' ? ' 🎬' : currentConversation.ad_media_type === 'image' ? ' 🖼️' : '';
-            adSourceText.textContent = `${platformIcon} ${currentConversation.ad_source}${mediaIcon}`;
+            const audiencePart = currentConversation.ad_audience ? `  👥 ${currentConversation.ad_audience}` : '';
+            adSourceText.textContent = `${platformIcon} ${currentConversation.ad_source}${mediaIcon}${audiencePart}`;
             adSourceEl.style.background = '#1a4f9f';
             adSourceEl.style.color = '#fff';
         } else {

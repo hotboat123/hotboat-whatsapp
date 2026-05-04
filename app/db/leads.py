@@ -48,7 +48,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                             id, phone_number, customer_name, lead_status,
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
                             unread_count, last_read_at, priority, ad_source,
-                            ad_platform, ad_media_type, ad_creative_url, ad_ctwa_clid
+                            ad_platform, ad_media_type, ad_creative_url, ad_ctwa_clid, ad_audience
                         FROM whatsapp_leads
                         WHERE phone_number = %s
                     """, (phone_number,))
@@ -103,6 +103,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "ad_media_type": row[15] if len(row) > 15 else None,
                         "ad_creative_url": row[16] if len(row) > 16 else None,
                         "ad_ctwa_clid": row[17] if len(row) > 17 else None,
+                        "ad_audience": row[18] if len(row) > 18 else None,
                     }
                 else:
                     # Create new lead
@@ -623,14 +624,27 @@ async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
     if not label:
         return None
 
-    # Derive platform from source_url
-    source_url = str(referral.get("source_url") or "").lower()
+    # Derive platform and audience from source_url (contains UTM params)
+    source_url_raw = referral.get("source_url") or ""
+    source_url = source_url_raw.lower()
     if "instagram" in source_url:
         platform = "instagram"
     elif source_url:
         platform = "facebook"
     else:
         platform = None
+
+    # Parse utm_content (audience) from source_url
+    audience = None
+    if source_url_raw:
+        try:
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(source_url_raw).query)
+            raw_audience = (qs.get("utm_content") or qs.get("utm_audience") or [None])[0]
+            if raw_audience:
+                audience = raw_audience.replace("-", " ").replace("_", " ").title()
+        except Exception:
+            pass
 
     media_type    = referral.get("media_type") or None        # "image" | "video"
     creative_url  = (referral.get("image_url") or referral.get("video_url") or None)
@@ -647,7 +661,8 @@ async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
                     ADD COLUMN IF NOT EXISTS ad_platform TEXT,
                     ADD COLUMN IF NOT EXISTS ad_media_type TEXT,
                     ADD COLUMN IF NOT EXISTS ad_creative_url TEXT,
-                    ADD COLUMN IF NOT EXISTS ad_ctwa_clid TEXT
+                    ADD COLUMN IF NOT EXISTS ad_ctwa_clid TEXT,
+                    ADD COLUMN IF NOT EXISTS ad_audience TEXT
                 """)
                 global _ad_col_cached
                 _ad_col_cached = True
@@ -659,16 +674,17 @@ async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
                         ad_media_type  = %s,
                         ad_creative_url = %s,
                         ad_ctwa_clid   = %s,
+                        ad_audience    = %s,
                         updated_at     = NOW()
                     WHERE phone_number = %s
                 """, (label, _json.dumps(referral), platform, media_type,
-                      creative_url, ctwa_clid, phone_number))
+                      creative_url, ctwa_clid, audience, phone_number))
                 rowcount = cur.rowcount
             conn.commit()
         if rowcount == 0:
             logger.warning(f"Ad source NOT saved for {phone_number} (rowcount=0, lead not found?): {label}")
         else:
-            logger.info(f"Ad source saved for {phone_number}: {label} | platform={platform} | media={media_type}")
+            logger.info(f"Ad source saved for {phone_number}: {label} | platform={platform} | audience={audience}")
         return label
     except Exception as e:
         logger.warning(f"Could not save ad source for {phone_number}: {e}")
