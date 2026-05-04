@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     meta_pixel_id: str = ""
     # Meta Marketing API token for ad name lookup (optional — falls back to whatsapp_api_token)
     meta_marketing_token: str = ""
+    # Facebook Page ID linked to the WhatsApp Business Account (required for Conversions API)
+    meta_page_id: str = ""
     
     # Automations
     automation_phone_numbers: str = ""  # Comma-separated phone numbers for automation notifications

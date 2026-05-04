@@ -37,10 +37,10 @@ async def fire_lead_event(
     ad_name: str | None = None,
 ) -> bool:
     """
-    Send a 'Lead' conversion event to Meta when someone first contacts via CTWA ad.
+    Send a 'Contact' conversion event to Meta when someone first contacts via CTWA ad.
     Returns True if the API accepted it.
     """
-    return await _fire_event("Lead", phone_number, ctwa_clid=ctwa_clid, ad_name=ad_name)
+    return await _fire_event("Contact", phone_number, ctwa_clid=ctwa_clid, ad_name=ad_name)
 
 
 async def fire_purchase_event(
@@ -83,6 +83,8 @@ async def _fire_event(
     }
     if ctwa_clid:
         user_data["ctwa_clid"] = ctwa_clid
+    if cfg.meta_page_id:
+        user_data["page_id"] = cfg.meta_page_id
 
     event: dict = {
         "event_name": event_name,
