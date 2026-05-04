@@ -42,19 +42,28 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Try to get existing lead
-                _ad_col = "ad_source" if _ad_source_col_exists(cur) else "NULL::text AS ad_source"
-                cur.execute(f"""
-                    SELECT
-                        id, phone_number, customer_name, lead_status,
-                        notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
-                        unread_count, last_read_at, priority, {_ad_col}
-                    FROM whatsapp_leads
-                    WHERE phone_number = %s
-                """, (phone_number,))
-                
+                try:
+                    cur.execute("""
+                        SELECT
+                            id, phone_number, customer_name, lead_status,
+                            notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
+                            unread_count, last_read_at, priority, ad_source
+                        FROM whatsapp_leads
+                        WHERE phone_number = %s
+                    """, (phone_number,))
+                except Exception:
+                    # ad_source column not yet created — fallback without it
+                    cur.execute("""
+                        SELECT
+                            id, phone_number, customer_name, lead_status,
+                            notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
+                            unread_count, last_read_at, priority
+                        FROM whatsapp_leads
+                        WHERE phone_number = %s
+                    """, (phone_number,))
+
                 row = cur.fetchone()
-                
+
                 if row:
                     # Update last interaction
                     cur.execute("""
@@ -63,7 +72,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                             updated_at = NOW()
                         WHERE phone_number = %s
                     """, (phone_number,))
-                    
+
                     if customer_name and customer_name != row[2]:
                         # Update name if different
                         cur.execute("""
@@ -71,9 +80,9 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                             SET customer_name = %s, updated_at = NOW()
                             WHERE phone_number = %s
                         """, (customer_name, phone_number))
-                    
+
                     conn.commit()
-                    
+
                     return {
                         "id": row[0],
                         "phone_number": row[1],
@@ -93,15 +102,15 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                 else:
                     # Create new lead
                     cur.execute("""
-                        INSERT INTO whatsapp_leads 
+                        INSERT INTO whatsapp_leads
                         (phone_number, customer_name, lead_status, last_interaction_at, created_at, updated_at)
                         VALUES (%s, %s, 'unknown', NOW(), NOW(), NOW())
                         RETURNING id
                     """, (phone_number, customer_name))
-                    
+
                     lead_id = cur.fetchone()[0]
                     conn.commit()
-                    
+
                     return {
                         "id": lead_id,
                         "phone_number": phone_number,
