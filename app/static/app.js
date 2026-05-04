@@ -278,7 +278,8 @@ async function loadConversations(limit = null) {
                     last_message_at: timestamp,
                     created_at: timestamp,
                     unread_count: item.unread_count || 0,
-                    priority: item.priority || 0  // ✅ Preserve priority
+                    priority: item.priority || 0,
+                    ad_source: item.ad_source || null
                 });
             }
         });
