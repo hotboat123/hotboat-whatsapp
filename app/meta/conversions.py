@@ -109,10 +109,12 @@ async def _fire_event(
             return True
         else:
             logger.warning(f"Meta CAPI {event_name} error {resp.status_code}: {resp.text[:300]}")
-            return False
+            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:400]}")
+    except RuntimeError:
+        raise
     except Exception as e:
         logger.warning(f"Meta CAPI {event_name} exception: {e}")
-        return False
+        raise
 
 
 async def fire_purchase_from_booking(

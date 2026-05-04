@@ -2962,28 +2962,35 @@ async def test_meta_capi(x_admin_key: str = Header("")):
     from app.config import get_settings
     cfg = get_settings()
 
-    results = {}
+    results = {
+        "pixel_id": cfg.meta_pixel_id or "⚠️ no configurado",
+        "token_set": bool(cfg.meta_marketing_token or cfg.whatsapp_api_token),
+    }
 
     # Test Lead event
-    lead_ok = await fire_lead_event(
-        phone_number="56900000000",
-        ctwa_clid=None,
-        ad_name="TEST — Evento de prueba",
-    )
-    results["lead_event"] = "✅ enviado" if lead_ok else "❌ falló"
+    try:
+        await fire_lead_event(
+            phone_number="56900000000",
+            ctwa_clid=None,
+            ad_name="TEST — Evento de prueba",
+        )
+        results["lead_event"] = "✅ enviado"
+    except Exception as e:
+        results["lead_event"] = f"❌ error: {e}"
 
     # Test Purchase event
-    purchase_ok = await fire_purchase_event(
-        phone_number="56900000000",
-        value=150000,
-        currency="CLP",
-        ctwa_clid=None,
-        ad_name="TEST — Evento de prueba",
-    )
-    results["purchase_event"] = "✅ enviado" if purchase_ok else "❌ falló"
+    try:
+        await fire_purchase_event(
+            phone_number="56900000000",
+            value=150000,
+            currency="CLP",
+            ctwa_clid=None,
+            ad_name="TEST — Evento de prueba",
+        )
+        results["purchase_event"] = "✅ enviado"
+    except Exception as e:
+        results["purchase_event"] = f"❌ error: {e}"
 
-    results["pixel_id"] = cfg.meta_pixel_id or "⚠️ no configurado"
-    results["token_set"] = bool(cfg.meta_marketing_token or cfg.whatsapp_api_token)
     results["instrucciones"] = (
         "Ve a Meta Business → Events Manager → tu Pixel → Pestaña 'Eventos de prueba' "
         "para ver si los eventos llegaron en tiempo real."
