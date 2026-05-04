@@ -40,7 +40,7 @@ async def fire_lead_event(
     Send a 'Contact' conversion event to Meta when someone first contacts via CTWA ad.
     Returns True if the API accepted it.
     """
-    return await _fire_event("Contact", phone_number, ctwa_clid=ctwa_clid, ad_name=ad_name)
+    return await _fire_event("LeadSubmitted", phone_number, ctwa_clid=ctwa_clid, ad_name=ad_name)
 
 
 async def fire_purchase_event(
