@@ -106,7 +106,6 @@ async def _run_auto_sync():
 
             inserted_reservas = 0
             updated_reservas = 0
-            inserted_hb = 0
             status_updated = 0
 
             with get_connection() as conn:
@@ -206,53 +205,18 @@ async def _run_auto_sync():
                     """)
                     dedup_deleted = cur.rowcount
 
-                    # Sync hotboat_web — exclude cancelled/rejected so deleted bookings stay deleted
-                    cur.execute("""
-                        SELECT booking_ref, customer_name, customer_email, customer_phone,
-                               booking_date, booking_time, num_people,
-                               subtotal, extras_total, total_price, extras, status,
-                               payment_id, payment_status, notes, created_at
-                        FROM hotboat_appointments
-                        WHERE booking_date IS NOT NULL
-                          AND booking_date >= (CURRENT_DATE - INTERVAL '3 years')
-                          AND booking_date <= (CURRENT_DATE + INTERVAL '3 years')
-                          AND status NOT IN ('solicitud', 'cancelled', 'rejected', 'cancelada', 'rechazada')
-                    """)
-                    for row in cur.fetchall():
-                        (ref, nombre, email, phone, fecha, hora, num_p,
-                         sub, ext, total, extras, status, pay_id, pay_st, notes, created) = row
-                        cur.execute(f"SELECT id, status FROM {TABLE} WHERE source='hotboat_web' AND source_id=%s", (ref,))
-                        existing = cur.fetchone()
-                        if existing:
-                            if status and status != existing[1]:
-                                cur.execute(f"UPDATE {TABLE} SET status=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
-                                            (status, pay_st, existing[0]))
-                                status_updated += 1
-                        else:
-                            cur.execute(f"""
-                                INSERT INTO {TABLE}
-                                (source,source_id,fecha,hora,nombre_cliente,email,telefono,
-                                 servicio,num_personas,ingreso_reserva,ingreso_extras,ingreso_total,
-                                 status,extras_json,observaciones,payment_id,payment_status,created_at)
-                                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-                                ON CONFLICT DO NOTHING
-                            """, (ref, fecha, hora, nombre, email, normalize_phone(phone),
-                                  f"HotBoat Web ({num_p}p)", str(num_p),
-                                  float(sub or 0), float(ext or 0), float(total or 0),
-                                  status, PgJson(extras or {}), notes, pay_id, pay_st))
-                            inserted_hb += 1
-
                     conn.commit()
 
-            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), +{inserted_hb} web, {status_updated} estados")
+            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), {status_updated} estados")
 
             # Clean up stale pending_payment web bookings (older than 45 min)
             try:
                 with get_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-                            DELETE FROM hotboat_appointments
-                            WHERE status = 'pending_payment'
+                            DELETE FROM all_appointments
+                            WHERE source = 'hotboat_web'
+                              AND status = 'pending_payment'
                               AND created_at < NOW() - INTERVAL '45 minutes'
                         """)
                         deleted = cur.rowcount

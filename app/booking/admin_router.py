@@ -276,11 +276,6 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                                 "UPDATE booknetic_appointments SET status=%s, updated_at=NOW() WHERE id=%s",
                                 (updates["status"], src_id)
                             )
-                        elif src == "hotboat_web" and src_id:
-                            cur.execute(
-                                "UPDATE hotboat_appointments SET status=%s, updated_at=NOW() WHERE booking_ref=%s",
-                                (updates["status"], src_id)
-                            )
                         elif src == "sheets" and src_id:
                             cur.execute(
                                 "UPDATE reservas_con_extras SET status=%s, updated_at=NOW() WHERE id=%s",
@@ -410,23 +405,6 @@ async def delete_reserva(rid: int, x_admin_key: str = Header("")):
                     raise HTTPException(status_code=404, detail="Not found")
                 nombre_cliente, fecha, hora, source, source_id = row
                 cur.execute(f"DELETE FROM {TABLE} WHERE id=%s", (rid,))
-                # Cancel the matching hotboat_appointments entry so it doesn't
-                # re-appear via sync and doesn't block availability.
-                if source == "hotboat_web":
-                    if source_id:
-                        cur.execute(
-                            "UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW() WHERE booking_ref=%s",
-                            (source_id,)
-                        )
-                    elif fecha and hora:
-                        # Fallback: no source_id stored — match by date/time/customer
-                        cur.execute(
-                            """UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW()
-                               WHERE booking_date=%s AND booking_time=%s::time
-                                 AND (customer_name=%s OR %s IS NULL)
-                                 AND status NOT IN ('cancelled','rejected','cancelada')""",
-                            (fecha, hora, nombre_cliente, nombre_cliente)
-                        )
                 conn.commit()
         return {"ok": True, "deleted": rid}
     except HTTPException:
@@ -471,24 +449,12 @@ async def fix_blocked_slot(
     fecha: str = Query(...),
     hora: str = Query(...),
 ):
-    """Force-cancel any active booking at the given date/time in both hotboat_appointments
-    and all_appointments so the slot shows as available."""
+    """Force-cancel any active booking at the given date/time in all_appointments."""
     _check_auth(x_admin_key)
     try:
         updated = []
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Cancel in hotboat_appointments
-                cur.execute(
-                    """UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW()
-                       WHERE booking_date=%s::date AND booking_time=%s::time
-                         AND status NOT IN ('cancelled','rejected','cancelada')
-                       RETURNING booking_ref, customer_name""",
-                    (fecha, hora)
-                )
-                for r in cur.fetchall():
-                    updated.append({"table": "hotboat_appointments", "ref": r[0], "customer": r[1]})
-
                 # Cancel in all_appointments
                 cur.execute(
                     """UPDATE all_appointments SET status='cancelled', updated_at=NOW()
@@ -512,7 +478,6 @@ async def fix_blocked_slot(
         return {"ok": True, "updated": updated, "slot_should_now_be_free": f"{fecha} {hora}"}
     except Exception as e:
         logger.error(f"fix_blocked_slot error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -921,8 +886,8 @@ async def availability_debug(
                             "customer": r[3], "status": r[4],
                         })
                     cur.execute(
-                        "SELECT booking_ref, booking_date, booking_time, customer_name, status"
-                        " FROM hotboat_appointments WHERE booking_date = %s ORDER BY booking_time",
+                        "SELECT source_id, fecha, hora, nombre_cliente, status"
+                        " FROM all_appointments WHERE source = 'hotboat_web' AND fecha = %s ORDER BY hora",
                         (fecha,)
                     )
                     for r in cur.fetchall():
@@ -1828,6 +1793,31 @@ async def send_payment_link(rid: int, x_admin_key: str = Header("")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@admin_router.post("/api/admin/reservas/{rid}/send-followup-email")
+async def send_followup_email_manual(rid: int, x_admin_key: str = Header("")):
+    """Send TripAdvisor / satisfaction follow-up email to the customer (manual trigger)."""
+    _check_auth(x_admin_key)
+    try:
+        from app.booking.booking_email import send_manual_followup_email
+
+        result = await asyncio.to_thread(send_manual_followup_email, rid)
+        if result.get("sent"):
+            return {"ok": True, "sent": True, "reason": result.get("reason", "ok")}
+        reason = str(result.get("reason") or "unknown")
+        if reason == "not_found":
+            raise HTTPException(status_code=404, detail="Reserva no encontrada")
+        if reason == "no_customer_email":
+            raise HTTPException(status_code=400, detail="La reserva no tiene email del cliente")
+        if reason == "no_resend_key":
+            raise HTTPException(status_code=503, detail="Resend no configurado (API key)")
+        raise HTTPException(status_code=400, detail=reason[:500])
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending follow-up email for {rid}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── WooCommerce: receive payment webhook ──────────────────────────────────────
 
 @admin_router.post("/api/woo-webhook")
@@ -1907,86 +1897,128 @@ async def woo_webhook(request: Request):
                     )
                     conn.commit()
 
-        # ── 2. Update hotboat_appointments (web booking flow) ────────────────
+        # ── 2. Confirm web booking (all_appointments; legacy hotboat-only rows still supported)
         if booking_ref_wc:
             try:
                 with get_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
-                            "SELECT id, customer_name, customer_phone, customer_email, "
-                            "booking_date, booking_time, num_people, subtotal, extras_total, "
-                            "total_price, has_flex, flex_amount, extras, notes "
-                            "FROM hotboat_appointments WHERE booking_ref=%s",
-                            (booking_ref_wc,)
+                            f"SELECT id, COALESCE(pagos,'[]'::jsonb), created_at::date::text FROM {TABLE} "
+                            f"WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
+                            (booking_ref_wc,),
                         )
-                        ha_row = cur.fetchone()
-                        if ha_row:
-                            (ha_id, ha_name, ha_phone, ha_email,
-                             ha_date, ha_time, ha_people, ha_sub,
-                             ha_ext, ha_total, ha_flex, ha_flex_amt,
-                             ha_extras_json, ha_notes) = ha_row
-
+                        all_row = cur.fetchone()
+                        if all_row:
+                            all_id, pagos_raw2, created_at_str2 = all_row
+                            pagos2 = _add_pago(
+                                list(pagos_raw2) if pagos_raw2 else [],
+                                total,
+                                "transbank",
+                                created_at_str2 or "",
+                            )
                             cur.execute(
-                                "UPDATE hotboat_appointments "
-                                "SET status='confirmed', payment_order_id=%s, payment_status=%s, "
-                                "paid_at=NOW(), updated_at=NOW() WHERE booking_ref=%s",
-                                (str(wc_id), status, booking_ref_wc)
+                                f"UPDATE {TABLE} SET status='confirmed', payment_order_id=%s, payment_status=%s, "
+                                f"paid_at=NOW(), pagos=%s, updated_at=NOW() WHERE id=%s",
+                                (str(wc_id), status, PgJson(pagos2), all_id),
                             )
                             conn.commit()
-
-                            # Sync confirmed booking into all_appointments
-                            from app.booking.router import _sync_hotboat_to_all
-                            import json as _json
-                            booking_data = {
-                                "customer_name":  ha_name,
-                                "customer_phone": ha_phone,
-                                "customer_email": ha_email,
-                                "booking_date":   str(ha_date),
-                                "booking_time":   str(ha_time)[:5],
-                                "num_people":     ha_people,
-                                "subtotal":       float(ha_sub or 0),
-                                "extras_total":   float(ha_ext or 0),
-                                "total_price":    float(ha_total or 0),
-                                "has_flex":       ha_flex,
-                                "flex_amount":    float(ha_flex_amt or 0),
-                                "extras":         _json.loads(ha_extras_json) if isinstance(ha_extras_json, str) else (ha_extras_json or []),
-                                "notes":          ha_notes,
-                            }
-                            _sync_hotboat_to_all(booking_ref_wc, booking_data, "confirmed")
-
-                            # Register payment in all_appointments.pagos
-                            with get_connection() as conn2:
-                                with conn2.cursor() as cur2:
-                                    cur2.execute(
-                                        f"SELECT id, COALESCE(pagos,'[]'::jsonb), created_at::date::text FROM {TABLE} "
-                                        f"WHERE source='hotboat_web' AND source_id=%s",
-                                        (booking_ref_wc,)
-                                    )
-                                    all_row = cur2.fetchone()
-                                    if all_row:
-                                        all_id, pagos_raw2, created_at_str2 = all_row
-                                        pagos2 = _add_pago(
-                                            list(pagos_raw2) if pagos_raw2 else [],
-                                            total, "transbank",
-                                            created_at_str2 or ""
-                                        )
-                                        cur2.execute(
-                                            f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
-                                            (PgJson(pagos2), status, all_id)
-                                        )
-                                        conn2.commit()
-
-                            logger.info(f"WC webhook: hotboat_appointments {booking_ref_wc} confirmed + synced")
+                            logger.info("WC webhook: all_appointments %s confirmed", booking_ref_wc)
                             try:
                                 from app.booking.booking_email import (
                                     try_send_booking_confirmation_after_payment,
                                 )
+
                                 em = try_send_booking_confirmation_after_payment(booking_ref_wc)
                                 logger.info("WC webhook: confirmation email %s", em)
                             except Exception as em_err:
                                 logger.warning("WC webhook: confirmation email error: %s", em_err)
+                        else:
+                            cur.execute(
+                                "SELECT id, customer_name, customer_phone, customer_email, "
+                                "booking_date, booking_time, num_people, subtotal, extras_total, "
+                                "total_price, has_flex, flex_amount, extras, notes "
+                                "FROM hotboat_appointments WHERE booking_ref=%s",
+                                (booking_ref_wc,),
+                            )
+                            ha_row = cur.fetchone()
+                            if ha_row:
+                                (
+                                    _ha_id,
+                                    ha_name,
+                                    ha_phone,
+                                    ha_email,
+                                    ha_date,
+                                    ha_time,
+                                    ha_people,
+                                    ha_sub,
+                                    ha_ext,
+                                    ha_total,
+                                    ha_flex,
+                                    ha_flex_amt,
+                                    ha_extras_json,
+                                    ha_notes,
+                                ) = ha_row
+                                cur.execute(
+                                    "UPDATE hotboat_appointments "
+                                    "SET status='confirmed', payment_order_id=%s, payment_status=%s, "
+                                    "paid_at=NOW(), updated_at=NOW() WHERE booking_ref=%s",
+                                    (str(wc_id), status, booking_ref_wc),
+                                )
+                                conn.commit()
+                                from app.booking.router import _sync_hotboat_to_all
+                                import json as _json
+
+                                booking_data = {
+                                    "customer_name": ha_name,
+                                    "customer_phone": ha_phone,
+                                    "customer_email": ha_email,
+                                    "booking_date": str(ha_date),
+                                    "booking_time": str(ha_time)[:5],
+                                    "num_people": ha_people,
+                                    "subtotal": float(ha_sub or 0),
+                                    "extras_total": float(ha_ext or 0),
+                                    "total_price": float(ha_total or 0),
+                                    "has_flex": ha_flex,
+                                    "flex_amount": float(ha_flex_amt or 0),
+                                    "extras": _json.loads(ha_extras_json)
+                                    if isinstance(ha_extras_json, str)
+                                    else (ha_extras_json or []),
+                                    "notes": ha_notes,
+                                }
+                                _sync_hotboat_to_all(booking_ref_wc, booking_data, "confirmed")
+                                with get_connection() as conn2:
+                                    with conn2.cursor() as cur2:
+                                        cur2.execute(
+                                            f"SELECT id, COALESCE(pagos,'[]'::jsonb), created_at::date::text FROM {TABLE} "
+                                            f"WHERE source='hotboat_web' AND source_id=%s",
+                                            (booking_ref_wc,),
+                                        )
+                                        ar2 = cur2.fetchone()
+                                        if ar2:
+                                            aid2, pr2, c2 = ar2
+                                            pg2 = _add_pago(
+                                                list(pr2) if pr2 else [],
+                                                total,
+                                                "transbank",
+                                                c2 or "",
+                                            )
+                                            cur2.execute(
+                                                f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
+                                                (PgJson(pg2), status, aid2),
+                                            )
+                                            conn2.commit()
+                                logger.info("WC webhook: legacy hotboat %s confirmed + synced to all_appointments", booking_ref_wc)
+                                try:
+                                    from app.booking.booking_email import (
+                                        try_send_booking_confirmation_after_payment,
+                                    )
+
+                                    em = try_send_booking_confirmation_after_payment(booking_ref_wc)
+                                    logger.info("WC webhook: confirmation email %s", em)
+                                except Exception as em_err:
+                                    logger.warning("WC webhook: confirmation email error: %s", em_err)
             except Exception as he:
-                logger.error(f"WC webhook: error updating hotboat_appointments {booking_ref_wc}: {he}")
+                logger.error(f"WC webhook: error confirming web booking {booking_ref_wc}: {he}")
 
         # ── 3. Update accommodation_bookings ─────────────────────────────────
         aloj_ref_wc = meta_map.get("accommodation_booking_ref", "") or (
@@ -2016,14 +2048,22 @@ async def woo_webhook(request: Request):
                             # If combined with HotBoat, confirm that booking too
                             if combined_hb_ref:
                                 cur.execute(
-                                    "UPDATE hotboat_appointments"
+                                    f"UPDATE {TABLE}"
                                     " SET status='confirmed', payment_order_id=%s, payment_status=%s,"
                                     "     paid_at=NOW(), updated_at=NOW()"
-                                    " WHERE booking_ref=%s",
-                                    (str(wc_id), status, combined_hb_ref)
+                                    " WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
+                                    (str(wc_id), status, combined_hb_ref),
                                 )
+                                if cur.rowcount == 0:
+                                    cur.execute(
+                                        "UPDATE hotboat_appointments"
+                                        " SET status='confirmed', payment_order_id=%s, payment_status=%s,"
+                                        "     paid_at=NOW(), updated_at=NOW()"
+                                        " WHERE booking_ref=%s",
+                                        (str(wc_id), status, combined_hb_ref),
+                                    )
                                 conn.commit()
-                                logger.info("WC webhook: combined hotboat_appointments %s confirmed", combined_hb_ref)
+                                logger.info("WC webhook: combined HotBoat booking %s confirmed", combined_hb_ref)
                             nights_ab = (ab_checkout - ab_checkin).days if ab_checkin and ab_checkout else 0
                             # WhatsApp notification to admin
                             try:

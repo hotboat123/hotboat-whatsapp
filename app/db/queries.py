@@ -110,7 +110,7 @@ async def get_appointments_between_dates(
 async def check_slot_availability(slot_datetime: datetime, duration_hours: float = 2.0, buffer_hours: float = 0.5) -> bool:
     """
     Check if a specific time slot is available.
-    Checks both booknetic_appointments AND hotboat_appointments (web bookings).
+    Checks booknetic_appointments AND all_appointments (web bookings via hotboat_web).
     """
     import pytz
     CHILE_TZ = pytz.timezone('America/Santiago')
@@ -139,24 +139,22 @@ async def check_slot_availability(slot_datetime: datetime, duration_hours: float
                 if cur.fetchone()[0] > 0:
                     return False
 
-                # 2. Web bookings (hotboat_appointments)
-                # Reconstruct datetime from booking_date + booking_time text ("HH:MM")
+                # 2. Web bookings (all_appointments canonical source)
                 slot_date   = slot_datetime.date()
                 slot_h      = slot_datetime.hour
                 slot_m      = slot_datetime.minute
-                # A web booking at H:MM overlaps if its window [H-buf .. H+dur+buf] overlaps ours
-                # Convert everything to minutes-since-midnight for a pure SQL comparison
                 slot_start_min = (slot_h * 60 + slot_m) - int(buffer_hours * 60)
                 slot_end_min   = (slot_h * 60 + slot_m) + int((duration_hours + buffer_hours) * 60)
                 cur.execute("""
-                    SELECT COUNT(*) FROM hotboat_appointments
-                    WHERE booking_date = %s
-                      AND booking_time IS NOT NULL
+                    SELECT COUNT(*) FROM all_appointments
+                    WHERE source = 'hotboat_web'
+                      AND fecha = %s
+                      AND hora IS NOT NULL
                       AND status NOT IN ('cancelled','rejected','solicitud')
                       AND (
-                          (EXTRACT(HOUR FROM booking_time)::int * 60 + EXTRACT(MINUTE FROM booking_time)::int)
+                          (EXTRACT(HOUR FROM hora)::int * 60 + EXTRACT(MINUTE FROM hora)::int)
                               - %s < %s
-                          AND (EXTRACT(HOUR FROM booking_time)::int * 60 + EXTRACT(MINUTE FROM booking_time)::int)
+                          AND (EXTRACT(HOUR FROM hora)::int * 60 + EXTRACT(MINUTE FROM hora)::int)
                               + %s > %s
                       )
                 """, (
@@ -243,41 +241,8 @@ async def get_booked_slots(
                         "status": row[4],
                     })
 
-                # Also include web bookings from hotboat_appointments
+                # Include all_appointments (web hotboat_web + manual/sheets; canonical).
                 from datetime import time as dt_time
-                cur.execute("""
-                    SELECT booking_ref, booking_date, booking_time, customer_name, status
-                    FROM hotboat_appointments
-                    WHERE booking_date >= %s::date
-                      AND booking_date <= %s::date
-                      AND booking_time IS NOT NULL
-                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud','pending_payment')
-                    ORDER BY booking_date, booking_time
-                """, (start_date, end_date))
-                for row in cur.fetchall():
-                    _, b_date, b_time, b_name, b_status = row
-                    try:
-                        # b_time may be a datetime.time object or a "HH:MM" string
-                        if hasattr(b_time, 'hour'):
-                            h, m = b_time.hour, b_time.minute
-                        else:
-                            h, m = map(int, str(b_time).split(":")[:2])
-                        dt_naive = datetime.combine(b_date, dt_time(h, m))
-                        starts_at = CHILE_TZ.localize(dt_naive)
-                        booked_slots.append({
-                            "id": None,
-                            "starts_at": starts_at,
-                            "service_name": "HotBoat Web",
-                            "customer_name": b_name,
-                            "status": b_status,
-                        })
-                    except Exception:
-                        pass
-
-                # Include all_appointments entries (manual entries AND hotboat_web as safety net).
-                # hotboat_web is included because a booking may exist in all_appointments but
-                # be missing from hotboat_appointments due to a sync gap — without this it
-                # would be invisible to the availability checker.
                 cur.execute("""
                     SELECT fecha, hora, nombre_cliente, status
                     FROM all_appointments

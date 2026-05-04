@@ -85,15 +85,16 @@ async def get_dynamic_price(
         today = datetime.now(CHILE_TZ).date()
         days_advance = max(0, (booking_date - today).days)
 
-        # Count confirmed bookings on that day from hotboat_appointments
+        # Count confirmed web bookings on that day (all_appointments is canonical)
         bookings_on_day = 0
         try:
             from app.db.connection import get_connection
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        """SELECT COUNT(*) FROM hotboat_appointments
-                           WHERE booking_date = %s
+                        """SELECT COUNT(*) FROM all_appointments
+                           WHERE source = 'hotboat_web'
+                             AND fecha = %s
                              AND status NOT IN ('cancelled','rejected','solicitud')""",
                         (booking_date,),
                     )
@@ -208,17 +209,6 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
             try:
                 with get_connection() as conn:
                     with conn.cursor() as cur:
-                        # Web bookings
-                        cur.execute("""
-                            SELECT booking_date::text,
-                                   TO_CHAR(booking_time, 'HH24:MI') AS t
-                            FROM hotboat_appointments
-                            WHERE booking_date >= %s AND booking_date <= %s
-                              AND status NOT IN ('cancelled','rejected','solicitud','pending_payment')
-                              AND booking_time IS NOT NULL
-                        """, (start.date(), end.date()))
-                        for row in cur.fetchall():
-                            booked_by_day.setdefault(row[0], []).append(row[1])
                         # Booknetic bookings (stored as Chile time, no tz offset)
                         cur.execute("""
                             SELECT (starts_at AT TIME ZONE 'UTC')::date::text AS d,
@@ -231,12 +221,12 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
                         """, (start.date(), end.date()))
                         for row in cur.fetchall():
                             booked_by_day.setdefault(row[0], []).append(row[1])
-                        # Manual / sheets reservations from all_appointments
+                        # Web + manual / sheets (all_appointments — canonical)
                         cur.execute("""
                             SELECT fecha::text AS d,
                                    TO_CHAR(hora, 'HH24:MI') AS t
                             FROM all_appointments
-                            WHERE source NOT IN ('booknetic', 'hotboat_web')
+                            WHERE source NOT IN ('booknetic')
                               AND fecha >= %s AND fecha <= %s
                               AND hora IS NOT NULL
                               AND status NOT IN ('cancelled','rejected','cancelada','solicitud','pending_payment')
@@ -382,9 +372,15 @@ async def create_booking_endpoint(request: CreateBookingRequest):
                     with _gc() as conn:
                         with conn.cursor() as cur:
                             cur.execute(
-                                "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
-                                (str(woo_order_id), booking_ref)
+                                "UPDATE all_appointments SET payment_order_id=%s, updated_at=NOW() "
+                                "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
+                                (str(woo_order_id), booking_ref),
                             )
+                            if cur.rowcount == 0:
+                                cur.execute(
+                                    "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
+                                    (str(woo_order_id), booking_ref),
+                                )
                             conn.commit()
                 except Exception as ue:
                     logger.warning(f"Could not save woo_order_id for {booking_ref}: {ue}")
@@ -476,18 +472,23 @@ async def create_solicitud(request: SolicitudRequest):
         )
         with get_connection() as conn:
             with conn.cursor() as cur:
+                ref = generate_booking_ref()
                 cur.execute(
-                    "INSERT INTO hotboat_appointments"
-                    " (booking_ref,customer_name,customer_phone,customer_email,"
-                    "  booking_date,booking_time,num_people,"
-                    "  price_per_person,subtotal,total_price,status,source,notes)"
-                    " VALUES (%s,%s,%s,%s,CURRENT_DATE,'00:00',1,0,0,0,'solicitud','web',%s)"
-                    " RETURNING booking_ref",
+                    "INSERT INTO all_appointments"
+                    " (source,source_id,appointment_id,fecha,hora,nombre_cliente,telefono,email,"
+                    "  servicio,num_personas,ingreso_reserva,ingreso_extras,ingreso_total,"
+                    "  status,observaciones,created_at,updated_at)"
+                    " VALUES ('web_solicitud',%s,%s,CURRENT_DATE,'00:00'::time,%s,%s,%s,"
+                    "  'Consulta','1',0,0,0,'solicitud',%s,NOW(),NOW())"
+                    " RETURNING source_id",
                     (
-                        generate_booking_ref(),
-                        request.customer_name, request.customer_phone,
-                        request.customer_email, notes_full
-                    )
+                        ref,
+                        ref,
+                        request.customer_name,
+                        request.customer_phone,
+                        request.customer_email,
+                        notes_full,
+                    ),
                 )
                 ref = cur.fetchone()[0]
                 conn.commit()
@@ -533,19 +534,22 @@ async def arma_pack_pay(request: ArmaPackPayRequest):
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO hotboat_appointments"
-                    " (booking_ref,customer_name,customer_phone,customer_email,"
-                    "  booking_date,booking_time,num_people,"
-                    "  price_per_person,subtotal,total_price,status,source,notes)"
-                    " VALUES (%s,%s,%s,%s,CURRENT_DATE,'00:00',%s,0,%s,%s,'pendiente','web_armapack',%s)"
-                    " RETURNING booking_ref",
+                    "INSERT INTO all_appointments"
+                    " (source,source_id,appointment_id,fecha,hora,nombre_cliente,telefono,email,"
+                    "  servicio,num_personas,ingreso_reserva,ingreso_extras,ingreso_total,"
+                    "  status,observaciones,created_at,updated_at)"
+                    " VALUES ('web_armapack',%s,%s,CURRENT_DATE,'00:00'::time,%s,%s,NULL,"
+                    "  'Arma tu Pack',%s,%s,0,%s,'pendiente',%s,NOW(),NOW())",
                     (
                         booking_ref,
-                        request.customer_name, request.customer_phone, None,
-                        request.num_people,
-                        request.deposit_amount, request.total_amount,
+                        booking_ref,
+                        request.customer_name,
+                        request.customer_phone,
+                        str(request.num_people),
+                        request.deposit_amount,
+                        request.total_amount,
                         notes_full,
-                    )
+                    ),
                 )
                 conn.commit()
     except Exception as e:
@@ -1025,12 +1029,19 @@ async def create_accommodation_booking(request: AlojBookingRequest):
             with _gc() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
-                        (hotboat_ref,)
+                        "SELECT ingreso_total FROM all_appointments "
+                        "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
+                        (hotboat_ref,),
                     )
                     row = cur.fetchone()
+                    if not row:
+                        cur.execute(
+                            "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
+                            (hotboat_ref,),
+                        )
+                        row = cur.fetchone()
                     if row:
-                        hotboat_deposit = round(row[0] * 0.5)
+                        hotboat_deposit = round(float(row[0]) * 0.5)
         except Exception as le:
             logger.warning(f"Could not look up hotboat booking {hotboat_ref}: {le}")
     elif request.hotboat_date and request.hotboat_time and request.hotboat_people:
@@ -1125,9 +1136,15 @@ async def create_accommodation_booking(request: AlojBookingRequest):
                     # Also link the combined order to the HotBoat booking
                     if hotboat_ref:
                         cur.execute(
-                            "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
-                            (str(woo_order_id), hotboat_ref)
+                            "UPDATE all_appointments SET payment_order_id=%s, updated_at=NOW() "
+                            "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
+                            (str(woo_order_id), hotboat_ref),
                         )
+                        if cur.rowcount == 0:
+                            cur.execute(
+                                "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
+                                (str(woo_order_id), hotboat_ref),
+                            )
                     conn.commit()
     except Exception as pe:
         import traceback

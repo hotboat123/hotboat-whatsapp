@@ -2403,6 +2403,12 @@ async function openModal(id){
                      border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
               📧 Enviar resumen
             </button>
+            <button type="button" onclick="sendFollowupReviewEmail(${id})"
+              title="TripAdvisor y encuesta (mismo mail que el envío automático ~2 h después del horario)"
+              style="background:rgba(46,204,113,.1);color:#2ecc71;border:1px solid rgba(46,204,113,.35);
+                     border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
+              ⭐ Mail reseña
+            </button>
           </div>
           <input type="hidden" id="_bref_val" value="${r.booking_ref||''}">
         </div>
@@ -2539,6 +2545,16 @@ async function sendFirmasSummary(bookingRef){
   try{
     await api(`/api/admin/reservas/${encodeURIComponent(bookingRef)}/firmas/summary-email`,{method:'POST'});
     showToast('📧 Resumen enviado a hotboatnotification@gmail.com');
+  }catch(e){
+    showToast('Error: '+e.message);
+  }
+}
+async function sendFollowupReviewEmail(rid){
+  if(!rid) return;
+  try{
+    const res = await api(`/api/admin/reservas/${rid}/send-followup-email`,{method:'POST'});
+    if(res.ok || res.sent) showToast('⭐ Mail de reseña enviado al cliente');
+    else showToast('No enviado: '+(res.reason||''));
   }catch(e){
     showToast('Error: '+e.message);
   }

@@ -7,6 +7,7 @@ from app.config import get_settings
 from app.booking.db import (
     get_booking_by_ref, mark_confirmation_email_sent,
     get_bookings_for_followup, mark_followup_email_sent,
+    mark_followup_sent_after_manual_send,
     get_customers_for_birthday_email, mark_birthday_email_sent,
     get_bookings_pending_payment_email, mark_pending_email_sent,
 )
@@ -1086,6 +1087,90 @@ def send_test_email_for_trigger(trigger: str, to_addr: str) -> Dict[str, Any]:
 
 
 # ── Daily follow-up sweep ────────────────────────────────────────────────────
+
+def send_manual_followup_email(rid: int) -> Dict[str, Any]:
+    """
+    Send booking_followup (TripAdvisor / survey) for one all_appointments row from the admin UI.
+    Does not require workflow enabled (same templates/subject as auto sweep); needs Resend API key.
+    """
+    out: Dict[str, Any] = {"sent": False, "reason": ""}
+    settings = get_settings()
+    if not (getattr(settings, "resend_api_key", "") or "").strip():
+        out["reason"] = "no_resend_key"
+        return out
+
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, nombre_cliente, telefono, email, fecha, hora, num_personas, "
+                "ingreso_reserva, ingreso_extras, ingreso_total, status, "
+                "COALESCE(customer_language,'es'), source, source_id "
+                "FROM all_appointments WHERE id=%s",
+                (rid,),
+            )
+            row = cur.fetchone()
+
+    if not row:
+        out["reason"] = "not_found"
+        return out
+
+    (
+        _id,
+        nombre,
+        telefono,
+        email,
+        fecha,
+        hora,
+        num_p,
+        ing_res,
+        ing_ext,
+        ing_total,
+        status,
+        lang,
+        source,
+        source_id,
+    ) = row
+
+    to_addr = (email or "").strip()
+    if not to_addr:
+        out["reason"] = "no_customer_email"
+        return out
+
+    src = str(source or "")
+    sid = str(source_id or "").strip()
+    if src == "hotboat_web" and sid:
+        booking_ref = sid
+    else:
+        booking_ref = f"AA-{rid}"
+
+    booking: Dict[str, Any] = {
+        "booking_ref": booking_ref,
+        "customer_name": nombre or "Cliente",
+        "customer_email": to_addr,
+        "customer_phone": telefono or "",
+        "booking_date": str(fecha) if fecha else "",
+        "booking_time": str(hora)[:5] if hora else "",
+        "num_people": str(num_p) if num_p not in (None, "") else "",
+        "total_price": ing_total,
+        "subtotal": ing_res,
+        "extras_total": ing_ext,
+        "status": status or "",
+        "customer_language": lang or "es",
+    }
+    ctx = _booking_ctx(booking)
+    result = _render_and_send("booking_followup", to_addr, ctx)
+    if result.get("sent"):
+        mark_followup_sent_after_manual_send(rid)
+        out["sent"] = True
+        out["reason"] = "ok"
+        logger.info("Manual follow-up email sent rid=%s to=%s", rid, to_addr)
+    else:
+        out["reason"] = result.get("reason") or "send_failed"
+        logger.warning("Manual follow-up email failed rid=%s reason=%s", rid, out["reason"])
+    return out
+
 
 def run_followup_email_sweep() -> dict:
     """
