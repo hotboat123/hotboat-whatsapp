@@ -108,8 +108,8 @@ async def _fire_event(
             logger.info(f"Meta CAPI {event_name} sent for {phone_number} | clid={ctwa_clid}")
             return True
         else:
-            logger.warning(f"Meta CAPI {event_name} error {resp.status_code}: {resp.text[:300]}")
-            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:400]}")
+            logger.warning(f"Meta CAPI {event_name} error {resp.status_code}: {resp.text}")
+            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
     except RuntimeError:
         raise
     except Exception as e:
