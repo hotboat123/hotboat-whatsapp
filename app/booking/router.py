@@ -1364,10 +1364,7 @@ _EVENT_LABELS = {
 def _build_ad_label(utm_campaign: str, utm_source: str, utm_medium: str, utm_content: str, from_fbclid: bool, referrer: str) -> str:
     """Return a human-readable ad label for the visitor session email."""
     if utm_campaign:
-        label = utm_campaign.replace("-", " ").replace("_", " ").title()
-        if utm_content:
-            label += f" — {utm_content.replace('-', ' ').replace('_', ' ').title()}"
-        return label
+        return utm_campaign.replace("-", " ").replace("_", " ").title()
     if from_fbclid:
         r = referrer.lower()
         if "instagram" in r:
@@ -1411,6 +1408,7 @@ def _send_session_summary(session: dict):
 
             # Build ad source label
             ad_label = _build_ad_label(utm_campaign, utm_source, utm_medium, utm_content, from_fbclid, referrer)
+            audience_label = utm_content.replace("-", " ").replace("_", " ").title() if utm_content and utm_campaign else ""
 
             rows = ""
             for ev in events:
@@ -1426,6 +1424,8 @@ def _send_session_summary(session: dict):
 
             ad_row = (f'<tr><td style="color:#888;padding:.3rem 0">📢 Anuncio</td>'
                       f'<td><strong style="color:#f5c842">{ad_label}</strong></td></tr>') if ad_label else ""
+            audience_row = (f'<tr><td style="color:#888;padding:.3rem 0">👥 Audiencia</td>'
+                            f'<td><strong style="color:#7eb8f7">{audience_label}</strong></td></tr>') if audience_label else ""
 
             subject = f"{classification} · {start_str}"
             html = f"""
@@ -1450,6 +1450,7 @@ def _send_session_summary(session: dict):
     </tr>
     {ref_row}
     {ad_row}
+    {audience_row}
     <tr>
       <td style="color:#888;padding:.3rem 0">Acciones</td>
       <td><strong>{len(events)}</strong></td>
