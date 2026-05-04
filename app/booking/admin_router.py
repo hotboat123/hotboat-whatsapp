@@ -2953,50 +2953,58 @@ async def migrate_ad_sources_endpoint(x_admin_key: str = Header("")):
 @admin_router.post("/api/admin/test-meta-capi")
 async def test_meta_capi(x_admin_key: str = Header("")):
     """
-    Fire a test Lead + Purchase event to Meta Conversions API with dummy data.
-    Use this to verify the pixel_id and token are correctly configured.
-    Check Meta Events Manager → Test Events to see them arrive in real time.
+    Test Meta Conversions API credentials with a website Purchase event.
+    WhatsApp (business_messaging) events require a real ctwa_clid from an actual
+    ad click — they cannot be tested with dummy data.
     """
     _check_auth(x_admin_key)
-    from app.meta.conversions import fire_lead_event, fire_purchase_event
+    import hashlib, time
+    import httpx
     from app.config import get_settings
     cfg = get_settings()
 
+    pixel_id = cfg.meta_pixel_id
+    token = cfg.meta_marketing_token or cfg.whatsapp_api_token
+    page_id = cfg.meta_page_id
+
     results = {
-        "pixel_id": cfg.meta_pixel_id or "⚠️ no configurado",
-        "token_set": bool(cfg.meta_marketing_token or cfg.whatsapp_api_token),
+        "pixel_id": pixel_id or "⚠️ no configurado",
+        "page_id": page_id or "⚠️ no configurado (META_PAGE_ID)",
+        "token_set": bool(token),
     }
 
-    # Dummy ctwa_clid required by Meta for business_messaging events
-    dummy_clid = "test_ctwa_clid_000000000000000"
+    if not pixel_id or not token:
+        results["resultado"] = "⚠️ Faltan META_PIXEL_ID o token — configurar en Railway"
+        return results
 
-    # Test Lead event
+    # Test with a website Purchase event (no ctwa_clid required)
+    # This validates pixel_id + token without needing a real CTWA click
+    ph = hashlib.sha256("56900000000".encode()).hexdigest()
+    payload = {
+        "data": [{
+            "event_name": "Purchase",
+            "event_time": int(time.time()),
+            "action_source": "website",
+            "event_source_url": "https://hotboatchile.com/test",
+            "user_data": {"ph": [ph]},
+            "custom_data": {"value": 1, "currency": "CLP"},
+        }],
+        "access_token": token,
+    }
     try:
-        await fire_lead_event(
-            phone_number="56900000000",
-            ctwa_clid=dummy_clid,
-            ad_name="TEST — Evento de prueba",
-        )
-        results["lead_event"] = "✅ enviado"
+        url = f"https://graph.facebook.com/v18.0/{pixel_id}/events"
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.post(url, json=payload)
+        if resp.status_code == 200:
+            results["credenciales"] = "✅ pixel_id + token válidos"
+        else:
+            results["credenciales"] = f"❌ {resp.status_code}: {resp.text}"
     except Exception as e:
-        results["lead_event"] = f"❌ error: {e}"
+        results["credenciales"] = f"❌ excepción: {e}"
 
-    # Test Purchase event
-    try:
-        await fire_purchase_event(
-            phone_number="56900000000",
-            value=150000,
-            currency="CLP",
-            ctwa_clid=dummy_clid,
-            ad_name="TEST — Evento de prueba",
-        )
-        results["purchase_event"] = "✅ enviado"
-    except Exception as e:
-        results["purchase_event"] = f"❌ error: {e}"
-
-    results["instrucciones"] = (
-        "Ve a Meta Business → Events Manager → tu Pixel → Pestaña 'Eventos de prueba' "
-        "para ver si los eventos llegaron en tiempo real."
+    results["nota"] = (
+        "Los eventos LeadSubmitted y Purchase de WhatsApp se disparan automáticamente "
+        "cuando alguien hace clic en un anuncio CTWA y escribe por WhatsApp / completa una reserva. "
+        "No se pueden simular porque Meta valida que el ctwa_clid sea real."
     )
-
     return results
