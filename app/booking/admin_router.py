@@ -2967,11 +2967,14 @@ async def test_meta_capi(x_admin_key: str = Header("")):
         "token_set": bool(cfg.meta_marketing_token or cfg.whatsapp_api_token),
     }
 
+    # Dummy ctwa_clid required by Meta for business_messaging events
+    dummy_clid = "test_ctwa_clid_000000000000000"
+
     # Test Lead event
     try:
         await fire_lead_event(
             phone_number="56900000000",
-            ctwa_clid=None,
+            ctwa_clid=dummy_clid,
             ad_name="TEST — Evento de prueba",
         )
         results["lead_event"] = "✅ enviado"
@@ -2984,7 +2987,7 @@ async def test_meta_capi(x_admin_key: str = Header("")):
             phone_number="56900000000",
             value=150000,
             currency="CLP",
-            ctwa_clid=None,
+            ctwa_clid=dummy_clid,
             ad_name="TEST — Evento de prueba",
         )
         results["purchase_event"] = "✅ enviado"

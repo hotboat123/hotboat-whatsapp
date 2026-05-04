@@ -76,6 +76,9 @@ async def _fire_event(
     if not pixel_id or not token:
         logger.debug("Meta Conversions API skipped: no pixel_id or token configured")
         return False
+    if not ctwa_clid:
+        logger.debug("Meta Conversions API skipped: no ctwa_clid (contact not from CTWA ad)")
+        return False
 
     phone_norm = _phone_e164(phone_number)
     user_data: dict = {
