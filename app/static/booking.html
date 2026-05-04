@@ -574,11 +574,29 @@ const _isReturning = (()=>{
 })();
 
 const _urlParams = new URLSearchParams(window.location.search);
-const _utmSource   = _urlParams.get('utm_source')   || '';
-const _utmMedium   = _urlParams.get('utm_medium')   || '';
-const _utmCampaign = _urlParams.get('utm_campaign') || '';
-const _utmContent  = _urlParams.get('utm_content')  || '';
-const _fbclid      = _urlParams.get('fbclid')       || '';
+/** Reads query key case-insensitively; trims and caps length. */
+function _queryParam(names, maxLen){
+  const cap = typeof maxLen==='number'?maxLen:500;
+  for(const n of names){
+    let v=( _urlParams.get(n)||'' ).trim();
+    if(!v){
+      const nl=n.toLowerCase();
+      for(const [k,val] of _urlParams.entries()){
+        if(k.toLowerCase()===nl){ v=(val||'').trim(); break; }
+      }
+    }
+    if(v) return v.substring(0,cap);
+  }
+  return '';
+}
+const _landingAttribution = Object.freeze({
+  utm_source:   _queryParam(['utm_source'],100),
+  utm_medium:   _queryParam(['utm_medium'],100),
+  utm_campaign: _queryParam(['utm_campaign'],200),
+  utm_content:  _queryParam(['utm_content'],200),
+  parametro_url: _queryParam(['parametro_url','PARAMETRO_URL','parametro'],240),
+  fbclid:       _queryParam(['fbclid'],120),
+});
 
 function _trackEvent(event, date){
   try{
@@ -588,11 +606,7 @@ function _trackEvent(event, date){
       referrer: document.referrer?document.referrer.substring(0,200):'',
       session_id: _sessionId,
       is_returning: _isReturning,
-      utm_source: _utmSource,
-      utm_medium: _utmMedium,
-      utm_campaign: _utmCampaign,
-      utm_content: _utmContent,
-      fbclid: _fbclid,
+      ..._landingAttribution,
     });
     fetch('/api/booking/track',{method:'POST',headers:{'Content-Type':'application/json'},body:payload}).catch(()=>{});
   }catch(e){}
@@ -2215,8 +2229,14 @@ async function init(){
     // Track page exit via sendBeacon (survives page unload)
     window.addEventListener('visibilitychange', ()=>{
       if(document.visibilityState==='hidden'){
-        const d = JSON.stringify({event:'exit',session_id:_sessionId,is_returning:_isReturning,
-          lang:S.lang||'es',referrer:''});
+        const d = JSON.stringify({
+          event:'exit',
+          session_id:_sessionId,
+          is_returning:_isReturning,
+          lang:S.lang||'es',
+          referrer: document.referrer?document.referrer.substring(0,200):'',
+          ..._landingAttribution,
+        });
         navigator.sendBeacon('/api/booking/track', new Blob([d],{type:'application/json'}));
       }
     });

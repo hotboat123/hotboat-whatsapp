@@ -1230,6 +1230,38 @@ class TrackEventRequest(BaseModel):
     utm_campaign: Optional[str] = ""
     utm_content: Optional[str] = ""
     fbclid: Optional[str] = ""  # present = clicked a Meta ad
+    # Custom ad URL parameter (landing pages / Meta website URL fields)
+    parametro_url: Optional[str] = ""
+
+
+def _merge_visitor_session_attribution(dst: dict, body: TrackEventRequest) -> None:
+    """Fill empty attribution slots (handles out-of-order / exit-only beacons after slow first request)."""
+    lim = {
+        "utm_source": 100,
+        "utm_medium": 100,
+        "utm_campaign": 200,
+        "utm_content": 200,
+        "parametro_url": 240,
+        "referrer": 200,
+    }
+    pairs = [
+        ("utm_source", (body.utm_source or "").strip()),
+        ("utm_medium", (body.utm_medium or "").strip()),
+        ("utm_campaign", (body.utm_campaign or "").strip()),
+        ("utm_content", (body.utm_content or "").strip()),
+        ("parametro_url", (body.parametro_url or "").strip()),
+        ("referrer", (body.referrer or "").strip()),
+    ]
+    for key, val in pairs:
+        if not val:
+            continue
+        cap = lim.get(key, 200)
+        if not (dst.get(key) or "").strip():
+            dst[key] = val[:cap]
+
+    fb = str(body.fbclid or "").strip()
+    if fb:
+        dst["fbclid"] = True
 
 
 @router.post("/api/booking/track")
@@ -1272,15 +1304,21 @@ async def track_booking_event(body: TrackEventRequest):
             "session_id": sid,
             "start_time": now_cl,
             "lang": body.lang or "es",
-            "referrer": (body.referrer or "")[:200],
+            "referrer": "",
             "is_returning": body.is_returning or False,
             "events": [],
-            "utm_source": (body.utm_source or "")[:100],
-            "utm_medium": (body.utm_medium or "")[:100],
-            "utm_campaign": (body.utm_campaign or "")[:200],
-            "utm_content": (body.utm_content or "")[:200],
-            "fbclid": bool(body.fbclid),
+            "utm_source": "",
+            "utm_medium": "",
+            "utm_campaign": "",
+            "utm_content": "",
+            "parametro_url": "",
+            "fbclid": False,
         }
+    sess = _visitor_sessions[sid]
+    _merge_visitor_session_attribution(sess, body)
+    if body.lang:
+        sess["lang"] = body.lang or sess.get("lang") or "es"
+    sess["is_returning"] = bool(sess.get("is_returning")) or bool(body.is_returning)
 
     _visitor_sessions[sid]["events"].append({
         "event": body.event,
@@ -1361,10 +1399,30 @@ _EVENT_LABELS = {
 }
 
 
-def _build_ad_label(utm_campaign: str, utm_source: str, utm_medium: str, utm_content: str, from_fbclid: bool, referrer: str) -> str:
+def _pretty_attribution_fragment(s: str) -> str:
+    s = (s or "").strip()
+    return s.replace("-", " ").replace("_", " ").title() if s else ""
+
+
+def _build_ad_label(
+    utm_campaign: str,
+    parametro_url: str,
+    utm_source: str,
+    utm_medium: str,
+    utm_content: str,
+    from_fbclid: bool,
+    referrer: str,
+) -> str:
     """Return a human-readable ad label for the visitor session email."""
     if utm_campaign:
-        return utm_campaign.replace("-", " ").replace("_", " ").title()
+        return _pretty_attribution_fragment(utm_campaign)
+    if parametro_url:
+        return _pretty_attribution_fragment(parametro_url)
+    # Often only utm_content is populated for Meta paid when campaign name is omitted
+    if utm_content and not utm_campaign and not parametro_url:
+        meta_med = utm_medium.lower() in ("paid", "cpc", "cpm", "paid_social", "paid social")
+        if from_fbclid or meta_med:
+            return _pretty_attribution_fragment(utm_content)
     if from_fbclid:
         r = referrer.lower()
         if "instagram" in r:
@@ -1399,6 +1457,7 @@ def _send_session_summary(session: dict):
         utm_source   = (session.get("utm_source") or "").strip()
         utm_medium   = (session.get("utm_medium") or "").strip()
         utm_content  = (session.get("utm_content") or "").strip()
+        parametro_url = (session.get("parametro_url") or "").strip()
         from_fbclid  = bool(session.get("fbclid"))
 
         if not api_key or not to_addr:
@@ -1407,8 +1466,15 @@ def _send_session_summary(session: dict):
             ref_label = _referrer_label(referrer)
 
             # Build ad source label
-            ad_label = _build_ad_label(utm_campaign, utm_source, utm_medium, utm_content, from_fbclid, referrer)
-            audience_label = utm_content.replace("-", " ").replace("_", " ").title() if utm_content and utm_campaign else ""
+            ad_label = _build_ad_label(
+                utm_campaign, parametro_url, utm_source, utm_medium, utm_content, from_fbclid, referrer
+            )
+            # Audience / creative variation: prefer utm_content when it is distinct from headline label
+            base_for_audience = _pretty_attribution_fragment(utm_campaign or parametro_url)
+            cand = _pretty_attribution_fragment(utm_content)
+            audience_label = ""
+            if cand and cand.casefold() != (base_for_audience or "").casefold():
+                audience_label = cand
 
             rows = ""
             for ev in events:
