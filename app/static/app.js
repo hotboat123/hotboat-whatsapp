@@ -559,11 +559,15 @@ function renderCurrentChat(options = {}) {
     const adSourceEl = document.getElementById('currentChatAdSource');
     const adSourceText = document.getElementById('currentChatAdSourceText');
     if (adSourceEl && adSourceText) {
+        adSourceEl.style.display = 'inline-block';
         if (currentConversation.ad_source) {
             adSourceText.textContent = currentConversation.ad_source;
-            adSourceEl.style.display = 'inline-block';
+            adSourceEl.style.background = '#1a4f9f';
+            adSourceEl.style.color = '#fff';
         } else {
-            adSourceEl.style.display = 'none';
+            adSourceText.textContent = 'no hay ad asociado';
+            adSourceEl.style.background = 'transparent';
+            adSourceEl.style.color = '#888';
         }
     }
     messageInputArea.style.display = 'block';
