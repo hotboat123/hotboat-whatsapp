@@ -53,7 +53,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         WHERE phone_number = %s
                     """, (phone_number,))
                 except Exception:
-                    # ad columns not yet created — fallback without them
+                    conn.rollback()  # psycopg3: reset aborted transaction before fallback
                     cur.execute("""
                         SELECT
                             id, phone_number, customer_name, lead_status,

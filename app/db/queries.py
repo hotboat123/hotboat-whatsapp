@@ -371,7 +371,7 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                         LIMIT %s
                     """, (limit,))
                 except Exception:
-                    # Fallback: query without ad_source if column doesn't exist yet
+                    conn.rollback()  # psycopg3: reset aborted transaction before fallback
                     cur.execute("""
                         SELECT
                             latest.phone_number,
