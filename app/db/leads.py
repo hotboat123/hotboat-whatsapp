@@ -651,7 +651,6 @@ async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
                 """)
                 global _ad_col_cached
                 _ad_col_cached = True
-                # Only set if not already set — first ad click wins
                 cur.execute("""
                     UPDATE whatsapp_leads
                     SET ad_source      = %s,
@@ -661,11 +660,15 @@ async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
                         ad_creative_url = %s,
                         ad_ctwa_clid   = %s,
                         updated_at     = NOW()
-                    WHERE phone_number = %s AND ad_source IS NULL
+                    WHERE phone_number = %s
                 """, (label, _json.dumps(referral), platform, media_type,
                       creative_url, ctwa_clid, phone_number))
+                rowcount = cur.rowcount
             conn.commit()
-        logger.info(f"Ad source saved for {phone_number}: {label} | platform={platform} | media={media_type}")
+        if rowcount == 0:
+            logger.warning(f"Ad source NOT saved for {phone_number} (rowcount=0, lead not found?): {label}")
+        else:
+            logger.info(f"Ad source saved for {phone_number}: {label} | platform={platform} | media={media_type}")
         return label
     except Exception as e:
         logger.warning(f"Could not save ad source for {phone_number}: {e}")
