@@ -154,7 +154,11 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             text_body = message.get("text", {}).get("body", "")
             logger.info(f"💬 Message text: {text_body}")
 
-            # Extract ad referral (Click-to-WhatsApp ads send this on first message)
+            # Ensure lead exists before saving ad referral
+            from app.db.leads import get_or_create_lead
+            lead = await get_or_create_lead(from_number, contact_name)
+
+            # Save ad referral now that the lead row is guaranteed to exist
             referral = message.get("referral")
             ad_source = None
             if referral:
@@ -176,10 +180,6 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 )
             except Exception as push_error:
                 logger.warning(f"Could not send push notification: {push_error}")
-
-            # Check if bot is enabled for this user
-            from app.db.leads import get_or_create_lead
-            lead = await get_or_create_lead(from_number, contact_name)
             bot_enabled = lead.get("bot_enabled", True) if lead else True
             
             if not bot_enabled:
