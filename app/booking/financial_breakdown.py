@@ -230,7 +230,9 @@ def _reconcile_three(inc: float, a: float, e: float, x: float) -> Tuple[float, f
         return a, e, x + rem
     if parsed > TOL:
         return a + rem * a / parsed, e + rem * e / parsed, x + rem * x / parsed
-    return rem / 3, rem / 3, rem / 3
+    # If extras_json has no classifiable lines, default the remaining income to "extra".
+    # This avoids creating phantom alojamiento/experiencia income on empty days.
+    return 0.0, 0.0, rem
 
 
 def split_booking_financials(

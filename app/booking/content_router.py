@@ -36,35 +36,58 @@ def _default_extra_icon(key: str) -> str:
 
 
 @content_router.get("/api/content/extras")
-def list_extras():
+def list_extras(lang: str = Query("es", description="es | en | pt")):
     """Public endpoint: returns extras visible in the booking app (show_in_booking = TRUE)."""
     try:
         from app.booking.admin_router import _slugify_extra
-        # Ensure name column exists before querying (may not exist on first deploy)
+        lang = (lang or "es").lower().strip()[:2]
+        if lang not in ("es", "en", "pt"):
+            lang = "es"
+        # Ensure columns exist before querying (may not exist on first deploy)
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    ALTER TABLE extras_visibility
-                    ADD COLUMN IF NOT EXISTS name TEXT
-                """)
+                for col_def in [
+                    "name TEXT",
+                    "description TEXT",
+                    "name_en TEXT",
+                    "name_pt TEXT",
+                    "description_en TEXT",
+                    "description_pt TEXT",
+                ]:
+                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
                 conn.commit()
 
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT extra_name_lower,
-                           COALESCE(name, extra_name_lower) AS name,
+                           COALESCE(name, extra_name_lower) AS name_es,
                            COALESCE(precio_venta, 0)        AS price,
                            COALESCE(icon, '')               AS icon,
-                           COALESCE(description, '')        AS description,
+                           COALESCE(description, '')        AS description_es,
+                           COALESCE(NULLIF(TRIM(name_en), ''), '') AS name_en,
+                           COALESCE(NULLIF(TRIM(name_pt), ''), '') AS name_pt,
+                           COALESCE(NULLIF(TRIM(description_en), ''), '') AS description_en,
+                           COALESCE(NULLIF(TRIM(description_pt), ''), '') AS description_pt,
                            COALESCE(sort_order, 999)        AS sort_order
                     FROM extras_visibility
                     WHERE show_in_booking = TRUE
                     ORDER BY sort_order, extra_name_lower
                 """)
                 extras = []
-                for (name_lower, name, price, icon, description, sort_order) in cur.fetchall():
-                    key = _slugify_extra(name)
+                for row in cur.fetchall():
+                    (name_lower, name_es, price, icon, description_es,
+                     name_en, name_pt, description_en, description_pt, sort_order) = row
+                    if lang == "en":
+                        name = (name_en or "").strip() or name_es
+                        description = (description_en or "").strip() or description_es
+                    elif lang == "pt":
+                        name = (name_pt or "").strip() or name_es
+                        description = (description_pt or "").strip() or description_es
+                    else:
+                        name = name_es
+                        description = description_es
+                    key = _slugify_extra(name_es)
                     resolved_icon = icon or _default_extra_icon(key)
                     extras.append({
                         "id": name_lower,

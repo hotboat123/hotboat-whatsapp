@@ -284,6 +284,9 @@ const I18N = {
     alojPayErr: 'Error al procesar. Intenta de nuevo.',
     alojConnErr: 'Error de conexión.',
     alojPayLodgingShort: '💳 Pagar solo alojamiento',
+    extrasListTitle: '🎁 Extras disponibles',
+    extrasListNote: 'Los extras se agregan al momento de reservar',
+    bookWithExtras: 'Reservar con extras 🚤',
   },
   en: {
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
@@ -358,6 +361,9 @@ const I18N = {
     alojPayErr: 'Could not process. Try again.',
     alojConnErr: 'Connection error.',
     alojPayLodgingShort: '💳 Pay lodging only',
+    extrasListTitle: '🎁 Available add-ons',
+    extrasListNote: 'Add-ons are selected when you book',
+    bookWithExtras: 'Book with add-ons 🚤',
   },
   pt: {
     days: ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],
@@ -432,6 +438,9 @@ const I18N = {
     alojPayErr: 'Erro ao processar. Tente novamente.',
     alojConnErr: 'Erro de conexão.',
     alojPayLodgingShort: '💳 Pagar só hospedagem',
+    extrasListTitle: '🎁 Extras disponíveis',
+    extrasListNote: 'Os extras são escolhidos no momento da reserva',
+    bookWithExtras: 'Reservar com extras 🚤',
   },
 };
 let LANG = localStorage.getItem('hb_lang') || 'es';
@@ -477,7 +486,15 @@ function rebuildAlojamientosFromDyn(){
     });
   });
 }
-function setLang(l){ LANG = l; localStorage.setItem('hb_lang', l); document.documentElement.lang = l; renderLangSwitcher(); rebuildAlojamientosFromDyn(); renderMenu(); }
+async function setLang(l){
+  LANG = l;
+  localStorage.setItem('hb_lang', l);
+  document.documentElement.lang = l;
+  await fetchExtrasCatalog();
+  renderLangSwitcher();
+  rebuildAlojamientosFromDyn();
+  renderMenu();
+}
 function renderLangSwitcher(){
   const el = document.getElementById('lang-switcher');
   if(!el) return;
@@ -495,6 +512,17 @@ const DAYS = new Proxy([], { get: (_, i) => typeof i==='number'||/^\d+$/.test(i)
 const MONTHS = new Proxy([], { get: (_, i) => typeof i==='number'||/^\d+$/.test(i) ? getMonths()[+i] : getMonths()[i] });
 
 let EXTRAS_CATALOG = [];  // loaded from /api/content/extras
+
+async function fetchExtrasCatalog(){
+  const ex = await fetch('/api/content/extras?lang='+encodeURIComponent(LANG)).then(r=>r.json());
+  EXTRAS_CATALOG = (ex.extras || []).map(e=>({
+    id: e.key || e.id,
+    name: e.name,
+    price: e.price,
+    icon: e.icon || '⭐',
+    description: e.description || '',
+  }));
+}
 
 function showToast(msg, ms=3000){
   const t = $('toast');
@@ -573,21 +601,14 @@ function _trackEvent(event, date){
 async function loadPricesAndAvail(){
   _trackEvent('page_visit');
   try{
-    const [pr, av, ex] = await Promise.all([
+    const [pr, av] = await Promise.all([
       fetch('/api/booking/prices').then(r=>r.json()),
       fetch('/api/booking/availability?days=90').then(r=>r.json()),
-      fetch('/api/content/extras').then(r=>r.json()),
     ]);
     S.prices = pr.prices || {};
     S.availability = av.availability || {};
     S.fakeBooked = av.fake_booked_slots || {};
-    EXTRAS_CATALOG = (ex.extras || []).map(e=>({
-      id: e.key || e.id,
-      name: e.name,
-      price: e.price,
-      icon: e.icon || '⭐',
-      description: e.description || '',
-    }));
+    await fetchExtrasCatalog();
   }catch(e){ showToast('Error cargando disponibilidad'); }
 }
 
@@ -799,18 +820,19 @@ function showCabalgata(){ showExperienciaDetail('cabalgata'); }
 function showVelerismo(){ showExperienciaDetail('velerismo'); }
 
 function showExtras(){
+  const loc = _moneyLocale();
   mc.innerHTML = `
   <div class="card">
-    <div class="card-title">🎁 Extras disponibles</div>
+    <div class="card-title">${t('extrasListTitle')}</div>
     ${EXTRAS_CATALOG.map(e=>`
     <div class="extra-item" style="margin-bottom:.4rem">
       <span>${e.icon} ${e.name}</span>
-      <span class="extra-price">+$${e.price.toLocaleString('es-CL')}</span>
+      <span class="extra-price">+$${e.price.toLocaleString(loc)}</span>
     </div>`).join('')}
-    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">Los extras se agregan al momento de reservar</p>
+    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">${t('extrasListNote')}</p>
   </div>
-  <button class="btn" onclick="goReservar()">Reservar con extras 🚤</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
+  <button class="btn" onclick="goReservar()">${t('bookWithExtras')}</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
 }
 
 const ALOJAMIENTOS = [

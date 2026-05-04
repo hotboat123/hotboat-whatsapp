@@ -566,6 +566,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th>Ícono</th>
               <th>Nombre extra</th>
               <th>Descripción (app)</th>
+              <th style="min-width:136px;color:#93c5fd;font-size:.78rem">🇺🇸 EN</th>
+              <th style="min-width:136px;color:#86efac;font-size:.78rem">🇧🇷 PT</th>
               <th style="text-align:center">Mostrar en<br>reservas</th>
               <th style="text-align:right">Precio venta</th>
               <th style="text-align:right">Costo</th>
@@ -574,7 +576,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th style="text-align:center;color:#a78bfa" title="Ingredientes de stock">🧪</th>
             </tr>
           </thead>
-          <tbody id="ec-tbody"><tr><td colspan="10" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="ec-tbody"><tr><td colspan="12" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -3715,14 +3717,14 @@ let _extrasCatData = [];   // full list loaded from API
 async function loadExtrasCat(){
   const tbody = document.getElementById('ec-tbody');
   if(!tbody) return;
-  tbody.innerHTML='<tr><td colspan="6" class="loading-msg">Cargando...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="12" class="loading-msg">Cargando...</td></tr>';
   try{
     const d = await api('/api/admin/precios-extras');
     EXTRAS_CATALOG = d.extras||[];   // also refresh catalog for modal dropdowns
     _extrasCatData = d.extras||[];
     renderExtrasCat(_extrasCatData);
   }catch(e){
-    tbody.innerHTML=`<tr><td colspan="6" class="no-data">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="12" class="no-data">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -3732,7 +3734,7 @@ function renderExtrasCat(list){
   if(!tbody) return;
   if(countEl) countEl.textContent = `${list.length} extras`;
   if(!list.length){
-    tbody.innerHTML='<tr><td colspan="6" class="no-data">Sin extras</td></tr>';
+    tbody.innerHTML='<tr><td colspan="12" class="no-data">Sin extras</td></tr>';
     return;
   }
   tbody.innerHTML = list.map((e,i)=>{
@@ -3759,6 +3761,22 @@ function renderExtrasCat(list){
           placeholder="Texto informativo visible en la app"
           oninput="ecMarkDirty('${e.id}')" style="min-width:220px;font-size:.8rem">
       </td>
+      <td style="vertical-align:top;padding:.35rem .45rem">
+        <input class="ec-input" value="${escHtml(e.name_en||'')}" data-field="name_en"
+          placeholder="English name"
+          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.78rem;margin-bottom:.22rem">
+        <input class="ec-input" value="${escHtml(e.description_en||'')}" data-field="description_en"
+          placeholder="English description"
+          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.72rem">
+      </td>
+      <td style="vertical-align:top;padding:.35rem .45rem">
+        <input class="ec-input" value="${escHtml(e.name_pt||'')}" data-field="name_pt"
+          placeholder="Nome (PT)"
+          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.78rem;margin-bottom:.22rem">
+        <input class="ec-input" value="${escHtml(e.description_pt||'')}" data-field="description_pt"
+          placeholder="Descrição (PT)"
+          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.72rem">
+      </td>
       <td style="text-align:center">
         <label class="toggle-wrap" title="Mostrar en app de reservas">
           <input type="checkbox" ${e.show_in_booking!==false?'checked':''} data-field="show_in_booking"
@@ -3776,7 +3794,9 @@ function renderExtrasCat(list){
       </td>
       <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
       <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
-      <td style="display:flex;gap:.4rem;align-items:center;padding:.5rem .4rem;white-space:nowrap">
+      <td style="display:flex;gap:.35rem;align-items:center;padding:.5rem .35rem;white-space:nowrap;flex-wrap:wrap;justify-content:flex-end">
+        <button type="button" class="ec-save-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .45rem"
+          onclick="autoTranslateExtra('${e.id}')" title="Generar inglés y portugués desde nombre y descripción en español (IA)">✨ IA</button>
         <button class="ec-save-btn" id="ec-btn-${e.id}" onclick="saveExtra('${e.id}')">Guardar</button>
         <button onclick="openBomModal('${escHtml(e.key||e.name.toLowerCase().replace(/\s+/g,'_'))}','${escHtml(e.name)}')"
           title="Ingredientes / stock" style="background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer">🧪</button>
@@ -3792,7 +3812,7 @@ async function moveExtra(idx, dir){
   // Swap in local array
   [_extrasCatData[idx], _extrasCatData[newIdx]] = [_extrasCatData[newIdx], _extrasCatData[idx]];
   // Assign consecutive sort_order values
-  const payload = _extrasCatData.map((e, i) => ({ name_lower: e.name.toLowerCase(), sort_order: i + 1 }));
+  const payload = _extrasCatData.map((e, i) => ({ name_lower: e.id, sort_order: i + 1 }));
   renderExtrasCat(_extrasCatData);
   try{
     await api('/api/admin/precios-extras/reorder', { method:'POST', body: JSON.stringify(payload) });
@@ -3802,7 +3822,10 @@ async function moveExtra(idx, dir){
 
 function filterExtrasCat(){
   const q = document.getElementById('ec-search')?.value.toLowerCase()||'';
-  renderExtrasCat(q ? _extrasCatData.filter(e=>e.name.toLowerCase().includes(q)) : _extrasCatData);
+  renderExtrasCat(q ? _extrasCatData.filter(e=>{
+    const hay = [e.name,e.description,e.name_en,e.name_pt,e.description_en,e.description_pt].map(x=>(x||'').toLowerCase()).join(' ');
+    return hay.includes(q);
+  }) : _extrasCatData);
 }
 
 function ecGetRow(id){
@@ -3862,6 +3885,15 @@ async function saveExtraVisibility(id, visible){
     const idx = _extrasCatData.findIndex(e=>e.id===id);
     if(idx>=0) _extrasCatData[idx].show_in_booking = visible;
     showToast(visible ? '✓ Extra visible en reservas' : '✓ Extra oculto en reservas');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function autoTranslateExtra(id){
+  try{
+    showToast('Traduciendo con IA...');
+    await api(`/api/admin/precios-extras/${encodeURIComponent(id)}/auto-translate`, { method:'POST', body:'{}' });
+    showToast('EN / PT guardados ✓');
+    await loadExtrasCat();
   }catch(e){ showToast('Error: '+e.message); }
 }
 

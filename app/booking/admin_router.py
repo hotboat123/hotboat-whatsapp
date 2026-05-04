@@ -1540,6 +1540,10 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                     "precio_venta INTEGER",
                     "costo INTEGER",
                     "icon TEXT",
+                    "name_en TEXT",
+                    "name_pt TEXT",
+                    "description_en TEXT",
+                    "description_pt TEXT",
                 ]:
                     cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
                 conn.commit()
@@ -1552,13 +1556,18 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                            COALESCE(description, '') AS description,
                            COALESCE(precio_venta, 0) AS price,
                            COALESCE(costo, 0)        AS cost,
-                           COALESCE(icon, '')        AS icon
+                           COALESCE(icon, '')        AS icon,
+                           COALESCE(name_en, '')       AS name_en,
+                           COALESCE(name_pt, '')       AS name_pt,
+                           COALESCE(description_en, '') AS description_en,
+                           COALESCE(description_pt, '') AS description_pt
                     FROM extras_visibility
                     ORDER BY sort_order, extra_name_lower
                 """)
                 extras = []
                 for (name_lower, name, show_in_booking, sort_order,
-                     description, price, cost, icon) in cur.fetchall():
+                     description, price, cost, icon,
+                     name_en, name_pt, description_en, description_pt) in cur.fetchall():
                     display_name = name or name_lower
                     extras.append({
                         "id": name_lower,
@@ -1568,6 +1577,10 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                         "cost": cost,
                         "icon": icon,
                         "description": description,
+                        "name_en": name_en or "",
+                        "name_pt": name_pt or "",
+                        "description_en": description_en or "",
+                        "description_pt": description_pt or "",
                         "show_in_booking": bool(show_in_booking),
                         "sort_order": int(sort_order),
                     })
@@ -1587,6 +1600,10 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         cost = int(body.get("cost") or 0)
         icon = body.get("icon", "").strip()
         description = body.get("description", "").strip()
+        name_en = body.get("name_en", "").strip()
+        name_pt = body.get("name_pt", "").strip()
+        description_en = body.get("description_en", "").strip()
+        description_pt = body.get("description_pt", "").strip()
         show_in_booking = bool(body.get("show_in_booking", True))
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
@@ -1600,17 +1617,22 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                         SET extra_name_lower = %s, name = %s,
                             show_in_booking = %s, description = %s,
                             precio_venta = %s, costo = %s, icon = %s,
+                            name_en = %s, name_pt = %s,
+                            description_en = %s, description_pt = %s,
                             updated_at = NOW()
                         WHERE extra_name_lower = %s
                     """, (new_name_lower, name, show_in_booking,
                           description or None, price or None, cost or None, icon or None,
+                          name_en or None, name_pt or None,
+                          description_en or None, description_pt or None,
                           extra_id))
                     if cur.rowcount == 0:
                         # Row didn't exist under old key — upsert under new key
                         cur.execute("""
                             INSERT INTO extras_visibility
-                                (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon, updated_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                                (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
+                                 name_en, name_pt, description_en, description_pt, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                             ON CONFLICT (extra_name_lower) DO UPDATE
                                 SET name = EXCLUDED.name,
                                     show_in_booking = EXCLUDED.show_in_booking,
@@ -1618,14 +1640,21 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                                     precio_venta = EXCLUDED.precio_venta,
                                     costo = EXCLUDED.costo,
                                     icon = EXCLUDED.icon,
+                                    name_en = EXCLUDED.name_en,
+                                    name_pt = EXCLUDED.name_pt,
+                                    description_en = EXCLUDED.description_en,
+                                    description_pt = EXCLUDED.description_pt,
                                     updated_at = NOW()
                         """, (new_name_lower, name, show_in_booking,
-                              description or None, price or None, cost or None, icon or None))
+                              description or None, price or None, cost or None, icon or None,
+                              name_en or None, name_pt or None,
+                              description_en or None, description_pt or None))
                 else:
                     cur.execute("""
                         INSERT INTO extras_visibility
-                            (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                            (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
+                             name_en, name_pt, description_en, description_pt, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                         ON CONFLICT (extra_name_lower) DO UPDATE
                             SET name = EXCLUDED.name,
                                 show_in_booking = EXCLUDED.show_in_booking,
@@ -1633,9 +1662,15 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                                 precio_venta = EXCLUDED.precio_venta,
                                 costo = EXCLUDED.costo,
                                 icon = EXCLUDED.icon,
+                                name_en = EXCLUDED.name_en,
+                                name_pt = EXCLUDED.name_pt,
+                                description_en = EXCLUDED.description_en,
+                                description_pt = EXCLUDED.description_pt,
                                 updated_at = NOW()
                     """, (new_name_lower, name, show_in_booking,
-                          description or None, price or None, cost or None, icon or None))
+                          description or None, price or None, cost or None, icon or None,
+                          name_en or None, name_pt or None,
+                          description_en or None, description_pt or None))
                 conn.commit()
         return {"ok": True}
     except HTTPException:
@@ -1656,6 +1691,10 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
         description = body.get("description", "").strip()
+        name_en = body.get("name_en", "").strip()
+        name_pt = body.get("name_pt", "").strip()
+        description_en = body.get("description_en", "").strip()
+        description_pt = body.get("description_pt", "").strip()
         show_in_booking = bool(body.get("show_in_booking", True))
         name_lower = name.lower()
         with get_connection() as conn:
@@ -1663,17 +1702,24 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
                 cur.execute("""
                     INSERT INTO extras_visibility
                         (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
+                         name_en, name_pt, description_en, description_pt,
                          sort_order, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, '', 999, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, '', %s, %s, %s, %s, 999, NOW())
                     ON CONFLICT (extra_name_lower) DO UPDATE
                         SET name = EXCLUDED.name,
                             show_in_booking = EXCLUDED.show_in_booking,
                             description = EXCLUDED.description,
                             precio_venta = EXCLUDED.precio_venta,
                             costo = EXCLUDED.costo,
+                            name_en = EXCLUDED.name_en,
+                            name_pt = EXCLUDED.name_pt,
+                            description_en = EXCLUDED.description_en,
+                            description_pt = EXCLUDED.description_pt,
                             updated_at = NOW()
                 """, (name_lower, name, show_in_booking,
-                      description or None, price or None, cost or None))
+                      description or None, price or None, cost or None,
+                      name_en or None, name_pt or None,
+                      description_en or None, description_pt or None))
                 conn.commit()
         return {"ok": True, "id": name_lower, "key": _slugify_extra(name)}
     except HTTPException:
@@ -1718,6 +1764,69 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
     except Exception as e:
         logger.error(f"Error deleting extra {extra_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.post("/api/admin/precios-extras/{extra_id:path}/auto-translate")
+async def auto_translate_precio_extra(extra_id: str, x_admin_key: str = Header("")):
+    """Fill name_en, name_pt, description_en, description_pt from Spanish name + description (Groq)."""
+    _check_auth(x_admin_key)
+    try:
+        from app.booking.extras_translate import translate_extra_fields
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for col_def in [
+                    "name_en TEXT",
+                    "name_pt TEXT",
+                    "description_en TEXT",
+                    "description_pt TEXT",
+                ]:
+                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
+                conn.commit()
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COALESCE(name, extra_name_lower), COALESCE(description, '') "
+                    "FROM extras_visibility WHERE extra_name_lower = %s",
+                    (extra_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Extra not found")
+                name_es, desc_es = row[0], row[1]
+
+        out = translate_extra_fields(str(name_es), str(desc_es or ""))
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE extras_visibility SET
+                        name_en = %s, name_pt = %s,
+                        description_en = %s, description_pt = %s,
+                        updated_at = NOW()
+                    WHERE extra_name_lower = %s
+                    """,
+                    (
+                        out["name_en"],
+                        out["name_pt"],
+                        out["description_en"] or None,
+                        out["description_pt"] or None,
+                        extra_id,
+                    ),
+                )
+                conn.commit()
+        return {"ok": True, **out}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"auto_translate_precio_extra {extra_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ── WooCommerce: send payment link ────────────────────────────────────────────
