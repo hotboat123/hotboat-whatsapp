@@ -55,6 +55,18 @@ async def booking_success(
                 try_send_booking_confirmation_after_payment(booking_ref)
             except Exception as em_err:
                 logger.warning(f"Confirmation email after payment: {em_err}")
+            # Report Purchase conversion to Meta for CTWA leads
+            try:
+                booking = get_booking_by_ref(booking_ref)
+                if booking:
+                    phone = (booking.get("customer_phone") or "").strip()
+                    total = float(booking.get("total_price") or booking.get("subtotal") or 0)
+                    if phone and total > 0:
+                        import asyncio
+                        from app.meta.conversions import fire_purchase_from_booking
+                        asyncio.create_task(fire_purchase_from_booking(phone, total))
+            except Exception as capi_err:
+                logger.warning(f"Meta CAPI Purchase (web) failed: {capi_err}")
         except Exception as e:
             logger.error(f"Payment update error: {e}")
     return _booking_html()

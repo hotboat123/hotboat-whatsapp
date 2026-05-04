@@ -383,6 +383,18 @@ async def create_reserva(x_admin_key: str = Header(""), request: Request = None)
             except Exception as em_err:
                 logger.warning(f"Manual booking confirmation email failed: {em_err}")
 
+        # Report Purchase conversion to Meta for CTWA leads
+        try:
+            phone = (body.get("telefono") or "").strip()
+            total = float(body.get("ingreso_total") or body.get("ingreso_reserva") or 0)
+            status = body.get("status") or "confirmed"
+            if phone and total > 0 and status == "confirmed":
+                import asyncio
+                from app.meta.conversions import fire_purchase_from_booking
+                asyncio.create_task(fire_purchase_from_booking(phone, total))
+        except Exception as capi_err:
+            logger.warning(f"Meta CAPI Purchase (manual) failed: {capi_err}")
+
         return {"ok": True, "id": new_id}
     except HTTPException:
         raise

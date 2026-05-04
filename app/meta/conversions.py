@@ -113,3 +113,45 @@ async def _fire_event(
     except Exception as e:
         logger.warning(f"Meta CAPI {event_name} exception: {e}")
         return False
+
+
+async def fire_purchase_from_booking(
+    phone_number: str,
+    total: float,
+    currency: str = "CLP",
+) -> bool:
+    """
+    Look up the lead's ctwa_clid and ad_source, then fire a Purchase event.
+    Safe to call even if the lead has no ad data — will be a no-op.
+    """
+    if not phone_number:
+        return False
+    try:
+        from app.db.leads import get_lead_ad_source
+        from app.db.connection import get_connection
+        ctwa_clid = None
+        ad_name = None
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                try:
+                    cur.execute(
+                        "SELECT ad_source, ad_ctwa_clid FROM whatsapp_leads WHERE phone_number = %s",
+                        (phone_number,)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        ad_name, ctwa_clid = row[0], row[1]
+                except Exception:
+                    pass
+        if not ad_name and not ctwa_clid:
+            return False  # lead didn't come from a trackable ad
+        return await fire_purchase_event(
+            phone_number=phone_number,
+            value=total,
+            currency=currency,
+            ctwa_clid=ctwa_clid,
+            ad_name=ad_name,
+        )
+    except Exception as e:
+        logger.warning(f"fire_purchase_from_booking error: {e}")
+        return False
