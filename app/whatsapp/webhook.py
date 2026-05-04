@@ -166,6 +166,16 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 try:
                     from app.db.leads import save_lead_ad_source
                     ad_source = await save_lead_ad_source(from_number, referral)
+                    # Report Lead conversion to Meta Conversions API
+                    try:
+                        from app.meta.conversions import fire_lead_event
+                        await fire_lead_event(
+                            phone_number=from_number,
+                            ctwa_clid=referral.get("ctwa_clid"),
+                            ad_name=ad_source,
+                        )
+                    except Exception as capi_err:
+                        logger.warning(f"Meta CAPI Lead event failed: {capi_err}")
                 except Exception as ref_err:
                     logger.warning(f"Could not save ad referral: {ref_err}")
 

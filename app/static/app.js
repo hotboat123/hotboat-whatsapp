@@ -410,6 +410,8 @@ async function selectConversation(phoneNumber) {
             nextCursor: data.next_cursor || null,
             priority: data.lead?.priority || 0,
             ad_source: data.lead?.ad_source || null,
+            ad_platform: data.lead?.ad_platform || null,
+            ad_media_type: data.lead?.ad_media_type || null,
         };
 
         // Update bot toggle state from lead info
@@ -561,11 +563,13 @@ function renderCurrentChat(options = {}) {
     if (adSourceEl && adSourceText) {
         adSourceEl.style.display = 'inline-block';
         if (currentConversation.ad_source) {
-            adSourceText.textContent = currentConversation.ad_source;
+            const platformIcon = currentConversation.ad_platform === 'instagram' ? '📸' : currentConversation.ad_platform === 'facebook' ? '👥' : '📢';
+            const mediaIcon = currentConversation.ad_media_type === 'video' ? ' 🎬' : currentConversation.ad_media_type === 'image' ? ' 🖼️' : '';
+            adSourceText.textContent = `${platformIcon} ${currentConversation.ad_source}${mediaIcon}`;
             adSourceEl.style.background = '#1a4f9f';
             adSourceEl.style.color = '#fff';
         } else {
-            adSourceText.textContent = 'no hay ad asociado';
+            adSourceText.textContent = '📢 no hay ad asociado';
             adSourceEl.style.background = 'transparent';
             adSourceEl.style.color = '#888';
         }
@@ -796,8 +800,20 @@ function renderLeadInfo(lead) {
         </div>
         ${lead.ad_source ? `
             <div class="info-item">
-                <div class="info-label">📢 Anuncio origen</div>
+                <div class="info-label">📢 Anuncio</div>
                 <div class="info-value" style="color:#4a9fff;font-weight:600">${escapeHtml(lead.ad_source)}</div>
+            </div>
+        ` : ''}
+        ${lead.ad_platform ? `
+            <div class="info-item">
+                <div class="info-label">${lead.ad_platform === 'instagram' ? '📸 Plataforma' : '👥 Plataforma'}</div>
+                <div class="info-value">${lead.ad_platform === 'instagram' ? 'Instagram' : 'Facebook'}</div>
+            </div>
+        ` : ''}
+        ${lead.ad_media_type ? `
+            <div class="info-item">
+                <div class="info-label">${lead.ad_media_type === 'video' ? '🎬 Creativo' : '🖼️ Creativo'}</div>
+                <div class="info-value">${lead.ad_media_type === 'video' ? 'Video' : 'Imagen'}${lead.ad_creative_url ? ` <a href="${lead.ad_creative_url}" target="_blank" style="color:#4a9fff;font-size:.75rem">ver</a>` : ''}</div>
             </div>
         ` : ''}
         ${lead.notes ? `
