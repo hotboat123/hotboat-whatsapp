@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Términos y Condiciones · HotBoat Chile</title>
+<!--META_PIXEL_HEAD-->
+<style>
+:root{
+  --blue:#0d6efd;--blue-dark:#0b5ed7;--green:#198754;--red:#dc3545;
+  --bg:#f0f4ff;--card:#fff;--border:#dee2e6;--text:#212529;--muted:#6c757d;
+  --gold:#e8a000;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+     background:var(--bg);color:var(--text);min-height:100vh;padding:0 0 40px}
+
+/* Header */
+.header{background:linear-gradient(135deg,#0a1628 0%,#1a3a6e 100%);
+        color:#fff;padding:1.4rem 1rem;text-align:center}
+.header .logo img{height:72px;width:auto;display:block;margin:0 auto .3rem}
+.header p{font-size:.82rem;opacity:.8}
+.booking-badge{display:inline-flex;align-items:center;gap:.5rem;
+  background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);
+  border-radius:20px;padding:.45rem .9rem;margin-top:.8rem;font-size:.85rem}
+
+/* Steps */
+.container{max-width:480px;margin:0 auto;padding:1rem}
+.step{display:none}
+.step.active{display:block}
+
+/* Cards */
+.card{background:var(--card);border-radius:16px;box-shadow:0 2px 16px rgba(0,0,0,.08);
+      padding:1.4rem;margin-bottom:1rem}
+.card-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+            color:var(--muted);margin-bottom:1rem;display:flex;align-items:center;gap:.4rem}
+
+/* Form elements */
+.form-group{margin-bottom:1rem}
+label.fl{display:block;font-size:.8rem;font-weight:600;color:var(--muted);
+         margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.04em}
+input.fi,select.fi{width:100%;border:1.5px solid var(--border);border-radius:10px;
+  padding:.72rem .9rem;font-size:.97rem;color:var(--text);outline:none;
+  transition:border-color .2s,box-shadow .2s;background:#fff;appearance:none;
+  -webkit-appearance:none}
+input.fi:focus,select.fi:focus{border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(13,110,253,.12)}
+input.fi::placeholder{color:#adb5bd}
+.fi-error{border-color:var(--red)!important}
+.error-msg{color:var(--red);font-size:.8rem;margin-top:.3rem;display:none}
+
+/* Birthday 3-select row */
+.bday-row{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:.5rem}
+
+/* Booking selector card */
+.booking-option{display:flex;align-items:center;gap:.85rem;padding:.85rem;
+  border:2px solid var(--border);border-radius:12px;cursor:pointer;
+  transition:border-color .2s,background .2s,box-shadow .2s;margin-bottom:.55rem}
+.booking-option:hover{border-color:#adb5bd;background:#f8f9fa}
+.booking-option.selected{border-color:var(--blue);background:#e8f0fe;box-shadow:0 0 0 3px rgba(13,110,253,.1)}
+.bo-icon{width:42px;height:42px;background:linear-gradient(135deg,#0a1628,#1a3a6e);
+         border-radius:10px;display:flex;align-items:center;justify-content:center;
+         font-size:1.2rem;flex-shrink:0}
+.bo-info{flex:1}
+.bo-name{font-weight:700;font-size:.95rem;color:var(--text)}
+.bo-detail{font-size:.78rem;color:var(--muted);margin-top:.1rem}
+.bo-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);
+          flex-shrink:0;display:flex;align-items:center;justify-content:center;
+          font-size:.85rem;transition:all .2s}
+.booking-option.selected .bo-check{background:var(--blue);border-color:var(--blue);color:#fff}
+
+
+.accept-row{display:flex;align-items:flex-start;gap:.7rem;cursor:pointer;
+            padding:.75rem;border:2px solid var(--border);border-radius:10px;
+            transition:border-color .2s,background .2s;user-select:none}
+.accept-row.checked{border-color:var(--green);background:#f0fdf4}
+.accept-row input[type=checkbox]{width:20px;height:20px;flex-shrink:0;
+  accent-color:var(--green);cursor:pointer;margin-top:1px}
+.accept-row .ac-txt{font-size:.88rem;line-height:1.4}
+.accept-row .ac-txt strong{color:var(--green)}
+
+/* Buttons */
+.btn{width:100%;padding:1rem;border:none;border-radius:12px;font-size:1rem;
+  font-weight:700;cursor:pointer;transition:background .2s,transform .1s;
+  display:flex;align-items:center;justify-content:center;gap:.5rem}
+.btn:active{transform:scale(.98)}
+.btn:disabled{background:#adb5bd!important;cursor:not-allowed}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover:not(:disabled){background:var(--blue-dark)}
+.btn-back{background:none;border:2px solid var(--border);color:var(--muted);
+          border-radius:12px;padding:.6rem 1rem;font-size:.85rem;font-weight:600;
+          cursor:pointer;margin-bottom:.6rem;width:auto}
+.btn-back:hover{border-color:#adb5bd;color:var(--text)}
+
+.spinner{width:18px;height:18px;border:3px solid rgba(255,255,255,.3);
+         border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Success */
+#success{display:none;text-align:center;padding:2rem 1rem}
+.check-circle{width:80px;height:80px;background:#d1fae5;border-radius:50%;
+              display:flex;align-items:center;justify-content:center;
+              font-size:2.5rem;margin:0 auto 1rem}
+#success h2{color:var(--green);font-size:1.4rem;margin-bottom:.5rem}
+#success p{color:var(--muted);font-size:.92rem;line-height:1.5;margin-bottom:1.2rem}
+.btn-another{background:var(--blue);color:#fff;border:none;border-radius:10px;
+             padding:.8rem 1.6rem;font-size:.95rem;font-weight:700;cursor:pointer}
+.btn-another:hover{background:var(--blue-dark)}
+
+/* Not found */
+#not-found{display:none;text-align:center;padding:3rem 1rem}
+#not-found .nf-icon{font-size:3rem;margin-bottom:1rem}
+#not-found h2{color:var(--red);margin-bottom:.5rem}
+#not-found p{color:var(--muted);font-size:.9rem}
+
+/* Toast */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(100px);
+       background:#dc3545;color:#fff;border-radius:10px;padding:.7rem 1.2rem;
+       font-size:.88rem;font-weight:600;z-index:9999;transition:transform .3s;
+       max-width:90vw;text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+.no-bookings{text-align:center;padding:1.5rem;color:var(--muted);font-size:.9rem}
+.no-bookings .icon{font-size:2rem;margin-bottom:.5rem}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo" id="header-logo">
+    <img src="/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png" alt="HotBoat"
+         onerror="this.outerHTML='⛵'">
+  </div>
+  <p>Firma de Términos y Condiciones</p>
+  <div class="booking-badge" id="header-badge" style="display:none">
+    <span>📅</span>
+    <span id="header-badge-text"></span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Not found -->
+  <div id="not-found">
+    <div class="nf-icon">🔍</div>
+    <h2>Reserva no encontrada</h2>
+    <p>El código de reserva no existe o el enlace está incorrecto.<br>Consulta a tu anfitrión.</p>
+  </div>
+
+  <!-- STEP 1: Choose booking (generic QR mode) -->
+  <div class="step" id="step-select">
+    <div class="card">
+      <div class="card-title">📅 ¿A nombre de quién está tu reserva?</div>
+      <div class="form-group">
+        <label class="fl" for="sel-date">Fecha de hoy</label>
+        <input class="fi" type="date" id="sel-date">
+      </div>
+      <div id="bookings-list">
+        <div class="no-bookings"><div class="icon">⏳</div>Cargando reservas...</div>
+      </div>
+      <div class="error-msg" id="err-select" style="display:none;margin-top:.5rem">Selecciona una reserva para continuar</div>
+    </div>
+    <button class="btn btn-primary" id="btn-continue" onclick="goToForm()" style="margin-top:.3rem">
+      Continuar →
+    </button>
+  </div>
+
+  <!-- STEP 2: Passenger form -->
+  <div class="step" id="step-form">
+    <button class="btn-back" id="btn-back" onclick="goBack()" style="display:none">← Cambiar reserva</button>
+
+    <div class="card">
+      <div class="card-title">👤 Tus datos</div>
+
+      <div class="form-group">
+        <label class="fl" for="f-name">Nombre completo *</label>
+        <input class="fi" type="text" id="f-name" placeholder="Juan Pérez" autocomplete="name">
+        <div class="error-msg" id="err-name">Ingresa tu nombre completo</div>
+      </div>
+
+      <div class="form-group">
+        <label class="fl" for="f-email">Email *</label>
+        <input class="fi" type="email" id="f-email" placeholder="juan@ejemplo.com" autocomplete="email">
+        <div class="error-msg" id="err-email">El email es obligatorio e debe ser válido</div>
+      </div>
+
+      <div class="form-group">
+        <label class="fl" for="f-phone">Teléfono</label>
+        <input class="fi" type="tel" id="f-phone" placeholder="+56 9 1234 5678" autocomplete="tel">
+      </div>
+
+      <div class="form-group">
+        <label class="fl">Fecha de nacimiento</label>
+        <div class="bday-row">
+          <select class="fi" id="f-bday-d" aria-label="Día">
+            <option value="">Día</option>
+          </select>
+          <select class="fi" id="f-bday-m" aria-label="Mes">
+            <option value="">Mes</option>
+            <option value="01">Enero</option><option value="02">Febrero</option>
+            <option value="03">Marzo</option><option value="04">Abril</option>
+            <option value="05">Mayo</option><option value="06">Junio</option>
+            <option value="07">Julio</option><option value="08">Agosto</option>
+            <option value="09">Septiembre</option><option value="10">Octubre</option>
+            <option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
+          <select class="fi" id="f-bday-y" aria-label="Año">
+            <option value="">Año</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📄 Términos y Condiciones</div>
+
+      <a href="https://hotboatchile.com/es/terms-conditions/" target="_blank" rel="noopener"
+         style="display:block;text-align:center;background:linear-gradient(135deg,#0a1628,#1a3a6e);
+                color:#fff;text-decoration:none;border-radius:12px;padding:1rem 1.2rem;
+                font-size:1rem;font-weight:700;letter-spacing:.3px;margin-bottom:1rem;
+                box-shadow:0 4px 14px rgba(10,22,40,.25);">
+        📄 Ver Términos y Condiciones
+        <span style="display:block;font-size:.75rem;font-weight:400;opacity:.75;margin-top:.2rem">
+          hotboatchile.com/es/terms-conditions
+        </span>
+      </a>
+
+      <label class="accept-row" id="accept-row" onclick="toggleAccept()">
+        <input type="checkbox" id="f-accept" style="pointer-events:none">
+        <div class="ac-txt">
+          He leído y acepto los <strong>Términos y Condiciones</strong> de HotBoat Chile.
+          Entiendo que esta aceptación tiene valor legal equivalente a una firma.
+        </div>
+      </label>
+      <div class="error-msg" id="err-accept">Debes aceptar los Términos y Condiciones</div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-submit" onclick="submitForm()">
+      <div class="spinner" id="spinner"></div>
+      <span id="btn-text">✅ Firmar y enviar</span>
+    </button>
+  </div>
+
+  <!-- Success -->
+  <div id="success">
+    <div class="check-circle">✅</div>
+    <h2>¡Listo, gracias!</h2>
+    <p>Tu firma fue registrada correctamente.<br>
+       Si hay otros integrantes del grupo, pídeles que también firmen.</p>
+    <button class="btn-another" onclick="resetForm()">
+      ➕ Agregar otro pasajero
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Detect mode ────────────────────────────────────────────────────────────────
+// Path: /firma           → generic mode (show selector first)
+// Path: /firma/AA-123    → direct mode (skip to form)
+const pathParts = location.pathname.split('/firma');
+const rawRef = (pathParts[1] || '').replace(/^\//, '').trim();
+const isGeneric = rawRef === '' || rawRef === '/';
+let currentBookingRef = isGeneric ? '' : rawRef;
+let selectedBookingName = '';
+
+// ── Populate selectors ────────────────────────────────────────────────────────
+const dSel = document.getElementById('f-bday-d');
+for(let d=1;d<=31;d++){
+  const o=document.createElement('option');
+  o.value=String(d).padStart(2,'0');o.textContent=d;dSel.appendChild(o);
+}
+const ySel=document.getElementById('f-bday-y');
+const nowYear=new Date().getFullYear();
+for(let y=nowYear-10;y>=nowYear-100;y--){
+  const o=document.createElement('option');
+  o.value=String(y);o.textContent=y;ySel.appendChild(o);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init(){
+  if(isGeneric){
+    // Set date input to today
+    const today=todayStr();
+    document.getElementById('sel-date').value=today;
+    document.getElementById('sel-date').addEventListener('change', e=>loadBookingsForDate(e.target.value));
+    showStep('step-select');
+    await loadBookingsForDate(today);
+  } else {
+    // Direct mode: verify booking exists then show form
+    const info = await fetchBookingInfo(currentBookingRef);
+    if(!info){ showNotFound(); return; }
+    setHeaderBadge(info);
+    showStep('step-form');
+    // Hide back button in direct mode
+    document.getElementById('btn-back').style.display='none';
+  }
+}
+
+// ── Step 1: booking selector ──────────────────────────────────────────────────
+async function loadBookingsForDate(date){
+  const listEl=document.getElementById('bookings-list');
+  listEl.innerHTML='<div class="no-bookings"><div class="icon">⏳</div>Cargando...</div>';
+  try{
+    const r=await fetch(`/api/firma/bookings?date=${date}`);
+    const d=await r.json();
+    const bookings=d.bookings||[];
+    if(!bookings.length){
+      listEl.innerHTML='<div class="no-bookings"><div class="icon">📭</div>No hay reservas para esta fecha</div>';
+      return;
+    }
+    listEl.innerHTML=bookings.map(b=>`
+      <div class="booking-option" data-ref="${b.booking_ref}" data-name="${escHtml(b.nombre_cliente)}"
+           onclick="selectBooking(this,'${b.booking_ref}','${escHtml(b.nombre_cliente)}')">
+        <div class="bo-icon">⛵</div>
+        <div class="bo-info">
+          <div class="bo-name">${escHtml(b.nombre_cliente)}</div>
+          <div class="bo-detail">${b.hora?b.hora+' · ':''}${b.num_personas} personas</div>
+        </div>
+        <div class="bo-check" id="chk-${b.booking_ref}"></div>
+      </div>`).join('');
+  }catch(e){
+    listEl.innerHTML='<div class="no-bookings"><div class="icon">⚠️</div>Error al cargar reservas</div>';
+  }
+}
+
+function selectBooking(el, ref, name){
+  // Deselect all
+  document.querySelectorAll('.booking-option').forEach(o=>{
+    o.classList.remove('selected');
+    const c=o.querySelector('.bo-check');
+    if(c) c.textContent='';
+  });
+  // Select this
+  el.classList.add('selected');
+  const chk=document.getElementById('chk-'+ref);
+  if(chk) chk.textContent='✓';
+  currentBookingRef=ref;
+  selectedBookingName=name;
+  hide('err-select');
+}
+
+function goToForm(){
+  if(!currentBookingRef){ show('err-select'); return; }
+  // Show header badge
+  const date=document.getElementById('sel-date').value;
+  setHeaderBadge({booking_ref:currentBookingRef,customer_name:selectedBookingName,
+    booking_date:date,booking_time:'',num_people:''});
+  showStep('step-form');
+  document.getElementById('btn-back').style.display='block';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function goBack(){
+  showStep('step-select');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── Step 2: passenger form ────────────────────────────────────────────────────
+function toggleAccept(){
+  const cb=document.getElementById('f-accept');
+  const row=document.getElementById('accept-row');
+  cb.checked=!cb.checked;
+  row.classList.toggle('checked',cb.checked);
+  if(cb.checked) hide('err-accept');
+}
+
+function validate(){
+  let ok=true;
+  const name=(document.getElementById('f-name').value||'').trim();
+  if(!name){ show('err-name'); fi('f-name',true); ok=false; }
+  else{ hide('err-name'); fi('f-name',false); }
+
+  const email=(document.getElementById('f-email').value||'').trim();
+  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ show('err-email'); fi('f-email',true); ok=false; }
+  else{ hide('err-email'); fi('f-email',false); }
+
+  if(!document.getElementById('f-accept').checked){ show('err-accept'); ok=false; }
+  else{ hide('err-accept'); }
+  return ok;
+}
+
+async function submitForm(){
+  if(!validate()) return;
+  const btn=document.getElementById('btn-submit');
+  const spinner=document.getElementById('spinner');
+  const btnTxt=document.getElementById('btn-text');
+  btn.disabled=true; spinner.style.display='block'; btnTxt.textContent='Enviando...';
+
+  const d=document.getElementById('f-bday-d').value;
+  const m=document.getElementById('f-bday-m').value;
+  const y=document.getElementById('f-bday-y').value;
+  const bday=(d&&m&&y)?`${y}-${m}-${d}`:null;
+
+  const payload={
+    passenger_name: document.getElementById('f-name').value.trim(),
+    passenger_email: document.getElementById('f-email').value.trim()||null,
+    passenger_phone: document.getElementById('f-phone').value.trim()||null,
+    passenger_birthday: bday,
+    accepted_tc: true,
+  };
+
+  try{
+    const r=await fetch(`/api/firma/${encodeURIComponent(currentBookingRef)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    if(!r.ok){
+      const err=await r.json().catch(()=>({detail:'Error al guardar'}));
+      throw new Error(err.detail||'Error al guardar');
+    }
+    document.getElementById('step-form').style.display='none';
+    document.getElementById('success').style.display='block';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){
+    showToast(e.message);
+  }finally{
+    btn.disabled=false; spinner.style.display='none'; btnTxt.textContent='✅ Firmar y enviar';
+  }
+}
+
+function resetForm(){
+  document.getElementById('f-name').value='';
+  document.getElementById('f-email').value='';
+  document.getElementById('f-phone').value='';
+  document.getElementById('f-bday-d').value='';
+  document.getElementById('f-bday-m').value='';
+  document.getElementById('f-bday-y').value='';
+  const cb=document.getElementById('f-accept');
+  cb.checked=false;
+  document.getElementById('accept-row').classList.remove('checked');
+  ['err-name','err-email','err-accept'].forEach(hide);
+  document.getElementById('success').style.display='none';
+
+  if(isGeneric){
+    // Go back to selector
+    showStep('step-select');
+    // Deselect booking options so user picks again (or same)
+    document.querySelectorAll('.booking-option').forEach(o=>o.classList.remove('selected'));
+    document.querySelectorAll('.bo-check').forEach(c=>c.textContent='');
+    // Re-select current booking
+    if(currentBookingRef){
+      const el=document.querySelector(`[data-ref="${currentBookingRef}"]`);
+      if(el){ el.classList.add('selected'); }
+    }
+    // Go directly to form since they just signed
+    showStep('step-form');
+  } else {
+    showStep('step-form');
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function showStep(id){
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id);
+  if(el) el.classList.add('active');
+}
+function showNotFound(){
+  document.getElementById('not-found').style.display='block';
+}
+function setHeaderBadge(info){
+  const badge=document.getElementById('header-badge');
+  const txt=document.getElementById('header-badge-text');
+  let s = info.customer_name || info.booking_ref || '';
+  if(info.booking_date) s += ' · ' + fmtDate(info.booking_date);
+  if(info.booking_time) s += ' ' + (info.booking_time||'').substring(0,5);
+  txt.textContent=s;
+  badge.style.display='inline-flex';
+}
+async function fetchBookingInfo(ref){
+  try{
+    const r=await fetch(`/api/firma/${encodeURIComponent(ref)}/info`);
+    if(!r.ok) return null;
+    return await r.json();
+  }catch{ return null; }
+}
+function todayStr(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtDate(s){
+  if(!s) return '';
+  const [y,m,d]=(s||'').split('-');
+  const MONTHS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y}`;
+}
+function escHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function show(id){ const el=document.getElementById(id); if(el) el.style.display='block'; }
+function hide(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
+function fi(id,err){ const el=document.getElementById(id); if(el) el.classList.toggle('fi-error',err); }
+let _toastTimer;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>t.classList.remove('show'),4000);
+}
+
+init();
+</script>
+</body>
+</html>

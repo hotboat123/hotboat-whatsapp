@@ -347,6 +347,10 @@ function renderConversations() {
             console.log(`📬 Unread: ${conv.customer_name || conv.phone_number} has ${unreadCount} unread messages`);
         }
 
+        const adBadge = conv.ad_source
+            ? `<span style="font-size:.68rem;background:#1a4f9f;color:#fff;border-radius:4px;padding:2px 7px;display:inline-block" title="Vino del anuncio: ${conv.ad_source}">📢 ${conv.ad_source}</span>`
+            : '';
+
         return `
         <div class="conversation-item ${currentConversation?.phone_number === conv.phone_number ? 'active' : ''}"
              onclick="selectConversation('${conv.phone_number}')">
@@ -358,6 +362,7 @@ function renderConversations() {
                 </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
             </div>
+            ${adBadge ? `<div style="margin:.15rem 0 .1rem">${adBadge}</div>` : ''}
             <div class="conversation-preview">
                 ${truncate(conv.last_message || 'No messages', 50)}
             </div>
@@ -403,7 +408,8 @@ async function selectConversation(phoneNumber) {
             messages: normalizeMessages(data.messages),
             hasMore: Boolean(data.has_more),
             nextCursor: data.next_cursor || null,
-            priority: data.lead?.priority || 0
+            priority: data.lead?.priority || 0,
+            ad_source: data.lead?.ad_source || null,
         };
 
         // Update bot toggle state from lead info
@@ -550,6 +556,16 @@ function renderCurrentChat(options = {}) {
     
     chatName.textContent = currentConversation.customer_name;
     chatPhone.textContent = currentConversation.phone_number;
+    const adSourceEl = document.getElementById('currentChatAdSource');
+    const adSourceText = document.getElementById('currentChatAdSourceText');
+    if (adSourceEl && adSourceText) {
+        if (currentConversation.ad_source) {
+            adSourceText.textContent = currentConversation.ad_source;
+            adSourceEl.style.display = 'inline-block';
+        } else {
+            adSourceEl.style.display = 'none';
+        }
+    }
     messageInputArea.style.display = 'block';
     
     // Render messages
@@ -774,6 +790,12 @@ function renderLeadInfo(lead) {
             <div class="info-label">Last Contact</div>
             <div class="info-value">${formatDate(lead.last_contact_at)}</div>
         </div>
+        ${lead.ad_source ? `
+            <div class="info-item">
+                <div class="info-label">📢 Anuncio origen</div>
+                <div class="info-value" style="color:#4a9fff;font-weight:600">${escapeHtml(lead.ad_source)}</div>
+            </div>
+        ` : ''}
         ${lead.notes ? `
             <div class="info-item">
                 <div class="info-label">Notes</div>

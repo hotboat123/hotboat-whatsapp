@@ -95,7 +95,7 @@ El bot debería responder con algo como:
 Puedo ayudarte a reservar el horario perfecto.
 
 💡 También puedes reservar directamente aquí:
-https://hotboatchile.com/es/book-hotboat/
+https://whatsapp.hotboat.cl/booking
 ```
 
 ## 🔍 Verificar logs

@@ -131,7 +131,8 @@ async def check_slot_availability(slot_datetime: datetime, duration_hours: float
                 cur.execute("""
                     SELECT COUNT(*) FROM booknetic_appointments
                     WHERE starts_at IS NOT NULL
-                      AND (status IS NULL OR status NOT IN ('cancelled','rejected'))
+                      AND status IS NOT NULL
+                      AND status NOT IN ('cancelled','rejected','cancelada','pending_payment','solicitud')
                       AND starts_at < %s
                       AND starts_at + INTERVAL '1 hour' * %s > %s
                 """, (s_end, appt_dur, s_start))
@@ -204,7 +205,8 @@ async def get_booked_slots(
                 # Build query based on exclude_statuses
                 if exclude_statuses and len(exclude_statuses) > 0:
                     placeholders = ','.join(['%s'] * len(exclude_statuses))
-                    status_filter = f"AND (status IS NULL OR status NOT IN ({placeholders}))"
+                    # status NULL in booknetic has produced orphan/ghost blocks; ignore NULL.
+                    status_filter = f"AND status IS NOT NULL AND status NOT IN ({placeholders})"
                     params = (start_date, end_date) + tuple(exclude_statuses)
                 else:
                     status_filter = ""
@@ -249,7 +251,7 @@ async def get_booked_slots(
                     WHERE booking_date >= %s::date
                       AND booking_date <= %s::date
                       AND booking_time IS NOT NULL
-                      AND status NOT IN ('cancelled','rejected','solicitud')
+                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud','pending_payment')
                     ORDER BY booking_date, booking_time
                 """, (start_date, end_date))
                 for row in cur.fetchall():
@@ -266,6 +268,40 @@ async def get_booked_slots(
                             "id": None,
                             "starts_at": starts_at,
                             "service_name": "HotBoat Web",
+                            "customer_name": b_name,
+                            "status": b_status,
+                        })
+                    except Exception:
+                        pass
+
+                # Include all_appointments entries (manual entries AND hotboat_web as safety net).
+                # hotboat_web is included because a booking may exist in all_appointments but
+                # be missing from hotboat_appointments due to a sync gap — without this it
+                # would be invisible to the availability checker.
+                cur.execute("""
+                    SELECT fecha, hora, nombre_cliente, status
+                    FROM all_appointments
+                    WHERE source NOT IN ('booknetic')
+                      AND fecha >= %s::date
+                      AND fecha <= %s::date
+                      AND hora IS NOT NULL
+                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud','pending_payment')
+                    ORDER BY fecha, hora
+                """, (start_date, end_date))
+                for row in cur.fetchall():
+                    b_date, b_time, b_name, b_status = row
+                    try:
+                        if hasattr(b_time, 'hour'):
+                            h, m = b_time.hour, b_time.minute
+                        else:
+                            parts = str(b_time).split(":")
+                            h, m = int(parts[0]), int(parts[1])
+                        dt_naive = datetime.combine(b_date, dt_time(h, m))
+                        starts_at = CHILE_TZ.localize(dt_naive)
+                        booked_slots.append({
+                            "id": None,
+                            "starts_at": starts_at,
+                            "service_name": "Manual",
                             "customer_name": b_name,
                             "status": b_status,
                         })
@@ -340,31 +376,61 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT 
-                        latest.phone_number,
-                        latest.customer_name,
-                        latest.created_at,
-                        latest.message_text,
-                        latest.response_text,
-                        latest.direction,
-                        COALESCE(l.unread_count, 0) as unread_count,
-                        COALESCE(l.priority, 0) as priority
-                    FROM (
-                        SELECT DISTINCT ON (phone_number)
-                            phone_number,
-                            customer_name,
-                            created_at,
-                            message_text,
-                            response_text,
-                            direction
-                        FROM whatsapp_conversations
-                        ORDER BY phone_number, created_at DESC
-                    ) latest
-                    LEFT JOIN whatsapp_leads l ON latest.phone_number = l.phone_number
-                    ORDER BY latest.created_at DESC
-                    LIMIT %s
-                """, (limit,))
+                # ad_source column added dynamically; use NULL fallback if not yet present
+                try:
+                    cur.execute("""
+                        SELECT
+                            latest.phone_number,
+                            latest.customer_name,
+                            latest.created_at,
+                            latest.message_text,
+                            latest.response_text,
+                            latest.direction,
+                            COALESCE(l.unread_count, 0) as unread_count,
+                            COALESCE(l.priority, 0) as priority,
+                            l.ad_source
+                        FROM (
+                            SELECT DISTINCT ON (phone_number)
+                                phone_number,
+                                customer_name,
+                                created_at,
+                                message_text,
+                                response_text,
+                                direction
+                            FROM whatsapp_conversations
+                            ORDER BY phone_number, created_at DESC
+                        ) latest
+                        LEFT JOIN whatsapp_leads l ON latest.phone_number = l.phone_number
+                        ORDER BY latest.created_at DESC
+                        LIMIT %s
+                    """, (limit,))
+                except Exception:
+                    # Fallback: query without ad_source if column doesn't exist yet
+                    cur.execute("""
+                        SELECT
+                            latest.phone_number,
+                            latest.customer_name,
+                            latest.created_at,
+                            latest.message_text,
+                            latest.response_text,
+                            latest.direction,
+                            COALESCE(l.unread_count, 0) as unread_count,
+                            COALESCE(l.priority, 0) as priority
+                        FROM (
+                            SELECT DISTINCT ON (phone_number)
+                                phone_number,
+                                customer_name,
+                                created_at,
+                                message_text,
+                                response_text,
+                                direction
+                            FROM whatsapp_conversations
+                            ORDER BY phone_number, created_at DESC
+                        ) latest
+                        LEFT JOIN whatsapp_leads l ON latest.phone_number = l.phone_number
+                        ORDER BY latest.created_at DESC
+                        LIMIT %s
+                    """, (limit,))
                 
                 results = cur.fetchall()
                 
@@ -378,12 +444,13 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                     direction = row[5] if row[5] else 'incoming'
                     unread_count = row[6] if len(row) > 6 else 0
                     priority = row[7] if len(row) > 7 else 0
-                    
+                    ad_source = row[8] if len(row) > 8 else None
+
                     if direction == 'outgoing':
                         last_message = response_text or message_text
                     else:
                         last_message = message_text or response_text
-                    
+
                     # Convert UTC to Chilean timezone
                     if created_at:
                         if created_at.tzinfo is None:
@@ -391,7 +458,7 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                             created_at = created_at.replace(tzinfo=ZoneInfo("UTC"))
                         # Convert to Chilean time
                         created_at = created_at.astimezone(CHILE_TZ)
-                    
+
                     conversations.append({
                         "phone_number": phone_number,
                         "customer_name": customer_name,
@@ -399,7 +466,8 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                         "last_message": last_message,
                         "direction": direction,
                         "unread_count": unread_count,
-                        "priority": priority
+                        "priority": priority,
+                        "ad_source": ad_source,
                     })
                 
                 conversations.sort(key=lambda x: x["last_message_at"] or "", reverse=True)

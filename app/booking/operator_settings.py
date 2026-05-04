@@ -128,6 +128,69 @@ def remove_vacation_day(d: date) -> bool:
         return False
 
 
+# ── Per-day urgency overrides ─────────────────────────────────────────────────
+
+def get_urgency_days(from_date: Optional[date] = None, to_date: Optional[date] = None) -> list:
+    """Return list of {date, enabled, reason} for days with urgency override."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                wheres, params = [], []
+                if from_date:
+                    wheres.append("fecha >= %s"); params.append(from_date)
+                if to_date:
+                    wheres.append("fecha <= %s"); params.append(to_date)
+                where = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+                cur.execute(f"SELECT fecha, enabled, reason FROM urgency_days {where} ORDER BY fecha", params)
+                return [{"date": str(r[0]), "enabled": r[1], "reason": r[2] or ""} for r in cur.fetchall()]
+    except Exception as e:
+        logger.error(f"get_urgency_days failed: {e}")
+        return []
+
+
+def get_urgency_day_override(d: date) -> Optional[bool]:
+    """
+    Returns True/False if the day has an explicit override, None if no override.
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT enabled FROM urgency_days WHERE fecha=%s", (d,))
+                row = cur.fetchone()
+                return row[0] if row else None
+    except Exception:
+        return None
+
+
+def set_urgency_day(d: date, enabled: bool, reason: str = "") -> bool:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO urgency_days (fecha, enabled, reason)
+                       VALUES (%s, %s, %s)
+                       ON CONFLICT (fecha) DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason""",
+                    (d, enabled, reason),
+                )
+                conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"set_urgency_day failed: {e}")
+        return False
+
+
+def remove_urgency_day(d: date) -> bool:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM urgency_days WHERE fecha=%s", (d,))
+                conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"remove_urgency_day failed: {e}")
+        return False
+
+
 # ── Urgency filter ────────────────────────────────────────────────────────────
 
 def apply_urgency_filter(
@@ -360,19 +423,19 @@ TRIGGER_META: dict = {
     "booking_followup": {
         "label": "Seguimiento post-reserva",
         "description": (
-            "El servidor revisa cada día si corresponde enviar este correo. "
-            "Útil para pedir reseña, ofrecer descuento próximo viaje, etc."
+            "Se envía automáticamente N horas después del horario de la reserva. "
+            "Pide reseña en TripAdvisor y encuesta de satisfacción."
         ),
         "default_subject": "¡Gracias por navegar con nosotros! — {{booking_ref}}",
         "icon": "⭐",
         "extra_fields": [
             {
-                "key": "days_after",
-                "label": "Días después de la reserva",
+                "key": "hours_after",
+                "label": "Horas después del horario de la reserva",
                 "type": "number",
-                "default": 5,
+                "default": 2,
                 "min": 1,
-                "max": 180,
+                "max": 72,
             }
         ],
     },
@@ -384,6 +447,26 @@ TRIGGER_META: dict = {
         ),
         "default_subject": "🔔 Nuevo lead: {{customer_name}} — {{booking_date}} {{booking_time}}",
         "icon": "🔔",
+        "recipient": "admin",
+    },
+    "admin_booking_confirmed": {
+        "label": "Pago confirmado (notificación al operador)",
+        "description": (
+            "Se envía AL ADMINISTRADOR (no al cliente) cuando el pago queda confirmado. "
+            "Ideal para recibir la notificación de nueva reserva pagada en tu correo."
+        ),
+        "default_subject": "✅ Reserva pagada: {{customer_name}} — {{booking_date}} {{booking_time}}",
+        "icon": "✅",
+        "recipient": "admin",
+    },
+    "admin_pending_payment": {
+        "label": "Pago pendiente — recordatorio al operador (5 min)",
+        "description": (
+            "Se envía AL ADMINISTRADOR 5 minutos después de que un cliente avanzó al pago "
+            "pero no lo completó. Incluye botón de WhatsApp para contactar al cliente."
+        ),
+        "default_subject": "⚠️ Sin pago: {{customer_name}} — {{booking_date}} {{booking_time}}",
+        "icon": "⚠️",
         "recipient": "admin",
     },
     "customer_birthday": {
@@ -398,7 +481,28 @@ TRIGGER_META: dict = {
 }
 
 # Triggers activos por defecto
-_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed"}
+_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed", "booking_created", "admin_new_lead", "admin_booking_confirmed", "admin_pending_payment"}
+
+
+def seed_email_workflow_defaults() -> None:
+    """
+    Called once at startup: enable triggers that should be on by default
+    but haven't been explicitly configured yet in the DB.
+    This is idempotent — it never overwrites an explicitly saved setting.
+    """
+    try:
+        raw = _json_setting("email_workflows", {})
+        changed = False
+        for trigger in _TRIGGERS_ENABLED_DEFAULT:
+            if trigger not in raw:
+                # Not yet touched by the user → seed as enabled
+                raw[trigger] = {"enabled": True}
+                changed = True
+        if changed:
+            set_setting("email_workflows", json.dumps(raw))
+            logger.info("Email workflow defaults seeded: %s", _TRIGGERS_ENABLED_DEFAULT - set(raw.keys() - {k for k in raw}))
+    except Exception as e:
+        logger.warning(f"seed_email_workflow_defaults: {e}")
 
 
 def get_email_workflows() -> dict:

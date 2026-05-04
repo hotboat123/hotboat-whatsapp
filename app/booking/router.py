@@ -12,6 +12,8 @@ _avail_cache: dict = {}
 _AVAIL_CACHE_TTL = 30  # seconds
 
 from app.booking.models import CreateBookingRequest
+from app.meta_pixel import apply_meta_pixel_placeholder
+from app.config import get_settings
 from app.booking.db import (
     create_booking, update_booking_payment,
     get_booking_by_ref, get_all_bookings, PRICES,
@@ -29,7 +31,7 @@ def _booking_html() -> str:
     path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "booking.html")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+            return apply_meta_pixel_placeholder(f.read(), get_settings().meta_pixel_id)
     return "<h1>Booking page not found</h1>"
 
 
@@ -157,7 +159,7 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
     try:
         from app.booking.operator_settings import (
             get_vacation_days, is_urgency_mode, apply_urgency_filter,
-            get_operating_hours, get_urgency_fake_slots
+            get_operating_hours, get_urgency_fake_slots, get_urgency_days,
         )
         from app.db.connection import get_connection
 
@@ -167,10 +169,21 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
         end = start + timedelta(days=days)
         slots = await checker.get_available_slots(start, end)
 
-        # Load vacation days for the range
+        # Load vacation days and per-day urgency overrides for the range
         vacation_dates = {
             v["date"] for v in get_vacation_days(start.date(), end.date())
         }
+        global_urgency = is_urgency_mode()
+        urgency_day_overrides = {
+            v["date"]: v["enabled"]
+            for v in get_urgency_days(start.date(), end.date())
+        }
+
+        def _day_urgency_active(dk: str) -> bool:
+            """True if urgency is active for this specific date (override wins over global)."""
+            if dk in urgency_day_overrides:
+                return urgency_day_overrides[dk]
+            return global_urgency
 
         # Group slots by date, skipping vacation days
         grouped: dict = {}
@@ -183,11 +196,13 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
             grouped[dk].append(s["time"])
 
         # Compute fake_booked_slots for grey display in urgency mode.
+        # Applies per-day urgency overrides: each day is evaluated independently.
         # NOTE: availability.py already applies the urgency filter correctly (using data
         # from both booknetic + hotboat_appointments). We do NOT re-apply it here to
         # avoid double-filtering that empties valid days.
         fake_booked_by_day: dict = {}
-        if is_urgency_mode():
+        any_urgency_active = global_urgency or any(v for v in urgency_day_overrides.values())
+        if any_urgency_active:
             # Load actual bookings from BOTH sources for the fake-slot calculation
             booked_by_day: dict = {}
             try:
@@ -211,7 +226,20 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
                             FROM booknetic_appointments
                             WHERE starts_at IS NOT NULL
                               AND starts_at >= %s AND starts_at <= %s
-                              AND (status IS NULL OR status NOT IN ('cancelled','rejected'))
+                              AND status IS NOT NULL
+                              AND status NOT IN ('cancelled','rejected','cancelada','pending_payment','solicitud')
+                        """, (start.date(), end.date()))
+                        for row in cur.fetchall():
+                            booked_by_day.setdefault(row[0], []).append(row[1])
+                        # Manual / sheets reservations from all_appointments
+                        cur.execute("""
+                            SELECT fecha::text AS d,
+                                   TO_CHAR(hora, 'HH24:MI') AS t
+                            FROM all_appointments
+                            WHERE source NOT IN ('booknetic', 'hotboat_web')
+                              AND fecha >= %s AND fecha <= %s
+                              AND hora IS NOT NULL
+                              AND status NOT IN ('cancelled','rejected','cancelada','solicitud','pending_payment')
                         """, (start.date(), end.date()))
                         for row in cur.fetchall():
                             booked_by_day.setdefault(row[0], []).append(row[1])
@@ -223,6 +251,8 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
             gap_min = int(float(get_urgency_config().get("gap_hours", 3)) * 60)
 
             for dk, times in grouped.items():
+                if not _day_urgency_active(dk):
+                    continue  # day has urgency off — no ghost slots
                 booked = booked_by_day.get(dk, [])
                 avail_set = set(times)
                 if not booked:
@@ -252,9 +282,9 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
         result = {
             "availability": grouped,
             "operating_hours": get_operating_hours(),
-            "urgency_mode": is_urgency_mode(),
+            "urgency_mode": global_urgency,
             "vacation_days": list(vacation_dates),
-            "fake_booked_slots": fake_booked_by_day if is_urgency_mode() else {},
+            "fake_booked_slots": fake_booked_by_day,
         }
         _avail_cache[cache_key] = {"data": result, "ts": _time.time()}
         return result
@@ -301,13 +331,13 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         result = create_booking(data)
         booking_ref = result["booking_ref"]
 
-        # Fire booking_created (→ cliente) and admin_new_lead (→ admin), best-effort
+        # Fire admin_new_lead immediately; booking_created is sent by the
+        # pending-payment sweep after 5 min if payment not yet confirmed.
         try:
             from app.booking.booking_email import send_email_for_trigger
-            send_email_for_trigger("booking_created", booking_ref)
             send_email_for_trigger("admin_new_lead", booking_ref)
         except Exception as _em:
-            logger.warning("Lead/created emails: %s", _em)
+            logger.warning("admin_new_lead email: %s", _em)
 
         # Determine amount to charge (50% deposit, support test_price override)
         if request.test_price is not None and request.test_price > 0:
@@ -321,42 +351,43 @@ async def create_booking_endpoint(request: CreateBookingRequest):
 
         payment_url = None
         woo_order_id = None
-        try:
-            from app.payment.woocommerce import create_order as woo_create_order
-            woo_order = await woo_create_order(
-                reservation_id=0,
-                booking_ref=booking_ref,
-                nombre=request.customer_name,
-                telefono=request.customer_phone,
-                email=request.customer_email,
-                monto_reserva=woo_monto_reserva,
-                monto_extras=woo_monto_extras,
-                fecha=request.booking_date,
-                num_personas=request.num_people,
-            )
-            payment_url  = woo_order.get("payment_url")
-            woo_order_id = woo_order.get("order_id")
-        except Exception as pe:
-            logger.warning(f"WooCommerce skip: {pe}")
+        if not request.skip_payment:
             try:
-                deposit = round(total * 0.5)
-                payment_url = await _create_mp_preference(booking_ref, request, deposit)
-            except Exception as mpe:
-                logger.warning(f"MercadoPago skip: {mpe}")
+                from app.payment.woocommerce import create_order as woo_create_order
+                woo_order = await woo_create_order(
+                    reservation_id=0,
+                    booking_ref=booking_ref,
+                    nombre=request.customer_name,
+                    telefono=request.customer_phone,
+                    email=request.customer_email,
+                    monto_reserva=woo_monto_reserva,
+                    monto_extras=woo_monto_extras,
+                    fecha=request.booking_date,
+                    num_personas=request.num_people,
+                )
+                payment_url  = woo_order.get("payment_url")
+                woo_order_id = woo_order.get("order_id")
+            except Exception as pe:
+                logger.warning(f"WooCommerce skip: {pe}")
+                try:
+                    deposit = round(total * 0.5)
+                    payment_url = await _create_mp_preference(booking_ref, request, deposit)
+                except Exception as mpe:
+                    logger.warning(f"MercadoPago skip: {mpe}")
 
-        # Store WooCommerce order ID so the webhook can find this booking
-        if woo_order_id:
-            try:
-                from app.db.connection import get_connection as _gc
-                with _gc() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
-                            (str(woo_order_id), booking_ref)
-                        )
-                        conn.commit()
-            except Exception as ue:
-                logger.warning(f"Could not save woo_order_id for {booking_ref}: {ue}")
+            # Store WooCommerce order ID so the webhook can find this booking
+            if woo_order_id:
+                try:
+                    from app.db.connection import get_connection as _gc
+                    with _gc() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
+                                (str(woo_order_id), booking_ref)
+                            )
+                            conn.commit()
+                except Exception as ue:
+                    logger.warning(f"Could not save woo_order_id for {booking_ref}: {ue}")
 
         # NOTE: we do NOT sync to all_appointments here.
         # _sync_hotboat_to_all is called by the WooCommerce webhook once payment is confirmed.
@@ -606,17 +637,162 @@ def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):
                  nombre_cliente, email, telefono,
                  servicio, num_personas,
                  ingreso_reserva, ingreso_extras, ingreso_total,
+                 has_flex, flex_amount,
                  costo_operativo_fijo, costo_operativo_total,
                  status, extras_json, observaciones, created_at, updated_at)
-                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18000,18000,%s,%s,%s,NOW(),NOW())
+                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18000,18000,%s,%s,%s,NOW(),NOW())
             """, (
                 booking_ref, booking_ref, fecha, hora,
                 data.get("customer_name"), data.get("customer_email"), data.get("customer_phone"),
                 f"HotBoat Web ({num_p}p)", str(num_p),
                 float(data.get("subtotal", 0)), float(data.get("extras_total", 0)), float(data.get("total_price", 0)),
+                bool(data.get("has_flex", False)), float(data.get("flex_amount", 0)),
                 status, PgJson(data.get("extras") or []), data.get("notes")
             ))
             conn.commit()
+
+
+async def _notify_aloj_booking(
+    *,
+    aloj_ref: str,
+    accommodation_name: str,
+    customer_name: str,
+    customer_phone: str,
+    check_in: str,
+    check_out: str,
+    nights: int,
+    total: float,
+    deposit: float,
+    hotboat_ref: str | None = None,
+    confirmed: bool = False,
+):
+    """Send WhatsApp notification to admin for accommodation booking events."""
+    import os as _os, httpx as _httpx
+    token    = _os.getenv("WHATSAPP_API_TOKEN", "")
+    phone_id = _os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+    admin    = _os.getenv("ADMIN_PHONE", "56974950762")
+    if not token or not phone_id:
+        return
+
+    if confirmed:
+        header = f"✅ *Pago Confirmado — Alojamiento* ({aloj_ref})"
+        status_line = f"💳 Depósito pagado: *${int(deposit):,}*".replace(",", ".")
+    else:
+        header = f"🏠 *Nueva Reserva Alojamiento* ({aloj_ref})"
+        status_line = f"⏳ Pendiente de pago · Depósito: *${int(deposit):,}*".replace(",", ".")
+
+    lines = [
+        header,
+        "",
+        f"🏠 *Alojamiento:* {accommodation_name}",
+        f"👤 *Cliente:* {customer_name}",
+        f"📱 *Teléfono:* {customer_phone}",
+        f"📅 *Check-in:* {check_in}  →  *Check-out:* {check_out} ({nights} noche{'s' if nights!=1 else ''})",
+        f"💰 *Total:* ${int(total):,}".replace(",", "."),
+        status_line,
+    ]
+    if hotboat_ref:
+        lines.append(f"🚤 *HotBoat add-on:* {hotboat_ref}")
+
+    msg = "\n".join(lines)
+    try:
+        async with _httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"https://graph.facebook.com/v17.0/{phone_id}/messages",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"messaging_product": "whatsapp", "to": admin,
+                      "type": "text", "text": {"body": msg}},
+            )
+    except Exception as _wa_err:
+        logger.warning("WhatsApp aloj notify failed %s: %s", aloj_ref, _wa_err)
+
+
+def _email_aloj_booking(
+    *,
+    aloj_ref: str,
+    accommodation_name: str,
+    customer_name: str,
+    customer_phone: str,
+    customer_email: str,
+    check_in: str,
+    check_out: str,
+    nights: int,
+    total: float,
+    deposit: float,
+    hotboat_ref: str | None = None,
+    confirmed: bool = False,
+):
+    """Send email notification to admin for accommodation booking events."""
+    from app.config import get_settings
+    from app.email.resend_booking import send_booking_html
+
+    settings = get_settings()
+    resend_key = (getattr(settings, "resend_api_key", "") or "").strip()
+    if not resend_key:
+        logger.warning("_email_aloj_booking: no RESEND key, skipping")
+        return
+
+    from_addr = (getattr(settings, "resend_from_confirmations", "") or
+                 getattr(settings, "email_from", "onboarding@resend.dev")).strip()
+    notif_emails = (getattr(settings, "notification_emails", "") or "").strip()
+    recipients = [e.strip() for e in notif_emails.split(",") if e.strip()]
+    if not recipients:
+        recipients = ["hotboatnotification@gmail.com"]
+
+    total_fmt   = f"${int(total):,}".replace(",", ".")
+    deposit_fmt = f"${int(deposit):,}".replace(",", ".")
+
+    if confirmed:
+        subject     = f"✅ Pago Confirmado — {accommodation_name} · {aloj_ref}"
+        status_html = f"""
+        <div style="background:#ecfdf5;padding:16px;border-radius:8px;margin:16px 0;border-left:4px solid #10b981">
+          <strong style="color:#065f46">✅ Pago confirmado</strong><br>
+          Depósito recibido: <strong>{deposit_fmt}</strong>
+        </div>"""
+    else:
+        subject     = f"🏠 Nueva Reserva Alojamiento — {accommodation_name} · {aloj_ref}"
+        status_html = f"""
+        <div style="background:#fffbeb;padding:16px;border-radius:8px;margin:16px 0;border-left:4px solid #f59e0b">
+          <strong style="color:#92400e">⏳ Pendiente de pago</strong><br>
+          Depósito a cobrar: <strong>{deposit_fmt}</strong>
+        </div>"""
+
+    hotboat_row = f"<p><strong>🚤 HotBoat add-on:</strong> {hotboat_ref}</p>" if hotboat_ref else ""
+    email_row   = f"<p><strong>📧 Email:</strong> {customer_email}</p>" if customer_email else ""
+
+    html = f"""
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <h2 style="color:#1d4ed8">{'✅ Pago Confirmado — Alojamiento' if confirmed else '🏠 Nueva Reserva de Alojamiento'}</h2>
+  {status_html}
+  <div style="background:#f3f4f6;padding:20px;border-radius:8px;margin:16px 0">
+    <h3 style="margin-top:0">Detalles de la reserva</h3>
+    <p><strong>📋 Ref:</strong> {aloj_ref}</p>
+    <p><strong>🏠 Alojamiento:</strong> {accommodation_name}</p>
+    <p><strong>📅 Check-in:</strong> {check_in}</p>
+    <p><strong>📅 Check-out:</strong> {check_out} ({nights} noche{'s' if nights != 1 else ''})</p>
+    <p><strong>💰 Total:</strong> {total_fmt}</p>
+    <p><strong>👤 Cliente:</strong> {customer_name}</p>
+    <p><strong>📱 Teléfono:</strong> {customer_phone}</p>
+    {email_row}
+    {hotboat_row}
+  </div>
+  <p style="color:#9ca3af;font-size:12px;margin-top:24px">
+    Notificación automática desde la app de reservas HotBoat.
+  </p>
+</div>"""
+
+    try:
+        for recipient in recipients:
+            send_booking_html(
+                to=recipient,
+                subject=subject,
+                html=html,
+                from_address=from_addr,
+                api_key=resend_key,
+            )
+        logger.info("_email_aloj_booking sent for %s (confirmed=%s) to %s", aloj_ref, confirmed, recipients)
+    except Exception as e:
+        logger.warning("_email_aloj_booking send error %s: %s", aloj_ref, e)
 
 
 async def _notify_solicitud(req: SolicitudRequest, ref: str):
@@ -799,3 +975,476 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
         logger.warning(f"_email_accommodation_solicitud send error: {e}")
 
 
+# ── Accommodation booking ─────────────────────────────────────────────────────
+
+class AlojBookingRequest(BaseModel):
+    accommodation_id: int
+    accommodation_name: str
+    accommodation_slug: str
+    check_in: str        # YYYY-MM-DD
+    check_out: str       # YYYY-MM-DD
+    num_people: int = 1
+    price_per_night: int
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[str] = None
+    hotboat_booking_ref: Optional[str] = None   # existing HotBoat booking (skip_payment=True)
+    hotboat_date: Optional[str] = None
+    hotboat_time: Optional[str] = None
+    hotboat_people: Optional[int] = None
+    test_price: Optional[int] = None
+
+
+@router.post("/api/booking/accommodation-create")
+async def create_accommodation_booking(request: AlojBookingRequest):
+    import random, string
+    from datetime import date as _date
+    from app.db.connection import get_connection as _gc
+
+    check_in  = _date.fromisoformat(request.check_in)
+    check_out = _date.fromisoformat(request.check_out)
+    nights    = (check_out - check_in).days
+    if nights < 1:
+        raise HTTPException(status_code=400, detail="Mínimo 1 noche")
+
+    total_aloj   = request.price_per_night * nights
+    deposit_aloj = round(total_aloj * 0.5)
+
+    # Generate accommodation booking ref
+    year    = datetime.now(CHILE_TZ).year
+    suffix  = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    aloj_ref = f"HA-{year}-{suffix}"
+
+    # Optional HotBoat add-on
+    hotboat_ref     = None
+    hotboat_deposit = 0
+    if request.hotboat_booking_ref:
+        # HotBoat booking already created in DB (skip_payment=True); look up its total
+        hotboat_ref = request.hotboat_booking_ref
+        try:
+            with _gc() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
+                        (hotboat_ref,)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        hotboat_deposit = round(row[0] * 0.5)
+        except Exception as le:
+            logger.warning(f"Could not look up hotboat booking {hotboat_ref}: {le}")
+    elif request.hotboat_date and request.hotboat_time and request.hotboat_people:
+        from app.booking.db import create_booking, PRICES
+        n        = int(request.hotboat_people)
+        price_pp = PRICES.get(n, 69990)
+        hb_sub   = price_pp * n
+        hotboat_deposit = round(hb_sub * 0.5)
+        hb_result = create_booking({
+            "customer_name":  request.customer_name,
+            "customer_phone": request.customer_phone,
+            "customer_email": request.customer_email,
+            "booking_date":   request.hotboat_date,
+            "booking_time":   request.hotboat_time,
+            "num_people":     n,
+            "price_per_person": price_pp,
+            "subtotal":       hb_sub,
+            "extras_total":   0,
+            "has_flex":       False,
+            "flex_amount":    0,
+            "total_price":    hb_sub,
+            "source":         "web",
+            "notes":          f"Combinado con alojamiento: {request.accommodation_name}",
+        })
+        hotboat_ref = hb_result["booking_ref"]
+        try:
+            from app.booking.booking_email import send_email_for_trigger
+            send_email_for_trigger("admin_new_lead", hotboat_ref)
+        except Exception:
+            pass
+
+    # Save accommodation booking
+    with _gc() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO accommodation_bookings"
+                " (booking_ref, accommodation_id, accommodation_name,"
+                "  customer_name, customer_phone, customer_email,"
+                "  check_in, check_out, num_people,"
+                "  price_per_night, total_price, deposit_amount, hotboat_ref)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (aloj_ref, request.accommodation_id, request.accommodation_name,
+                 request.customer_name, request.customer_phone, request.customer_email,
+                 check_in, check_out, request.num_people,
+                 request.price_per_night, total_aloj, deposit_aloj, hotboat_ref)
+            )
+            conn.commit()
+
+    # Build WooCommerce order
+    total_deposit = deposit_aloj + hotboat_deposit
+    if request.test_price and request.test_price > 0:
+        total_deposit = request.test_price
+
+    fee_lines = [
+        {
+            "name": f"Alojamiento: {request.accommodation_name} ({nights}n {check_in.strftime('%d/%m')} al {check_out.strftime('%d/%m')})",
+            "total": str(deposit_aloj),
+        }
+    ]
+    if hotboat_ref and hotboat_deposit:
+        fee_lines.append({
+            "name": f"HotBoat {request.hotboat_people}p · {request.hotboat_date} {request.hotboat_time}",
+            "total": str(hotboat_deposit),
+        })
+
+    extra_meta = [{"key": "accommodation_booking_ref", "value": aloj_ref}]
+    if hotboat_ref:
+        extra_meta.append({"key": "hotboat_combined_ref", "value": hotboat_ref})
+
+    payment_url = None
+    try:
+        from app.payment.woocommerce import create_order as woo_create_order
+        woo_order = await woo_create_order(
+            reservation_id=0,
+            booking_ref=aloj_ref,
+            nombre=request.customer_name,
+            telefono=request.customer_phone,
+            email=request.customer_email,
+            monto_reserva=0,
+            custom_fee_lines=fee_lines,
+            extra_meta=extra_meta,
+        )
+        payment_url  = woo_order.get("payment_url")
+        woo_order_id = woo_order.get("order_id")
+        if woo_order_id:
+            with _gc() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE accommodation_bookings SET payment_order_id=%s WHERE booking_ref=%s",
+                        (str(woo_order_id), aloj_ref)
+                    )
+                    # Also link the combined order to the HotBoat booking
+                    if hotboat_ref:
+                        cur.execute(
+                            "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
+                            (str(woo_order_id), hotboat_ref)
+                        )
+                    conn.commit()
+    except Exception as pe:
+        import traceback
+        logger.warning("WooCommerce accommodation skip [%s]: %r\n%s",
+                       type(pe).__name__, str(pe), traceback.format_exc())
+
+    logger.info("accommodation-create: %s nights=%d aloj_deposit=%d hotboat_deposit=%d",
+                aloj_ref, nights, deposit_aloj, hotboat_deposit)
+
+    # Notify admin via WhatsApp
+    try:
+        await _notify_aloj_booking(
+            aloj_ref=aloj_ref,
+            accommodation_name=request.accommodation_name,
+            customer_name=request.customer_name,
+            customer_phone=request.customer_phone,
+            check_in=check_in.strftime("%d/%m/%Y"),
+            check_out=check_out.strftime("%d/%m/%Y"),
+            nights=nights,
+            total=total_aloj,
+            deposit=deposit_aloj,
+            hotboat_ref=hotboat_ref,
+            confirmed=False,
+        )
+    except Exception as _ne:
+        logger.warning("aloj notify error: %s", _ne)
+
+    # Notify admin via email
+    try:
+        import threading
+        threading.Thread(
+            target=_email_aloj_booking,
+            kwargs=dict(
+                aloj_ref=aloj_ref,
+                accommodation_name=request.accommodation_name,
+                customer_name=request.customer_name,
+                customer_phone=request.customer_phone,
+                customer_email=request.customer_email or "",
+                check_in=check_in.strftime("%d/%m/%Y"),
+                check_out=check_out.strftime("%d/%m/%Y"),
+                nights=nights,
+                total=total_aloj,
+                deposit=deposit_aloj,
+                hotboat_ref=hotboat_ref,
+                confirmed=False,
+            ),
+            daemon=True,
+        ).start()
+    except Exception as _ee:
+        logger.warning("aloj email notify error: %s", _ee)
+
+    return {"booking_ref": aloj_ref, "total_price": total_aloj, "payment_url": payment_url}
+
+
+# ── Booking page visitor tracking ─────────────────────────────────────────────
+
+# In-memory session store: session_id → {events, start_time, ...}
+_visitor_sessions: dict = {}
+_visitor_tasks: dict = {}  # session_id → asyncio.Task
+
+
+class TrackEventRequest(BaseModel):
+    event: str
+    date: Optional[str] = None
+    lang: Optional[str] = "es"
+    referrer: Optional[str] = ""
+    session_id: Optional[str] = ""
+    is_returning: Optional[bool] = False
+    utm_source: Optional[str] = ""
+    utm_medium: Optional[str] = ""
+    utm_campaign: Optional[str] = ""
+    utm_content: Optional[str] = ""
+    fbclid: Optional[str] = ""  # present = clicked a Meta ad
+
+
+@router.post("/api/booking/track")
+async def track_booking_event(body: TrackEventRequest):
+    """
+    Collects visitor events per session, then after 5 min of inactivity
+    sends a single summary email with activity timeline and classification.
+    Events are persisted to the DB for analytics on every tracked call (when session_id exists).
+    """
+    import asyncio
+    from app.booking.operator_settings import get_setting
+
+    sid = (body.session_id or "").strip()[:64]
+    if not sid:
+        return {"ok": True, "sent": False}
+
+    now_cl = datetime.now(CHILE_TZ)
+
+    try:
+        from app.booking.visitor_tracking import persist_booking_visitor_event
+
+        persist_booking_visitor_event(
+            sid,
+            (body.event or "").strip(),
+            extra_date=(body.date or "").strip() or None,
+            time_label=now_cl.strftime("%H:%M"),
+            lang=str(body.lang or "es"),
+            referrer=str(body.referrer or ""),
+            is_returning=bool(body.is_returning),
+            recorded_at=now_cl,
+        )
+    except Exception as _persist_e:
+        logger.warning("visitor event persist failed: %s", _persist_e)
+
+    if get_setting("booking_visitor_notif", "false").lower() != "true":
+        return {"ok": True, "sent": False}
+
+    if sid not in _visitor_sessions:
+        _visitor_sessions[sid] = {
+            "session_id": sid,
+            "start_time": now_cl,
+            "lang": body.lang or "es",
+            "referrer": (body.referrer or "")[:200],
+            "is_returning": body.is_returning or False,
+            "events": [],
+            "utm_source": (body.utm_source or "")[:100],
+            "utm_medium": (body.utm_medium or "")[:100],
+            "utm_campaign": (body.utm_campaign or "")[:200],
+            "utm_content": (body.utm_content or "")[:200],
+            "fbclid": bool(body.fbclid),
+        }
+
+    _visitor_sessions[sid]["events"].append({
+        "event": body.event,
+        "date": body.date,
+        "time": now_cl.strftime("%H:%M"),
+    })
+    _visitor_sessions[sid]["last_time"] = now_cl
+
+    # Cancel existing 5-min timer, restart it (reset on each new event)
+    if sid in _visitor_tasks and not _visitor_tasks[sid].done():
+        _visitor_tasks[sid].cancel()
+    _visitor_tasks[sid] = asyncio.create_task(_delayed_session_email(sid, 300))
+
+    return {"ok": True, "sent": False}
+
+
+async def _delayed_session_email(session_id: str, delay: int = 300):
+    import asyncio
+    try:
+        await asyncio.sleep(delay)
+        session = _visitor_sessions.pop(session_id, None)
+        _visitor_tasks.pop(session_id, None)
+        if session and session.get("events"):
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    None, _send_session_summary, session
+                )
+            except Exception as e:
+                logger.warning("_delayed_session_email summary failed: %s", e)
+    except asyncio.CancelledError:
+        pass  # timer was reset by a new event; a new task was already scheduled
+
+
+def _classify_visitor(events: list) -> tuple:
+    types = {e["event"] for e in events}
+    if "booking_completed" in types:
+        return "✅ Reservó", "Completó una reserva en la página"
+    if "solicitud_form" in types:
+        return "🎯 Listo para reservar", "Abrió el formulario de solicitud de reserva"
+    if "date_selected" in types:
+        return "⭐ Muy interesado", "Seleccionó una fecha en el calendario"
+    deep = types & {"view_prices", "view_alojamientos", "view_alojamiento_detail",
+                    "view_experiencias", "view_packs", "view_arma_pack"}
+    if "view_reservar" in types or len(deep) >= 2:
+        return "🔍 Explorando activamente", "Visitó varias secciones y mostró interés real"
+    if deep:
+        return "🔍 Explorando", "Revisó algunas secciones de la página"
+    return "👀 Solo mirando", "Entró a la página pero no interactuó mucho"
+
+
+def _referrer_label(referrer: str) -> str:
+    if not referrer:
+        return ""
+    r = referrer.lower()
+    if "instagram" in r:      return "📸 Instagram"
+    if "facebook" in r or "fb.com" in r: return "👥 Facebook"
+    if "tiktok" in r:         return "🎵 TikTok"
+    if "google" in r:         return "🔍 Google"
+    if "whatsapp" in r or "wa.me" in r:  return "💬 WhatsApp"
+    return referrer[:80]
+
+
+_EVENT_LABELS = {
+    "page_visit":             ("👀", "Entró a la página"),
+    "view_reservar":          ("🗓️", "Fue al calendario de reservas"),
+    "date_selected":          ("📅", "Seleccionó una fecha"),
+    "view_prices":            ("💰", "Vio los precios"),
+    "view_features":          ("⚡", "Vio las características del HotBoat"),
+    "view_ubicacion":         ("📍", "Vio cómo llegar"),
+    "view_alojamientos":      ("🏠", "Vio la lista de alojamientos"),
+    "view_alojamiento_detail":("🔍", "Vio el detalle de un alojamiento"),
+    "view_experiencias":      ("🎭", "Vio otras experiencias"),
+    "view_packs":             ("📦", "Vio los packs completos"),
+    "view_arma_pack":         ("🛠️", "Exploró Arma tu Pack"),
+    "solicitud_form":         ("📋", "Abrió formulario de solicitud"),
+    "booking_completed":      ("🎉", "Completó una reserva"),
+    "exit":                   ("🚪", "Salió de la página"),
+}
+
+
+def _build_ad_label(utm_campaign: str, utm_source: str, utm_medium: str, utm_content: str, from_fbclid: bool, referrer: str) -> str:
+    """Return a human-readable ad label for the visitor session email."""
+    if utm_campaign:
+        label = utm_campaign.replace("-", " ").replace("_", " ").title()
+        if utm_content:
+            label += f" — {utm_content.replace('-', ' ').replace('_', ' ').title()}"
+        return label
+    if from_fbclid:
+        r = referrer.lower()
+        if "instagram" in r:
+            return "Anuncio de Instagram"
+        return "Anuncio de Facebook/Meta"
+    return ""
+
+
+def _send_session_summary(session: dict):
+    from app.booking.visitor_tracking import persist_booking_visitor_session_closed
+
+    ended_at = datetime.now(CHILE_TZ)
+    events = session.get("events", []) or []
+    classification, cls_desc = _classify_visitor(events)
+    sent_ok = False
+
+    try:
+        from app.config import get_settings
+        from app.booking.booking_email import _get_admin_email, _get_from_addr
+        from app.email.resend_booking import send_booking_html
+
+        cfg = get_settings()
+        api_key   = (getattr(cfg, "resend_api_key", "") or "").strip()
+        to_addr   = _get_admin_email(cfg)
+        from_addr = _get_from_addr(cfg)
+        lang         = (session.get("lang") or "es").upper()
+        referrer     = session.get("referrer", "")
+        is_returning = session.get("is_returning", False)
+        start_time   = session.get("start_time")
+        start_str    = start_time.strftime("%d/%m/%Y %H:%M") if start_time else "—"
+        utm_campaign = (session.get("utm_campaign") or "").strip()
+        utm_source   = (session.get("utm_source") or "").strip()
+        utm_medium   = (session.get("utm_medium") or "").strip()
+        utm_content  = (session.get("utm_content") or "").strip()
+        from_fbclid  = bool(session.get("fbclid"))
+
+        if not api_key or not to_addr:
+            logger.warning("visitor_session_summary: email not configured; skipping send")
+        else:
+            ref_label = _referrer_label(referrer)
+
+            # Build ad source label
+            ad_label = _build_ad_label(utm_campaign, utm_source, utm_medium, utm_content, from_fbclid, referrer)
+
+            rows = ""
+            for ev in events:
+                icon, label = _EVENT_LABELS.get(ev["event"], ("•", ev["event"]))
+                extra = f" — <strong>{ev['date']}</strong>" if ev.get("date") else ""
+                rows += (f'<tr>'
+                         f'<td style="color:#888;font-size:.8rem;padding:.25rem .6rem;white-space:nowrap">{ev["time"]}</td>'
+                         f'<td style="padding:.25rem .6rem">{icon} {label}{extra}</td>'
+                         f'</tr>')
+
+            ref_row = (f'<tr><td style="color:#888;padding:.3rem 0">Origen</td>'
+                       f'<td><strong>{ref_label}</strong></td></tr>') if ref_label else ""
+
+            ad_row = (f'<tr><td style="color:#888;padding:.3rem 0">📢 Anuncio</td>'
+                      f'<td><strong style="color:#f5c842">{ad_label}</strong></td></tr>') if ad_label else ""
+
+            subject = f"{classification} · {start_str}"
+            html = f"""
+<div style="font-family:sans-serif;max-width:520px;margin:auto;padding:1.5rem;
+            background:#1a1a2e;color:#e0e0e0;border-radius:12px">
+  <h2 style="color:#f5c842;margin-bottom:.2rem">Resumen de visita</h2>
+  <p style="color:#888;margin-top:0;font-size:.85rem">{start_str}</p>
+
+  <div style="background:#252540;border-radius:8px;padding:1rem;margin:1rem 0">
+    <div style="font-size:1.3rem;margin-bottom:.3rem">{classification}</div>
+    <div style="color:#aaa;font-size:.85rem">{cls_desc}</div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem;margin-bottom:1rem">
+    <tr>
+      <td style="color:#888;padding:.3rem 0;width:45%">Idioma</td>
+      <td><strong>{lang}</strong></td>
+    </tr>
+    <tr>
+      <td style="color:#888;padding:.3rem 0">Tipo de visita</td>
+      <td><strong>{'🔁 Visitante recurrente' if is_returning else '🆕 Primera visita'}</strong></td>
+    </tr>
+    {ref_row}
+    {ad_row}
+    <tr>
+      <td style="color:#888;padding:.3rem 0">Acciones</td>
+      <td><strong>{len(events)}</strong></td>
+    </tr>
+  </table>
+
+  <div style="font-size:.8rem;color:#888;margin-bottom:.4rem">📋 Actividad registrada:</div>
+  <table style="width:100%;font-size:.85rem;background:#252540;border-radius:8px;
+                padding:.4rem;border-collapse:collapse">
+    {rows}
+  </table>
+</div>"""
+
+            send_booking_html(to=to_addr, subject=subject, html=html,
+                              from_address=from_addr, api_key=api_key)
+            sent_ok = True
+            logger.info("visitor_session_summary sent: sid=%s events=%d cls=%s",
+                        session.get("session_id", "?"), len(events), classification)
+    except Exception as e:
+        logger.warning("_send_session_summary error: %s", e)
+
+    try:
+        persist_booking_visitor_session_closed(
+            session, classification, cls_desc, sent_ok, ended_at,
+        )
+    except Exception as pe:
+        logger.warning("visitor_session DB persist failed: %s", pe)

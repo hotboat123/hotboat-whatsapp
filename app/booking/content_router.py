@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from app.db.connection import get_connection
 
@@ -87,7 +87,12 @@ def list_alojamientos(active_only: bool = True):
     with get_connection() as conn:
         with conn.cursor() as cur:
             q = ("SELECT id,slug,name,group_name,icon,description,"
-                 "price_from,cost_from,capacity,image_path,is_active,display_order"
+                 "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                 "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                 "COALESCE(group_name_en,'') AS group_name_en,COALESCE(group_name_pt,'') AS group_name_pt,"
+                 "price_from,cost_from,capacity,image_path,"
+                 "COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                 "is_active,display_order"
                  " FROM alojamientos")
             if active_only:
                 q += " WHERE is_active=TRUE"
@@ -95,6 +100,62 @@ def list_alojamientos(active_only: bool = True):
             cur.execute(q)
             cols = [d.name for d in cur.description]
             return {"alojamientos": [dict(zip(cols, r)) for r in cur.fetchall()]}
+
+
+@content_router.get("/api/content/accommodation-availability/{slug}")
+def get_accommodation_availability(slug: str):
+    """
+    Returns fully_booked_dates (all units taken — disabled in calendar)
+    and admin-blocked ranges (solicitud flow — look normal, different outcome).
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, COALESCE(total_units,1) FROM alojamientos WHERE slug=%s AND is_active=TRUE",
+                (slug,)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Alojamiento no encontrado")
+            aloj_id, total_units = row[0], max(int(row[1]), 1)
+
+            # Dates where every unit is booked (count of overlapping confirmed bookings >= total_units)
+            cur.execute(
+                """
+                SELECT gs.d::text
+                FROM generate_series(
+                    CURRENT_DATE,
+                    CURRENT_DATE + INTERVAL '365 days',
+                    INTERVAL '1 day'
+                ) AS gs(d)
+                WHERE (
+                    SELECT COUNT(*) FROM accommodation_bookings ab
+                    WHERE ab.accommodation_id = %s
+                      AND ab.status NOT IN ('cancelled')
+                      AND ab.check_in  <= gs.d
+                      AND ab.check_out  > gs.d
+                ) >= %s
+                ORDER BY gs.d
+                """,
+                (aloj_id, total_units)
+            )
+            fully_booked = [r[0] for r in cur.fetchall()]
+
+            cur.execute(
+                "SELECT start_date::text, end_date::text, reason"
+                " FROM accommodation_blocked_dates"
+                " WHERE accommodation_id=%s AND end_date >= CURRENT_DATE"
+                " ORDER BY start_date",
+                (aloj_id,)
+            )
+            blocked = [{"start": r[0], "end": r[1], "reason": r[2]} for r in cur.fetchall()]
+
+            return {
+                "alojamiento_id": aloj_id,
+                "total_units": total_units,
+                "fully_booked_dates": fully_booked,
+                "blocked": blocked,
+            }
 
 
 @content_router.get("/api/content/experiencias")
@@ -413,3 +474,61 @@ async def public_create_extras_booking(body: PublicExtrasBookingBody):
     except Exception as e:
         logger.error(f"public extras booking error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── Public coupon validation ────────────────────────────────────────────────
+
+@content_router.get("/api/booking/coupon/{code}")
+def validate_coupon(code: str, booking_date: str = Query(None)):
+    """Validate a coupon code and return its discount info (public endpoint).
+    Pass booking_date=YYYY-MM-DD to also validate against booking date constraints.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, code, name, discount_percent, discount_fixed,
+                       extra_description, max_uses, uses_count,
+                       valid_from, expires_at, booking_date_from, booking_date_to, rules
+                FROM coupons
+                WHERE UPPER(code)=UPPER(%s) AND is_active=TRUE
+            """, (code.strip(),))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Cupón no válido o inactivo")
+            cols = ["id","code","name","discount_percent","discount_fixed",
+                    "extra_description","max_uses","uses_count",
+                    "valid_from","expires_at","booking_date_from","booking_date_to","rules"]
+            c = dict(zip(cols, row))
+            from datetime import date
+            today = date.today()
+            # Check code window: not yet active
+            if c["valid_from"] and c["valid_from"] > today:
+                raise HTTPException(status_code=410,
+                    detail=f"Este cupón estará activo a partir del {c['valid_from'].strftime('%d/%m/%Y')}")
+            # Check code window: expired
+            if c["expires_at"] and c["expires_at"] < today:
+                raise HTTPException(status_code=410, detail="Este cupón ha expirado")
+            # Check max uses
+            if c["max_uses"] and c["uses_count"] >= c["max_uses"]:
+                raise HTTPException(status_code=410, detail="Este cupón ya alcanzó el límite de usos")
+            # Check booking date constraints
+            if booking_date:
+                try:
+                    bdate = date.fromisoformat(booking_date)
+                    if c["booking_date_from"] and bdate < c["booking_date_from"]:
+                        raise HTTPException(status_code=410,
+                            detail=f"Este cupón aplica para reservas desde el {c['booking_date_from'].strftime('%d/%m/%Y')}")
+                    if c["booking_date_to"] and bdate > c["booking_date_to"]:
+                        raise HTTPException(status_code=410,
+                            detail=f"Este cupón solo aplica para reservas hasta el {c['booking_date_to'].strftime('%d/%m/%Y')}")
+                except ValueError:
+                    pass
+            return {
+                "valid": True,
+                "code": c["code"],
+                "name": c["name"],
+                "discount_percent": float(c["discount_percent"] or 0),
+                "discount_fixed": float(c["discount_fixed"] or 0),
+                "extra_description": c["extra_description"] or "",
+                "rules": c["rules"] or [],
+            }

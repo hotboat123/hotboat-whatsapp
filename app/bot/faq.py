@@ -74,7 +74,7 @@ class FAQHandler:
 _*niños pagan desde los 6 años_
 
 Aquí puedes reservar tu horario directo 👇
-https://hotboatchile.com/es/book-hotboat/""",
+https://whatsapp.hotboat.cl/booking""",
             
             "valor": "precio",  # Alias
             "valores": "precio",  # Alias
@@ -316,16 +316,13 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
     
     def is_menu_number(self, message: str) -> Optional[int]:
         """
-        Check if message is a menu number selection (1-8)
-        
-        Args:
-            message: User's message
-        
+        Check if message is a menu number selection (1-9)
+
         Returns:
-            Number selected (1-8) or None
+            Number selected (1-9) or None
         """
         message_stripped = message.strip()
-        
+
         # Check for emoji numbers
         menu_numbers = {
             "1️⃣": 1,
@@ -336,28 +333,28 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
             "6️⃣": 6,
             "7️⃣": 7,
             "8️⃣": 8,
+            "9️⃣": 9,
         }
-        
+
         # Check exact match with emoji
         if message_stripped in menu_numbers:
             return menu_numbers[message_stripped]
-        
+
         # Check for plain numbers (just the digit, possibly with spaces)
         message_lower = message.lower().strip()
-        if message_lower in ["1", "2", "3", "4", "5", "6", "7", "8"]:
+        if message_lower in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]:
             return int(message_lower)
-        
+
         # Check if message starts with a number (e.g., "1 disponibilidad")
         first_char = message_lower[0] if message_lower else ""
-        if first_char in ["1", "2", "3", "4", "5", "6", "7", "8"]:
+        if first_char in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]:
             try:
-                # Try to parse just the number
                 num = int(first_char)
-                if 1 <= num <= 8:
+                if 1 <= num <= 9:
                     return num
             except ValueError:
                 pass
-        
+
         return None
     
     def is_multiple_menu_numbers(self, message: str) -> Optional[list]:

@@ -222,24 +222,42 @@ class AvailabilityChecker:
             try:
                 from app.booking.operator_settings import (
                     get_vacation_days, is_urgency_mode, apply_urgency_filter,
-                    get_operating_hours_as_ints
+                    get_operating_hours_as_ints, get_urgency_days,
                 )
                 vacation_dates = {
                     v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
                 }
-                urgency = is_urgency_mode()
+                global_urgency = is_urgency_mode()
                 db_operating_hours = get_operating_hours_as_ints()
+                # Build per-day urgency override map: {date_str: bool}
+                urgency_day_overrides = {
+                    v["date"]: v["enabled"]
+                    for v in get_urgency_days(start_date.date(), end_date.date())
+                }
             except Exception as se:
                 logger.warning(f"Could not load operator settings: {se}")
                 vacation_dates = set()
-                urgency = False
+                global_urgency = False
                 db_operating_hours = None
+                urgency_day_overrides = {}
 
-            # Generate all possible slots and check availability
-            available_slots = []
-            # For urgency: track booked times per day from booknetic
+            # Determine effective urgency for each day (override wins over global)
+            def _day_urgency(date_str: str) -> bool:
+                if date_str in urgency_day_overrides:
+                    return urgency_day_overrides[date_str]
+                return global_urgency
+
+            # Pre-compute urgency hour expansion for days that need it
+            any_urgency = global_urgency or any(v for v in urgency_day_overrides.values())
             booked_times_by_day: dict = {}
-            if urgency:
+            hours_urgency_expanded: list = db_operating_hours  # fallback
+            if any_urgency and db_operating_hours:
+                from app.booking.operator_settings import get_urgency_config
+                _gap = int(get_urgency_config().get("gap_hours", 3))
+                _min_h = max(8,  min(db_operating_hours) - _gap)
+                _max_h = min(22, max(db_operating_hours) + _gap)
+                hours_urgency_expanded = list(range(_min_h, _max_h + 1))
+                # Track booked times per day (only needed for urgency filtering)
                 for slot in booked_slots:
                     if slot.get("starts_at"):
                         try:
@@ -252,18 +270,6 @@ class AvailabilityChecker:
                         except Exception:
                             pass
 
-            # In urgency mode generate a full hourly range so the filter can find
-            # slots at booking ± gap_hours (e.g. 18:00 booked → 15:00 candidate).
-            # Outside urgency, use only the configured operating hours.
-            if urgency and db_operating_hours:
-                from app.booking.operator_settings import get_urgency_config
-                _gap = int(get_urgency_config().get("gap_hours", 3))
-                _min_h = max(8,  min(db_operating_hours) - _gap)
-                _max_h = min(22, max(db_operating_hours) + _gap)
-                hours_to_generate = list(range(_min_h, _max_h + 1))
-            else:
-                hours_to_generate = db_operating_hours
-
             # Group raw available slots by date (before urgency filter)
             by_date: dict = {}
             current_date = start_date.date()
@@ -274,6 +280,10 @@ class AvailabilityChecker:
                 if str(current_date) in vacation_dates:
                     current_date += timedelta(days=1)
                     continue
+
+                # Use expanded hour range only for days with urgency active
+                dk_str = str(current_date)
+                hours_to_generate = hours_urgency_expanded if _day_urgency(dk_str) else db_operating_hours
 
                 date_slots = self._generate_time_slots_for_date(
                     datetime.combine(current_date, time(0, 0)),
@@ -315,9 +325,11 @@ class AvailabilityChecker:
                 
                 current_date += timedelta(days=1)
 
-            # Apply urgency filter per day if enabled
-            if urgency:
+            # Apply urgency filter per day (global or per-day override)
+            if any_urgency:
                 for dk, day_slots in by_date.items():
+                    if not _day_urgency(dk):
+                        continue
                     times = [s["time"] for s in day_slots]
                     booked = booked_times_by_day.get(dk, [])
                     allowed = set(apply_urgency_filter(times, booked))
@@ -427,7 +439,7 @@ class AvailabilityChecker:
 💡 *Te sugiero:*
 • Consultar disponibilidad para *mañana*
 • Ver disponibilidad para *esta semana*
-• Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
+• Visitar nuestro sitio: https://whatsapp.hotboat.cl/booking
 
 ¿Te gustaría que revise disponibilidad para mañana o esta semana? 🚤"""
                 elif specific_date_requested:
@@ -452,7 +464,7 @@ class AvailabilityChecker:
 💡 *Te sugiero:*
 • Consultar disponibilidad para *otro día*
 • Reservar con *anticipación*
-• Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
+• Visitar nuestro sitio: https://whatsapp.hotboat.cl/booking
 
 ¿Te gustaría que revise disponibilidad para otra fecha? 🚤"""
                 else:
@@ -463,7 +475,7 @@ class AvailabilityChecker:
 💡 *Te sugiero:*
 • Consultar disponibilidad para la *próxima semana*
 • Reservar con *anticipación*
-• Visitar nuestro sitio: https://hotboatchile.com/es/book-hotboat/
+• Visitar nuestro sitio: https://whatsapp.hotboat.cl/booking
 
 ¿Te gustaría que revise disponibilidad para otra fecha? 🚤"""
             
@@ -538,7 +550,7 @@ class AvailabilityChecker:
             response_parts.append("• *\"4 de noviembre a las 15 para 2 personas\"*")
             response_parts.append("\nYo lo agrego al carrito automáticamente 🚤")
             response_parts.append("\n💡 También puedes reservar directamente aquí:")
-            response_parts.append("https://hotboatchile.com/es/book-hotboat/")
+            response_parts.append("https://whatsapp.hotboat.cl/booking")
             
             return "\n".join(response_parts)
             

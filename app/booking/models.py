@@ -15,6 +15,7 @@ class CreateBookingRequest(BaseModel):
     customer_phone: str
     customer_email: Optional[str] = None
     customer_birthday: Optional[str] = None  # YYYY-MM-DD, optional
+    customer_language: Optional[str] = "es"  # es / en / pt
     booking_date: str
     booking_time: str
     num_people: int
@@ -23,6 +24,7 @@ class CreateBookingRequest(BaseModel):
     notes: Optional[str] = None
     source: str = "web"
     test_price: Optional[int] = None  # Override total for testing (e.g. 100 CLP)
+    skip_payment: bool = False         # Create booking in DB but skip WooCommerce order
 
 
 class BookingResponse(BaseModel):

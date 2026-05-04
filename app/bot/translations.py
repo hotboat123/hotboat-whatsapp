@@ -55,8 +55,6 @@ Digite o número do seu idioma"""
 
 Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥
 
-Estoy al mando para ayudarte con todas tus dudas sobre nuestras experiencias flotantes en la laguna 🌊
-
 Puedes preguntarme por:
 
 1️⃣ *Disponibilidad y horarios HotBoat*
@@ -71,11 +69,7 @@ Puedes preguntarme por:
 
 6️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*
 
-7️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*
-
-8️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*
-
-Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *9️⃣* 👨‍✈️🌿
+Si prefieres hablar con el *Capitán Tomás*, escribe *"Llamar a Tomás"*, *"Ayuda"*, o simplemente *7️⃣* 👨‍✈️🌿
 
 ¿Listo para zarpar, grumete? ⛵
 
@@ -85,12 +79,10 @@ Si quieres cambiar de idioma, escribe:
 
 🇧🇷 portugués
 🇺🇸 inglés""",
-        
+
         "en": """🥬 Ahoy, sailor! ⚓
 
 I'm *Popeye the Sailor*, second mate of *HotBoat Chile* 🚤🔥
-
-I'm here to help you with every question about our floating experiences on the lagoon 🌊
 
 You can ask me about:
 
@@ -106,11 +98,7 @@ You can ask me about:
 
 6️⃣ *Pucón Accommodations (Domes · Cabins · Hostel)*
 
-7️⃣ *Other Pucón Experiences (Rafting, horseback riding, sailing)*
-
-8️⃣ *Complete Packages Pucón (Romantic · Family · Friends · Build Your Pack)*
-
-If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *9️⃣* 👨‍✈️🌿
+If you'd rather talk to *Captain Tomás*, write *"Call Tomás"*, *"Help"*, or simply *7️⃣* 👨‍✈️🌿
 
 Ready to set sail, sailor? ⛵
 
@@ -120,12 +108,10 @@ If you'd like to switch languages, type:
 
 🇪🇸 spanish
 🇧🇷 portuguese""",
-        
+
         "pt": """🥬 Ahoy, marujo! ⚓
 
 Eu sou *Popeye o Marinheiro*, segundo imediato do *HotBoat Chile* 🚤🔥
-
-Estou no comando para ajudar com todas as tuas dúvidas sobre nossas experiências flutuantes na lagoa 🌊
 
 Você pode me perguntar sobre:
 
@@ -141,11 +127,7 @@ Você pode me perguntar sobre:
 
 6️⃣ *Hospedagens Pucón (Domos · Cabanas · Hostel)*
 
-7️⃣ *Outras Experiências Pucón (Rafting, cavalgadas, vela)*
-
-8️⃣ *Pacotes Completos Pucón (Romântico · Familiar · Amigos · Monte seu Pacote)*
-
-Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *9️⃣* 👨‍✈️🌿
+Se preferir falar com o *Capitão Tomás*, escreva *"Ligar para Tomás"*, *"Ajuda"*, ou simplesmente *7️⃣* 👨‍✈️🌿
 
 Pronto para zarpar, marujo? ⛵
 
@@ -436,7 +418,7 @@ Gostaria de reservar sua experiência?"""
 _*niños pagan desde los 6 años_
 
 Aquí puedes reservar tu horario directo 👇
-https://hotboatchile.com/es/book-hotboat/""",
+https://whatsapp.hotboat.cl/booking""",
         
         "en": """💰 *HotBoat Prices:*
 
@@ -467,7 +449,7 @@ https://hotboatchile.com/es/book-hotboat/""",
 _*children pay from 6 years old_
 
 Book your time slot here 👇
-https://hotboatchile.com/en/book-hotboat/""",
+https://whatsapp.hotboat.cl/booking""",
         
         "pt": """💰 *Preços HotBoat:*
 
@@ -498,7 +480,7 @@ https://hotboatchile.com/en/book-hotboat/""",
 _*crianças pagam a partir dos 6 anos_
 
 Reserve seu horário aqui 👇
-https://hotboatchile.com/pt/book-hotboat/"""
+https://whatsapp.hotboat.cl/booking"""
     },
     
     # Location

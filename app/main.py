@@ -12,6 +12,10 @@ import httpx
 from app.booking.router import router as booking_router
 from app.booking.admin_router import admin_router
 from app.booking.content_router import content_router
+from app.booking.signatures_router import signatures_router
+from app.booking.stock_router import stock_router
+from app.booking.financial_router import financial_router
+from app.meta_pixel import apply_meta_pixel_placeholder, is_meta_pixel_enabled
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
@@ -43,8 +47,39 @@ logger = logging.getLogger(__name__)
 # Reduce httpx logging noise (403 errors from expired media)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+# ── In-memory log buffer (last 500 lines, queryable via /api/admin/logs) ──────
+from app.log_buffer import install as _install_log_buffer
+_install_log_buffer()
+
 # Get settings
 settings = get_settings()
+if is_meta_pixel_enabled(settings.meta_pixel_id):
+    logger.info(
+        "Meta Pixel: enabled — HTML pages will include the base code (booking, pagar, chat, firma)."
+    )
+else:
+    import os
+
+    present = [
+        k
+        for k in ("META_PIXEL_ID", "FACEBOOK_PIXEL_ID", "FB_PIXEL_ID")
+        if (os.environ.get(k) or "").strip() != ""
+    ]
+    if not present:
+        msg = (
+            "Meta Pixel: disabled — no META_PIXEL_ID / FACEBOOK_PIXEL_ID / FB_PIXEL_ID in "
+            "this service's environment (check Railway → correct service + redeploy)."
+        )
+    else:
+        msg = (
+            "Meta Pixel: disabled — env var(s) set (%s) but value is not a usable numeric "
+            "Pixel ID (copy only the digits from Events Manager; save + redeploy)."
+            % ", ".join(present)
+        )
+    if settings.is_production:
+        logger.warning(msg)
+    else:
+        logger.info(msg)
 
 # ── Auto-sync background task ──────────────────────────────────────────────────
 SYNC_INTERVAL_MINUTES = 30
@@ -71,7 +106,6 @@ async def _run_auto_sync():
 
             inserted_reservas = 0
             updated_reservas = 0
-            inserted_book = 0
             inserted_hb = 0
             status_updated = 0
 
@@ -172,48 +206,6 @@ async def _run_auto_sync():
                     """)
                     dedup_deleted = cur.rowcount
 
-                    # Sync booknetic (do NOT filter by MAX(reservas_con_extras.fecha): that max is usually
-                    # a *future* date, which would skip all earlier Booknetic appointments e.g. April when June exists)
-                    cur.execute("""
-                        SELECT id, customer_name, customer_email, starts_at, status, raw, created_at
-                        FROM booknetic_appointments
-                        WHERE starts_at IS NOT NULL
-                          AND starts_at::date >= (CURRENT_DATE - INTERVAL '3 years')
-                          AND starts_at::date <= (CURRENT_DATE + INTERVAL '3 years')
-                    """)
-                    for row in cur.fetchall():
-                        bid, nombre, email, starts_at, status, raw, created = row
-                        raw = raw or {}
-                        sid = str(bid)
-                        cur.execute(
-                            f"""SELECT id, source, status FROM {TABLE}
-                                WHERE (source = 'booknetic' AND source_id = %s)
-                                   OR (appointment_id IS NOT NULL AND TRIM(appointment_id::text) = %s)
-                                LIMIT 1""",
-                            (sid, sid),
-                        )
-                        existing = cur.fetchone()
-                        if existing:
-                            ex_id, ex_src, ex_st = existing[0], existing[1], existing[2]
-                            if ex_src == "booknetic" and status and status != ex_st:
-                                cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s", (status, ex_id))
-                                status_updated += 1
-                            continue
-                        else:
-                            phone = normalize_phone(raw.get("phone") or raw.get("customer_phone") or raw.get("cf_phone"))
-                            fecha = starts_at.date() if hasattr(starts_at, 'date') else starts_at
-                            hora = starts_at.strftime("%H:%M") if hasattr(starts_at, 'strftime') else "10:00"
-                            num_p = raw.get("num_people") or raw.get("persons") or 2
-                            total = float(raw.get("total_price") or raw.get("total") or 0)
-                            cur.execute(f"""
-                                INSERT INTO {TABLE}
-                                (source,source_id,fecha,hora,nombre_cliente,email,telefono,
-                                 servicio,num_personas,ingreso_total,status,created_at)
-                                VALUES ('booknetic',%s,%s,%s,%s,%s,%s,'HotBoat Booknetic',%s,%s,%s,NOW())
-                                ON CONFLICT DO NOTHING
-                            """, (str(bid), fecha, hora, nombre, email, phone, str(num_p), total, status or "confirmed"))
-                            inserted_book += 1
-
                     # Sync hotboat_web — exclude cancelled/rejected so deleted bookings stay deleted
                     cur.execute("""
                         SELECT booking_ref, customer_name, customer_email, customer_phone,
@@ -252,7 +244,7 @@ async def _run_auto_sync():
 
                     conn.commit()
 
-            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), +{inserted_book} booknetic, +{inserted_hb} web, {status_updated} estados")
+            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), +{inserted_hb} web, {status_updated} estados")
 
             # Clean up stale pending_payment web bookings (older than 45 min)
             try:
@@ -261,7 +253,7 @@ async def _run_auto_sync():
                         cur.execute("""
                             DELETE FROM hotboat_appointments
                             WHERE status = 'pending_payment'
-                              AND created_at < NOW() - INTERVAL '10 minutes'
+                              AND created_at < NOW() - INTERVAL '45 minutes'
                         """)
                         deleted = cur.rowcount
                         conn.commit()
@@ -276,8 +268,22 @@ async def _run_auto_sync():
         await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
 
 
+async def _run_pending_payment_email_scheduler():
+    """Every 3 minutes: send booking_created email to bookings still pending after 5 min."""
+    await asyncio.sleep(60)  # short delay after startup
+    while True:
+        try:
+            from app.booking.booking_email import run_pending_payment_email_sweep
+            result = await asyncio.to_thread(run_pending_payment_email_sweep, 5)
+            if result.get("sent", 0) or result.get("errors"):
+                logger.info("📧 pending-payment sweep: %s", result)
+        except Exception as _pe:
+            logger.error("Pending-payment sweep error: %s", _pe)
+        await asyncio.sleep(180)  # every 3 minutes
+
+
 async def _run_email_sweeps_scheduler():
-    """Run followup + birthday email sweeps every hour (DB flags ensure idempotency)."""
+    """Run followup + birthday email sweeps every 30 min (DB flags ensure idempotency)."""
     await asyncio.sleep(120)  # brief delay after startup
     while True:
         try:
@@ -291,7 +297,71 @@ async def _run_email_sweeps_scheduler():
                     logger.error("Email sweep %s error: %s", name, _se)
         except Exception as _fe:
             logger.error("Email sweeps scheduler error: %s", _fe)
-        await asyncio.sleep(3600)  # re-check every hour
+        await asyncio.sleep(1800)  # re-check every 30 minutes
+
+
+async def _run_daily_summary_scheduler():
+    """Every morning at 08:00 Santiago time, send the day's booking summary to the operator."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta, time as dtime
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    SEND_HOUR = 8  # 08:00 Santiago
+
+    while True:
+        now = datetime.now(CHILE_TZ)
+        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_secs = (target - now).total_seconds()
+        logger.info("📅 Daily summary scheduled in %.0f min (at %s Santiago)", wait_secs / 60, target.strftime("%H:%M %d/%m"))
+        await asyncio.sleep(wait_secs)
+        try:
+            from app.booking.booking_email import send_daily_summary_email
+            result = await asyncio.to_thread(send_daily_summary_email)
+            logger.info("📅 Daily summary: %s", result)
+        except Exception as _e:
+            logger.error("Daily summary scheduler error: %s", _e)
+        await asyncio.sleep(60)  # safety gap to avoid double-fire
+
+
+async def _run_signature_summary_scheduler():
+    """Every morning at 09:00 Santiago, send T&C signature summary for today's bookings."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    SEND_HOUR = 9  # 09:00 Santiago
+
+    while True:
+        now = datetime.now(CHILE_TZ)
+        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_secs = (target - now).total_seconds()
+        logger.info("✍️ Signature summary scheduled in %.0f min (at %s Santiago)", wait_secs / 60, target.strftime("%H:%M %d/%m"))
+        await asyncio.sleep(wait_secs)
+        try:
+            from app.booking.signatures_email import run_daily_signature_summary_sweep
+            result = await asyncio.to_thread(run_daily_signature_summary_sweep)
+            logger.info("✍️ Signature summary sweep: %s", result)
+        except Exception as _e:
+            logger.error("Signature summary scheduler error: %s", _e)
+        await asyncio.sleep(60)
+
+
+async def _run_pre_booking_notif_scheduler():
+    """Every 10 min: check for bookings starting in ~60 min and notify admin."""
+    POLL_SECONDS = 600  # 10 minutes
+    # Small initial delay so startup traffic settles before first check
+    await asyncio.sleep(30)
+    while True:
+        try:
+            from app.booking.signatures_email import run_pre_booking_notif_sweep
+            result = await asyncio.to_thread(run_pre_booking_notif_sweep)
+            if result.get("sent"):
+                logger.info("⏰ Pre-booking notif sweep: %s", result)
+        except Exception as _e:
+            logger.error("Pre-booking notif scheduler error: %s", _e)
+        await asyncio.sleep(POLL_SECONDS)
 
 
 def _ensure_extras_visibility_table():
@@ -337,12 +407,44 @@ async def lifespan(app: FastAPI):
         CartManager.refresh_prices_from_db()
     except Exception as _e:
         logger.warning(f"Cart price refresh skipped: {_e}")
-    sync_task = asyncio.create_task(_run_auto_sync())
-    email_task = asyncio.create_task(_run_email_sweeps_scheduler())
+    try:
+        from app.booking.db import load_prices_from_db
+        load_prices_from_db()
+    except Exception as _e:
+        logger.warning(f"Booking prices refresh skipped: {_e}")
+    try:
+        from app.booking.operator_settings import seed_email_workflow_defaults
+        seed_email_workflow_defaults()
+    except Exception as _e:
+        logger.warning(f"Email workflow seed skipped: {_e}")
+    # Apply any missing DB columns (idempotent migrations)
+    try:
+        from app.booking.db import ensure_db_columns
+        ensure_db_columns()
+        logger.info("✅ DB columns ensured (customer_language, pre_booking_notif_sent_at, extra_images)")
+    except Exception as _e:
+        logger.warning(f"ensure_db_columns skipped: {_e}")
+    # Ensure signatures table exists
+    try:
+        from app.booking.db import ensure_signatures_table
+        ensure_signatures_table()
+    except Exception as _e:
+        logger.warning(f"ensure_signatures_table skipped: {_e}")
+
+    sync_task       = asyncio.create_task(_run_auto_sync())
+    email_task      = asyncio.create_task(_run_email_sweeps_scheduler())
+    pending_task    = asyncio.create_task(_run_pending_payment_email_scheduler())
+    daily_task      = asyncio.create_task(_run_daily_summary_scheduler())
+    sig_task        = asyncio.create_task(_run_signature_summary_scheduler())
+    prebooking_task = asyncio.create_task(_run_pre_booking_notif_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
-    logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 1 h)")
+    logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
+    logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
+    logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
+    logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
+    logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
     yield
-    for task in (sync_task, email_task):
+    for task in (sync_task, email_task, pending_task, daily_task, sig_task, prebooking_task):
         task.cancel()
         try:
             await task
@@ -389,10 +491,25 @@ conversation_manager = ConversationManager()
 app.include_router(booking_router)
 app.include_router(admin_router)
 app.include_router(content_router)
+app.include_router(signatures_router)
+app.include_router(stock_router)
+app.include_router(financial_router)
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
+    """Redirect root to booking page"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/booking", status_code=302)
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_redirect():
+    """Redirect /admin to admin reservas panel"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/admin/reservas", status_code=302)
+
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_ui():
     """Serve Kia-Ai chat interface"""
     try:
         static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -401,7 +518,8 @@ async def root():
         if os.path.exists(index_path):
             logger.info(f"🖥️ Serving Kia-Ai interface from {index_path}")
             with open(index_path, 'r', encoding='utf-8') as f:
-                return HTMLResponse(content=f.read())
+                body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
+                return HTMLResponse(content=body)
         else:
             logger.warning("⚠️ Kia-Ai interface not found, returning default health response.")
             environment_status = "🚀 PRODUCTION" if settings.is_production else "🧪 STAGING" if settings.is_staging else "💻 DEVELOPMENT"
@@ -432,7 +550,8 @@ async def pago_page():
     path = os.path.join(static_dir, "pagar.html")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+            content = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
+        return HTMLResponse(content=content)
     return HTMLResponse("<h1>Página no encontrada</h1>", status_code=404)
 
 
@@ -462,6 +581,7 @@ async def pago_order_proxy(order_id: int):
             "payment_url": data.get("payment_url") or
                 f"{WOO_URL}/checkout/order-pay/{order_id}/?pay_for_order=true&key={data.get('order_key','')}",
             "billing":    data.get("billing", {}),
+            "fee_lines":  [{"name": fl["name"], "total": fl.get("total","0")} for fl in fee_lines],
             "meta": {
                 "fecha":    match_f.group(1) if match_f else meta_map.get("hotboat_fecha",""),
                 "personas": match_p.group(1) if match_p else "",

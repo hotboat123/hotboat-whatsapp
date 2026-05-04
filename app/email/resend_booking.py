@@ -12,9 +12,11 @@ def send_booking_html(
     from_address: str,
     api_key: str,
     bcc: Optional[List[str]] = None,
+    reply_to: Optional[str] = None,
 ) -> dict:
     """
     Returns Resend API response dict, or raises on failure.
+    reply_to: if set, customer replies go to this address instead of the From address.
     """
     import resend
 
@@ -30,6 +32,8 @@ def send_booking_html(
     }
     if bcc:
         payload["bcc"] = bcc
+    if reply_to:
+        payload["reply_to"] = [reply_to]
     result = resend.Emails.send(payload)
     logger.info("Resend booking email sent to %s id=%s", to, result.get("id", "?"))
     return result

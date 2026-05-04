@@ -1,12 +1,22 @@
 """
 Configuration management using Pydantic Settings
 """
-from pydantic_settings import BaseSettings
+import os
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
     """Application settings"""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        env_ignore_empty=True,
+        extra="ignore",
+    )
     
     # Database
     database_url: str
@@ -26,6 +36,10 @@ class Settings(BaseSettings):
     business_phone: str = "+56 9 75780920"
     business_email: str = "info@hotboatchile.com"
     business_website: str = "https://hotboatchile.com/es/"
+    # Meta Pixel (optional). Injected on /pagar for PageView + InitiateCheckout.
+    meta_pixel_id: str = ""
+    # Meta Marketing API token for ad name lookup (optional — falls back to whatsapp_api_token)
+    meta_marketing_token: str = ""
     
     # Automations
     automation_phone_numbers: str = ""  # Comma-separated phone numbers for automation notifications
@@ -39,6 +53,8 @@ class Settings(BaseSettings):
     # Optional BCC for every transactional booking email (comma-separated)
     resend_bcc_booking: str = ""
     notification_emails: str = ""  # Comma-separated list of emails to notify
+    # Direct URL of the logo image used in booking emails (must be publicly accessible)
+    email_logo_url: str = ""
     
     # SMTP Email Configuration (alternative to Resend)
     email_host: str = ""
@@ -68,10 +84,22 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         """Check if running in development"""
         return self.environment.lower() == "development"
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+
+    @model_validator(mode="after")
+    def resolve_meta_pixel_id_from_aliases(self):
+        """Railway/UI may use another env name or paste IDs with invisible characters."""
+        from app.meta_pixel import is_meta_pixel_enabled
+
+        if is_meta_pixel_enabled(self.meta_pixel_id):
+            return self
+        for key in ("META_PIXEL_ID", "FACEBOOK_PIXEL_ID", "FB_PIXEL_ID"):
+            raw = os.environ.get(key)
+            if raw is None:
+                continue
+            if is_meta_pixel_enabled(raw):
+                object.__setattr__(self, "meta_pixel_id", str(raw).strip())
+                break
+        return self
 
 
 @lru_cache()

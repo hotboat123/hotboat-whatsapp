@@ -35,6 +35,8 @@ async def create_order(
     monto_extras: float = 0.0,
     fecha: str | None = None,
     num_personas: int | None = None,
+    custom_fee_lines: list | None = None,
+    extra_meta: list | None = None,
 ) -> dict:
     """
     Create a WooCommerce order and return its payment URL.
@@ -46,21 +48,15 @@ async def create_order(
           "status": str,
         }
     """
-    total = monto_reserva + monto_extras
-
-    # Build line items as fee_lines (no product catalog needed)
-    label = f"HotBoat{f' {num_personas}p' if num_personas else ''}{f' · {fecha}' if fecha else ''}"
-    fee_lines = [
-        {
-            "name": label,
-            "total": str(int(monto_reserva)),
-        }
-    ]
-    if monto_extras > 0:
-        fee_lines.append({
-            "name": "Extras",
-            "total": str(int(monto_extras)),
-        })
+    if custom_fee_lines is not None:
+        fee_lines = custom_fee_lines
+        total = sum(float(f["total"]) for f in fee_lines)
+    else:
+        total = monto_reserva + monto_extras
+        label = f"HotBoat{f' {num_personas}p' if num_personas else ''}{f' · {fecha}' if fecha else ''}"
+        fee_lines = [{"name": label, "total": str(int(monto_reserva))}]
+        if monto_extras > 0:
+            fee_lines.append({"name": "Extras", "total": str(int(monto_extras))})
 
     # Split name into first/last for WooCommerce billing
     parts = (nombre or "Cliente").strip().split()
@@ -81,12 +77,15 @@ async def create_order(
         "meta_data": [
             {"key": "hotboat_reservation_id", "value": str(reservation_id)},
             {"key": "hotboat_booking_ref",    "value": booking_ref or ""},
+            *(extra_meta or []),
         ],
         "customer_note": f"Reserva #{reservation_id} – HotBoat Chile",
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(f"{_API}/orders", auth=_AUTH, json=payload)
+        if not resp.is_success:
+            logger.error("WooCommerce order error %s: %s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
         data = resp.json()
 
