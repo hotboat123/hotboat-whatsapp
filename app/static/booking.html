@@ -1726,16 +1726,37 @@ async function _submitAlojBooking(){
     customer_email: document.getElementById('ab-email')?.value||null,
   };
   try{
-    const r = await fetch('/api/booking/accommodation-create',{method:'POST',
+    const r = await fetch('/api/booking/accommodation-create',{
+      method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    }).then(d=>d.json());
-    if(r.payment_url){
-      window.location.href=r.payment_url;
-    } else {
-      showToast(t('alojPayErr'));
-      if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.detail || t('alojPayErr'));
+    if(j.payment_url){
+      window.location.href=j.payment_url;
+      return;
     }
+    if(j.requires_email){
+      const ref=j.booking_ref||'';
+      const box=document.getElementById('aloj-booking-result');
+      if(box){
+        box.innerHTML=`
+        <div class="card" style="text-align:center;padding:1.2rem;margin-top:.75rem">
+          <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
+          <div class="card-title">${t('addonHighSeasonTitle')}</div>
+          <p style="color:var(--muted);margin-top:.6rem">
+            ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+          </p>
+          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
+          <button class="btn btn-secondary" style="margin-top:1rem" onclick="showAlojamientos()">${t('alojMoreOptions')}</button>
+        </div>`;
+      }
+      if(btn){btn.disabled=false;btn.textContent=t('alojPayLodging');}
+      return;
+    }
+    showToast(t('alojPayErr'));
+    if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
   }catch(e){
     showToast(t('alojConnErr'));
     if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
@@ -2565,6 +2586,19 @@ async function submitBooking(){
       if(!ar.ok) throw new Error(adata.detail || 'Error al crear reserva alojamiento');
       S.bookingRef = adata.booking_ref;
       S.paymentUrl = adata.payment_url;
+      if(!adata.payment_url && adata.requires_email){
+        mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+          <div style="font-size:3rem;margin-bottom:1rem">📧</div>
+          <div class="card-title">${t('addonHighSeasonTitle')}</div>
+          <p style="color:var(--muted);margin-top:.6rem">
+            ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+          </p>
+          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${adata.booking_ref}</strong></p>
+          <p style="color:var(--muted);margin-top:.5rem;font-size:.82rem">HotBoat: <strong>${data.booking_ref}</strong></p>
+          <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">${t('backToMenu')}</button>
+        </div>`;
+        return;
+      }
       // Combined totals: HotBoat + accommodation
       const alojTotal = alojPayload.price_per_night * alojNights;
       const alojDeposit = Math.round(alojTotal * 0.5);

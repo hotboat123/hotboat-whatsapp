@@ -64,6 +64,7 @@ from app.booking.operator_settings import (
     get_setting, set_setting, is_urgency_mode,
     get_operating_hours, set_operating_hours,
     get_urgency_days, set_urgency_day, remove_urgency_day,
+    normalize_urgency_entity,
 )
 
 
@@ -753,19 +754,24 @@ async def delete_vacation(fecha: str, x_admin_key: str = Header("")):
 async def list_urgency_days(
     desde: Optional[str] = Query(None),
     hasta: Optional[str] = Query(None),
+    entity_type: str = Query("hotboat"),
+    entity_slug: str = Query("", description="Product slug alojamiento / experiencia / pack; vacío = HotBoat global"),
     x_admin_key: str = Header(""),
 ):
     _check_auth(x_admin_key)
     from datetime import date as _date
     fd = _date.fromisoformat(desde) if desde else None
     td = _date.fromisoformat(hasta) if hasta else None
-    return {"urgency_days": get_urgency_days(fd, td)}
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    return {"urgency_days": get_urgency_days(fd, td, entity_type=et, entity_slug=slug)}
 
 
 class UrgencyDayRequest(BaseModel):
     date: str
     enabled: bool = True
     reason: Optional[str] = ""
+    entity_type: str = "hotboat"
+    entity_slug: str = ""
 
 
 @admin_router.post("/api/admin/urgency-days")
@@ -773,7 +779,8 @@ async def add_urgency_day_route(body: UrgencyDayRequest, x_admin_key: str = Head
     _check_auth(x_admin_key)
     from datetime import date as _date
     d = _date.fromisoformat(body.date)
-    ok = set_urgency_day(d, body.enabled, body.reason or "")
+    et, slug = normalize_urgency_entity(body.entity_type, body.entity_slug)
+    ok = set_urgency_day(d, body.enabled, body.reason or "", entity_type=et, entity_slug=slug)
     if not ok:
         raise HTTPException(status_code=500, detail="Error setting urgency day")
     # Invalidate cached availability so day override applies immediately.
@@ -786,11 +793,17 @@ async def add_urgency_day_route(body: UrgencyDayRequest, x_admin_key: str = Head
 
 
 @admin_router.delete("/api/admin/urgency-days/{fecha}")
-async def delete_urgency_day_route(fecha: str, x_admin_key: str = Header("")):
+async def delete_urgency_day_route(
+    fecha: str,
+    entity_type: str = Query("hotboat"),
+    entity_slug: str = Query("", description="Product slug; vacío = HotBoat global"),
+    x_admin_key: str = Header(""),
+):
     _check_auth(x_admin_key)
     from datetime import date as _date
     d = _date.fromisoformat(fecha)
-    ok = remove_urgency_day(d)
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    ok = remove_urgency_day(d, entity_type=et, entity_slug=slug)
     # Invalidate cached availability so day override removal applies immediately.
     try:
         from app.booking import router as _booking_router

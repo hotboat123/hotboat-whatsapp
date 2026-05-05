@@ -21,6 +21,7 @@ from app.booking.db import (
 )
 from app.bot.availability import AvailabilityChecker
 from app.availability.availability_config import AVAILABILITY_CONFIG
+from app.booking.operator_settings import is_high_season_web_addon
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -1372,6 +1373,9 @@ async def create_accommodation_booking(request: AlojBookingRequest):
     if nights < 1:
         raise HTTPException(status_code=400, detail="Mínimo 1 noche")
 
+    slug_hs = (request.accommodation_slug or "").strip() or str(request.accommodation_id)
+    high_season_aloj = is_high_season_web_addon(check_in, "alojamiento", slug_hs)
+
     total_aloj   = request.price_per_night * nights
     deposit_aloj = round(total_aloj * 0.5)
 
@@ -1454,7 +1458,6 @@ async def create_accommodation_booking(request: AlojBookingRequest):
     # Calendario de extras (admin): duplicamos fila; end_date = check_out igual que accommodation_bookings
     # (último día como salida/registro — coincide con texto de mail y WooCommerce).
     try:
-        slug_for_extras = (request.accommodation_slug or "").strip() or str(request.accommodation_id)
         nt_parts = [f"Pago web · {aloj_ref}"]
         if hotboat_ref:
             nt_parts.append(f"HotBoat: {hotboat_ref}")
@@ -1470,7 +1473,7 @@ async def create_accommodation_booking(request: AlojBookingRequest):
                         request.customer_name,
                         request.customer_phone,
                         "alojamiento",
-                        slug_for_extras,
+                        slug_hs,
                         request.accommodation_name,
                         check_in,
                         check_out,
@@ -1524,47 +1527,64 @@ async def create_accommodation_booking(request: AlojBookingRequest):
         extra_meta.append({"key": "hotboat_combined_ref", "value": hotboat_ref})
 
     payment_url = None
-    try:
-        from app.payment.woocommerce import create_order as woo_create_order
-        woo_order = await woo_create_order(
-            reservation_id=0,
-            booking_ref=aloj_ref,
-            nombre=request.customer_name,
-            telefono=request.customer_phone,
-            email=request.customer_email,
-            monto_reserva=0,
-            custom_fee_lines=fee_lines,
-            extra_meta=extra_meta,
-        )
-        payment_url  = woo_order.get("payment_url")
-        woo_order_id = woo_order.get("order_id")
-        if woo_order_id:
-            with _gc() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "UPDATE accommodation_bookings SET payment_order_id=%s WHERE booking_ref=%s",
-                        (str(woo_order_id), aloj_ref)
-                    )
-                    # Also link the combined order to the HotBoat booking
-                    if hotboat_ref:
+    if not high_season_aloj:
+        try:
+            from app.payment.woocommerce import create_order as woo_create_order
+            woo_order = await woo_create_order(
+                reservation_id=0,
+                booking_ref=aloj_ref,
+                nombre=request.customer_name,
+                telefono=request.customer_phone,
+                email=request.customer_email,
+                monto_reserva=0,
+                custom_fee_lines=fee_lines,
+                extra_meta=extra_meta,
+            )
+            payment_url  = woo_order.get("payment_url")
+            woo_order_id = woo_order.get("order_id")
+            if woo_order_id:
+                with _gc() as conn:
+                    with conn.cursor() as cur:
                         cur.execute(
-                            "UPDATE all_appointments SET payment_order_id=%s, updated_at=NOW() "
-                            "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
-                            (str(woo_order_id), hotboat_ref),
+                            "UPDATE accommodation_bookings SET payment_order_id=%s WHERE booking_ref=%s",
+                            (str(woo_order_id), aloj_ref)
                         )
-                        if cur.rowcount == 0:
+                        # Also link the combined order to the HotBoat booking
+                        if hotboat_ref:
                             cur.execute(
-                                "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
+                                "UPDATE all_appointments SET payment_order_id=%s, updated_at=NOW() "
+                                "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
                                 (str(woo_order_id), hotboat_ref),
                             )
-                    conn.commit()
-    except Exception as pe:
-        import traceback
-        logger.warning("WooCommerce accommodation skip [%s]: %r\n%s",
-                       type(pe).__name__, str(pe), traceback.format_exc())
+                            if cur.rowcount == 0:
+                                cur.execute(
+                                    "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
+                                    (str(woo_order_id), hotboat_ref),
+                                )
+                        conn.commit()
+        except Exception as pe:
+            import traceback
+            logger.warning("WooCommerce accommodation skip [%s]: %r\n%s",
+                           type(pe).__name__, str(pe), traceback.format_exc())
+    else:
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE accommodation_bookings SET deposit_amount=0 WHERE booking_ref=%s",
+                    (aloj_ref,),
+                )
+                cur.execute(
+                    "UPDATE extras_bookings SET deposit_paid=0, status='pendiente' "
+                    "WHERE booking_ref=%s AND item_type='alojamiento'",
+                    (aloj_ref,),
+                )
+                conn.commit()
 
-    logger.info("accommodation-create: %s nights=%d aloj_deposit=%d hotboat_deposit=%d",
-                aloj_ref, nights, deposit_aloj, hotboat_deposit)
+    deposit_for_notify = 0 if high_season_aloj else deposit_aloj
+    logger.info(
+        "accommodation-create: %s nights=%d aloj_deposit=%d hotboat_deposit=%d high_season=%s",
+        aloj_ref, nights, deposit_for_notify, hotboat_deposit, high_season_aloj,
+    )
 
     # Notify admin via WhatsApp
     try:
@@ -1577,7 +1597,7 @@ async def create_accommodation_booking(request: AlojBookingRequest):
             check_out=check_out.strftime("%d/%m/%Y"),
             nights=nights,
             total=total_aloj,
-            deposit=deposit_aloj,
+            deposit=deposit_for_notify,
             hotboat_ref=hotboat_ref,
             confirmed=False,
         )
@@ -1599,7 +1619,7 @@ async def create_accommodation_booking(request: AlojBookingRequest):
                 check_out=check_out.strftime("%d/%m/%Y"),
                 nights=nights,
                 total=total_aloj,
-                deposit=deposit_aloj,
+                deposit=deposit_for_notify,
                 hotboat_ref=hotboat_ref,
                 confirmed=False,
             ),
@@ -1608,7 +1628,10 @@ async def create_accommodation_booking(request: AlojBookingRequest):
     except Exception as _ee:
         logger.warning("aloj email notify error: %s", _ee)
 
-    return {"booking_ref": aloj_ref, "total_price": total_aloj, "payment_url": payment_url}
+    out: dict = {"booking_ref": aloj_ref, "total_price": total_aloj, "payment_url": payment_url}
+    if high_season_aloj:
+        out["requires_email"] = True
+    return out
 
 
 class ExperienceBookingRequest(BaseModel):
@@ -1646,14 +1669,6 @@ def _gen_extras_booking_ref(prefix: str) -> str:
 
     suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
     return f"{prefix}-{year}-{suffix}"
-
-
-def _is_high_season_for_date(d) -> bool:
-    """Treat urgency-day as 'temporada alta' for web add-ons (no online payment)."""
-    from app.booking.operator_settings import is_urgency_mode, get_urgency_day_override
-
-    override = get_urgency_day_override(d)
-    return (override if override is not None else is_urgency_mode()) is True
 
 
 def _date_fromiso(d: Optional[str]):
@@ -1730,7 +1745,7 @@ async def create_experience_booking(request: ExperienceBookingRequest):
     hotboat_ref = (request.hotboat_booking_ref or "").strip()
 
     # High season: no online payment, coordinate manually
-    if _is_high_season_for_date(start_d):
+    if is_high_season_web_addon(start_d, "experience", request.experience_slug):
         with _gc() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -1877,7 +1892,7 @@ async def create_pack_booking(request: PackBookingRequest):
 
     hotboat_ref = (request.hotboat_booking_ref or "").strip()
 
-    if _is_high_season_for_date(start_d):
+    if is_high_season_web_addon(start_d, "pack", request.pack_slug):
         with _gc() as conn:
             with conn.cursor() as cur:
                 cur.execute(

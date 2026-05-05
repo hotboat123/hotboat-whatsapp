@@ -5,7 +5,7 @@ All settings stored in hotboat_settings (key/value) table.
 import json
 import logging
 from datetime import date, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 
 from app.db.connection import get_connection
 
@@ -130,47 +130,109 @@ def remove_vacation_day(d: date) -> bool:
 
 # ── Per-day urgency overrides ─────────────────────────────────────────────────
 
-def get_urgency_days(from_date: Optional[date] = None, to_date: Optional[date] = None) -> list:
-    """Return list of {date, enabled, reason} for days with urgency override."""
+
+def normalize_urgency_entity(entity_type: str, entity_slug: str) -> Tuple[str, str]:
+    """Canonical scope for urgency_days rows (also used by admin APIs)."""
+    et = (entity_type or "hotboat").strip().lower()
+    if et not in ("hotboat", "experience", "pack", "alojamiento"):
+        et = "hotboat"
+    slug = (entity_slug or "").strip()
+    if len(slug) > 160:
+        slug = slug[:160]
+    return et, slug
+
+
+def get_urgency_days(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    *,
+    entity_type: str = "hotboat",
+    entity_slug: str = "",
+) -> list:
+    """Return list of {date, enabled, reason, entity_type, entity_slug} for the given scope."""
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                wheres, params = [], []
+                wheres, params = ["entity_type = %s", "entity_slug = %s"], [et, slug]
                 if from_date:
-                    wheres.append("fecha >= %s"); params.append(from_date)
+                    wheres.append("fecha >= %s")
+                    params.append(from_date)
                 if to_date:
-                    wheres.append("fecha <= %s"); params.append(to_date)
-                where = ("WHERE " + " AND ".join(wheres)) if wheres else ""
-                cur.execute(f"SELECT fecha, enabled, reason FROM urgency_days {where} ORDER BY fecha", params)
-                return [{"date": str(r[0]), "enabled": r[1], "reason": r[2] or ""} for r in cur.fetchall()]
+                    wheres.append("fecha <= %s")
+                    params.append(to_date)
+                where = "WHERE " + " AND ".join(wheres)
+                cur.execute(
+                    f"SELECT fecha, enabled, reason, entity_type, entity_slug FROM urgency_days {where} ORDER BY fecha",
+                    params,
+                )
+                return [
+                    {
+                        "date": str(r[0]),
+                        "enabled": r[1],
+                        "reason": r[2] or "",
+                        "entity_type": r[3],
+                        "entity_slug": r[4] or "",
+                    }
+                    for r in cur.fetchall()
+                ]
     except Exception as e:
         logger.error(f"get_urgency_days failed: {e}")
         return []
 
 
-def get_urgency_day_override(d: date) -> Optional[bool]:
-    """
-    Returns True/False if the day has an explicit override, None if no override.
-    """
+def get_urgency_day_override_for_scope(d: date, entity_type: str, entity_slug: str) -> Optional[bool]:
+    """True/False if the day has an explicit override for this scope, None if no row."""
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT enabled FROM urgency_days WHERE fecha=%s", (d,))
+                cur.execute(
+                    "SELECT enabled FROM urgency_days WHERE entity_type=%s AND entity_slug=%s AND fecha=%s",
+                    (et, slug, d),
+                )
                 row = cur.fetchone()
                 return row[0] if row else None
     except Exception:
         return None
 
 
-def set_urgency_day(d: date, enabled: bool, reason: str = "") -> bool:
+def get_urgency_day_override(d: date) -> Optional[bool]:
+    """HotBoat/global slot urgency override (entity_type=hotboat, empty slug)."""
+    return get_urgency_day_override_for_scope(d, "hotboat", "")
+
+
+def is_high_season_web_addon(d: date, entity_type: str, entity_slug: str) -> bool:
+    """
+    Temporada alta for web extras (no online payment / requires email):
+    product-specific urgency row wins; otherwise same rule as global HotBoat calendar.
+    """
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    ov = get_urgency_day_override_for_scope(d, et, slug)
+    if ov is not None:
+        return ov is True
+    g = get_urgency_day_override(d)
+    return (g if g is not None else is_urgency_mode()) is True
+
+
+def set_urgency_day(
+    d: date,
+    enabled: bool,
+    reason: str = "",
+    *,
+    entity_type: str = "hotboat",
+    entity_slug: str = "",
+) -> bool:
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO urgency_days (fecha, enabled, reason)
-                       VALUES (%s, %s, %s)
-                       ON CONFLICT (fecha) DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason""",
-                    (d, enabled, reason),
+                    """INSERT INTO urgency_days (entity_type, entity_slug, fecha, enabled, reason)
+                       VALUES (%s, %s, %s, %s, %s)
+                       ON CONFLICT (entity_type, entity_slug, fecha)
+                       DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason""",
+                    (et, slug, d, enabled, reason),
                 )
                 conn.commit()
         return True
@@ -179,11 +241,20 @@ def set_urgency_day(d: date, enabled: bool, reason: str = "") -> bool:
         return False
 
 
-def remove_urgency_day(d: date) -> bool:
+def remove_urgency_day(
+    d: date,
+    *,
+    entity_type: str = "hotboat",
+    entity_slug: str = "",
+) -> bool:
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM urgency_days WHERE fecha=%s", (d,))
+                cur.execute(
+                    "DELETE FROM urgency_days WHERE entity_type=%s AND entity_slug=%s AND fecha=%s",
+                    (et, slug, d),
+                )
                 conn.commit()
         return True
     except Exception as e:
