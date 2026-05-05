@@ -182,23 +182,65 @@ def get_accommodation_availability(slug: str):
 
 
 @content_router.get("/api/content/experiencias")
-def list_experiencias(active_only: bool = True):
+def list_experiencias(active_only: bool = True, lang: str = Query("es", description="es | en | pt")):
+    lang = (lang or "es").lower().strip()[:2]
+    if lang not in ("es", "en", "pt"):
+        lang = "es"
     with get_connection() as conn:
         with conn.cursor() as cur:
-            q = "SELECT id,slug,name,icon,description,price_per_person,cost_per_person,image_path,is_active,display_order FROM experiences"
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS name_en TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS name_pt TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_en TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_pt TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+            q = (
+                "SELECT id,slug,name,icon,description,"
+                "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
+                "price_per_person,cost_per_person,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "is_active,display_order FROM experiences"
+            )
             if active_only:
                 q += " WHERE is_active=TRUE"
             q += " ORDER BY display_order,id"
             cur.execute(q)
             cols = [d.name for d in cur.description]
-            return {"experiences": [dict(zip(cols, r)) for r in cur.fetchall()]}
+            rows = []
+            for r in cur.fetchall():
+                row = dict(zip(cols, r))
+                if lang == "en":
+                    row["name"] = (row.get("name_en") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_en") or "").strip() or row.get("description")
+                elif lang == "pt":
+                    row["name"] = (row.get("name_pt") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_pt") or "").strip() or row.get("description")
+                rows.append(row)
+            return {"experiences": rows}
 
 
 @content_router.get("/api/content/packs")
-def list_packs(active_only: bool = True):
+def list_packs(active_only: bool = True, lang: str = Query("es", description="es | en | pt")):
+    lang = (lang or "es").lower().strip()[:2]
+    if lang not in ("es", "en", "pt"):
+        lang = "es"
     with get_connection() as conn:
         with conn.cursor() as cur:
-            q = "SELECT id,slug,name,icon,description,personas,price_from,cost_from,image_path,includes,is_active,display_order FROM packs"
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS name_en TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS name_pt TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_en TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_pt TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+            q = (
+                "SELECT id,slug,name,icon,description,"
+                "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
+                "personas,price_from,cost_from,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "includes,is_active,display_order FROM packs"
+            )
             if active_only:
                 q += " WHERE is_active=TRUE"
             q += " ORDER BY display_order,id"
@@ -210,6 +252,12 @@ def list_packs(active_only: bool = True):
                 if isinstance(row.get("includes"), str):
                     import json
                     row["includes"] = json.loads(row["includes"])
+                if lang == "en":
+                    row["name"] = (row.get("name_en") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_en") or "").strip() or row.get("description")
+                elif lang == "pt":
+                    row["name"] = (row.get("name_pt") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_pt") or "").strip() or row.get("description")
                 rows.append(row)
             return {"packs": rows}
 

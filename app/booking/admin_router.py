@@ -2355,14 +2355,37 @@ def _exp_row(r, cols):
     return row
 
 
+def _ensure_experiences_admin_columns(cur) -> None:
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS name_en TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS name_pt TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_en TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_pt TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+
+
+def _ensure_packs_admin_columns(cur) -> None:
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS name_en TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS name_pt TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_en TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_pt TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+
+
 @admin_router.get("/api/admin/experiencias")
 async def admin_list_experiencias(x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_experiences_admin_columns(cur)
             cur.execute(
-                "SELECT id,slug,name,icon,description,price_per_person,cost_per_person,"
-                "image_path,is_active,display_order FROM experiences ORDER BY display_order,id"
+                "SELECT id,slug,name,icon,description,"
+                "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
+                "price_per_person,cost_per_person,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "is_active,display_order FROM experiences ORDER BY display_order,id"
             )
             cols = [d.name for d in cur.description]
             return {"experiences": [_exp_row(r, cols) for r in cur.fetchall()]}
@@ -2373,9 +2396,15 @@ class ExperienceBody(BaseModel):
     name: str
     icon: str = "🚣"
     description: str = ""
+    name_en: str = ""
+    name_pt: str = ""
+    description_en: str = ""
+    description_pt: str = ""
+    admin_whatsapp: str = ""
     price_per_person: int = 0
     cost_per_person: int = 0
     image_path: Optional[str] = None
+    extra_images: List[str] = []
     is_active: bool = True
     display_order: int = 0
 
@@ -2385,12 +2414,15 @@ async def admin_create_experiencia(body: ExperienceBody, x_admin_key: str = Head
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_experiences_admin_columns(cur)
             cur.execute(
-                "INSERT INTO experiences (slug,name,icon,description,price_per_person,cost_per_person,image_path,is_active,display_order)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-                (body.slug, body.name, body.icon, body.description,
+                "INSERT INTO experiences (slug,name,icon,description,name_en,name_pt,description_en,description_pt,"
+                "admin_whatsapp,price_per_person,cost_per_person,image_path,extra_images,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
+                (body.slug, body.name, body.icon, body.description, body.name_en, body.name_pt,
+                 body.description_en, body.description_pt, body.admin_whatsapp,
                  body.price_per_person, body.cost_per_person,
-                 body.image_path, body.is_active, body.display_order),
+                 body.image_path, json.dumps(body.extra_images), body.is_active, body.display_order),
             )
             new_id = cur.fetchone()[0]
             conn.commit()
@@ -2402,13 +2434,16 @@ async def admin_update_experiencia(exp_id: int, body: ExperienceBody, x_admin_ke
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_experiences_admin_columns(cur)
             cur.execute(
                 "UPDATE experiences SET slug=%s,name=%s,icon=%s,description=%s,"
-                "price_per_person=%s,cost_per_person=%s,image_path=%s,is_active=%s,"
+                "name_en=%s,name_pt=%s,description_en=%s,description_pt=%s,admin_whatsapp=%s,"
+                "price_per_person=%s,cost_per_person=%s,image_path=%s,extra_images=%s::jsonb,is_active=%s,"
                 "display_order=%s,updated_at=NOW() WHERE id=%s",
                 (body.slug, body.name, body.icon, body.description,
+                 body.name_en, body.name_pt, body.description_en, body.description_pt, body.admin_whatsapp,
                  body.price_per_person, body.cost_per_person,
-                 body.image_path, body.is_active, body.display_order, exp_id),
+                 body.image_path, json.dumps(body.extra_images), body.is_active, body.display_order, exp_id),
             )
             conn.commit()
     return {"ok": True}
@@ -2427,16 +2462,32 @@ async def admin_delete_experiencia(exp_id: int, x_admin_key: str = Header(...)):
 @admin_router.post("/api/admin/experiencias/{exp_id}/image")
 async def admin_upload_exp_image(exp_id: int, file: UploadFile = File(...), x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
+    import time as _time
     ext = os.path.splitext(file.filename or "img.jpg")[1].lower() or ".jpg"
-    dest_dir = os.path.join(MEDIA_ROOT, "images", "experiencias", f"exp_{exp_id}")
-    os.makedirs(dest_dir, exist_ok=True)
-    dest = os.path.join(dest_dir, f"main{ext}")
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    rel = f"/media/images/experiencias/exp_{exp_id}/main{ext}"
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "images", "experiencias", f"exp_{exp_id}")
+    os.makedirs(static_dir, exist_ok=True)
+    ts = int(_time.time())
+    filename = f"img_{ts}{ext}"
+    dest = os.path.join(static_dir, filename)
+    with open(dest, "wb") as fh:
+        shutil.copyfileobj(file.file, fh)
+    rel = f"/static/images/experiencias/exp_{exp_id}/{filename}"
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("UPDATE experiences SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, exp_id))
+            _ensure_experiences_admin_columns(cur)
+            cur.execute("SELECT image_path, COALESCE(extra_images,'[]'::jsonb) FROM experiences WHERE id=%s", (exp_id,))
+            row = cur.fetchone()
+            if row:
+                existing_main = row[0]
+                existing_extra = list(row[1]) if row[1] else []
+                if not existing_main:
+                    cur.execute("UPDATE experiences SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, exp_id))
+                else:
+                    existing_extra.append(rel)
+                    cur.execute(
+                        "UPDATE experiences SET extra_images=%s::jsonb,updated_at=NOW() WHERE id=%s",
+                        (json.dumps(existing_extra), exp_id),
+                    )
             conn.commit()
     return {"ok": True, "image_path": rel}
 
@@ -2606,9 +2657,14 @@ async def admin_list_packs(x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_packs_admin_columns(cur)
             cur.execute(
-                "SELECT id,slug,name,icon,description,personas,price_from,cost_from,"
-                "image_path,includes,is_active,display_order FROM packs ORDER BY display_order,id"
+                "SELECT id,slug,name,icon,description,"
+                "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
+                "personas,price_from,cost_from,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "includes,is_active,display_order FROM packs ORDER BY display_order,id"
             )
             cols = [d.name for d in cur.description]
             rows = []
@@ -2625,10 +2681,16 @@ class PackBody(BaseModel):
     name: str
     icon: str = "🎁"
     description: str = ""
+    name_en: str = ""
+    name_pt: str = ""
+    description_en: str = ""
+    description_pt: str = ""
+    admin_whatsapp: str = ""
     personas: str = "2 personas"
     price_from: int = 0
     cost_from: int = 0
     image_path: Optional[str] = None
+    extra_images: List[str] = []
     includes: List[str] = []
     is_active: bool = True
     display_order: int = 0
@@ -2639,11 +2701,16 @@ async def admin_create_pack(body: PackBody, x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_packs_admin_columns(cur)
             cur.execute(
-                "INSERT INTO packs (slug,name,icon,description,personas,price_from,cost_from,image_path,includes,is_active,display_order)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
-                (body.slug, body.name, body.icon, body.description, body.personas,
+                "INSERT INTO packs (slug,name,icon,description,name_en,name_pt,description_en,description_pt,"
+                "admin_whatsapp,personas,price_from,cost_from,image_path,extra_images,includes,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s) RETURNING id",
+                (body.slug, body.name, body.icon, body.description,
+                 body.name_en, body.name_pt, body.description_en, body.description_pt, body.admin_whatsapp,
+                 body.personas,
                  body.price_from, body.cost_from, body.image_path,
+                 json.dumps(body.extra_images, ensure_ascii=False),
                  json.dumps(body.includes, ensure_ascii=False),
                  body.is_active, body.display_order),
             )
@@ -2657,12 +2724,17 @@ async def admin_update_pack(pack_id: int, body: PackBody, x_admin_key: str = Hea
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_packs_admin_columns(cur)
             cur.execute(
-                "UPDATE packs SET slug=%s,name=%s,icon=%s,description=%s,personas=%s,"
-                "price_from=%s,cost_from=%s,image_path=%s,includes=%s::jsonb,"
+                "UPDATE packs SET slug=%s,name=%s,icon=%s,description=%s,"
+                "name_en=%s,name_pt=%s,description_en=%s,description_pt=%s,admin_whatsapp=%s,"
+                "personas=%s,price_from=%s,cost_from=%s,image_path=%s,extra_images=%s::jsonb,includes=%s::jsonb,"
                 "is_active=%s,display_order=%s,updated_at=NOW() WHERE id=%s",
-                (body.slug, body.name, body.icon, body.description, body.personas,
+                (body.slug, body.name, body.icon, body.description,
+                 body.name_en, body.name_pt, body.description_en, body.description_pt, body.admin_whatsapp,
+                 body.personas,
                  body.price_from, body.cost_from, body.image_path,
+                 json.dumps(body.extra_images, ensure_ascii=False),
                  json.dumps(body.includes, ensure_ascii=False),
                  body.is_active, body.display_order, pack_id),
             )
@@ -2683,16 +2755,32 @@ async def admin_delete_pack(pack_id: int, x_admin_key: str = Header(...)):
 @admin_router.post("/api/admin/packs/{pack_id}/image")
 async def admin_upload_pack_image(pack_id: int, file: UploadFile = File(...), x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
+    import time as _time
     ext = os.path.splitext(file.filename or "img.jpg")[1].lower() or ".jpg"
-    dest_dir = os.path.join(MEDIA_ROOT, "images", "packs", f"pack_{pack_id}")
-    os.makedirs(dest_dir, exist_ok=True)
-    dest = os.path.join(dest_dir, f"main{ext}")
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    rel = f"/media/images/packs/pack_{pack_id}/main{ext}"
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "images", "packs", f"pack_{pack_id}")
+    os.makedirs(static_dir, exist_ok=True)
+    ts = int(_time.time())
+    filename = f"img_{ts}{ext}"
+    dest = os.path.join(static_dir, filename)
+    with open(dest, "wb") as fh:
+        shutil.copyfileobj(file.file, fh)
+    rel = f"/static/images/packs/pack_{pack_id}/{filename}"
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("UPDATE packs SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, pack_id))
+            _ensure_packs_admin_columns(cur)
+            cur.execute("SELECT image_path, COALESCE(extra_images,'[]'::jsonb) FROM packs WHERE id=%s", (pack_id,))
+            row = cur.fetchone()
+            if row:
+                existing_main = row[0]
+                existing_extra = list(row[1]) if row[1] else []
+                if not existing_main:
+                    cur.execute("UPDATE packs SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, pack_id))
+                else:
+                    existing_extra.append(rel)
+                    cur.execute(
+                        "UPDATE packs SET extra_images=%s::jsonb,updated_at=NOW() WHERE id=%s",
+                        (json.dumps(existing_extra), pack_id),
+                    )
             conn.commit()
     return {"ok": True, "image_path": rel}
 

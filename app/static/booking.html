@@ -758,8 +758,8 @@ let DYN_ALOJAMIENTOS = [];
 async function loadDynamicContent(){
   try{
     const [er, pr, ar, ms] = await Promise.all([
-      fetch('/api/content/experiencias').then(r=>r.json()),
-      fetch('/api/content/packs').then(r=>r.json()),
+      fetch(`/api/content/experiencias?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
+      fetch(`/api/content/packs?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
       fetch('/api/content/alojamientos').then(r=>r.json()),
       fetch('/api/content/menu-settings').then(r=>r.json()).catch(()=>({})),
     ]);
