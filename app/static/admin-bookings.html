@@ -1113,8 +1113,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">⚡ Modo Genera Urgencia</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
-          En la web/WhatsApp aparecen como disponibles (<strong>todos los Horarios HotBoat libres</strong>) unidos a los semilleros de abajo.<br>
-          Sin reservas: esos horarios combinados si están libres. Con reservas: también se ofrecen huecos ± diferencia de horas junto a cada reserva.
+          El día se genera con un <strong>rango de horas</strong> alrededor del horario HotBoat (± diferencia entre slots); sobre ese grid solo se marcan disponibles los <strong>semilleros</strong> de abajo que queden libres.<br>
+          Si dejas la lista de semillas <strong>vacía</strong> y guardas, se usan <strong>todos</strong> los Horarios HotBoat como semillas (comportamiento amplio). Con reservas reales: además se pueden ofrecer huecos ± diferencia de horas junto a cada reserva.
         </p>
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem">
           <label class="toggle-wrap">
@@ -1127,7 +1127,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <!-- Urgency config -->
         <div style="border-top:1px solid var(--border);padding-top:1rem;display:flex;flex-direction:column;gap:1rem">
           <div>
-            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">Semillas extra (opcional)</label>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">Semillas (horarios a mostrar)</label>
             <div id="seed-chips" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem"></div>
             <div style="display:flex;gap:.5rem;align-items:center">
               <input type="time" id="new-seed-input" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.85rem">

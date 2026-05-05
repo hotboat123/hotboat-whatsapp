@@ -217,28 +217,44 @@ class AvailabilityChecker:
                         'date': dt.date()
                     })
             
-            # Load vacation days and settings once
+            # Load vacation days and settings — each piece isolated so one DB/query failure
+            # does not silently disable urgency for everyone (old behaviour reset global_urgency=False).
+            vacation_dates: set = set()
+            global_urgency = False
+            db_operating_hours = None
+            urgency_day_overrides: dict = {}
             try:
                 from app.booking.operator_settings import (
-                    get_vacation_days, is_urgency_mode, apply_urgency_filter,
-                    get_operating_hours_as_ints, get_urgency_days,
+                    get_vacation_days,
+                    is_urgency_mode,
+                    apply_urgency_filter,
+                    get_operating_hours_as_ints,
+                    get_urgency_days,
                 )
-                vacation_dates = {
-                    v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
-                }
-                global_urgency = is_urgency_mode()
-                db_operating_hours = get_operating_hours_as_ints()
-                # Build per-day urgency override map: {date_str: bool}
-                urgency_day_overrides = {
-                    v["date"]: v["enabled"]
-                    for v in get_urgency_days(start_date.date(), end_date.date())
-                }
-            except Exception as se:
-                logger.warning(f"Could not load operator settings: {se}")
-                vacation_dates = set()
-                global_urgency = False
-                db_operating_hours = None
-                urgency_day_overrides = {}
+            except Exception as ie:
+                logger.error("operator_settings import failed: %s", ie, exc_info=True)
+            else:
+                try:
+                    vacation_dates = {
+                        v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
+                    }
+                except Exception as e:
+                    logger.warning("get_vacation_days failed (continuing): %s", e, exc_info=True)
+                try:
+                    global_urgency = is_urgency_mode()
+                except Exception as e:
+                    logger.warning("is_urgency_mode failed (continuing): %s", e, exc_info=True)
+                try:
+                    db_operating_hours = get_operating_hours_as_ints()
+                except Exception as e:
+                    logger.warning("get_operating_hours_as_ints failed (continuing): %s", e, exc_info=True)
+                try:
+                    urgency_day_overrides = {
+                        v["date"]: v["enabled"]
+                        for v in get_urgency_days(start_date.date(), end_date.date())
+                    }
+                except Exception as e:
+                    logger.warning("get_urgency_days failed (continuing): %s", e, exc_info=True)
 
             # If settings failed to load, fall back to static config (hour ints)
             if db_operating_hours is None:

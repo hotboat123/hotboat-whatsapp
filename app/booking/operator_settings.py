@@ -77,20 +77,45 @@ def _time_str_sort_key(t: str) -> int:
     return h * 60 + m
 
 
+def _normalize_seed_time(t: str) -> Optional[str]:
+    """Accept 'H:MM' or 'HH:MM' → 'HH:MM', or None if invalid."""
+    if not t or not str(t).strip():
+        return None
+    parts = str(t).strip().split(":")
+    if len(parts) < 2:
+        return None
+    try:
+        h, m = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        return None
+    return f"{h:02d}:{m:02d}"
+
+
 def get_effective_urgency_seed_times(config: Optional[dict] = None) -> list:
     """
-    Horarios HotBoat (operating_hours) ∪ urgency_config.seed_times, sin duplicados.
+    Semillas HH:MM para el filtro de urgencia (y slots grises).
 
-    Admin copy: el modo urgencia usa los horarios HotBoat como base; las semillas
-    del bloque inferior se suman (p. ej. franjas extra) y participan en ± gap.
+    - Si `urgency_config.seed_times` tiene entradas válidas: **solo** esas horas
+      actúan como semillas (escasez), más la lógica ±gap alrededor de reservas.
+    - Si seed_times está vacío: se usan todos los `operating_hours` HotBoat.
+
+    No se hace unión con operating_hours cuando ya hay seed_times: unir ambos
+    hacía que casi todo el grid libre coincidiera con una semilla y se mostraran
+    demasiados horarios «disponibles».
     """
     cfg = config if config is not None else get_urgency_config()
     oh = get_operating_hours()
-    extra = cfg.get("seed_times") or []
-    if not extra:
-        return sorted(oh, key=_time_str_sort_key)
-    merged = set(oh) | set(extra)
-    return sorted(merged, key=_time_str_sort_key)
+    raw = cfg.get("seed_times") or []
+    normalized: list = []
+    for x in raw:
+        s = _normalize_seed_time(str(x))
+        if s:
+            normalized.append(s)
+    if normalized:
+        return sorted(set(normalized), key=_time_str_sort_key)
+    return sorted(oh, key=_time_str_sort_key)
 
 
 # ── Vacation days ─────────────────────────────────────────────────────────────
@@ -293,8 +318,8 @@ def apply_urgency_filter(
     """
     Urgency algorithm:
 
-    • Conjunto base de “semillas” = Horarios HotBoat ∪ seed_times guardados en config.
-    • Sin reservas → mostrar esas semillas efectivas que estén libres.
+    • Conjunto base de “semillas” = seed_times (si hay) o bien todos los operating_hours.
+    • Sin reservas → mostrar esas semillas que estén libres (en el grid del día).
     • Con reservas → además, para cada reserva en X, sugerir X ± gap si cae en cupo libre.
 
     Ejemplos con seeds=[10,18,21] gap=3:

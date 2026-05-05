@@ -1592,11 +1592,15 @@ function _expCartLoad(){
   }catch(_e){ _experienceCart = []; }
 }
 function appendExperienceCartLine(line){
-  line.cart_id = ('ec'+Date.now()+Math.random().toString(36).slice(2,10)).replace(/\./g,'').slice(0,22);
-  _experienceCart.push(line);
+  /* Recargar desde LS para no pisar líneas agregadas en otra pestaña / sesión paralela */
+  _expCartLoad();
+  const row = { ...line };
+  row.cart_id = ('ec'+Date.now()+Math.random().toString(36).slice(2,10)).replace(/\./g,'').slice(0,22);
+  _experienceCart.push(row);
   _expCartPersist();
 }
 function removeExperienceCartLine(cid){
+  _expCartLoad();
   _experienceCart = _experienceCart.filter(x=>String(x.cart_id)!==String(cid));
   _expCartPersist();
 }
