@@ -271,18 +271,13 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                     params
                 )
 
-                # Cascade status to source tables
+                # Cascade status to legacy Sheets source only (canonical is all_appointments).
                 if "status" in updates:
                     cur.execute(f"SELECT source, source_id FROM {TABLE} WHERE id=%s", (rid,))
                     row = cur.fetchone()
                     if row:
                         src, src_id = row
-                        if src == "booknetic" and src_id:
-                            cur.execute(
-                                "UPDATE booknetic_appointments SET status=%s, updated_at=NOW() WHERE id=%s",
-                                (updates["status"], src_id)
-                            )
-                        elif src == "sheets" and src_id:
+                        if src == "sheets" and src_id:
                             cur.execute(
                                 "UPDATE reservas_con_extras SET status=%s, updated_at=NOW() WHERE id=%s",
                                 (updates["status"], int(src_id))
@@ -879,8 +874,8 @@ async def availability_debug(
     fecha: str = Query(None, description="Specific date YYYY-MM-DD to inspect raw DB rows"),
     days: int = Query(7, ge=1, le=14),
 ):
-    """Diagnostic: shows operating hours, booked slots seen by the checker,
-    and (when fecha= is given) raw rows from all three tables for that date."""
+    """Diagnostic: operating hours, booked slots seen by the checker,
+    and (when fecha= is given) raw ``all_appointments`` rows for that date."""
     _check_auth(x_admin_key)
     from datetime import datetime, timedelta, date as _date
     from zoneinfo import ZoneInfo
@@ -925,36 +920,15 @@ async def availability_debug(
         "period": {"from": str(start.date()), "to": str(end.date())},
     }
 
-    # When a specific date is requested, dump raw rows from all three tables
     if fecha:
-        raw = {"booknetic_appointments": [], "hotboat_appointments": [], "all_appointments": []}
+        raw: dict = {"all_appointments": []}
         try:
             fd = _date.fromisoformat(fecha)
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id, starts_at, service_name, customer_name, status FROM booknetic_appointments"
-                        " WHERE starts_at::date = %s OR starts_at::date = %s ORDER BY starts_at",
-                        (fecha, fecha)
-                    )
-                    for r in cur.fetchall():
-                        raw["booknetic_appointments"].append({
-                            "id": r[0], "starts_at": str(r[1]), "service": r[2],
-                            "customer": r[3], "status": r[4],
-                        })
-                    cur.execute(
-                        "SELECT source_id, fecha, hora, nombre_cliente, status"
-                        " FROM all_appointments WHERE source = 'hotboat_web' AND fecha = %s ORDER BY hora",
-                        (fecha,)
-                    )
-                    for r in cur.fetchall():
-                        raw["hotboat_appointments"].append({
-                            "ref": r[0], "date": str(r[1]), "time": str(r[2]),
-                            "customer": r[3], "status": r[4],
-                        })
-                    cur.execute(
                         "SELECT id, source, source_id, fecha, hora, nombre_cliente, status"
-                        " FROM all_appointments WHERE fecha = %s ORDER BY hora",
+                        " FROM all_appointments WHERE fecha = %s ORDER BY hora, source",
                         (fecha,)
                     )
                     for r in cur.fetchall():
@@ -1304,7 +1278,7 @@ async def get_email_booking_legacy(x_admin_key: str = Header("")):
 
 # ── Incremental sync ──────────────────────────────────────────────────────────
 # Syncs reservas_con_extras → all_appointments (full upsert)
-# Then pulls NEW records from booknetic + hotboat into all_appointments
+# Then pulls legacy hotboat_appointments rows into all_appointments (Booknetic is ingested elsewhere).
 
 @admin_router.post("/api/admin/sync")
 async def sync_tables(x_admin_key: str = Header("")):
@@ -1333,7 +1307,6 @@ async def sync_tables(x_admin_key: str = Header("")):
 
                 inserted_reservas = 0
                 updated_reservas = 0
-                inserted_book = 0
                 inserted_hb = 0
                 updated_status = 0
 
@@ -1455,56 +1428,7 @@ async def sync_tables(x_admin_key: str = Header("")):
                 """)
                 dedup_deleted += cur.rowcount
 
-                # Sync booknetic — do not use MAX(reservas_con_extras.fecha) as lower bound (it is often
-                # a future date and would skip all earlier appointments, e.g. April when June exists in DB)
-                cur.execute("""
-                    SELECT id, customer_name, customer_email, starts_at, status, raw, created_at
-                    FROM booknetic_appointments
-                    WHERE starts_at IS NOT NULL
-                      AND starts_at::date >= (CURRENT_DATE - INTERVAL '3 years')
-                      AND starts_at::date <= (CURRENT_DATE + INTERVAL '3 years')
-                """)
-                for row in cur.fetchall():
-                    bid, nombre, email, starts_at, status, raw, created = row
-                    raw = raw or {}
-                    sid = str(bid)
-                    # Already synced as booknetic, OR reservas_con_extras already created a sheets row with this appointment_id
-                    cur.execute(
-                        f"""SELECT id, source, status FROM {TABLE}
-                            WHERE (source = 'booknetic' AND source_id = %s)
-                               OR (appointment_id IS NOT NULL AND TRIM(appointment_id::text) = %s)
-                            LIMIT 1""",
-                        (sid, sid),
-                    )
-                    existing = cur.fetchone()
-                    if existing:
-                        ex_id, ex_src, ex_st = existing[0], existing[1], existing[2]
-                        if ex_src == "booknetic":
-                            if status and status != ex_st:
-                                cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s",
-                                            (status, ex_id))
-                                updated_status += 1
-                        # sheets (or other) row already represents this Booknetic ID — do not insert a 2nd row
-                        continue
-                    # Insert new
-                    phone = normalize_phone(raw.get("customer_phone_number"))
-                    service = raw.get("service") or ""
-                    ingreso = parse_clp(raw.get("payment"))
-                    hora = starts_at.time() if starts_at else None
-                    fecha = starts_at.date() if starts_at else None
-                    m = re.search(r"(\d+)\s*people", service, re.I)
-                    num_p = m.group(1) if m else None
-                    cur.execute(f"""
-                        INSERT INTO {TABLE}
-                        (source, source_id, appointment_id, fecha, hora, nombre_cliente, email, telefono,
-                         servicio, num_personas, ingreso_reserva, ingreso_total,
-                         costo_operativo_fijo, costo_operativo_total, status, extras_json, created_at, updated_at)
-                        VALUES ('booknetic',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18000,18000,%s,'{{}}', %s,NOW())
-                    """, (str(bid), str(bid), fecha, hora, nombre, email, phone,
-                          service, num_p, ingreso, ingreso, status, created))
-                    inserted_book += 1
-
-                # Sync hotboat_appointments (no reservas MAX fecha cutoff — see booknetic comment above)
+                # Sync hotboat_appointments (no reservas MAX fecha cutoff)
                 cur.execute("""
                     SELECT booking_ref, customer_name, customer_email, customer_phone,
                            booking_date, booking_time, num_people,
@@ -1547,7 +1471,7 @@ async def sync_tables(x_admin_key: str = Header("")):
             "reservas_con_extras_inserted": inserted_reservas,
             "reservas_con_extras_updated": updated_reservas,
             "duplicates_removed": dedup_deleted,
-            "inserted_booknetic": inserted_book,
+            "inserted_booknetic": 0,
             "inserted_hotboat": inserted_hb,
             "status_updated": updated_status,
         }

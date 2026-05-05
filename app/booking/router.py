@@ -211,8 +211,8 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
 
         # Compute fake_booked_slots for grey display in urgency mode.
         # Applies per-day urgency overrides: each day is evaluated independently.
-        # NOTE: availability.py already applies the urgency filter correctly (using data
-        # from both booknetic + hotboat_appointments). We do NOT re-apply it here to
+        # NOTE: availability.py already applies the urgency filter correctly using
+        # ``all_appointments`` booked rows. We do NOT re-apply it here to
         # avoid double-filtering that empties valid days.
         fake_booked_by_day: dict = {}
         any_urgency_active = global_urgency or any(v for v in urgency_day_overrides.values())
@@ -222,27 +222,16 @@ async def get_availability(days: int = Query(90, ge=1, le=90)):
             try:
                 with get_connection() as conn:
                     with conn.cursor() as cur:
-                        # Booknetic bookings (stored as Chile time, no tz offset)
-                        cur.execute("""
-                            SELECT (starts_at AT TIME ZONE 'UTC')::date::text AS d,
-                                   TO_CHAR(starts_at AT TIME ZONE 'UTC', 'HH24:MI') AS t
-                            FROM booknetic_appointments
-                            WHERE starts_at IS NOT NULL
-                              AND starts_at >= %s AND starts_at <= %s
-                              AND (status IS NULL OR status NOT IN ('cancelled','rejected','cancelada','pending_payment','solicitud'))
-                        """, (start.date(), end.date()))
-                        for row in cur.fetchall():
-                            booked_by_day.setdefault(row[0], []).append(row[1])
-                        # Web + manual / sheets (all_appointments — canonical)
                         cur.execute("""
                             SELECT fecha::text AS d,
                                    TO_CHAR(hora, 'HH24:MI') AS t
                             FROM all_appointments
-                            WHERE source NOT IN ('booknetic')
-                              AND fecha >= %s AND fecha <= %s
+                            WHERE fecha >= %s AND fecha <= %s
                               AND hora IS NOT NULL
-                              AND status IS NOT NULL
-                              AND status NOT IN ('cancelled','rejected','cancelada','solicitud')
+                              AND (
+                                  status IS NULL
+                                  OR status NOT IN ('cancelled','rejected','cancelada','solicitud')
+                              )
                         """, (start.date(), end.date()))
                         for row in cur.fetchall():
                             booked_by_day.setdefault(row[0], []).append(row[1])

@@ -301,7 +301,7 @@ class AvailabilityChecker:
                     slot_end_with_buffer = slot_end + timedelta(hours=self.config.buffer_hours)
                     
                     # Check if slot overlaps with any booked appointment (in-memory, fast)
-                    # get_booked_slots already loaded both booknetic + hotboat_appointments,
+                    # get_booked_slots already loaded booked rows from all_appointments,
                     # so no need for a second per-slot DB query (check_slot_availability).
                     overlaps = False
                     for booked_range in booked_ranges:

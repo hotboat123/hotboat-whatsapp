@@ -1,32 +1,40 @@
-"""Inspect booknetic_appointments and find max date"""
-import os, sys
-sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-from dotenv import load_dotenv
-load_dotenv()
-import psycopg2
+"""Inspect Booknetic-synced rows in all_appointments (source='booknetic')."""
+import sys
+from pathlib import Path
 
-conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-cur = conn.cursor()
+sys.path.insert(0, str(Path(__file__).parent))
 
-# Max date in Reservas_Con_Extras_Sheets
-cur.execute('SELECT MAX(fecha), COUNT(*) FROM "Reservas_Con_Extras_Sheets"')
-row = cur.fetchone()
-print(f"Reservas_Con_Extras_Sheets: max_fecha={row[0]}, total={row[1]}")
+from app.db.connection import get_connection
 
-# booknetic_appointments - count future vs past
-cur.execute("SELECT MIN(starts_at::date), MAX(starts_at::date), COUNT(*) FROM booknetic_appointments")
-row = cur.fetchone()
-print(f"booknetic_appointments: min={row[0]}, max={row[1]}, total={row[2]}")
 
-# hotboat_appointments
-cur.execute("SELECT MIN(booking_date), MAX(booking_date), COUNT(*) FROM hotboat_appointments")
-row = cur.fetchone()
-print(f"hotboat_appointments: min={row[0]}, max={row[1]}, total={row[2]}")
+def main():
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT MIN(fecha), MAX(fecha), COUNT(*)
+                FROM all_appointments
+                WHERE source = 'booknetic'
+                """
+            )
+            row = cur.fetchone()
+            print(f"all_appointments (booknetic): min={row[0]}, max={row[1]}, total={row[2]}")
 
-# Sample raw field from booknetic to understand phone
-cur.execute("SELECT id, customer_name, starts_at::date, raw->>'customer_phone_number' as phone, raw->>'payment' as payment FROM booknetic_appointments LIMIT 5")
-print("\nBooknetic samples (id, name, date, phone, payment):")
-for r in cur.fetchall():
-    print(f"  {r[0]:6s} | {str(r[1]):30s} | {str(r[2])} | {str(r[3])} | {str(r[4])}")
+            cur.execute(
+                """
+                SELECT source_id, nombre_cliente, fecha, hora,
+                       COALESCE(telefono::text, '') AS phone,
+                       status
+                FROM all_appointments
+                WHERE source = 'booknetic'
+                ORDER BY fecha DESC NULLS LAST, hora DESC NULLS LAST
+                LIMIT 5
+                """
+            )
+            print("sample:")
+            for r in cur.fetchall():
+                print(" ", r)
 
-cur.close(); conn.close()
+
+if __name__ == "__main__":
+    main()

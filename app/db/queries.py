@@ -60,48 +60,51 @@ async def get_appointments_between_dates(
     end_date: datetime
 ) -> List[Dict]:
     """
-    Get all appointments between two dates
-    
-    Args:
-        start_date: Start date
-        end_date: End date
-    
-    Returns:
-        List of appointments
+    Get all appointments between two dates from ``all_appointments`` only.
     """
+    from datetime import time as dt_time
+
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT 
-                        id,
-                        customer_name,
-                        customer_email,
-                        service_name,
-                        starts_at,
-                        status
-                    FROM booknetic_appointments
-                    WHERE starts_at >= %s
-                      AND starts_at <= %s
-                      AND status NOT IN ('cancelled', 'rejected')
-                    ORDER BY starts_at
-                """, (start_date, end_date))
-                
+                cur.execute(
+                    """
+                    SELECT id, nombre_cliente, email, servicio, fecha, hora, status
+                    FROM all_appointments
+                    WHERE fecha >= %s::date
+                      AND fecha <= %s::date
+                      AND hora IS NOT NULL
+                      AND (status IS NULL OR status NOT IN ('cancelled', 'rejected'))
+                    ORDER BY fecha, hora
+                    """,
+                    (start_date.date(), end_date.date()),
+                )
                 results = cur.fetchall()
-                
                 appointments = []
                 for row in results:
-                    appointments.append({
-                        "id": row[0],
-                        "customer_name": row[1],
-                        "customer_email": row[2],
-                        "service_name": row[3],
-                        "starts_at": row[4].isoformat() if row[4] else None,
-                        "status": row[5]
-                    })
-                
+                    _id, nombre, email, servicio, b_date, b_time, status = row
+                    try:
+                        if hasattr(b_time, "hour"):
+                            h, m = b_time.hour, b_time.minute
+                        else:
+                            parts = str(b_time).split(":")
+                            h, m = int(parts[0]), int(parts[1])
+                        dt_naive = datetime.combine(b_date, dt_time(h, m))
+                        starts_at = dt_naive.replace(tzinfo=CHILE_TZ).isoformat()
+                    except Exception:
+                        starts_at = None
+                    appointments.append(
+                        {
+                            "id": _id,
+                            "customer_name": nombre,
+                            "customer_email": email,
+                            "service_name": servicio,
+                            "starts_at": starts_at,
+                            "status": status,
+                        }
+                    )
                 return appointments
-    
+
     except Exception as e:
         logger.error(f"Error querying appointments: {e}")
         return []
@@ -109,60 +112,41 @@ async def get_appointments_between_dates(
 
 async def check_slot_availability(slot_datetime: datetime, duration_hours: float = 2.0, buffer_hours: float = 0.5) -> bool:
     """
-    Check if a specific time slot is available.
-    Checks booknetic_appointments AND all_appointments (web bookings via hotboat_web).
+    Check if a specific time slot is available using ``all_appointments`` only.
     """
-    import pytz
-    CHILE_TZ = pytz.timezone('America/Santiago')
 
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                slot_start_buf = slot_datetime - timedelta(hours=buffer_hours)
-                slot_end       = slot_datetime + timedelta(hours=duration_hours)
-                slot_end_buf   = slot_end + timedelta(hours=buffer_hours)
-
-                # Strip tz for booknetic (stores Chile time as UTC)
-                s_start = slot_start_buf.replace(tzinfo=None) if slot_start_buf.tzinfo else slot_start_buf
-                s_end   = slot_end_buf.replace(tzinfo=None)   if slot_end_buf.tzinfo   else slot_end_buf
-                appt_dur = duration_hours + buffer_hours
-
-                # 1. Booknetic appointments
-                cur.execute("""
-                    SELECT COUNT(*) FROM booknetic_appointments
-                    WHERE starts_at IS NOT NULL
-                      AND (status IS NULL OR status NOT IN ('cancelled','rejected','cancelada','pending_payment','solicitud'))
-                      AND starts_at < %s
-                      AND starts_at + INTERVAL '1 hour' * %s > %s
-                """, (s_end, appt_dur, s_start))
-                if cur.fetchone()[0] > 0:
-                    return False
-
-                # 2. Web bookings (all_appointments canonical source)
-                slot_date   = slot_datetime.date()
-                slot_h      = slot_datetime.hour
-                slot_m      = slot_datetime.minute
+                slot_date = slot_datetime.date()
+                slot_h = slot_datetime.hour
+                slot_m = slot_datetime.minute
                 slot_start_min = (slot_h * 60 + slot_m) - int(buffer_hours * 60)
-                slot_end_min   = (slot_h * 60 + slot_m) + int((duration_hours + buffer_hours) * 60)
-                cur.execute("""
+                slot_end_min = (slot_h * 60 + slot_m) + int((duration_hours + buffer_hours) * 60)
+                cur.execute(
+                    """
                     SELECT COUNT(*) FROM all_appointments
-                    WHERE source = 'hotboat_web'
-                      AND fecha = %s
+                    WHERE fecha = %s
                       AND hora IS NOT NULL
-                      AND status NOT IN ('cancelled','rejected','solicitud')
+                      AND (
+                          status IS NULL
+                          OR status::text NOT IN ('cancelled','rejected','cancelada','solicitud')
+                      )
                       AND (
                           (EXTRACT(HOUR FROM hora)::int * 60 + EXTRACT(MINUTE FROM hora)::int)
                               - %s < %s
                           AND (EXTRACT(HOUR FROM hora)::int * 60 + EXTRACT(MINUTE FROM hora)::int)
                               + %s > %s
                       )
-                """, (
-                    slot_date,
-                    int(buffer_hours * 60),
-                    slot_end_min,
-                    int((duration_hours + buffer_hours) * 60),
-                    slot_start_min,
-                ))
+                    """,
+                    (
+                        slot_date,
+                        int(buffer_hours * 60),
+                        slot_end_min,
+                        int((duration_hours + buffer_hours) * 60),
+                        slot_start_min,
+                    ),
+                )
                 if cur.fetchone()[0] > 0:
                     return False
 
@@ -180,98 +164,63 @@ async def get_booked_slots(
     exclude_statuses: Optional[List[str]] = None
 ) -> List[Dict]:
     """
-    Get all booked time slots between dates
-    
-    Args:
-        start_date: Start date for search
-        end_date: End date for search
-        exclude_statuses: List of statuses to exclude (default: ['cancelled', 'rejected'])
-    
-    Returns:
-        List of booked slots with datetime and service info
+    Booked slots for availability: ``all_appointments`` only (all sources).
+
+    ``exclude_statuses`` (from Booknetic-era config) is applied here but
+    ``pending_payment`` is never excluded so unpaid web bookings still block the slot.
     """
-    import pytz
-    CHILE_TZ = pytz.timezone('America/Santiago')
-    
-    if exclude_statuses is None:
-        exclude_statuses = ['cancelled', 'rejected']
-    
+
+    base_excl = {"cancelled", "rejected", "cancelada", "solicitud"}
+    base_excl.update(exclude_statuses or [])
+    base_excl.discard("pending_payment")  # web holds slot until TTL / payment
+    eff_exclude = sorted(base_excl)
+
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Build query based on exclude_statuses
-                if exclude_statuses and len(exclude_statuses) > 0:
-                    placeholders = ','.join(['%s'] * len(exclude_statuses))
-                    # Booknetic imports often arrive with NULL status; those are still holds for the calendar.
+                from datetime import time as dt_time
+
+                if eff_exclude:
+                    placeholders = ",".join(["%s"] * len(eff_exclude))
                     status_filter = f"AND (status IS NULL OR status NOT IN ({placeholders}))"
-                    params = (start_date, end_date) + tuple(exclude_statuses)
+                    params = (start_date.date(), end_date.date()) + tuple(eff_exclude)
                 else:
                     status_filter = ""
-                    params = (start_date, end_date)
-                
-                cur.execute(f"""
-                    SELECT 
-                        id,
-                        starts_at,
-                        service_name,
-                        customer_name,
-                        status
-                    FROM booknetic_appointments
-                    WHERE starts_at >= %s
-                      AND starts_at <= %s
-                      AND starts_at IS NOT NULL
-                      {status_filter}
-                    ORDER BY starts_at
-                """, params)
-                
-                results = cur.fetchall()
-                
-                booked_slots = []
-                for row in results:
-                    starts_at = row[1]
-                    # Booknetic stores Chile time marked as UTC — fix timezone
-                    if starts_at and starts_at.tzinfo is not None:
-                        starts_at = CHILE_TZ.localize(starts_at.replace(tzinfo=None))
-                    booked_slots.append({
-                        "id": row[0],
-                        "starts_at": starts_at,
-                        "service_name": row[2],
-                        "customer_name": row[3],
-                        "status": row[4],
-                    })
+                    params = (start_date.date(), end_date.date())
 
-                # Include all_appointments (web hotboat_web + manual/sheets; canonical).
-                from datetime import time as dt_time
-                # Include pending_payment for hotboat_web: slot is reserved until paid or TTL cleanup.
-                # (Stale rows >45min are deleted in app/main.py; solicitud/leads stay excluded.)
-                cur.execute("""
-                    SELECT fecha, hora, nombre_cliente, status
+                cur.execute(
+                    f"""
+                    SELECT id, fecha, hora, servicio, nombre_cliente, status, source
                     FROM all_appointments
-                    WHERE source NOT IN ('booknetic')
-                      AND fecha >= %s::date
+                    WHERE fecha >= %s::date
                       AND fecha <= %s::date
                       AND hora IS NOT NULL
-                      AND status IS NOT NULL
-                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud')
+                      {status_filter}
                     ORDER BY fecha, hora
-                """, (start_date, end_date))
+                    """,
+                    params,
+                )
+
+                booked_slots = []
                 for row in cur.fetchall():
-                    b_date, b_time, b_name, b_status = row
+                    _id, b_date, b_time, servicio, b_name, b_status, _src = row
                     try:
-                        if hasattr(b_time, 'hour'):
+                        if hasattr(b_time, "hour"):
                             h, m = b_time.hour, b_time.minute
                         else:
                             parts = str(b_time).split(":")
                             h, m = int(parts[0]), int(parts[1])
                         dt_naive = datetime.combine(b_date, dt_time(h, m))
-                        starts_at = CHILE_TZ.localize(dt_naive)
-                        booked_slots.append({
-                            "id": None,
-                            "starts_at": starts_at,
-                            "service_name": "Manual",
-                            "customer_name": b_name,
-                            "status": b_status,
-                        })
+                        starts_at = dt_naive.replace(tzinfo=CHILE_TZ)
+                        booked_slots.append(
+                            {
+                                "id": _id,
+                                "starts_at": starts_at,
+                                "service_name": servicio or "HotBoat",
+                                "customer_name": b_name,
+                                "status": b_status,
+                            }
+                        )
                     except Exception:
                         pass
 

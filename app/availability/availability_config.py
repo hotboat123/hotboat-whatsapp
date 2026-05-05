@@ -27,9 +27,8 @@ AVAILABILITY_CONFIG = AvailabilityConfig(
     operating_hours=[9, 11, 13, 15, 17, 19, 21],  # 9am, 11am, 1pm, 3pm, 5pm, 7pm, 9pm (sin 7am)
     duration_hours=2.0,  # Each HotBoat trip lasts 2 hours
     buffer_hours=0.0,  # Sin buffer - con 2 HotBoats podemos tener reservas simultáneas
-    # Booknetic/WP: unpaid/pending entries often shouldn't block legacy calendar logic.
-    # Web rows in ``all_appointments`` treat ``pending_payment`` as holding the slot
-    # (see app/db/queries.py get_booked_slots).
+    # Extra statuses to omit from occupancy (applied in get_booked_slots);
+    # ``pending_payment`` is never omitted so web drafts still hold the slot.
     exclude_statuses=['cancelled', 'rejected', 'pending_payment', 'solicitud']
 )
 

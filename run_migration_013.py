@@ -1,6 +1,9 @@
 """
 Migration 013: Create and populate all_appointments table.
 
+One-off bootstrap helper: it still SELECTs legacy booknetic_appointments to seed
+all_appointments. The running app reads/writes bookings only via all_appointments.
+
 This script:
   1. Creates the all_appointments table
   2. Imports ALL records from Reservas_Con_Extras_Sheets (historical source of truth)
