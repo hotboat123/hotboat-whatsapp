@@ -458,18 +458,18 @@ class ConversationManager:
                     logger.info(
                         f"Auto language on first message for {from_number}: {inferred_language}"
                     )
-            # Always show welcome message on first interaction
-            # BUT skip if an active flow was already set (e.g. via quick reply from admin)
-            elif is_first and not any(metadata.get(k) for k in (
-                "accommodation_flow", "experience_flow", "complete_packages_flow",
-                "build_package_flow", "awaiting_packages_submenu",
-            )):
-                logger.info("First message - sending welcome menu")
-                metadata["language_selected"] = True
-                language = metadata.get("language", "es")
-                # Signal webhook to schedule a 2-min follow-up if user doesn't reply
-                metadata["schedule_followup"] = True
-                response = self._get_main_menu_message(language)
+                # Always show welcome message on first interaction
+                # BUT skip if an active flow was already set (e.g. via quick reply from admin)
+                if not any(metadata.get(k) for k in (
+                    "accommodation_flow", "experience_flow", "complete_packages_flow",
+                    "build_package_flow", "awaiting_packages_submenu",
+                )):
+                    logger.info("First message - sending welcome menu")
+                    metadata["language_selected"] = True
+                    language = metadata.get("language", "es")
+                    # Signal webhook to schedule a 2-min follow-up if user doesn't reply
+                    metadata["schedule_followup"] = True
+                    response = self._get_main_menu_message(language)
             elif self._is_thanks_message(message_text):
                 logger.info("Gratitude detected - sending friendly reply")
                 language = metadata.get("language", "es")
