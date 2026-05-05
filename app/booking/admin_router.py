@@ -2166,6 +2166,25 @@ async def woo_webhook(request: Request):
                             (combined_hb_ref, ab_cname, ab_cphone, ab_cemail,
                              ab_aloj_name, ab_checkin, ab_checkout,
                              ab_total, ab_deposit) = ab_row
+                            try:
+                                cur.execute(
+                                    "UPDATE extras_bookings SET status=%s, total_price=%s, deposit_paid=%s "
+                                    "WHERE booking_ref=%s AND item_type=%s",
+                                    (
+                                        "confirmado",
+                                        int(ab_total or 0),
+                                        int(ab_deposit or 0),
+                                        aloj_ref_wc,
+                                        "alojamiento",
+                                    ),
+                                )
+                                conn.commit()
+                            except Exception as ee:
+                                logger.warning(
+                                    "WC webhook: extras_bookings mirror update failed for %s: %s",
+                                    aloj_ref_wc,
+                                    ee,
+                                )
                             # If combined with HotBoat, confirm that booking too
                             if combined_hb_ref:
                                 cur.execute(

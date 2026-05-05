@@ -2704,6 +2704,7 @@ function sourceColor(s){ if(!s) return '#7070a0'; if(s==='sheets') return '#7070
 // Default emoji icon for an extra based on its slugified key
 function defaultExtraIcon(key){
   const k = (key||'').toLowerCase();
+  if(k.startsWith('aloj__')||k.includes('alojamiento')||k.includes('cabana')||k.includes('hospedaje')) return '🏠';
   if(k.includes('roman')||k.includes('rosas')||k.includes('flores')) return '🌹';
   if(k.includes('foto'))            return '📸';
   if(k.includes('gopro')||k.includes('video')||k.includes('camara')||k.includes('cam_')) return '🎥';
@@ -2718,7 +2719,6 @@ function defaultExtraIcon(key){
   if(k.includes('espumante')||k.includes('champagne')||k.includes('botella')||k.includes('vino')) return '🍾';
   if(k.includes('cocktail')||k.includes('trago')||k.includes('pisco')) return '🍹';
   if(k.includes('cerveza'))         return '🍺';
-  if(k.includes('alojamiento')||k.includes('cabana')||k.includes('hospedaje')) return '🏠';
   if(k.includes('pack'))            return '📦';
   if(k.includes('musica')||k.includes('dj')) return '🎵';
   if(k.includes('decoracion')||k.includes('deco')) return '🎊';
@@ -4299,6 +4299,10 @@ function initExtrasEditor(extrasJson){
   }
   const catalogByKey = {};
   EXTRAS_CATALOG.forEach(e=>{ catalogByKey[e.key]=e; });
+  // Web HotBoat: envelope { extras: [...], price_per_person }
+  if(extrasJson && typeof extrasJson==='object' && !Array.isArray(extrasJson) && Array.isArray(extrasJson.extras)){
+    extrasJson = extrasJson.extras;
+  }
   // Web bookings store extras as an array [{name,price,quantity}] — convert to dict
   if(Array.isArray(extrasJson)){
     const converted = {};

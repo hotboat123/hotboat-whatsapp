@@ -1,6 +1,6 @@
 """FastAPI router for /booking and /api/booking/*"""
 import logging, os, time as _time
-from typing import Optional
+from typing import Any, Dict, Optional
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Query
@@ -668,6 +668,169 @@ def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):
             conn.commit()
 
 
+def _slug_for_extra_catalog_item(name: str, idx: int) -> str:
+    import re as _re
+
+    raw = _re.sub(r"[^a-z0-9]+", "_", (name or f"extra_{idx}").lower())
+    raw = _re.sub(r"_+", "_", raw).strip("_") or f"extra_{idx}"
+    return raw
+
+
+def _flatten_saved_extras_json(raw: Any) -> Dict[str, Any]:
+    """Normalize all_appointments.extras_json toward admin flat {key: {...}} shape."""
+    import json as _json
+
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        try:
+            raw = _json.loads(raw)
+        except (_json.JSONDecodeError, TypeError):
+            return {}
+    if isinstance(raw, list):
+        out: Dict[str, Any] = {}
+        for i, e in enumerate(raw):
+            if not isinstance(e, dict):
+                continue
+            base = _slug_for_extra_catalog_item(str(e.get("name") or ""), i)
+            key = base
+            n = 0
+            while key in out:
+                n += 1
+                key = f"{base}_{n}"
+            out[key] = {
+                "qty": int(e.get("quantity") or 1),
+                "unit_price": int(float(e.get("price") or 0)),
+                "name": e.get("name"),
+            }
+        return out
+    if not isinstance(raw, dict):
+        return {}
+    inner_list = raw.get("extras")
+    if isinstance(inner_list, list):
+        return _flatten_saved_extras_json(inner_list)
+    out = {}
+    for k, v in raw.items():
+        if k in ("extras", "price_per_person"):
+            continue
+        if isinstance(v, dict):
+            out[k] = dict(v)
+    return out
+
+
+def _extras_flat_monetary_total(flat: Dict[str, Any]) -> float:
+    tot = 0.0
+    for v in flat.values():
+        if not isinstance(v, dict):
+            continue
+        qty = float(v.get("qty") or v.get("nights") or 1)
+        unit = float(v.get("unit_price") or 0)
+        tot += qty * unit
+    return tot
+
+
+def _aloj_addon_key_slug(accommodation_slug: str, accommodation_id: int) -> str:
+    import re as _re
+
+    raw = (accommodation_slug or "").strip().lower().replace("-", "_")
+    raw = _re.sub(r"[^a-z0-9_]", "_", raw)
+    raw = _re.sub(r"_+", "_", raw).strip("_")
+    return raw or f"id_{accommodation_id}"
+
+
+def _merge_hotboat_reserva_accommodation_addon(
+    hotboat_ref: str,
+    *,
+    accommodation_id: int,
+    accommodation_slug: str,
+    accommodation_name: str,
+    check_in,
+    check_out,
+    nights: int,
+    price_per_night: int,
+    aloj_booking_ref: str,
+) -> bool:
+    """Add aloj__* line into hotboat_web all_appointments extras_json + recalc totals."""
+    from app.db.connection import get_connection as _gc
+    from psycopg.types.json import Json
+
+    br = (hotboat_ref or "").strip()
+    if not br:
+        return False
+    try:
+        flat_base = _flatten_saved_extras_json
+        slug_part = _aloj_addon_key_slug(accommodation_slug, accommodation_id)
+        aloj_key = f"aloj__{slug_part}"
+
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, extras_json, COALESCE(ingreso_reserva, 0),
+                           COALESCE(has_flex, FALSE), COALESCE(flex_amount, 0),
+                           COALESCE(coupon_discount, 0), COALESCE(observaciones, '')
+                    FROM all_appointments
+                    WHERE source = 'hotboat_web' AND TRIM(source_id) = TRIM(%s)
+                    LIMIT 1
+                    """,
+                    (br,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    logger.warning("_merge_hotboat_aloj: no all_appointments row for HB ref %s", br)
+                    return False
+                rid, extras_raw, ingreso_reserva, has_flex, flex_amount, coupon_disc, observaciones = row
+
+                merged = flat_base(extras_raw)
+                merged[aloj_key] = {
+                    "qty": int(nights),
+                    "unit_price": int(price_per_night),
+                    "entry_date": check_in.isoformat(),
+                    "exit_date": check_out.isoformat(),
+                    "name": accommodation_name,
+                }
+
+                extras_total = _extras_flat_monetary_total(merged)
+                flex_amt = float(flex_amount or 0) if has_flex else 0.0
+                ig_tot = (
+                    float(ingreso_reserva or 0)
+                    + extras_total
+                    + flex_amt
+                    - float(coupon_disc or 0)
+                )
+
+                snippet = f"🏠 Alojamiento WEB · ref {aloj_booking_ref}"
+                obs = (observaciones or "").strip()
+                new_obs = obs
+                if snippet not in obs:
+                    new_obs = f"{obs}\n{snippet}".strip() if obs else snippet
+
+                cur.execute(
+                    """
+                    UPDATE all_appointments
+                       SET extras_json = %s,
+                           ingreso_extras = %s,
+                           ingreso_total = %s,
+                           observaciones = %s,
+                           updated_at = NOW()
+                     WHERE id = %s
+                    """,
+                    (Json(merged), extras_total, ig_tot, new_obs, rid),
+                )
+                conn.commit()
+                logger.info(
+                    "Merged alojamiento %s into HotBoat reserva %s (extras %.0f · total %.0f)",
+                    aloj_booking_ref,
+                    br,
+                    extras_total,
+                    ig_tot,
+                )
+                return True
+    except Exception as ex:
+        logger.warning("_merge_hotboat_aloj failed for %s + %s: %s", br, aloj_booking_ref, ex)
+        return False
+
+
 async def _notify_aloj_booking(
     *,
     aloj_ref: str,
@@ -1101,6 +1264,57 @@ async def create_accommodation_booking(request: AlojBookingRequest):
                  request.price_per_night, total_aloj, deposit_aloj, hotboat_ref)
             )
             conn.commit()
+
+    # Calendario de extras (admin): duplicamos fila; end_date = check_out igual que accommodation_bookings
+    # (último día como salida/registro — coincide con texto de mail y WooCommerce).
+    try:
+        slug_for_extras = (request.accommodation_slug or "").strip() or str(request.accommodation_id)
+        nt_parts = [f"Pago web · {aloj_ref}"]
+        if hotboat_ref:
+            nt_parts.append(f"HotBoat: {hotboat_ref}")
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO extras_bookings "
+                    "(booking_ref,customer_name,customer_phone,item_type,item_slug,item_name,"
+                    " start_date,end_date,num_people,total_price,deposit_paid,status,notes)"
+                    " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        aloj_ref,
+                        request.customer_name,
+                        request.customer_phone,
+                        "alojamiento",
+                        slug_for_extras,
+                        request.accommodation_name,
+                        check_in,
+                        check_out,
+                        request.num_people,
+                        total_aloj,
+                        deposit_aloj,
+                        "pendiente",
+                        " · ".join(nt_parts),
+                    ),
+                )
+                conn.commit()
+    except Exception as ex_calendar:
+        logger.warning("extras_bookings calendar row skipped for %s: %s", aloj_ref, ex_calendar)
+
+    # Vincular alojamiento en la reserva HotBoat (extras_json + totales en all_appointments)
+    if hotboat_ref:
+        try:
+            _merge_hotboat_reserva_accommodation_addon(
+                hotboat_ref,
+                accommodation_id=request.accommodation_id,
+                accommodation_slug=request.accommodation_slug,
+                accommodation_name=request.accommodation_name,
+                check_in=check_in,
+                check_out=check_out,
+                nights=nights,
+                price_per_night=request.price_per_night,
+                aloj_booking_ref=aloj_ref,
+            )
+        except Exception as ex_merge:
+            logger.warning("HotBoat↔aloj merge skipped for %s: %s", aloj_ref, ex_merge)
 
     # Build WooCommerce order
     total_deposit = deposit_aloj + hotboat_deposit
