@@ -840,7 +840,6 @@ def _merge_hotboat_reserva_experience_addon(
         return False
 
     exp_slug = (experience_slug or "").strip().lower()
-    exp_key = f"exp__{exp_slug}" if exp_slug else f"exp__id_{experience_booking_ref}"
 
     try:
         flat_base = _flatten_saved_extras_json
@@ -866,6 +865,8 @@ def _merge_hotboat_reserva_experience_addon(
                 rid, extras_raw, ingreso_reserva, has_flex, flex_amount, coupon_disc, observaciones = row
 
                 merged = flat_base(extras_raw)
+                ref_part = (experience_booking_ref or "").strip() or exp_slug
+                exp_key = f"exp__ref__{ref_part}".replace("-", "_")
                 merged[exp_key] = {
                     "qty": int(num_people),
                     "unit_price": int(price_per_person),
@@ -1637,6 +1638,24 @@ class ExperienceBookingRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class ExperienceCartItem(BaseModel):
+    experience_slug: str
+    experience_name: str
+    start_date: str
+    end_date: Optional[str] = None
+    num_people: int = 1
+    price_per_person: int
+    notes: Optional[str] = None
+
+
+class ExperienceCartRequest(BaseModel):
+    items: list[ExperienceCartItem]
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[str] = None
+    hotboat_booking_ref: Optional[str] = None
+
+
 class PackBookingRequest(BaseModel):
     pack_slug: str
     pack_name: str
@@ -1825,6 +1844,197 @@ async def create_experience_booking(request: ExperienceBookingRequest):
         logger.warning("WooCommerce experience skip [%s]: %r", exp_ref, pe)
 
     return {"booking_ref": exp_ref, "total_price": total_price, "payment_url": payment_url}
+
+
+@router.post("/api/booking/experience-cart-create")
+async def create_experience_cart_booking(request: ExperienceCartRequest):
+    """Create multiple experience rows + one WooCommerce order (deposits) + HB merge per line."""
+    if not request.items:
+        raise HTTPException(status_code=400, detail="El carrito está vacío")
+
+    from app.db.connection import get_connection as _gc
+
+    hotboat_ref = (request.hotboat_booking_ref or "").strip()
+    booking_refs: list[str] = []
+    fee_lines: list[dict] = []
+    total_sum = 0
+    any_high_season = False
+
+    for it in request.items:
+        start_d = _date_fromiso(it.start_date)
+        end_d = _date_fromiso(it.end_date) if it.end_date else None
+        if not start_d:
+            raise HTTPException(status_code=400, detail=f"start_date inválida ({it.experience_name})")
+        if end_d and end_d < start_d:
+            raise HTTPException(status_code=400, detail=f"end_date inválida ({it.experience_name})")
+
+        days_count = 1
+        if end_d and end_d > start_d:
+            days_count = (end_d - start_d).days + 1
+        if end_d and end_d == start_d:
+            end_d = None
+
+        total_price = int(it.price_per_person) * int(it.num_people) * int(days_count)
+        deposit_paid = round(total_price * 0.5)
+        exp_ref = _gen_extras_booking_ref("EX")
+
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO extras_bookings "
+                    "(booking_ref,customer_name,customer_phone,item_type,item_slug,item_name,"
+                    " start_date,end_date,num_people,total_price,deposit_paid,status,notes)"
+                    " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        exp_ref,
+                        request.customer_name,
+                        request.customer_phone,
+                        "experience",
+                        it.experience_slug,
+                        it.experience_name,
+                        start_d,
+                        end_d,
+                        it.num_people,
+                        total_price,
+                        deposit_paid,
+                        "pendiente",
+                        (it.notes or "").strip() or f"Pago web carrito · {exp_ref}",
+                    ),
+                )
+                conn.commit()
+
+        try:
+            solicitud_req = SolicitudRequest(
+                customer_name=request.customer_name,
+                customer_phone=request.customer_phone,
+                customer_email=request.customer_email,
+                dates_preference=str(start_d) + (f" al {end_d}" if end_d else ""),
+                people=str(it.num_people),
+                notes=(it.notes or "").strip(),
+                service_type=f"experience:{it.experience_slug}",
+                title=it.experience_name,
+            )
+            await _notify_solicitud(solicitud_req, exp_ref)
+        except Exception as _notify_err:
+            logger.warning("experience-cart notify failed for %s: %s", exp_ref, _notify_err)
+
+        if is_high_season_web_addon(start_d, "experience", it.experience_slug):
+            any_high_season = True
+            with _gc() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE extras_bookings SET status='pendiente', deposit_paid=0 "
+                        "WHERE booking_ref=%s AND item_type=%s",
+                        (exp_ref, "experience"),
+                    )
+                    conn.commit()
+        else:
+            fee_lines.append(
+                {
+                    "name": f"Experiencia: {it.experience_name} ({start_d}{f' al {end_d}' if end_d else ''})",
+                    "total": str(deposit_paid),
+                }
+            )
+
+        total_sum += total_price
+        booking_refs.append(exp_ref)
+
+        if hotboat_ref:
+            try:
+                _merge_hotboat_reserva_experience_addon(
+                    hotboat_ref,
+                    experience_slug=it.experience_slug,
+                    experience_name=it.experience_name,
+                    start_date=start_d,
+                    num_people=it.num_people,
+                    price_per_person=it.price_per_person,
+                    experience_booking_ref=exp_ref,
+                )
+            except Exception as ex_merge:
+                logger.warning("experience-cart merge failed %s + %s: %s", hotboat_ref, exp_ref, ex_merge)
+
+    if any_high_season:
+        fee_lines.clear()
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                for ref in booking_refs:
+                    cur.execute(
+                        "UPDATE extras_bookings SET status='pendiente', deposit_paid=0 "
+                        "WHERE booking_ref=%s AND item_type='experience'",
+                        (ref,),
+                    )
+                conn.commit()
+        return {
+            "booking_refs": booking_refs,
+            "primary_ref": booking_refs[0] if booking_refs else "",
+            "total_price": total_sum,
+            "payment_url": None,
+            "requires_email": True,
+        }
+
+    hotboat_deposit = 0
+    hotboat_label = ""
+    if hotboat_ref:
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ingreso_total, fecha, hora, num_personas "
+                    "FROM all_appointments "
+                    "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) LIMIT 1",
+                    (hotboat_ref,),
+                )
+                row = cur.fetchone()
+                if row:
+                    hb_total, hb_fecha, hb_hora, hb_np = row
+                    hotboat_deposit = round(float(hb_total or 0) * 0.5)
+                    hb_hhmm = str(hb_hora or "")[:5]
+                    hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
+                else:
+                    cur.execute(
+                        "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
+                        (hotboat_ref,),
+                    )
+                    row2 = cur.fetchone()
+                    if row2:
+                        hotboat_deposit = round(float(row2[0] or 0) * 0.5)
+                        hotboat_label = "HotBoat · deposito 50%"
+
+    if hotboat_ref and hotboat_deposit:
+        fee_lines.append({"name": hotboat_label or "HotBoat · deposito 50%", "total": str(hotboat_deposit)})
+
+    payment_url = None
+    if fee_lines:
+        try:
+            from app.payment.woocommerce import create_order as woo_create_order
+
+            meta = [{"key": "experience_cart_refs", "value": ",".join(booking_refs)}]
+            if hotboat_ref:
+                meta.append({"key": "hotboat_booking_ref", "value": hotboat_ref})
+
+            first_start = _date_fromiso(request.items[0].start_date)
+            woo_order = await woo_create_order(
+                reservation_id=0,
+                booking_ref=booking_refs[0],
+                nombre=request.customer_name,
+                telefono=request.customer_phone,
+                email=request.customer_email,
+                monto_reserva=0,
+                monto_extras=0,
+                fecha=str(first_start) if first_start else None,
+                num_personas=request.items[0].num_people,
+                custom_fee_lines=fee_lines,
+                extra_meta=meta,
+            )
+            payment_url = woo_order.get("payment_url")
+        except Exception as pe:
+            logger.warning("WooCommerce experience-cart skip [%s]: %r", booking_refs, pe)
+
+    return {
+        "booking_refs": booking_refs,
+        "primary_ref": booking_refs[0] if booking_refs else "",
+        "total_price": total_sum,
+        "payment_url": payment_url,
+    }
 
 
 @router.post("/api/booking/pack-create")

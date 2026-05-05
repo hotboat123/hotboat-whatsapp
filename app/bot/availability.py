@@ -5,7 +5,7 @@ import logging
 import re
 from datetime import datetime, timedelta, time
 from typing import Optional, List, Dict, Tuple
-import pytz
+from zoneinfo import ZoneInfo
 
 from app.db.queries import get_booked_slots, check_slot_availability
 from app.availability.availability_config import (
@@ -15,8 +15,8 @@ from app.availability.availability_config import (
 
 logger = logging.getLogger(__name__)
 
-# Timezone for Chile
-CHILE_TZ = pytz.timezone('America/Santiago')
+# Timezone for Chile (same as app.db.queries — use ZoneInfo for booked-slot overlap)
+CHILE_TZ = ZoneInfo("America/Santiago")
 
 # Spanish month names
 SPANISH_MONTHS = {
@@ -77,11 +77,11 @@ class AvailabilityChecker:
             """Create a tz-aware date for the requested year, rolling to next year only if the day is before today (ignore time)."""
             try:
                 parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
-                parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                parsed_date = parsed_date_naive.replace(tzinfo=CHILE_TZ)
                 # Only move to next year if the whole calendar day is in the past, not just the time.
                 if parsed_date.date() < now.date():
                     parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
-                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    parsed_date = parsed_date_naive.replace(tzinfo=CHILE_TZ)
                 return parsed_date
             except ValueError:
                 return None
@@ -165,8 +165,7 @@ class AvailabilityChecker:
         hours = override_hours if override_hours is not None else self.config.operating_hours
         for hour in hours:
             dt_naive = datetime.combine(date_obj, time(hour, 0))
-            slot = CHILE_TZ.localize(dt_naive)
-            slots.append(slot)
+            slots.append(dt_naive.replace(tzinfo=CHILE_TZ))
         return slots
     
     async def get_available_slots(
@@ -241,6 +240,10 @@ class AvailabilityChecker:
                 db_operating_hours = None
                 urgency_day_overrides = {}
 
+            # If settings failed to load, fall back to static config (hour ints)
+            if db_operating_hours is None:
+                db_operating_hours = list(self.config.operating_hours)
+
             # Determine effective urgency for each day (override wins over global)
             def _day_urgency(date_str: str) -> bool:
                 if date_str in urgency_day_overrides:
@@ -250,13 +253,17 @@ class AvailabilityChecker:
             # Pre-compute urgency hour expansion for days that need it
             any_urgency = global_urgency or any(v for v in urgency_day_overrides.values())
             booked_times_by_day: dict = {}
-            hours_urgency_expanded: list = db_operating_hours  # fallback
-            if any_urgency and db_operating_hours:
+            hours_urgency_expanded: list = db_operating_hours
+            if any_urgency:
                 from app.booking.operator_settings import get_urgency_config
                 _gap = int(get_urgency_config().get("gap_hours", 3))
-                _min_h = max(8,  min(db_operating_hours) - _gap)
-                _max_h = min(22, max(db_operating_hours) + _gap)
-                hours_urgency_expanded = list(range(_min_h, _max_h + 1))
+                if db_operating_hours:
+                    _min_h = max(8, min(db_operating_hours) - _gap)
+                    # Cap at hour 23 so 23:00 start slots are generated when OH includes 21+gap
+                    _max_h = min(23, max(db_operating_hours) + _gap)
+                    hours_urgency_expanded = list(range(_min_h, _max_h + 1))
+                else:
+                    hours_urgency_expanded = list(self.config.operating_hours)
                 # Track booked times per day (only needed for urgency filtering)
                 for slot in booked_slots:
                     if slot.get("starts_at"):
@@ -284,6 +291,9 @@ class AvailabilityChecker:
                 # Use expanded hour range only for days with urgency active
                 dk_str = str(current_date)
                 hours_to_generate = hours_urgency_expanded if _day_urgency(dk_str) else db_operating_hours
+
+                if not hours_to_generate:
+                    hours_to_generate = list(self.config.operating_hours)
 
                 date_slots = self._generate_time_slots_for_date(
                     datetime.combine(current_date, time(0, 0)),

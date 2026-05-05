@@ -305,6 +305,16 @@ const I18N = {
       `Experiencia ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
     combinedSubtitlePackHb: (pkDep, hbDep, combTot) =>
       `Pack ${pkDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    combinedSubtitleExpCartHb: (n, expDep, hbDep, combTot) =>
+      `${n} experiencia(s): abonos ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    expCartTitle: '🛒 Experiencias en tu carrito',
+    expCartMenu: (n) => `🛒 Carrito experiencias (${n})`,
+    expCartEmpty: 'Vacío. Agrega experiencias desde “Otras experiencias”.',
+    expCartAdd: 'Solo agregar al carrito',
+    expCartGoHb: 'Elegir fecha HotBoat',
+    expCartRm: 'Quitar',
+    expCartToast: 'Agregado al carrito',
+    expCartPayHb: '💳 Pagar carrito + HotBoat',
   },
   en: {
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
@@ -399,6 +409,16 @@ const I18N = {
       `Experience ${expDep} + HotBoat ${hbDep} · Combined ${combTot}`,
     combinedSubtitlePackHb: (pkDep, hbDep, combTot) =>
       `Package ${pkDep} + HotBoat ${hbDep} · Combined ${combTot}`,
+    combinedSubtitleExpCartHb: (n, expDep, hbDep, combTot) =>
+      `${n} experience(s): deposits ${expDep} + HotBoat ${hbDep} · Combined ${combTot}`,
+    expCartTitle: '🛒 Experiences in your cart',
+    expCartMenu: (n) => `🛒 Experience cart (${n})`,
+    expCartEmpty: 'Empty. Add experiences from “Other experiences”.',
+    expCartAdd: 'Add to cart only',
+    expCartGoHb: 'Pick HotBoat date',
+    expCartRm: 'Remove',
+    expCartToast: 'Added to cart',
+    expCartPayHb: '💳 Pay cart + HotBoat',
   },
   pt: {
     days: ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],
@@ -493,6 +513,16 @@ const I18N = {
       `Experiência ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
     combinedSubtitlePackHb: (pkDep, hbDep, combTot) =>
       `Pacote ${pkDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    combinedSubtitleExpCartHb: (n, expDep, hbDep, combTot) =>
+      `${n} experiência(s): sinais ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    expCartTitle: '🛒 Experiências no carrinho',
+    expCartMenu: (n) => `🛒 Carrinho experiências (${n})`,
+    expCartEmpty: 'Vazio. Adicione experiências em “Outras experiências”.',
+    expCartAdd: 'Só adicionar ao carrinho',
+    expCartGoHb: 'Escolher data HotBoat',
+    expCartRm: 'Remover',
+    expCartToast: 'Adicionado ao carrinho',
+    expCartPayHb: '💳 Pagar carrinho + HotBoat',
   },
 };
 let LANG = localStorage.getItem('hb_lang') || 'es';
@@ -736,7 +766,54 @@ function renderMenu(){
         <span class="desc">${t('menuArmaDesc')}</span>
       </button>`:''}
     </div>
+    ${_experienceCart.length?`<button type="button" class="btn" style="width:100%;margin-top:.75rem;font-size:.92rem" onclick="renderExperienceCartScreen()">${t('expCartMenu', _experienceCart.length)}</button>`:''}
   </div>`;
+}
+
+function renderExperienceCartScreen(){
+  _trackEvent('view_exp_cart');
+  if(!_experienceCart.length){
+    mc.innerHTML = `
+    <div class="card"><p style="color:var(--muted)">${t('expCartEmpty')}</p></div>
+    <button class="btn" onclick="showExperiencias()">${t('menuExp')} →</button>
+    <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
+    return;
+  }
+  let sum = 0, depSum = 0;
+  const lines = _experienceCart.map(li=>{
+    const days = _addonDaysFromRange(li.start_date, li.end_date);
+    const tot = (Number(li.price_per_person)||0) * (Math.max(1, Number(li.num_people)||1)) * days;
+    sum += tot;
+    depSum += Math.round(tot * 0.5);
+    const de = li.end_date || li.start_date;
+    return `
+    <div class="card" style="margin-bottom:.6rem;padding:1rem;border-color:var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+        <div>
+          <div style="font-weight:700;color:var(--coral)">🎫 ${li.experience_name||''}</div>
+          <div style="font-size:.82rem;color:var(--muted);margin-top:.25rem">
+            📅 ${_fmtDate(li.start_date)} → ${_fmtDate(de)} · ${t('addonDaysLabel', days)}
+          </div>
+          <div style="font-size:.85rem;margin-top:.35rem">
+            ${_alojMoney(li.price_per_person)}/pers · ${li.num_people} · <strong>${_alojMoney(tot)}</strong>
+          </div>
+        </div>
+        <button type="button" onclick="removeExperienceCartLine('${li.cart_id}');renderExperienceCartScreen();"
+          style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.25rem .5rem;font-size:.75rem;cursor:pointer">${t('expCartRm')}</button>
+      </div>
+    </div>`;
+  }).join('');
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">${t('expCartTitle')}</div>
+    ${lines}
+    <div class="summary-row total"><span>${t('labelTotal')}</span><span>${_alojMoney(sum)}</span></div>
+    <p style="color:var(--gold);font-size:.85rem;margin-top:.35rem">${t('alojDepositNow')}: ${_alojMoney(depSum)}</p>
+    <p style="color:var(--muted);font-size:.76rem">${t('addonBalanceActivity', _alojMoney(sum-depSum))}</p>
+  </div>
+  <button class="btn" onclick="goReservar()">${t('expCartGoHb')}</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">${t('alojMoreOptions')}</button>
+  <button class="btn btn-secondary" style="margin-top:.35rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
 }
 
 function showPrices(){
@@ -1007,12 +1084,33 @@ function _renderAddonExpAvailable(){
         style="width:100%;background:var(--deep);border:1px solid var(--border);
                color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem;resize:vertical"></textarea></div>
   </div>
-  <button class="btn" id="ax-pay-btn" onclick="_submitAddonExpOnly()" style="margin-bottom:.6rem">
+  <button class="btn" id="ax-pay-btn" onclick="_submitAddonExpOnly()" style="margin-bottom:.5rem">
     ${t('addonPayExperienceOnly', _alojMoney(deposit))}
   </button>
-  <button class="btn btn-secondary" onclick="_startHotboatWithAddonExp()">
+  <button class="btn btn-secondary" onclick="_addonExperienceCartAppend()" style="margin-bottom:.5rem;width:100%">
+    ${t('expCartAdd')}
+  </button>
+  <button class="btn btn-secondary" onclick="_startHotboatWithAddonExp()" style="width:100%">
     ${t('alojAddHotboat')}
   </button>`;
+}
+
+function _addonExperienceCartAppend(){
+  const st=_addonExpState;
+  if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
+  const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
+  const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+  appendExperienceCartLine({
+    experience_slug:st.slug,
+    experience_name:st.name,
+    start_date:st.checkIn,
+    end_date:endDate,
+    num_people:people,
+    price_per_person:st.pricePerPerson,
+    notes:(document.getElementById('ax-notes')?.value||'').trim()||'',
+    customer_name:'', customer_phone:'', customer_email:null,
+  });
+  showToast(t('expCartToast'));
 }
 
 async function _submitAddonExpOnly(){
@@ -1084,7 +1182,7 @@ function _startHotboatWithAddonExp(){
   const endDate=st.checkOut===st.checkIn?null:st.checkOut;
   _pendingAlojBooking=null;
   _pendingPackBooking=null;
-  _pendingExpBooking={
+  appendExperienceCartLine({
     experience_slug:st.slug,
     experience_name:st.name,
     start_date:st.checkIn,
@@ -1095,7 +1193,7 @@ function _startHotboatWithAddonExp(){
     customer_phone:phone,
     customer_email:email,
     notes,
-  };
+  });
   S.customerName=name;
   S.customerPhone=phone;
   S.customerEmail=email||'';
@@ -1269,7 +1367,8 @@ function _startHotboatWithAddonPack(){
   const unitPrice=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
   const endDate=st.checkOut===st.checkIn?null:st.checkOut;
   _pendingAlojBooking=null;
-  _pendingExpBooking=null;
+  _experienceCart=[];
+  _expCartPersist();
   _pendingPackBooking={
     pack_slug:st.slug,
     pack_name:st.name,
@@ -1457,7 +1556,31 @@ function _galGoto(gid, dir){
 // ── Accommodation booking state & calendar ───────────────────────────────────
 let _alojState = null;
 let _pendingAlojBooking = null;  // accommodation held while user picks HotBoat slot
-let _pendingExpBooking = null;   // experience held while user picks HotBoat slot
+const EXP_CART_LS_KEY = 'hb_exp_cart_v1';
+/** @type {object[]} Lines: experience_slug, experience_name, start_date, end_date, num_people, price_per_person, notes, cart_id (+ optional customer_*) */
+let _experienceCart = [];
+
+function _expCartPersist(){
+  try{ localStorage.setItem(EXP_CART_LS_KEY, JSON.stringify(_experienceCart)); }catch(_e){}
+}
+function _expCartLoad(){
+  try{
+    const raw = localStorage.getItem(EXP_CART_LS_KEY);
+    if(raw) _experienceCart = JSON.parse(raw);
+    if(!Array.isArray(_experienceCart)) _experienceCart = [];
+  }catch(_e){ _experienceCart = []; }
+}
+function appendExperienceCartLine(line){
+  line.cart_id = ('ec'+Date.now()+Math.random().toString(36).slice(2,10)).replace(/\./g,'').slice(0,22);
+  _experienceCart.push(line);
+  _expCartPersist();
+}
+function removeExperienceCartLine(cid){
+  _experienceCart = _experienceCart.filter(x=>String(x.cart_id)!==String(cid));
+  _expCartPersist();
+}
+
+_expCartLoad();
 let _pendingPackBooking = null;  // pack held while user picks HotBoat slot
 /** @type {{e:any, slug:string, name:string, pricePerPerson:number, checkIn:string|null, checkOut:string|null}|null} */
 let _addonExpState = null;
@@ -1789,6 +1912,8 @@ function _startHotboatWithAloj(){
   if(!phone) return showToast(t('alojEnterPhone'));
   const email = (document.getElementById('ab-email')?.value||'').trim();
   const {alojId,a,checkIn,checkOut,pricePerNight}=_alojState;
+  _experienceCart = [];
+  _expCartPersist();
   _pendingAlojBooking = {
     accommodation_id:   alojId,
     accommodation_name: a.name,
@@ -2415,27 +2540,35 @@ function renderForm(){
       🏠🚤 <strong style="color:var(--gold)">Total abono ahora: $${combinedDeposit.toLocaleString('es-CL')}</strong><br>
       <span style="font-size:.75rem">Alojamiento $${alojDeposit.toLocaleString('es-CL')} + HotBoat $${hbDeposit.toLocaleString('es-CL')} · Total combinado $${combinedTotal.toLocaleString('es-CL')}</span>
     </div>`;
-  } else if(_pendingExpBooking){
-    const p = _pendingExpBooking;
-    const days = _addonDaysFromRange(p.start_date, p.end_date);
-    const expTotal = (Number(p.price_per_person)||0) * (Math.max(1, Number(p.num_people)||1)) * days;
-    const expDeposit = Math.round(expTotal * 0.5);
+  } else if(_experienceCart.length){
+    let expTotalAll = 0;
+    const rows = _experienceCart.map((p)=>{
+      const days = _addonDaysFromRange(p.start_date, p.end_date);
+      const expTotal = (Number(p.price_per_person)||0) * (Math.max(1, Number(p.num_people)||1)) * days;
+      expTotalAll += expTotal;
+      const dateEnd = p.end_date || p.start_date;
+      return `
+      <div style="border-bottom:1px solid var(--border);padding:.55rem 0;margin-bottom:.45rem">
+        <div style="font-weight:600;margin-bottom:.2rem;color:var(--text)">🎫 ${p.experience_name||''}</div>
+        <div class="summary-row"><span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span></div>
+        <div class="summary-row"><span>${_alojMoney(p.price_per_person)}/pers. × ${p.num_people} × ${days}</span><span><strong>${_alojMoney(expTotal)}</strong></span></div>
+      </div>`;
+    }).join('');
+    const expDepositAll = Math.round(expTotalAll * 0.5);
     const hbDeposit = Math.round(hbTotal * 0.5);
-    const combinedTotal = hbTotal + expTotal;
-    const combinedDeposit = hbDeposit + expDeposit;
-    const dateEnd = p.end_date || p.start_date;
+    const combinedTotal = hbTotal + expTotalAll;
+    const combinedDeposit = hbDeposit + expDepositAll;
     expPackBlock = `
     <div class="card" style="border-color:var(--coral)">
-      <div class="card-title" style="font-size:.95rem">🎫 ${p.experience_name||''}</div>
-      <div class="summary-row"><span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span></div>
-      <div class="summary-row"><span>${_alojMoney(p.price_per_person)}/pers. × ${p.num_people} × ${days}</span><span><strong>${_alojMoney(expTotal)}</strong></span></div>
-      <div class="summary-row" style="color:var(--gold)"><span>${t('alojDepositNow')}</span><span><strong>${_alojMoney(expDeposit)}</strong></span></div>
-      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(expTotal - expDeposit))}</div>
+      <div class="card-title" style="font-size:.95rem">${t('expCartTitle')}</div>
+      ${rows}
+      <div class="summary-row" style="color:var(--gold);margin-top:.35rem;padding-top:.35rem;border-top:1px solid var(--border)"><span>${t('alojDepositNow')} (experiencias)</span><span><strong>${_alojMoney(expDepositAll)}</strong></span></div>
+      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(expTotalAll - expDepositAll))}</div>
     </div>`;
     combinedDepositNote = `
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
       🎫🚤 <strong style="color:var(--gold)">Total abono ahora: ${_alojMoney(combinedDeposit)}</strong><br>
-      <span style="font-size:.75rem">${t('combinedSubtitleExpHb', _alojMoney(expDeposit), _alojMoney(hbDeposit), _alojMoney(combinedTotal))}</span>
+      <span style="font-size:.75rem">${t('combinedSubtitleExpCartHb', _experienceCart.length, _alojMoney(expDepositAll), _alojMoney(hbDeposit), _alojMoney(combinedTotal))}</span>
     </div>`;
   } else if(_pendingPackBooking){
     const p = _pendingPackBooking;
@@ -2519,8 +2652,8 @@ function renderForm(){
   <button class="btn" onclick="submitBooking()">
     ${_pendingAlojBooking
       ? '💳 Pagar alojamiento + HotBoat'
-      : _pendingExpBooking
-      ? '💳 Pagar experiencia + HotBoat'
+      : _experienceCart.length
+      ? t('expCartPayHb')
       : _pendingPackBooking
       ? '💳 Pagar pack + HotBoat'
       : t('pay') + ' 💳'}
@@ -2626,7 +2759,7 @@ async function submitBooking(){
     };
     if(testPrice) payload.test_price = parseInt(testPrice);
     // If coming from accommodation flow, create HotBoat booking without payment order
-    if(_pendingAlojBooking || _pendingExpBooking || _pendingPackBooking) payload.skip_payment = true;
+    if(_pendingAlojBooking || _experienceCart.length || _pendingPackBooking) payload.skip_payment = true;
 
     const r = await fetch('/api/booking/create',{
       method:'POST',
@@ -2671,42 +2804,51 @@ async function submitBooking(){
       const alojDeposit = Math.round(alojTotal * 0.5);
       S.totalPrice = total + alojTotal;           // real combined total
       S.depositAmount = Math.round(total * 0.5) + alojDeposit;  // real combined deposit
-    } else if(_pendingExpBooking){
-      // Create combined WooCommerce order: experience + HotBoat
-      const expPayload = { ..._pendingExpBooking, hotboat_booking_ref: data.booking_ref };
-      expPayload.num_people = S.numPeople;
-      const start = new Date(expPayload.start_date);
-      const end   = expPayload.end_date ? new Date(expPayload.end_date) : null;
-      const daysCount = (!end || expPayload.end_date === expPayload.start_date)
-        ? 1
-        : Math.round((end - start) / 86400000) + 1;
-      const expTotal = expPayload.price_per_person * expPayload.num_people * daysCount;
-      const expDeposit = Math.round(expTotal * 0.5);
-
-      _pendingExpBooking = null;
-
-      const er = await fetch('/api/booking/experience-create',{
+    } else if(_experienceCart.length){
+      const items = _experienceCart.map(li=>({
+        experience_slug: li.experience_slug,
+        experience_name: li.experience_name,
+        start_date: li.start_date,
+        end_date: li.end_date,
+        num_people: Math.max(1, Number(li.num_people)||1),
+        price_per_person: Number(li.price_per_person)||0,
+        notes: (li.notes||'').trim()||null,
+      }));
+      const er = await fetch('/api/booking/experience-cart-create',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(expPayload)
+        body: JSON.stringify({
+          items,
+          customer_name: S.customerName,
+          customer_phone: S.customerPhone,
+          customer_email: S.customerEmail||null,
+          hotboat_booking_ref: data.booking_ref,
+        }),
       });
       const edata = await er.json();
-      if(!er.ok) throw new Error(edata.detail || 'Error al crear reserva experiencia');
+      if(!er.ok) throw new Error(edata.detail || 'Error al crear reserva experiencias');
 
-      S.bookingRef = edata.booking_ref;
+      const expSumTotal = Number(edata.total_price)||0;
+
+      _experienceCart = [];
+      _expCartPersist();
+
+      S.bookingRef = edata.primary_ref || (edata.booking_refs && edata.booking_refs[0]) || data.booking_ref;
       S.paymentUrl = edata.payment_url;
-      S.totalPrice = total + expTotal;
-      S.depositAmount = Math.round(total * 0.5) + expDeposit;
+      S.totalPrice = total + expSumTotal;
+      S.depositAmount = Math.round(total * 0.5) + Math.round(expSumTotal * 0.5);
 
       if(!edata.payment_url && edata.requires_email){
+        const refs = (edata.booking_refs||[]).join(', ');
         mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
           <div style="font-size:3rem;margin-bottom:1rem">📧</div>
-          <div class="card-title">Alta temporada — Coordinamos por email</div>
+          <div class="card-title">${t('addonHighSeasonTitle')}</div>
           <p style="color:var(--muted);margin-top:.6rem">
-            Para confirmar la experiencia, escribe a <strong>info@hotboatchile.com</strong>.
+            ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
           </p>
-          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${edata.booking_ref}</strong></p>
-          <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">Volver al inicio</button>
+          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Refs: <strong>${refs||S.bookingRef}</strong></p>
+          <p style="color:var(--muted);margin-top:.5rem;font-size:.82rem">HotBoat: <strong>${data.booking_ref}</strong></p>
+          <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">${t('backToMenu')}</button>
         </div>`;
         return;
       }
@@ -2755,7 +2897,6 @@ async function submitBooking(){
     renderPayment();
   }catch(e){
     _pendingAlojBooking = null;
-    _pendingExpBooking = null;
     _pendingPackBooking = null;
     mc.innerHTML = `<div class="card"><p style="color:red">Error: ${e.message}</p></div>`;
   }finally{
