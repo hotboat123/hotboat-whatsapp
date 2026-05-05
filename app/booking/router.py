@@ -831,6 +831,192 @@ def _merge_hotboat_reserva_accommodation_addon(
         return False
 
 
+def _merge_hotboat_reserva_experience_addon(
+    hotboat_ref: str,
+    *,
+    experience_slug: str,
+    experience_name: str,
+    start_date,
+    num_people: int,
+    price_per_person: int,
+    experience_booking_ref: str,
+) -> bool:
+    """Add exp__* line into hotboat_web all_appointments extras_json + recalc totals."""
+    from app.db.connection import get_connection as _gc
+    from psycopg.types.json import Json
+
+    br = (hotboat_ref or "").strip()
+    if not br:
+        return False
+
+    exp_slug = (experience_slug or "").strip().lower()
+    exp_key = f"exp__{exp_slug}" if exp_slug else f"exp__id_{experience_booking_ref}"
+
+    try:
+        flat_base = _flatten_saved_extras_json
+
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, extras_json, COALESCE(ingreso_reserva, 0),
+                           COALESCE(has_flex, FALSE), COALESCE(flex_amount, 0),
+                           COALESCE(coupon_discount, 0), COALESCE(observaciones, '')
+                    FROM all_appointments
+                    WHERE source = 'hotboat_web' AND TRIM(source_id) = TRIM(%s)
+                    LIMIT 1
+                    """,
+                    (br,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    logger.warning("_merge_hotboat_exp: no all_appointments row for HB ref %s", br)
+                    return False
+
+                rid, extras_raw, ingreso_reserva, has_flex, flex_amount, coupon_disc, observaciones = row
+
+                merged = flat_base(extras_raw)
+                merged[exp_key] = {
+                    "qty": int(num_people),
+                    "unit_price": int(price_per_person),
+                    "date": start_date.isoformat(),
+                    "name": experience_name,
+                }
+
+                extras_total = _extras_flat_monetary_total(merged)
+                flex_amt = float(flex_amount or 0) if has_flex else 0.0
+                ig_tot = (
+                    float(ingreso_reserva or 0)
+                    + extras_total
+                    + flex_amt
+                    - float(coupon_disc or 0)
+                )
+
+                snippet = f"⭐ Experiencia WEB · ref {experience_booking_ref}"
+                obs = (observaciones or "").strip()
+                new_obs = obs
+                if snippet not in obs:
+                    new_obs = f"{obs}\n{snippet}".strip() if obs else snippet
+
+                cur.execute(
+                    """
+                    UPDATE all_appointments
+                       SET extras_json = %s,
+                           ingreso_extras = %s,
+                           ingreso_total = %s,
+                           observaciones = %s,
+                           updated_at = NOW()
+                     WHERE id = %s
+                    """,
+                    (Json(merged), extras_total, ig_tot, new_obs, rid),
+                )
+                conn.commit()
+                logger.info(
+                    "Merged experiencia %s into HotBoat reserva %s (extras %.0f · total %.0f)",
+                    experience_booking_ref,
+                    br,
+                    extras_total,
+                    ig_tot,
+                )
+                return True
+    except Exception as ex:
+        logger.warning("_merge_hotboat_exp failed for %s + %s: %s", br, experience_booking_ref, ex)
+        return False
+
+
+def _merge_hotboat_reserva_pack_addon(
+    hotboat_ref: str,
+    *,
+    pack_slug: str,
+    pack_name: str,
+    start_date,
+    num_people: int,
+    unit_price_per_person: int,
+    pack_booking_ref: str,
+) -> bool:
+    """Add pack as exp__* line into hotboat_web all_appointments extras_json + recalc totals."""
+    from app.db.connection import get_connection as _gc
+    from psycopg.types.json import Json
+
+    br = (hotboat_ref or "").strip()
+    if not br:
+        return False
+
+    pk_slug = (pack_slug or "").strip().lower()
+    pk_key = f"exp__{pk_slug}" if pk_slug else f"exp__id_{pack_booking_ref}"
+
+    try:
+        flat_base = _flatten_saved_extras_json
+
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, extras_json, COALESCE(ingreso_reserva, 0),
+                           COALESCE(has_flex, FALSE), COALESCE(flex_amount, 0),
+                           COALESCE(coupon_discount, 0), COALESCE(observaciones, '')
+                    FROM all_appointments
+                    WHERE source = 'hotboat_web' AND TRIM(source_id) = TRIM(%s)
+                    LIMIT 1
+                    """,
+                    (br,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    logger.warning("_merge_hotboat_pack: no all_appointments row for HB ref %s", br)
+                    return False
+
+                rid, extras_raw, ingreso_reserva, has_flex, flex_amount, coupon_disc, observaciones = row
+
+                merged = flat_base(extras_raw)
+                merged[pk_key] = {
+                    "qty": int(num_people),
+                    "unit_price": int(unit_price_per_person),
+                    "date": start_date.isoformat(),
+                    "name": pack_name,
+                }
+
+                extras_total = _extras_flat_monetary_total(merged)
+                flex_amt = float(flex_amount or 0) if has_flex else 0.0
+                ig_tot = (
+                    float(ingreso_reserva or 0)
+                    + extras_total
+                    + flex_amt
+                    - float(coupon_disc or 0)
+                )
+
+                snippet = f"🎁 Pack WEB · ref {pack_booking_ref}"
+                obs = (observaciones or "").strip()
+                new_obs = obs
+                if snippet not in obs:
+                    new_obs = f"{obs}\n{snippet}".strip() if obs else snippet
+
+                cur.execute(
+                    """
+                    UPDATE all_appointments
+                       SET extras_json = %s,
+                           ingreso_extras = %s,
+                           ingreso_total = %s,
+                           observaciones = %s,
+                           updated_at = NOW()
+                     WHERE id = %s
+                    """,
+                    (Json(merged), extras_total, ig_tot, new_obs, rid),
+                )
+                conn.commit()
+                logger.info(
+                    "Merged pack %s into HotBoat reserva %s (extras %.0f · total %.0f)",
+                    pack_booking_ref,
+                    br,
+                    extras_total,
+                    ig_tot,
+                )
+                return True
+    except Exception as ex:
+        logger.warning("_merge_hotboat_pack failed for %s + %s: %s", br, pack_booking_ref, ex)
+        return False
+
+
 async def _notify_aloj_booking(
     *,
     aloj_ref: str,
@@ -1423,6 +1609,354 @@ async def create_accommodation_booking(request: AlojBookingRequest):
         logger.warning("aloj email notify error: %s", _ee)
 
     return {"booking_ref": aloj_ref, "total_price": total_aloj, "payment_url": payment_url}
+
+
+class ExperienceBookingRequest(BaseModel):
+    experience_slug: str
+    experience_name: str
+    start_date: str  # YYYY-MM-DD
+    end_date: Optional[str] = None  # YYYY-MM-DD (optional)
+    num_people: int = 1
+    price_per_person: int
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[str] = None
+    hotboat_booking_ref: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class PackBookingRequest(BaseModel):
+    pack_slug: str
+    pack_name: str
+    start_date: str  # YYYY-MM-DD
+    end_date: Optional[str] = None  # YYYY-MM-DD (optional)
+    num_people: int = 1
+    # Used for accounting + exp__ merging in all_appointments
+    unit_price_per_person: int
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[str] = None
+    hotboat_booking_ref: Optional[str] = None
+    notes: Optional[str] = None
+
+
+def _gen_extras_booking_ref(prefix: str) -> str:
+    year = datetime.now(CHILE_TZ).year
+    import random, string
+
+    suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    return f"{prefix}-{year}-{suffix}"
+
+
+def _is_high_season_for_date(d) -> bool:
+    """Treat urgency-day as 'temporada alta' for web add-ons (no online payment)."""
+    from app.booking.operator_settings import is_urgency_mode, get_urgency_day_override
+
+    override = get_urgency_day_override(d)
+    return (override if override is not None else is_urgency_mode()) is True
+
+
+def _date_fromiso(d: Optional[str]):
+    from datetime import date as _date
+
+    if not d:
+        return None
+    return _date.fromisoformat(d)
+
+
+@router.post("/api/booking/experience-create")
+async def create_experience_booking(request: ExperienceBookingRequest):
+    start_d = _date_fromiso(request.start_date)
+    end_d = _date_fromiso(request.end_date) if request.end_date else None
+    if not start_d:
+        raise HTTPException(status_code=400, detail="start_date inválida")
+    if end_d and end_d < start_d:
+        raise HTTPException(status_code=400, detail="end_date no puede ser anterior a start_date")
+
+    days_count = 1
+    if end_d and end_d > start_d:
+        days_count = (end_d - start_d).days + 1
+    if end_d and end_d == start_d:
+        end_d = None
+
+    total_price = int(request.price_per_person) * int(request.num_people) * int(days_count)
+    deposit_paid = round(total_price * 0.5)
+    exp_ref = _gen_extras_booking_ref("EX")
+
+    # Insert calendar row first so it exists even if payment fails
+    from app.db.connection import get_connection as _gc
+
+    with _gc() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO extras_bookings "
+                "(booking_ref,customer_name,customer_phone,item_type,item_slug,item_name,"
+                " start_date,end_date,num_people,total_price,deposit_paid,status,notes)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    exp_ref,
+                    request.customer_name,
+                    request.customer_phone,
+                    "experience",
+                    request.experience_slug,
+                    request.experience_name,
+                    start_d,
+                    end_d,
+                    request.num_people,
+                    total_price,
+                    deposit_paid,
+                    "pendiente",
+                    (request.notes or "").strip() or f"Pago web · {exp_ref}",
+                ),
+            )
+            conn.commit()
+
+    # Notify admin (WhatsApp) - similar to /api/booking/solicitud
+    try:
+        solicitud_req = SolicitudRequest(
+            customer_name=request.customer_name,
+            customer_phone=request.customer_phone,
+            customer_email=request.customer_email,
+            dates_preference=str(start_d) + (f" al {end_d}" if end_d else ""),
+            people=str(request.num_people),
+            notes=(request.notes or "").strip(),
+            service_type=f"experience:{request.experience_slug}",
+            title=request.experience_name,
+        )
+        await _notify_solicitud(solicitud_req, exp_ref)
+    except Exception as _notify_err:
+        logger.warning("experience-create notify failed for %s: %s", exp_ref, _notify_err)
+
+    hotboat_ref = (request.hotboat_booking_ref or "").strip()
+
+    # High season: no online payment, coordinate manually
+    if _is_high_season_for_date(start_d):
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE extras_bookings SET status='pendiente', deposit_paid=0 WHERE booking_ref=%s AND item_type=%s",
+                    (exp_ref, "experience"),
+                )
+                conn.commit()
+        return {"booking_ref": exp_ref, "total_price": total_price, "payment_url": None, "requires_email": True}
+
+    # If combined with HotBoat, compute hotboat deposit before merging extras into totals.
+    hotboat_deposit = 0
+    hotboat_label = ""
+    if hotboat_ref:
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ingreso_total, fecha, hora, num_personas "
+                    "FROM all_appointments "
+                    "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) LIMIT 1",
+                    (hotboat_ref,),
+                )
+                row = cur.fetchone()
+                if row:
+                    hb_total, hb_fecha, hb_hora, hb_np = row
+                    hotboat_deposit = round(float(hb_total or 0) * 0.5)
+                    hb_hhmm = str(hb_hora or "")[:5]
+                    hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
+
+    if hotboat_ref:
+        try:
+            _merge_hotboat_reserva_experience_addon(
+                hotboat_ref,
+                experience_slug=request.experience_slug,
+                experience_name=request.experience_name,
+                start_date=start_d,
+                num_people=request.num_people,
+                price_per_person=request.price_per_person,
+                experience_booking_ref=exp_ref,
+            )
+        except Exception as ex_merge:
+            logger.warning("experience-create merge failed for %s + %s: %s", hotboat_ref, exp_ref, ex_merge)
+
+    fee_lines = [
+        {
+            "name": f"Experiencia: {request.experience_name} ({start_d}{f' al {end_d}' if end_d else ''})",
+            "total": str(deposit_paid),
+        }
+    ]
+    if hotboat_ref and hotboat_deposit:
+        fee_lines.append({"name": hotboat_label or "HotBoat · deposito 50%", "total": str(hotboat_deposit)})
+
+    payment_url = None
+    try:
+        from app.payment.woocommerce import create_order as woo_create_order
+
+        woo_order = await woo_create_order(
+            reservation_id=0,
+            booking_ref=exp_ref,
+            nombre=request.customer_name,
+            telefono=request.customer_phone,
+            email=request.customer_email,
+            monto_reserva=0,
+            monto_extras=0,
+            fecha=str(start_d),
+            num_personas=request.num_people,
+            custom_fee_lines=fee_lines,
+            extra_meta=[
+                {"key": "hotboat_booking_ref", "value": hotboat_ref},
+                {"key": "experience_booking_ref", "value": exp_ref},
+            ]
+            if hotboat_ref
+            else [
+                {"key": "experience_booking_ref", "value": exp_ref},
+            ],
+        )
+        payment_url = woo_order.get("payment_url")
+    except Exception as pe:
+        logger.warning("WooCommerce experience skip [%s]: %r", exp_ref, pe)
+
+    return {"booking_ref": exp_ref, "total_price": total_price, "payment_url": payment_url}
+
+
+@router.post("/api/booking/pack-create")
+async def create_pack_booking(request: PackBookingRequest):
+    start_d = _date_fromiso(request.start_date)
+    end_d = _date_fromiso(request.end_date) if request.end_date else None
+    if not start_d:
+        raise HTTPException(status_code=400, detail="start_date inválida")
+    if end_d and end_d < start_d:
+        raise HTTPException(status_code=400, detail="end_date no puede ser anterior a start_date")
+
+    days_count = 1
+    if end_d and end_d > start_d:
+        days_count = (end_d - start_d).days + 1
+    if end_d and end_d == start_d:
+        end_d = None
+
+    total_price = int(request.unit_price_per_person) * int(request.num_people) * int(days_count)
+    deposit_paid = round(total_price * 0.5)
+    pack_ref = _gen_extras_booking_ref("PK")
+
+    from app.db.connection import get_connection as _gc
+
+    with _gc() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO extras_bookings "
+                "(booking_ref,customer_name,customer_phone,item_type,item_slug,item_name,"
+                " start_date,end_date,num_people,total_price,deposit_paid,status,notes)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    pack_ref,
+                    request.customer_name,
+                    request.customer_phone,
+                    "pack",
+                    request.pack_slug,
+                    request.pack_name,
+                    start_d,
+                    end_d,
+                    request.num_people,
+                    total_price,
+                    deposit_paid,
+                    "pendiente",
+                    (request.notes or "").strip() or f"Pago web · {pack_ref}",
+                ),
+            )
+            conn.commit()
+
+    # Notify admin (WhatsApp) - similar to /api/booking/solicitud
+    try:
+        solicitud_req = SolicitudRequest(
+            customer_name=request.customer_name,
+            customer_phone=request.customer_phone,
+            customer_email=request.customer_email,
+            dates_preference=str(start_d) + (f" al {end_d}" if end_d else ""),
+            people=str(request.num_people),
+            notes=(request.notes or "").strip(),
+            service_type=f"pack:{request.pack_slug}",
+            title=request.pack_name,
+        )
+        await _notify_solicitud(solicitud_req, pack_ref)
+    except Exception as _notify_err:
+        logger.warning("pack-create notify failed for %s: %s", pack_ref, _notify_err)
+
+    hotboat_ref = (request.hotboat_booking_ref or "").strip()
+
+    if _is_high_season_for_date(start_d):
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE extras_bookings SET status='pendiente', deposit_paid=0 WHERE booking_ref=%s AND item_type=%s",
+                    (pack_ref, "pack"),
+                )
+                conn.commit()
+        return {"booking_ref": pack_ref, "total_price": total_price, "payment_url": None, "requires_email": True}
+
+    hotboat_deposit = 0
+    hotboat_label = ""
+    if hotboat_ref:
+        with _gc() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ingreso_total, fecha, hora, num_personas "
+                    "FROM all_appointments "
+                    "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) LIMIT 1",
+                    (hotboat_ref,),
+                )
+                row = cur.fetchone()
+                if row:
+                    hb_total, hb_fecha, hb_hora, hb_np = row
+                    hotboat_deposit = round(float(hb_total or 0) * 0.5)
+                    hb_hhmm = str(hb_hora or "")[:5]
+                    hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
+
+    if hotboat_ref:
+        try:
+            _merge_hotboat_reserva_pack_addon(
+                hotboat_ref,
+                pack_slug=request.pack_slug,
+                pack_name=request.pack_name,
+                start_date=start_d,
+                num_people=request.num_people,
+                unit_price_per_person=request.unit_price_per_person,
+                pack_booking_ref=pack_ref,
+            )
+        except Exception as ex_merge:
+            logger.warning("pack-create merge failed for %s + %s: %s", hotboat_ref, pack_ref, ex_merge)
+
+    fee_lines = [
+        {
+            "name": f"Pack: {request.pack_name} ({start_d}{f' al {end_d}' if end_d else ''})",
+            "total": str(deposit_paid),
+        }
+    ]
+    if hotboat_ref and hotboat_deposit:
+        fee_lines.append({"name": hotboat_label or "HotBoat · deposito 50%", "total": str(hotboat_deposit)})
+
+    payment_url = None
+    try:
+        from app.payment.woocommerce import create_order as woo_create_order
+
+        woo_order = await woo_create_order(
+            reservation_id=0,
+            booking_ref=pack_ref,
+            nombre=request.customer_name,
+            telefono=request.customer_phone,
+            email=request.customer_email,
+            monto_reserva=0,
+            monto_extras=0,
+            fecha=str(start_d),
+            num_personas=request.num_people,
+            custom_fee_lines=fee_lines,
+            extra_meta=[
+                {"key": "hotboat_booking_ref", "value": hotboat_ref},
+                {"key": "pack_booking_ref", "value": pack_ref},
+            ]
+            if hotboat_ref
+            else [
+                {"key": "pack_booking_ref", "value": pack_ref},
+            ],
+        )
+        payment_url = woo_order.get("payment_url")
+    except Exception as pe:
+        logger.warning("WooCommerce pack skip [%s]: %r", pack_ref, pe)
+
+    return {"booking_ref": pack_ref, "total_price": total_price, "payment_url": payment_url}
 
 
 # ── Booking page visitor tracking ─────────────────────────────────────────────

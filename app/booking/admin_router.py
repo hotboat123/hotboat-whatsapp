@@ -2282,6 +2282,59 @@ async def woo_webhook(request: Request):
             except Exception as ae:
                 logger.error("WC webhook: error updating accommodation_bookings %s: %s", aloj_ref_wc, ae)
 
+        # ── 3b. Update experience/pack extras_bookings ─────────────────────
+        exp_ref_wc = meta_map.get("experience_booking_ref", "") or ""
+        pack_ref_wc = meta_map.get("pack_booking_ref", "") or ""
+        if exp_ref_wc or pack_ref_wc:
+            try:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        if exp_ref_wc:
+                            cur.execute(
+                                "SELECT total_price, deposit_paid FROM extras_bookings "
+                                "WHERE booking_ref=%s AND item_type=%s LIMIT 1",
+                                (exp_ref_wc, "experience"),
+                            )
+                            row = cur.fetchone()
+                            if row:
+                                total_price, deposit_paid = row
+                                cur.execute(
+                                    "UPDATE extras_bookings SET status=%s, total_price=%s, deposit_paid=%s "
+                                    "WHERE booking_ref=%s AND item_type=%s",
+                                    (
+                                        "confirmado",
+                                        int(total_price or 0),
+                                        int(deposit_paid or 0),
+                                        exp_ref_wc,
+                                        "experience",
+                                    ),
+                                )
+
+                        if pack_ref_wc:
+                            cur.execute(
+                                "SELECT total_price, deposit_paid FROM extras_bookings "
+                                "WHERE booking_ref=%s AND item_type=%s LIMIT 1",
+                                (pack_ref_wc, "pack"),
+                            )
+                            row = cur.fetchone()
+                            if row:
+                                total_price, deposit_paid = row
+                                cur.execute(
+                                    "UPDATE extras_bookings SET status=%s, total_price=%s, deposit_paid=%s "
+                                    "WHERE booking_ref=%s AND item_type=%s",
+                                    (
+                                        "confirmado",
+                                        int(total_price or 0),
+                                        int(deposit_paid or 0),
+                                        pack_ref_wc,
+                                        "pack",
+                                    ),
+                                )
+
+                        conn.commit()
+            except Exception as ep:
+                logger.error("WC webhook: error updating exp/pack extras_bookings: %s", ep)
+
         logger.info(f"WC webhook: order {wc_id} processed → status={status}, amount={total}")
         return {"ok": True, "reservation_id": res_id, "booking_ref": booking_ref_wc, "status": status}
 

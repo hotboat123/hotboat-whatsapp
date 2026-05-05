@@ -996,6 +996,8 @@ function _galGoto(gid, dir){
 // ── Accommodation booking state & calendar ───────────────────────────────────
 let _alojState = null;
 let _pendingAlojBooking = null;  // accommodation held while user picks HotBoat slot
+let _pendingExpBooking = null;   // experience held while user picks HotBoat slot
+let _pendingPackBooking = null;  // pack held while user picks HotBoat slot
 const _alojAvailCache = {};
 
 async function showAlojamiento(id){
@@ -1559,6 +1561,8 @@ function showExtrasDateForm(slug, name, type){
       <input type="text" id="ef-name" placeholder="Tu nombre"></div>
     <div class="form-group"><label>WhatsApp / Telefono *</label>
       <input type="tel" id="ef-phone" placeholder="+56 9 xxxx xxxx"></div>
+    <div class="form-group"><label>Email (opcional)</label>
+      <input type="email" id="ef-email" placeholder="tu@email.com"></div>
     <div class="form-group"><label>Fecha inicio *</label>
       <input type="date" id="ef-start"></div>
     <div class="form-group"><label>Fecha fin (si aplica)</label>
@@ -1575,6 +1579,7 @@ function showExtrasDateForm(slug, name, type){
 async function enviarExtrasForm(slug, name, type){
   const nameVal  = document.getElementById('ef-name').value.trim();
   const phone    = document.getElementById('ef-phone').value.trim();
+  const email    = document.getElementById('ef-email')?.value.trim() || null;
   const start    = document.getElementById('ef-start').value;
   const end      = document.getElementById('ef-end').value || null;
   const people   = parseInt(document.getElementById('ef-people').value)||1;
@@ -1583,7 +1588,73 @@ async function enviarExtrasForm(slug, name, type){
   const btn = mc.querySelector('.btn');
   if(btn){ btn.textContent='Enviando...'; btn.disabled=true; }
   try{
-    // Create extras booking (public endpoint, no auth needed)
+    const endDate = (end && end !== start) ? end : null;
+
+    // Experience + Pack web flow: create pending add-on while user picks HotBoat slot.
+    if(type === 'experience'){
+      const exp = (DYN_EXPERIENCIAS || []).find(e => e.slug === slug) || {};
+      const pricePerPerson = Math.round(Number(exp.price_per_person || 0));
+      if(!pricePerPerson){
+        throw new Error('No se pudo obtener el precio de la experiencia.');
+      }
+
+      _pendingAlojBooking = null;
+      _pendingPackBooking = null;
+      _pendingExpBooking = {
+        experience_slug: slug,
+        experience_name: name,
+        start_date: start,
+        end_date: endDate,
+        num_people: people,
+        price_per_person: pricePerPerson,
+        customer_name: nameVal,
+        customer_phone: phone,
+        customer_email: email,
+        notes: notes,
+      };
+
+      S.customerName = nameVal;
+      S.customerPhone = phone;
+      S.customerEmail = email;
+      S.numPeople = people;
+      goReservar();
+      return;
+    }
+
+    if(type === 'pack'){
+      const pack = (DYN_PACKS || []).find(p => p.slug === slug) || {};
+      const priceFrom = Number(pack.price_from || 0);
+      if(!priceFrom){
+        throw new Error('No se pudo obtener el precio del pack.');
+      }
+      // Approx: treat pack price_from as total price for the selected number of people,
+      // so we store a unit price per person for exp__ merging + accounting.
+      const unitPricePerPerson = Math.max(1, Math.round(priceFrom / people));
+
+      _pendingAlojBooking = null;
+      _pendingExpBooking = null;
+      _pendingPackBooking = {
+        pack_slug: slug,
+        pack_name: name,
+        start_date: start,
+        end_date: endDate,
+        num_people: people,
+        unit_price_per_person: unitPricePerPerson,
+        customer_name: nameVal,
+        customer_phone: phone,
+        customer_email: email,
+        notes: notes,
+      };
+
+      S.customerName = nameVal;
+      S.customerPhone = phone;
+      S.customerEmail = email;
+      S.numPeople = people;
+      goReservar();
+      return;
+    }
+
+    // Fallback to legacy behavior (solicitud + extras request)
     await fetch('/api/content/extras-booking', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -1595,7 +1666,6 @@ async function enviarExtrasForm(slug, name, type){
         total_price:0, deposit_paid:0, status:'pendiente',
       }),
     });
-    // Also create solicitud for admin notification
     await fetch('/api/booking/solicitud',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -1995,7 +2065,15 @@ function renderForm(){
       <input type="date" id="f-birthday" max="${new Date().toISOString().split('T')[0]}" value="${S.customerBirthday||''}">
     </div>
   </div>
-  <button class="btn" onclick="submitBooking()">${_pendingAlojBooking ? '💳 Pagar alojamiento + HotBoat' : t('pay') + ' 💳'}</button>
+  <button class="btn" onclick="submitBooking()">
+    ${_pendingAlojBooking
+      ? '💳 Pagar alojamiento + HotBoat'
+      : _pendingExpBooking
+      ? '💳 Pagar experiencia + HotBoat'
+      : _pendingPackBooking
+      ? '💳 Pagar pack + HotBoat'
+      : t('pay') + ' 💳'}
+  </button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderExtras()">${t('back')}</button>`;
 }
 
@@ -2095,7 +2173,7 @@ async function submitBooking(){
     };
     if(testPrice) payload.test_price = parseInt(testPrice);
     // If coming from accommodation flow, create HotBoat booking without payment order
-    if(_pendingAlojBooking) payload.skip_payment = true;
+    if(_pendingAlojBooking || _pendingExpBooking || _pendingPackBooking) payload.skip_payment = true;
 
     const r = await fetch('/api/booking/create',{
       method:'POST',
@@ -2127,12 +2205,92 @@ async function submitBooking(){
       const alojDeposit = Math.round(alojTotal * 0.5);
       S.totalPrice = total + alojTotal;           // real combined total
       S.depositAmount = Math.round(total * 0.5) + alojDeposit;  // real combined deposit
+    } else if(_pendingExpBooking){
+      // Create combined WooCommerce order: experience + HotBoat
+      const expPayload = { ..._pendingExpBooking, hotboat_booking_ref: data.booking_ref };
+      expPayload.num_people = S.numPeople;
+      const start = new Date(expPayload.start_date);
+      const end   = expPayload.end_date ? new Date(expPayload.end_date) : null;
+      const daysCount = (!end || expPayload.end_date === expPayload.start_date)
+        ? 1
+        : Math.round((end - start) / 86400000) + 1;
+      const expTotal = expPayload.price_per_person * expPayload.num_people * daysCount;
+      const expDeposit = Math.round(expTotal * 0.5);
+
+      _pendingExpBooking = null;
+
+      const er = await fetch('/api/booking/experience-create',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(expPayload)
+      });
+      const edata = await er.json();
+      if(!er.ok) throw new Error(edata.detail || 'Error al crear reserva experiencia');
+
+      S.bookingRef = edata.booking_ref;
+      S.paymentUrl = edata.payment_url;
+      S.totalPrice = total + expTotal;
+      S.depositAmount = Math.round(total * 0.5) + expDeposit;
+
+      if(!edata.payment_url && edata.requires_email){
+        mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+          <div style="font-size:3rem;margin-bottom:1rem">📧</div>
+          <div class="card-title">Alta temporada — Coordinamos por email</div>
+          <p style="color:var(--muted);margin-top:.6rem">
+            Para confirmar la experiencia, escribe a <strong>info@hotboatchile.com</strong>.
+          </p>
+          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${edata.booking_ref}</strong></p>
+          <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">Volver al inicio</button>
+        </div>`;
+        return;
+      }
+    } else if(_pendingPackBooking){
+      // Create combined WooCommerce order: pack + HotBoat
+      const packPayload = { ..._pendingPackBooking, hotboat_booking_ref: data.booking_ref };
+      packPayload.num_people = S.numPeople;
+      const start = new Date(packPayload.start_date);
+      const end   = packPayload.end_date ? new Date(packPayload.end_date) : null;
+      const daysCount = (!end || packPayload.end_date === packPayload.start_date)
+        ? 1
+        : Math.round((end - start) / 86400000) + 1;
+      const packTotal = packPayload.unit_price_per_person * packPayload.num_people * daysCount;
+      const packDeposit = Math.round(packTotal * 0.5);
+
+      _pendingPackBooking = null;
+
+      const pr = await fetch('/api/booking/pack-create',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(packPayload)
+      });
+      const pdata = await pr.json();
+      if(!pr.ok) throw new Error(pdata.detail || 'Error al crear reserva pack');
+
+      S.bookingRef = pdata.booking_ref;
+      S.paymentUrl = pdata.payment_url;
+      S.totalPrice = total + packTotal;
+      S.depositAmount = Math.round(total * 0.5) + packDeposit;
+
+      if(!pdata.payment_url && pdata.requires_email){
+        mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+          <div style="font-size:3rem;margin-bottom:1rem">📧</div>
+          <div class="card-title">Alta temporada — Coordinamos por email</div>
+          <p style="color:var(--muted);margin-top:.6rem">
+            Para confirmar el pack, escribe a <strong>info@hotboatchile.com</strong>.
+          </p>
+          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${pdata.booking_ref}</strong></p>
+          <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">Volver al inicio</button>
+        </div>`;
+        return;
+      }
     }
 
     _trackEvent('booking_completed', S.selectedDate);
     renderPayment();
   }catch(e){
     _pendingAlojBooking = null;
+    _pendingExpBooking = null;
+    _pendingPackBooking = null;
     mc.innerHTML = `<div class="card"><p style="color:red">Error: ${e.message}</p></div>`;
   }
 }
