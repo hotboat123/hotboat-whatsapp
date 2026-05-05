@@ -633,7 +633,7 @@ function toggleMedia(btnId, containerId, src, isImg){
   btn.textContent = isImg ? '🙈 Ocultar foto' : '🙈 Ocultar';
 }
 
-// Helper to build a media block (img + optional pdf link)
+// Helper for optional expandable image / PDF elsewhere (packs etc.)
 function mediaBlock(id, imgSrc, pdfSrc){
   const imgBtn = imgSrc ? `
     <button id="mb-btn-${id}" class="media-toggle" onclick="toggleMedia('mb-btn-${id}','mb-box-${id}','${imgSrc}',true)">📸 Ver foto</button>
@@ -958,15 +958,16 @@ function showExperienciaDetail(slug){
   _destroyAddonPickers();
   _addonPackState = null;
   _addonExpState = {e, slug, name: e.name, pricePerPerson, checkIn:null, checkOut:null};
-  const img = e.image_path ? mediaBlock(slug, e.image_path, '/media/documents/experiencias.pdf') : '';
+  const expImgs = _expImagesList(e);
+  const gid = `gal-exp-${String(slug).replace(/[^a-z0-9_-]/gi, '')}`;
+  const imgHtml = _galBuild(gid, expImgs, e.icon || '🎫');
   mc.innerHTML = `
   <div class="card">
-    <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${e.icon}</div>
+    ${imgHtml}
     <div class="card-title">${e.name}</div>
-    <p style="color:var(--muted);margin-bottom:.8rem">${e.description||''}</p>
     <div class="price-tag"><div class="price-big">${_alojMoney(pricePerPerson)}</div>
       <div class="price-sub">${t('addonPriceHint')}</div></div>
-    ${img}
+    <p style="color:var(--muted);font-size:.85rem;margin-top:.8rem;line-height:1.5">${e.description||''}</p>
   </div>
   <div class="card">
     <div class="card-title" style="font-size:1rem;margin-bottom:.6rem">${t('alojSelectDates')}</div>
@@ -1520,6 +1521,26 @@ function _galBuild(gid, imgs, icon){
     <div id="${gid}-ctr" style="position:absolute;top:8px;right:10px;background:rgba(0,0,0,.55);color:#fff;
       font-size:11px;border-radius:12px;padding:2px 8px">1 / ${imgs.length}</div>
   </div>`;
+}
+
+/** Normalize experience image_path + DB extra_images (strings or {url}) into deduped URLs */
+function _expImagesList(e){
+  const out = [];
+  if(!e) return out;
+  if(e.image_path){
+    const p = String(e.image_path).trim();
+    if(p) out.push(p);
+  }
+  let extra = e.extra_images;
+  if(typeof extra === 'string'){
+    try{ extra = JSON.parse(extra); }catch(_){ extra = []; }
+  }
+  if(!Array.isArray(extra)) return out;
+  extra.forEach(x=>{
+    const p = typeof x === 'string' ? String(x).trim() : (x && (x.url || x.path || x.src)) ? String(x.url||x.path||x.src).trim() : '';
+    if(p && !out.includes(p)) out.push(p);
+  });
+  return out;
 }
 
 function _galGoto(gid, dir){
