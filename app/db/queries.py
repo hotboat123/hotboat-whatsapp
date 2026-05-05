@@ -131,8 +131,7 @@ async def check_slot_availability(slot_datetime: datetime, duration_hours: float
                 cur.execute("""
                     SELECT COUNT(*) FROM booknetic_appointments
                     WHERE starts_at IS NOT NULL
-                      AND status IS NOT NULL
-                      AND status NOT IN ('cancelled','rejected','cancelada','pending_payment','solicitud')
+                      AND (status IS NULL OR status NOT IN ('cancelled','rejected','cancelada','pending_payment','solicitud'))
                       AND starts_at < %s
                       AND starts_at + INTERVAL '1 hour' * %s > %s
                 """, (s_end, appt_dur, s_start))
@@ -203,8 +202,8 @@ async def get_booked_slots(
                 # Build query based on exclude_statuses
                 if exclude_statuses and len(exclude_statuses) > 0:
                     placeholders = ','.join(['%s'] * len(exclude_statuses))
-                    # status NULL in booknetic has produced orphan/ghost blocks; ignore NULL.
-                    status_filter = f"AND status IS NOT NULL AND status NOT IN ({placeholders})"
+                    # Booknetic imports often arrive with NULL status; those are still holds for the calendar.
+                    status_filter = f"AND (status IS NULL OR status NOT IN ({placeholders}))"
                     params = (start_date, end_date) + tuple(exclude_statuses)
                 else:
                     status_filter = ""
@@ -243,6 +242,8 @@ async def get_booked_slots(
 
                 # Include all_appointments (web hotboat_web + manual/sheets; canonical).
                 from datetime import time as dt_time
+                # Include pending_payment for hotboat_web: slot is reserved until paid or TTL cleanup.
+                # (Stale rows >45min are deleted in app/main.py; solicitud/leads stay excluded.)
                 cur.execute("""
                     SELECT fecha, hora, nombre_cliente, status
                     FROM all_appointments
@@ -250,7 +251,8 @@ async def get_booked_slots(
                       AND fecha >= %s::date
                       AND fecha <= %s::date
                       AND hora IS NOT NULL
-                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud','pending_payment')
+                      AND status IS NOT NULL
+                      AND status NOT IN ('cancelled','rejected','cancelada','solicitud')
                     ORDER BY fecha, hora
                 """, (start_date, end_date))
                 for row in cur.fetchall():
