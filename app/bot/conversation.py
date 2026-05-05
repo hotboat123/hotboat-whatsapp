@@ -451,6 +451,13 @@ class ConversationManager:
                 else:
                     logger.info(f"Unsupported language requested: {requested_language}")
                     response = self._language_not_supported_response(conversation)
+            elif is_first and not metadata.get("language_selected"):
+                inferred_language = self._infer_language_from_free_text(message_text)
+                if inferred_language in LANGUAGES:
+                    metadata["language"] = inferred_language
+                    logger.info(
+                        f"Auto language on first message for {from_number}: {inferred_language}"
+                    )
             # Always show welcome message on first interaction
             # BUT skip if an active flow was already set (e.g. via quick reply from admin)
             elif is_first and not any(metadata.get(k) for k in (
@@ -1117,6 +1124,37 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         metadata.pop("pending_extras", None)
         
         return self._cart_needs_reservation_message(conversation)
+
+    def _infer_language_from_free_text(self, message: str) -> Optional[str]:
+        """
+        Infer language from first-message ad variants without explicit "english"/"portugues".
+        """
+        txt = self._normalize_text(message or "")
+        if not txt:
+            return None
+
+        en_phrases = (
+            "i want more information",
+            "i want information",
+            "more information",
+            "can i get more information",
+            "i would like more information",
+            "hello i want",
+            "hi i want",
+        )
+        if any(p in txt for p in en_phrases):
+            return "en"
+
+        pt_phrases = (
+            "quero mais informacao",
+            "quero mais informacoes",
+            "quero informacao",
+            "ola quero",
+        )
+        if any(p in txt for p in pt_phrases):
+            return "pt"
+
+        return None
     
     def _switch_language(self, conversation: dict, language_code: str) -> str:
         """Set the conversation language and return confirmation + menu."""

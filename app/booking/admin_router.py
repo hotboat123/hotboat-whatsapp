@@ -14,6 +14,11 @@ from pydantic import BaseModel
 
 from app.db.connection import get_connection
 
+from app.booking.extras_calendar_sync import (
+    sync_aloj_addons_from_appointment_cursor,
+    update_synced_aloj_calendar_status,
+)
+
 logger = logging.getLogger(__name__)
 admin_router = APIRouter()
 CHILE_TZ = ZoneInfo("America/Santiago")
@@ -281,6 +286,33 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                                 "UPDATE reservas_con_extras SET status=%s, updated_at=NOW() WHERE id=%s",
                                 (updates["status"], int(src_id))
                             )
+
+                # Calendario Extras: alojamiento añadido/editado en panel (no viene de accommodation-create)
+                if "extras_json" in updates or "status" in updates:
+                    cur.execute(
+                        f"SELECT source, source_id, nombre_cliente, telefono, num_personas, fecha, extras_json, status "
+                        f"FROM {TABLE} WHERE id=%s",
+                        (rid,),
+                    )
+                    sync_row = cur.fetchone()
+                    if sync_row:
+                        src, src_id_row, nombre, tel, npers, fecha_v, ej, cur_status = sync_row
+                        # Calendario extras: cualquier source; sync interno evita duplicar HB+HA
+                        if "extras_json" in updates:
+                            sync_aloj_addons_from_appointment_cursor(
+                                cur,
+                                appointment_id=rid,
+                                source=src or "",
+                                source_id=(str(src_id_row) if src_id_row is not None else None),
+                                extras_json=ej,
+                                nombre_cliente=nombre or "",
+                                telefono=tel,
+                                num_personas=npers,
+                                fecha=fecha_v,
+                                status=cur_status,
+                            )
+                        elif "status" in updates:
+                            update_synced_aloj_calendar_status(cur, rid, cur_status)
 
                 conn.commit()
 
