@@ -1773,6 +1773,16 @@ async def create_experience_booking(request: ExperienceBookingRequest):
                     hotboat_deposit = round(float(hb_total or 0) * 0.5)
                     hb_hhmm = str(hb_hora or "")[:5]
                     hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
+                else:
+                    # Combined flow can exist before all_appointments row is synced.
+                    cur.execute(
+                        "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
+                        (hotboat_ref,),
+                    )
+                    row2 = cur.fetchone()
+                    if row2:
+                        hotboat_deposit = round(float(row2[0] or 0) * 0.5)
+                        hotboat_label = "HotBoat · deposito 50%"
 
     if hotboat_ref:
         try:
@@ -1919,6 +1929,16 @@ async def create_pack_booking(request: PackBookingRequest):
                     hotboat_deposit = round(float(hb_total or 0) * 0.5)
                     hb_hhmm = str(hb_hora or "")[:5]
                     hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
+                else:
+                    # Combined flow can exist before all_appointments row is synced.
+                    cur.execute(
+                        "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
+                        (hotboat_ref,),
+                    )
+                    row2 = cur.fetchone()
+                    if row2:
+                        hotboat_deposit = round(float(row2[0] or 0) * 0.5)
+                        hotboat_label = "HotBoat · deposito 50%"
 
     if hotboat_ref:
         try:

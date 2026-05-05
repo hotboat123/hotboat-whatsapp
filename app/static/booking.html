@@ -200,6 +200,7 @@ const S = {
   couponPercent: 0,
   depositAmount: 0,       // overridden for combined aloj+HotBoat payments
 };
+let _isSubmittingBooking = false;
 
 // ── i18n ──────────────────────────────────────────────────────────────────────
 const I18N = {
@@ -2518,6 +2519,8 @@ async function applyCoupon(){
 }
 
 async function submitBooking(){
+  if(_isSubmittingBooking) return;
+  _isSubmittingBooking = true;
   S.customerName = $('f-name').value.trim();
   S.customerPhone = $('f-phone').value.trim();
   S.customerEmail = $('f-email').value.trim();
@@ -2691,6 +2694,8 @@ async function submitBooking(){
     _pendingExpBooking = null;
     _pendingPackBooking = null;
     mc.innerHTML = `<div class="card"><p style="color:red">Error: ${e.message}</p></div>`;
+  }finally{
+    _isSubmittingBooking = false;
   }
 }
 
