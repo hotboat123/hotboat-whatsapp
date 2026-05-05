@@ -301,6 +301,10 @@ const I18N = {
     addonInvalidDates: 'La fecha de término debe ser igual o posterior al inicio',
     addonPriceHint: '/ persona · día',
     addonPackRefNote: 'Referencia según temporada y versión del pack',
+    combinedSubtitleExpHb: (expDep, hbDep, combTot) =>
+      `Experiencia ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    combinedSubtitlePackHb: (pkDep, hbDep, combTot) =>
+      `Pack ${pkDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
   },
   en: {
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
@@ -391,6 +395,10 @@ const I18N = {
     addonInvalidDates: 'End date must be on or after the start date',
     addonPriceHint: '/ person · day',
     addonPackRefNote: 'Indicative — varies by season and package version',
+    combinedSubtitleExpHb: (expDep, hbDep, combTot) =>
+      `Experience ${expDep} + HotBoat ${hbDep} · Combined ${combTot}`,
+    combinedSubtitlePackHb: (pkDep, hbDep, combTot) =>
+      `Package ${pkDep} + HotBoat ${hbDep} · Combined ${combTot}`,
   },
   pt: {
     days: ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],
@@ -481,6 +489,10 @@ const I18N = {
     addonInvalidDates: 'A data de fim deve ser igual ou após o início',
     addonPriceHint: '/ pessoa · dia',
     addonPackRefNote: 'Valor de referência conforme temporada e versão',
+    combinedSubtitleExpHb: (expDep, hbDep, combTot) =>
+      `Experiência ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    combinedSubtitlePackHb: (pkDep, hbDep, combTot) =>
+      `Pacote ${pkDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
   },
 };
 let LANG = localStorage.getItem('hb_lang') || 'es';
@@ -1470,6 +1482,12 @@ function _addonComputeDays(checkInIso, checkOutIso){
   return Math.round((end - start) / 86400000) + 1;
 }
 
+/** Pending experience/pack payloads may omit end_date when same calendar day */
+function _addonDaysFromRange(startIso, endIsoMaybe){
+  if(!startIso) return 1;
+  return _addonComputeDays(startIso, endIsoMaybe || startIso);
+}
+
 async function showAlojamiento(id){
   _trackEvent('view_alojamiento_detail', id);
   const a = ALOJAMIENTOS.find(x=>x.id===id);
@@ -2369,8 +2387,9 @@ function renderForm(){
   const total = hbTotal;
   const [yr,mo,dy] = S.selectedDate.split('-');
 
-  // Accommodation block (shown when coming from aloj flow)
+  // Accommodation / experiencia / pack summary (addon + HotBoat)
   let alojBlock = '';
+  let expPackBlock = '';
   let combinedDepositNote = '';
   if(_pendingAlojBooking){
     const p = _pendingAlojBooking;
@@ -2396,11 +2415,56 @@ function renderForm(){
       🏠🚤 <strong style="color:var(--gold)">Total abono ahora: $${combinedDeposit.toLocaleString('es-CL')}</strong><br>
       <span style="font-size:.75rem">Alojamiento $${alojDeposit.toLocaleString('es-CL')} + HotBoat $${hbDeposit.toLocaleString('es-CL')} · Total combinado $${combinedTotal.toLocaleString('es-CL')}</span>
     </div>`;
+  } else if(_pendingExpBooking){
+    const p = _pendingExpBooking;
+    const days = _addonDaysFromRange(p.start_date, p.end_date);
+    const expTotal = (Number(p.price_per_person)||0) * (Math.max(1, Number(p.num_people)||1)) * days;
+    const expDeposit = Math.round(expTotal * 0.5);
+    const hbDeposit = Math.round(hbTotal * 0.5);
+    const combinedTotal = hbTotal + expTotal;
+    const combinedDeposit = hbDeposit + expDeposit;
+    const dateEnd = p.end_date || p.start_date;
+    expPackBlock = `
+    <div class="card" style="border-color:var(--coral)">
+      <div class="card-title" style="font-size:.95rem">🎫 ${p.experience_name||''}</div>
+      <div class="summary-row"><span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span></div>
+      <div class="summary-row"><span>${_alojMoney(p.price_per_person)}/pers. × ${p.num_people} × ${days}</span><span><strong>${_alojMoney(expTotal)}</strong></span></div>
+      <div class="summary-row" style="color:var(--gold)"><span>${t('alojDepositNow')}</span><span><strong>${_alojMoney(expDeposit)}</strong></span></div>
+      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(expTotal - expDeposit))}</div>
+    </div>`;
+    combinedDepositNote = `
+    <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
+      🎫🚤 <strong style="color:var(--gold)">Total abono ahora: ${_alojMoney(combinedDeposit)}</strong><br>
+      <span style="font-size:.75rem">${t('combinedSubtitleExpHb', _alojMoney(expDeposit), _alojMoney(hbDeposit), _alojMoney(combinedTotal))}</span>
+    </div>`;
+  } else if(_pendingPackBooking){
+    const p = _pendingPackBooking;
+    const days = _addonDaysFromRange(p.start_date, p.end_date);
+    const packTotal = (Number(p.unit_price_per_person)||0) * (Math.max(1, Number(p.num_people)||1)) * days;
+    const packDeposit = Math.round(packTotal * 0.5);
+    const hbDeposit = Math.round(hbTotal * 0.5);
+    const combinedTotal = hbTotal + packTotal;
+    const combinedDeposit = hbDeposit + packDeposit;
+    const dateEnd = p.end_date || p.start_date;
+    expPackBlock = `
+    <div class="card" style="border-color:var(--coral)">
+      <div class="card-title" style="font-size:.95rem">📦 ${p.pack_name||''}</div>
+      <div class="summary-row"><span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span></div>
+      <div class="summary-row"><span>${_alojMoney(p.unit_price_per_person)}/pers. × ${p.num_people} × ${days}</span><span><strong>${_alojMoney(packTotal)}</strong></span></div>
+      <div class="summary-row" style="color:var(--gold)"><span>${t('alojDepositNow')}</span><span><strong>${_alojMoney(packDeposit)}</strong></span></div>
+      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(packTotal - packDeposit))}</div>
+    </div>`;
+    combinedDepositNote = `
+    <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
+      📦🚤 <strong style="color:var(--gold)">Total abono ahora: ${_alojMoney(combinedDeposit)}</strong><br>
+      <span style="font-size:.75rem">${t('combinedSubtitlePackHb', _alojMoney(packDeposit), _alojMoney(hbDeposit), _alojMoney(combinedTotal))}</span>
+    </div>`;
   }
 
   mc.innerHTML = `
   ${stepsHtml('datos')}
   ${alojBlock}
+  ${expPackBlock}
   <div class="card">
     <div class="card-title">${t('formTitle')}</div>
     <div class="summary-row"><span>${t('labelDate')}</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
