@@ -72,6 +72,27 @@ def set_urgency_config(cfg: dict) -> bool:
     return set_setting("urgency_config", json.dumps(cfg))
 
 
+def _time_str_sort_key(t: str) -> int:
+    h, m = map(int, t.split(":"))
+    return h * 60 + m
+
+
+def get_effective_urgency_seed_times(config: Optional[dict] = None) -> list:
+    """
+    Horarios HotBoat (operating_hours) ∪ urgency_config.seed_times, sin duplicados.
+
+    Admin copy: el modo urgencia usa los horarios HotBoat como base; las semillas
+    del bloque inferior se suman (p. ej. franjas extra) y participan en ± gap.
+    """
+    cfg = config if config is not None else get_urgency_config()
+    oh = get_operating_hours()
+    extra = cfg.get("seed_times") or []
+    if not extra:
+        return sorted(oh, key=_time_str_sort_key)
+    merged = set(oh) | set(extra)
+    return sorted(merged, key=_time_str_sort_key)
+
+
 # ── Vacation days ─────────────────────────────────────────────────────────────
 
 def get_vacation_days(from_date: Optional[date] = None, to_date: Optional[date] = None) -> list:
@@ -272,9 +293,9 @@ def apply_urgency_filter(
     """
     Urgency algorithm:
 
-    • Sin reservas → mostrar las horas semilla (seed_times) que estén libres.
-    • Con reservas → para CADA reserva en X, ofrecer X - gap y X + gap.
-      Los seed_times ya NO se muestran; los reemplazan los slots de expansión.
+    • Conjunto base de “semillas” = Horarios HotBoat ∪ seed_times guardados en config.
+    • Sin reservas → mostrar esas semillas efectivas que estén libres.
+    • Con reservas → además, para cada reserva en X, sugerir X ± gap si cae en cupo libre.
 
     Ejemplos con seeds=[10,18,21] gap=3:
       - Sin reservas          → [10:00, 18:00, 21:00]
@@ -286,7 +307,7 @@ def apply_urgency_filter(
         return []
 
     cfg = config if config is not None else get_urgency_config()
-    seed_times: list = cfg.get("seed_times") or get_operating_hours()
+    seed_times: list = get_effective_urgency_seed_times(cfg)
     gap_hours: float = float(cfg.get("gap_hours", 3))
 
     def _to_min(t: str) -> int:
@@ -348,7 +369,7 @@ def get_urgency_fake_slots(config: Optional[dict] = None) -> list:
     Resultado: [07:00, 13:00, 15:00]
     """
     cfg = config if config is not None else get_urgency_config()
-    seed_times: list = cfg.get("seed_times") or get_operating_hours()
+    seed_times: list = get_effective_urgency_seed_times(cfg)
     gap_hours: float = float(cfg.get("gap_hours", 3))
 
     def _to_min(t: str) -> int:
