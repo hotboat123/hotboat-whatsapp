@@ -451,6 +451,22 @@ class ConversationManager:
                 else:
                     logger.info(f"Unsupported language requested: {requested_language}")
                     response = self._language_not_supported_response(conversation)
+            elif (inferred_language := self._infer_language_from_free_text(message_text)) in LANGUAGES:
+                # Meta / ad-style phrases ("I want more information", etc.): switch language
+                # or show main menu so FAQ does not match "info" inside "information".
+                current_lang = metadata.get("language", "es")
+                if inferred_language != current_lang:
+                    logger.info(
+                        f"Language switch from lead phrase: {current_lang} -> {inferred_language} ({from_number})"
+                    )
+                    if is_first:
+                        metadata["schedule_followup"] = True
+                    response = self._switch_language(conversation, inferred_language)
+                else:
+                    logger.info(
+                        f"Lead phrase in {inferred_language}; sending main menu ({from_number})"
+                    )
+                    response = self._get_main_menu_message(inferred_language)
             elif is_first and not metadata.get("language_selected"):
                 inferred_language = self._infer_language_from_free_text(message_text)
                 if inferred_language in LANGUAGES:
@@ -727,14 +743,15 @@ O elige:
             elif self._is_help_request(message_text):
                 logger.info("Help request detected - notifying Capitán Tomás")
                 await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
-                faq_response = self.faq_handler.get_response(message_text)
+                _lang = metadata.get("language", "es")
+                faq_response = self.faq_handler.get_response(message_text, _lang)
                 if not faq_response:
-                    faq_response = self.faq_handler.get_response("llamar a tomas")
+                    faq_response = self.faq_handler.get_response("llamar a tomas", _lang)
                 response = faq_response or "👨‍✈️ ¡Entendido! El Capitán Tomás te contactará a la brevedad."
             # Check if it's a FAQ question
-            elif self.faq_handler.get_response(message_text):
+            elif faq_hit := self.faq_handler.get_response(message_text, metadata.get("language", "es")):
                 logger.info("Responding with FAQ answer")
-                response = self.faq_handler.get_response(message_text)
+                response = faq_hit
             
             # PRIORITY: Check if user is making a complete reservation (date, time, AND party size)
             # This should happen BEFORE AI handler to catch reservation intents

@@ -2,6 +2,7 @@
 FAQ Handler - predefined responses for common questions
 """
 import logging
+import re
 from typing import Optional
 
 from app.bot.translations import get_text
@@ -294,24 +295,30 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
         
         # Check for exact matches or keywords
         for keyword, response in self.faqs.items():
-            if keyword in message_lower:
-                # If response is an alias, resolve it
-                actual_keyword = keyword
+            # "info" must be a whole word — otherwise "information" / "información" false-positive to features
+            if keyword == "info":
+                matched = re.search(r"\binfo\b", message_lower) is not None
+            else:
+                matched = keyword in message_lower
+            if not matched:
+                continue
+            # If response is an alias, resolve it
+            actual_keyword = keyword
+            if isinstance(response, str) and response in self.faqs:
+                actual_keyword = response
+
+            # Check if we have a translation for this keyword
+            if actual_keyword in faq_to_translation:
+                translation_key = faq_to_translation[actual_keyword]
+                logger.info(f"FAQ match found for keyword: {keyword} -> {translation_key}")
+                return get_text(translation_key, lang)
+            else:
+                # Fallback to original response if no translation available
                 if isinstance(response, str) and response in self.faqs:
-                    actual_keyword = response
-                
-                # Check if we have a translation for this keyword
-                if actual_keyword in faq_to_translation:
-                    translation_key = faq_to_translation[actual_keyword]
-                    logger.info(f"FAQ match found for keyword: {keyword} -> {translation_key}")
-                    return get_text(translation_key, lang)
-                else:
-                    # Fallback to original response if no translation available
-                    if isinstance(response, str) and response in self.faqs:
-                        response = self.faqs[response]
-                    logger.info(f"FAQ match found for keyword: {keyword} (no translation)")
-                    return response
-        
+                    response = self.faqs[response]
+                logger.info(f"FAQ match found for keyword: {keyword} (no translation)")
+                return response
+
         return None
     
     def is_menu_number(self, message: str) -> Optional[int]:
