@@ -217,19 +217,15 @@ class AvailabilityChecker:
                         'date': dt.date()
                     })
             
-            # Load vacation days and settings — each piece isolated so one DB/query failure
-            # does not silently disable urgency for everyone (old behaviour reset global_urgency=False).
+            # Load vacation days + operating hours (urgency is handled separately in the
+            # web booking endpoint as a "ghost calendar" overlay; it must NOT affect
+            # real availability generation here).
             vacation_dates: set = set()
-            global_urgency = False
             db_operating_hours = None
-            urgency_day_overrides: dict = {}
             try:
                 from app.booking.operator_settings import (
                     get_vacation_days,
-                    is_urgency_mode,
-                    apply_urgency_filter,
                     get_operating_hours_as_ints,
-                    get_urgency_days,
                 )
             except Exception as ie:
                 logger.error("operator_settings import failed: %s", ie, exc_info=True)
@@ -241,59 +237,15 @@ class AvailabilityChecker:
                 except Exception as e:
                     logger.warning("get_vacation_days failed (continuing): %s", e, exc_info=True)
                 try:
-                    global_urgency = is_urgency_mode()
-                except Exception as e:
-                    logger.warning("is_urgency_mode failed (continuing): %s", e, exc_info=True)
-                try:
                     db_operating_hours = get_operating_hours_as_ints()
                 except Exception as e:
                     logger.warning("get_operating_hours_as_ints failed (continuing): %s", e, exc_info=True)
-                try:
-                    urgency_day_overrides = {
-                        v["date"]: v["enabled"]
-                        for v in get_urgency_days(start_date.date(), end_date.date())
-                    }
-                except Exception as e:
-                    logger.warning("get_urgency_days failed (continuing): %s", e, exc_info=True)
 
             # If settings failed to load, fall back to static config (hour ints)
             if db_operating_hours is None:
                 db_operating_hours = list(self.config.operating_hours)
 
-            # Determine effective urgency for each day (override wins over global)
-            def _day_urgency(date_str: str) -> bool:
-                if date_str in urgency_day_overrides:
-                    return urgency_day_overrides[date_str]
-                return global_urgency
-
-            # Pre-compute urgency hour expansion for days that need it
-            any_urgency = global_urgency or any(v for v in urgency_day_overrides.values())
-            booked_times_by_day: dict = {}
-            hours_urgency_expanded: list = db_operating_hours
-            if any_urgency:
-                from app.booking.operator_settings import get_urgency_config
-                _gap = int(get_urgency_config().get("gap_hours", 3))
-                if db_operating_hours:
-                    _min_h = max(8, min(db_operating_hours) - _gap)
-                    # Cap at hour 23 so 23:00 start slots are generated when OH includes 21+gap
-                    _max_h = min(23, max(db_operating_hours) + _gap)
-                    hours_urgency_expanded = list(range(_min_h, _max_h + 1))
-                else:
-                    hours_urgency_expanded = list(self.config.operating_hours)
-                # Track booked times per day (only needed for urgency filtering)
-                for slot in booked_slots:
-                    if slot.get("starts_at"):
-                        try:
-                            dt = slot["starts_at"]
-                            if isinstance(dt, str):
-                                dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
-                            dk = str(dt.date())
-                            t = dt.strftime("%H:%M")
-                            booked_times_by_day.setdefault(dk, []).append(t)
-                        except Exception:
-                            pass
-
-            # Group raw available slots by date (before urgency filter)
+            # Group raw available slots by date
             by_date: dict = {}
             current_date = start_date.date()
             end_date_only = end_date.date()
@@ -304,10 +256,7 @@ class AvailabilityChecker:
                     current_date += timedelta(days=1)
                     continue
 
-                # Use expanded hour range only for days with urgency active
-                dk_str = str(current_date)
-                hours_to_generate = hours_urgency_expanded if _day_urgency(dk_str) else db_operating_hours
-
+                hours_to_generate = db_operating_hours
                 if not hours_to_generate:
                     hours_to_generate = list(self.config.operating_hours)
 
@@ -350,16 +299,6 @@ class AvailabilityChecker:
                         by_date.setdefault(dk, []).append(slot_info)
                 
                 current_date += timedelta(days=1)
-
-            # Apply urgency filter per day (global or per-day override)
-            if any_urgency:
-                for dk, day_slots in by_date.items():
-                    if not _day_urgency(dk):
-                        continue
-                    times = [s["time"] for s in day_slots]
-                    booked = booked_times_by_day.get(dk, [])
-                    allowed = set(apply_urgency_filter(times, booked))
-                    by_date[dk] = [s for s in day_slots if s["time"] in allowed]
 
             # Flatten back to list
             available_slots = [s for day_slots in by_date.values() for s in day_slots]
