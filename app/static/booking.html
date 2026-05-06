@@ -2773,11 +2773,18 @@ function renderForm(){
       const pxRow = days>1
         ? `${_alojMoney(pp)}/pers. × ${p.num_people} × ${days}`
         : `${_alojMoney(pp)}/pers. × ${p.num_people}`;
+      const cid = String(p.cart_id || '').replace(/'/g, '');
       return `
       <div style="border-bottom:1px solid var(--border);padding:.55rem 0;margin-bottom:.45rem">
-        <div style="font-weight:600;margin-bottom:.2rem;color:var(--text)">${ic} ${nm}</div>
-        <div class="summary-row">${dateRow}</div>
-        <div class="summary-row"><span>${pxRow}</span><span><strong>${_alojMoney(expTotal)}</strong></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;margin-bottom:.2rem;color:var(--text)">${ic} ${nm}</div>
+            <div class="summary-row">${dateRow}</div>
+            <div class="summary-row"><span>${pxRow}</span><span><strong>${_alojMoney(expTotal)}</strong></span></div>
+          </div>
+          <button type="button" onclick="removeExperienceCartLine('${cid}');renderForm();"
+            style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.25rem .5rem;font-size:.75rem;cursor:pointer;flex-shrink:0;align-self:flex-start">${t('expCartRm')}</button>
+        </div>
       </div>`;
     }).join('');
     const expDepositAll = Math.round(expTotalAll * 0.5);
@@ -2803,11 +2810,17 @@ function renderForm(){
     const combinedDeposit = hbDeposit + packDeposit;
     const dateEnd = p.end_date || p.start_date;
     unifiedCartTopInner = `
-      <div style="margin-bottom:.5rem;font-weight:600;color:var(--text);font-size:.95rem">📦 ${p.pack_name||''}</div>
-      <div class="summary-row"><span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span></div>
-      <div class="summary-row"><span>${_alojMoney(p.unit_price_per_person)}/pers. × ${p.num_people} × ${days}</span><span><strong>${_alojMoney(packTotal)}</strong></span></div>
-      <div class="summary-row" style="color:var(--gold)"><span>${t('alojDepositNow')}</span><span><strong>${_alojMoney(packDeposit)}</strong></span></div>
-      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(packTotal - packDeposit))}</div>`;
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;margin-bottom:.45rem">
+        <div style="flex:1;min-width:0">
+          <div style="margin-bottom:.35rem;font-weight:600;color:var(--text);font-size:.95rem">📦 ${p.pack_name||''}</div>
+          <div class="summary-row"><span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span></div>
+          <div class="summary-row"><span>${_alojMoney(p.unit_price_per_person)}/pers. × ${p.num_people} × ${days}</span><span><strong>${_alojMoney(packTotal)}</strong></span></div>
+          <div class="summary-row" style="color:var(--gold)"><span>${t('alojDepositNow')}</span><span><strong>${_alojMoney(packDeposit)}</strong></span></div>
+          <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(packTotal - packDeposit))}</div>
+        </div>
+        <button type="button" onclick="_pendingPackBooking=null;renderForm();"
+          style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.25rem .5rem;font-size:.75rem;cursor:pointer;flex-shrink:0;align-self:flex-start">${t('expCartRm')}</button>
+      </div>`;
     combinedDepositNote = `
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
       📦🚤 <strong style="color:var(--gold)">Total abono ahora: ${_alojMoney(combinedDeposit)}</strong><br>
