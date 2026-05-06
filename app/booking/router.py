@@ -1638,18 +1638,23 @@ class ExperienceBookingRequest(BaseModel):
     notes: Optional[str] = None
 
 
-class ExperienceCartItem(BaseModel):
-    experience_slug: str
-    experience_name: str
+class AddonCartItem(BaseModel):
+    """One line in the HotBoat web cart: experience and/or pack addon."""
+    item_type: str = "experience"  # "experience" | "pack"
     start_date: str
     end_date: Optional[str] = None
     num_people: int = 1
-    price_per_person: int
     notes: Optional[str] = None
+    experience_slug: Optional[str] = None
+    experience_name: Optional[str] = None
+    price_per_person: Optional[int] = None
+    pack_slug: Optional[str] = None
+    pack_name: Optional[str] = None
+    unit_price_per_person: Optional[int] = None
 
 
 class ExperienceCartRequest(BaseModel):
-    items: list[ExperienceCartItem]
+    items: list[AddonCartItem]
     customer_name: str
     customer_phone: str
     customer_email: Optional[str] = None
@@ -1848,7 +1853,7 @@ async def create_experience_booking(request: ExperienceBookingRequest):
 
 @router.post("/api/booking/experience-cart-create")
 async def create_experience_cart_booking(request: ExperienceCartRequest):
-    """Create multiple experience rows + one WooCommerce order (deposits) + HB merge per line."""
+    """Create multiple extras_bookings rows (experiences and/or packs) + WooCommerce + HB merge per line."""
     if not request.items:
         raise HTTPException(status_code=400, detail="El carrito está vacío")
 
@@ -1856,6 +1861,7 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
 
     hotboat_ref = (request.hotboat_booking_ref or "").strip()
     booking_refs: list[str] = []
+    booking_db_types: list[str] = []
     fee_lines: list[dict] = []
     total_sum = 0
     any_high_season = False
@@ -1863,16 +1869,108 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
     for it in request.items:
         start_d = _date_fromiso(it.start_date)
         end_d = _date_fromiso(it.end_date) if it.end_date else None
+        kind = (it.item_type or "experience").strip().lower()
+        label = (it.experience_name or it.pack_name or "ítem").strip()
         if not start_d:
-            raise HTTPException(status_code=400, detail=f"start_date inválida ({it.experience_name})")
+            raise HTTPException(status_code=400, detail=f"start_date inválida ({label})")
         if end_d and end_d < start_d:
-            raise HTTPException(status_code=400, detail=f"end_date inválida ({it.experience_name})")
+            raise HTTPException(status_code=400, detail=f"end_date inválida ({label})")
 
         days_count = 1
         if end_d and end_d > start_d:
             days_count = (end_d - start_d).days + 1
         if end_d and end_d == start_d:
             end_d = None
+
+        if kind == "pack":
+            if not it.pack_slug or not it.pack_name or it.unit_price_per_person is None:
+                raise HTTPException(status_code=400, detail="Pack incompleto en carrito")
+            total_price = int(it.unit_price_per_person) * int(it.num_people) * int(days_count)
+            deposit_paid = round(total_price * 0.5)
+            row_ref = _gen_extras_booking_ref("PK")
+            db_item_type = "pack"
+
+            with _gc() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO extras_bookings "
+                        "(booking_ref,customer_name,customer_phone,item_type,item_slug,item_name,"
+                        " start_date,end_date,num_people,total_price,deposit_paid,status,notes)"
+                        " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (
+                            row_ref,
+                            request.customer_name,
+                            request.customer_phone,
+                            db_item_type,
+                            it.pack_slug,
+                            it.pack_name,
+                            start_d,
+                            end_d,
+                            it.num_people,
+                            total_price,
+                            deposit_paid,
+                            "pendiente",
+                            (it.notes or "").strip() or f"Pago web carrito · {row_ref}",
+                        ),
+                    )
+                    conn.commit()
+
+            try:
+                solicitud_req = SolicitudRequest(
+                    customer_name=request.customer_name,
+                    customer_phone=request.customer_phone,
+                    customer_email=request.customer_email,
+                    dates_preference=str(start_d) + (f" al {end_d}" if end_d else ""),
+                    people=str(it.num_people),
+                    notes=(it.notes or "").strip(),
+                    service_type=f"pack:{it.pack_slug}",
+                    title=it.pack_name,
+                )
+                await _notify_solicitud(solicitud_req, row_ref)
+            except Exception as _notify_err:
+                logger.warning("addon-cart pack notify failed for %s: %s", row_ref, _notify_err)
+
+            if is_high_season_web_addon(start_d, "pack", it.pack_slug):
+                any_high_season = True
+                with _gc() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE extras_bookings SET status='pendiente', deposit_paid=0 "
+                            "WHERE booking_ref=%s AND item_type=%s",
+                            (row_ref, "pack"),
+                        )
+                        conn.commit()
+            else:
+                fee_lines.append(
+                    {
+                        "name": f"Pack: {it.pack_name} ({start_d}{f' al {end_d}' if end_d else ''})",
+                        "total": str(deposit_paid),
+                    }
+                )
+
+            total_sum += total_price
+            booking_refs.append(row_ref)
+            booking_db_types.append(db_item_type)
+
+            if hotboat_ref:
+                try:
+                    _merge_hotboat_reserva_pack_addon(
+                        hotboat_ref,
+                        pack_slug=it.pack_slug,
+                        pack_name=it.pack_name,
+                        start_date=start_d,
+                        num_people=it.num_people,
+                        unit_price_per_person=it.unit_price_per_person,
+                        pack_booking_ref=row_ref,
+                    )
+                except Exception as ex_merge:
+                    logger.warning("addon-cart pack merge failed %s + %s: %s", hotboat_ref, row_ref, ex_merge)
+
+            continue
+
+        # --- experience line ---
+        if not it.experience_slug or not it.experience_name or it.price_per_person is None:
+            raise HTTPException(status_code=400, detail="Experiencia incompleta en carrito")
 
         total_price = int(it.price_per_person) * int(it.num_people) * int(days_count)
         deposit_paid = round(total_price * 0.5)
@@ -1938,6 +2036,7 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
 
         total_sum += total_price
         booking_refs.append(exp_ref)
+        booking_db_types.append("experience")
 
         if hotboat_ref:
             try:
@@ -1957,11 +2056,11 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
         fee_lines.clear()
         with _gc() as conn:
             with conn.cursor() as cur:
-                for ref in booking_refs:
+                for ref, db_t in zip(booking_refs, booking_db_types):
                     cur.execute(
                         "UPDATE extras_bookings SET status='pendiente', deposit_paid=0 "
-                        "WHERE booking_ref=%s AND item_type='experience'",
-                        (ref,),
+                        "WHERE booking_ref=%s AND item_type=%s",
+                        (ref, db_t),
                     )
                 conn.commit()
         return {
