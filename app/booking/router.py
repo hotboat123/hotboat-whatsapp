@@ -1366,8 +1366,13 @@ async def create_accommodation_booking(request: AlojBookingRequest):
     slug_hs = (request.accommodation_slug or "").strip() or str(request.accommodation_id)
     high_season_aloj = is_high_season_web_addon(check_in, "alojamiento", slug_hs)
 
-    total_aloj   = request.price_per_night * nights
-    deposit_aloj = round(total_aloj * 0.5)
+    total_aloj = request.price_per_night * nights
+    is_combined_with_hotboat = bool(
+        (request.hotboat_booking_ref or "").strip()
+        or (request.hotboat_date and request.hotboat_time and request.hotboat_people)
+    )
+    # Alojamiento solo: cobrar 100%. Combinado con HotBoat: 50% del alojamiento.
+    deposit_aloj = round(total_aloj * 0.5) if is_combined_with_hotboat else int(total_aloj)
 
     # Generate accommodation booking ref
     year    = datetime.now(CHILE_TZ).year
@@ -1708,7 +1713,9 @@ async def create_experience_booking(request: ExperienceBookingRequest):
         end_d = None
 
     total_price = int(request.price_per_person) * int(request.num_people) * int(days_count)
-    deposit_paid = round(total_price * 0.5)
+    hotboat_ref = (request.hotboat_booking_ref or "").strip()
+    # Experiencia sola: cobrar 100%. Combinada con HotBoat: 50%.
+    deposit_paid = round(total_price * 0.5) if hotboat_ref else int(total_price)
     exp_ref = _gen_extras_booking_ref("EX")
 
     # Insert calendar row first so it exists even if payment fails
@@ -1754,8 +1761,6 @@ async def create_experience_booking(request: ExperienceBookingRequest):
         await _notify_solicitud(solicitud_req, exp_ref)
     except Exception as _notify_err:
         logger.warning("experience-create notify failed for %s: %s", exp_ref, _notify_err)
-
-    hotboat_ref = (request.hotboat_booking_ref or "").strip()
 
     # High season: no online payment, coordinate manually
     if is_high_season_web_addon(start_d, "experience", request.experience_slug):
@@ -1848,7 +1853,12 @@ async def create_experience_booking(request: ExperienceBookingRequest):
     except Exception as pe:
         logger.warning("WooCommerce experience skip [%s]: %r", exp_ref, pe)
 
-    return {"booking_ref": exp_ref, "total_price": total_price, "payment_url": payment_url}
+    return {
+        "booking_ref": exp_ref,
+        "total_price": total_price,
+        "pay_now_amount": deposit_paid,
+        "payment_url": payment_url,
+    }
 
 
 @router.post("/api/booking/experience-cart-create")
@@ -1864,6 +1874,7 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
     booking_db_types: list[str] = []
     fee_lines: list[dict] = []
     total_sum = 0
+    pay_now_sum = 0
     any_high_season = False
 
     for it in request.items:
@@ -1886,7 +1897,7 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
             if not it.pack_slug or not it.pack_name or it.unit_price_per_person is None:
                 raise HTTPException(status_code=400, detail="Pack incompleto en carrito")
             total_price = int(it.unit_price_per_person) * int(it.num_people) * int(days_count)
-            deposit_paid = round(total_price * 0.5)
+            deposit_paid = round(total_price * 0.5) if hotboat_ref else int(total_price)
             row_ref = _gen_extras_booking_ref("PK")
             db_item_type = "pack"
 
@@ -1949,6 +1960,7 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
                 )
 
             total_sum += total_price
+            pay_now_sum += deposit_paid
             booking_refs.append(row_ref)
             booking_db_types.append(db_item_type)
 
@@ -1973,7 +1985,7 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
             raise HTTPException(status_code=400, detail="Experiencia incompleta en carrito")
 
         total_price = int(it.price_per_person) * int(it.num_people) * int(days_count)
-        deposit_paid = round(total_price * 0.5)
+        deposit_paid = round(total_price * 0.5) if hotboat_ref else int(total_price)
         exp_ref = _gen_extras_booking_ref("EX")
 
         with _gc() as conn:
@@ -2035,6 +2047,7 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
             )
 
         total_sum += total_price
+        pay_now_sum += deposit_paid
         booking_refs.append(exp_ref)
         booking_db_types.append("experience")
 
@@ -2067,6 +2080,7 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
             "booking_refs": booking_refs,
             "primary_ref": booking_refs[0] if booking_refs else "",
             "total_price": total_sum,
+            "pay_now_amount": 0,
             "payment_url": None,
             "requires_email": True,
         }
@@ -2132,6 +2146,7 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
         "booking_refs": booking_refs,
         "primary_ref": booking_refs[0] if booking_refs else "",
         "total_price": total_sum,
+        "pay_now_amount": pay_now_sum,
         "payment_url": payment_url,
     }
 

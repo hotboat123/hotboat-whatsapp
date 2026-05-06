@@ -288,6 +288,7 @@ const I18N = {
     alojSendErr: 'Error al enviar. Intenta de nuevo.',
     alojYourBooking: '🛒 Tu reserva',
     alojDepositNow: '💳 Abono ahora (50%)',
+    payNowLabel: '💳 Pago ahora',
     alojBalanceArrival: (bal) => `Saldo ${bal} al llegar`,
     alojYourData: '👤 Tus datos',
     alojEmailOpt: 'Email (opcional)',
@@ -345,6 +346,7 @@ const I18N = {
     expCartCreatedNoPayment: 'Reserva creada. Te contactamos por WhatsApp para coordinar el pago.',
     expCartSaldoRow: 'Saldo pendiente',
     expCartDepositLbl: 'Abono ahora (50%)',
+    expCartPayNowLbl: 'Pago ahora',
   },
   en: {
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
@@ -408,6 +410,7 @@ const I18N = {
     alojSendErr: 'Could not send. Try again.',
     alojYourBooking: '🛒 Your booking',
     alojDepositNow: '💳 Deposit now (50%)',
+    payNowLabel: '💳 Pay now',
     alojBalanceArrival: (bal) => `Balance ${bal} on arrival`,
     alojYourData: '👤 Your details',
     alojEmailOpt: 'Email (optional)',
@@ -465,6 +468,7 @@ const I18N = {
     expCartCreatedNoPayment: 'Booking saved. We will reach out on WhatsApp to coordinate payment.',
     expCartSaldoRow: 'Remaining balance',
     expCartDepositLbl: 'Deposit now (50%)',
+    expCartPayNowLbl: 'Pay now',
   },
   pt: {
     days: ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],
@@ -528,6 +532,7 @@ const I18N = {
     alojSendErr: 'Erro ao enviar. Tente novamente.',
     alojYourBooking: '🛒 Sua reserva',
     alojDepositNow: '💳 Sinal agora (50%)',
+    payNowLabel: '💳 Pagar agora',
     alojBalanceArrival: (bal) => `Saldo ${bal} na chegada`,
     alojYourData: '👤 Seus dados',
     alojEmailOpt: 'E-mail (opcional)',
@@ -585,6 +590,7 @@ const I18N = {
     expCartCreatedNoPayment: 'Reserva criada. Entraremos em contato pelo WhatsApp para o pagamento.',
     expCartSaldoRow: 'Saldo pendente',
     expCartDepositLbl: 'Sinal agora (50%)',
+    expCartPayNowLbl: 'Pagar agora',
   },
 };
 let LANG = localStorage.getItem('hb_lang') || 'es';
@@ -885,14 +891,14 @@ function renderExperienceCartScreen(){
     <button class="btn btn-secondary" onclick="renderMenu()">${t('backToMenu')}</button>`;
     return;
   }
-  let sum = 0, depSum = 0;
+  let sum = 0;
+  // Carrito sin HotBoat en el mismo checkout: cobro completo al pagar desde aquí.
   const lines = _experienceCart.map(li=>{
     const days = _addonDaysFromRange(li.start_date, li.end_date);
     const isPack = li.kind==='pack' || !!li.pack_slug;
     const pp = isPack ? Number(li.unit_price_per_person)||0 : Number(li.price_per_person)||0;
     const tot = pp * (Math.max(1, Number(li.num_people)||1)) * days;
     sum += tot;
-    depSum += Math.round(tot * 0.5);
     const de = li.end_date || li.start_date;
     const title = isPack ? (li.pack_name||'') : (li.experience_name||'');
     const ic = isPack ? '📦' : '🎫';
@@ -921,8 +927,7 @@ function renderExperienceCartScreen(){
     <div class="card-title">${t('expCartTitle')}</div>
     ${lines}
     <div class="summary-row total"><span>${t('labelTotal')}</span><span>${_alojMoney(sum)}</span></div>
-    <p style="color:var(--gold);font-size:.85rem;margin-top:.35rem">${t('alojDepositNow')}: ${_alojMoney(depSum)}</p>
-    <p style="color:var(--muted);font-size:.76rem">${t('addonBalanceActivity', _alojMoney(sum-depSum))}</p>
+    <p style="color:var(--gold);font-size:.85rem;margin-top:.35rem">${t('payNowLabel')}: ${_alojMoney(sum)}</p>
   </div>
   <div class="card">
     <div class="card-title" style="font-size:1.05rem">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
@@ -1002,7 +1007,8 @@ async function _submitExperienceCartPayOnly(){
     S.bookingRef = edata.primary_ref || (edata.booking_refs && edata.booking_refs[0]) || '';
     S.paymentUrl = edata.payment_url || '';
     S.totalPrice = expSumTotal;
-    S.depositAmount = Math.round(expSumTotal * 0.5);
+    // Backend antiguo sin pay_now_amount: solo carrito (sin HB) debe cobrar total.
+    S.depositAmount = Number(edata.pay_now_amount ?? expSumTotal);
     if(!edata.payment_url && edata.requires_email){
       const refs = (edata.booking_refs||[]).join(', ');
       mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
@@ -1027,9 +1033,11 @@ async function _submitExperienceCartPayOnly(){
 }
 
 function renderExperienceCartPaymentScreen(itemCount){
-  const deposit = S.depositAmount || Math.round(S.totalPrice * 0.5);
+  const deposit = S.depositAmount > 0 ? S.depositAmount : S.totalPrice;
   S.depositAmount = 0;
-  const resto = S.totalPrice - deposit;
+  const resto = Math.max(0, S.totalPrice - deposit);
+  const isFullNow = deposit >= S.totalPrice;
+  const payLabel = isFullNow ? t('expCartPayNowLbl') : t('expCartDepositLbl');
   const sub = t('expCartPaymentSub', itemCount);
   mc.innerHTML = `
   ${stepsHtml('pago')}
@@ -1038,20 +1046,20 @@ function renderExperienceCartPaymentScreen(itemCount){
     <p style="color:var(--muted);margin-bottom:.5rem;font-size:.85rem">${sub}</p>
     <p style="color:var(--muted);margin-bottom:.8rem;font-size:.85rem">Ref: <strong>${S.bookingRef}</strong></p>
     <div style="background:var(--bg);border-radius:12px;padding:1rem;margin:.75rem 0">
-      <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem">${t('expCartDepositLbl')}</div>
+      <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem">${payLabel}</div>
       <div style="font-size:2rem;font-weight:800;color:var(--gold)">$${deposit.toLocaleString('es-CL')}</div>
     </div>
     <div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.75rem 1rem;margin:.5rem 0;display:flex;justify-content:space-between;align-items:center;font-size:.85rem">
       <span style="color:var(--muted)">${t('expCartGrandTotal')}</span>
       <span style="font-weight:700">$${S.totalPrice.toLocaleString('es-CL')}</span>
     </div>
-    <div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.75rem 1rem;margin:.5rem 0;display:flex;justify-content:space-between;align-items:center;font-size:.85rem">
+    ${!isFullNow ? `<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.75rem 1rem;margin:.5rem 0;display:flex;justify-content:space-between;align-items:center;font-size:.85rem">
       <span style="color:var(--muted)">${t('expCartSaldoRow')}</span>
       <span style="font-weight:700">$${resto.toLocaleString('es-CL')}</span>
-    </div>
-    <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.7rem 1rem;margin:.75rem 0;font-size:.8rem;color:var(--muted);text-align:left">
+    </div>` : ''}
+    ${!isFullNow ? `<div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.7rem 1rem;margin:.75rem 0;font-size:.8rem;color:var(--muted);text-align:left">
       ${t('expCartPayFootnote')}
-    </div>
+    </div>` : ''}
     ${S.paymentUrl ? `
       <a href="${S.paymentUrl}" class="btn" style="text-decoration:none;margin-top:.5rem;font-size:1rem;padding:.9rem">
         ${t('expCartPayOnly')} $${deposit.toLocaleString('es-CL')}
@@ -1276,7 +1284,7 @@ function _renderAddonExpAvailable(){
   const days=1;
   const unit=st.pricePerPerson;
   const total=unit*people*days;
-  const deposit=Math.round(total*0.5);
+  const payNow=total;
   const result=document.getElementById('addon-booking-result');
   if(!result) return;
   result.innerHTML = `
@@ -1291,10 +1299,10 @@ function _renderAddonExpAvailable(){
       <span><strong>${_alojMoney(total)}</strong></span>
     </div>
     <div class="summary-row" style="color:var(--gold)">
-      <span>${t('alojDepositNow')}</span>
-      <span><strong>${_alojMoney(deposit)}</strong></span>
+      <span>${t('payNowLabel')}</span>
+      <span><strong>${_alojMoney(payNow)}</strong></span>
     </div>
-    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(total-deposit))}</div>
+    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(total-payNow))}</div>
   </div>
   <div class="card">
     <div class="card-title" style="font-size:1rem">${t('alojMsgExtra')}</div>
@@ -1304,7 +1312,7 @@ function _renderAddonExpAvailable(){
                color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem;resize:vertical"></textarea></div>
   </div>
   <button class="btn" id="ax-pay-btn" onclick="_submitAddonExpOnly()" style="margin-bottom:.5rem">
-    ${t('addonPayExperienceOnly', _alojMoney(deposit))}
+    ${t('addonPayExperienceOnly', _alojMoney(payNow))}
   </button>
   <button class="btn btn-secondary" onclick="_addonExperienceCartAppend()" style="margin-bottom:.5rem;width:100%">
     ${t('expCartAdd')}
@@ -1461,7 +1469,7 @@ function _renderAddonPackAvailable(){
   if(!days) return;
   const unit=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
   const total=unit*people*days;
-  const deposit=Math.round(total*0.5);
+  const payNow=total;
   const result=document.getElementById('addon-pack-booking-result');
   if(!result) return;
   result.innerHTML=`
@@ -1476,10 +1484,10 @@ function _renderAddonPackAvailable(){
       <span><strong>${_alojMoney(total)}</strong></span>
     </div>
     <div class="summary-row" style="color:var(--gold)">
-      <span>${t('alojDepositNow')}</span>
-      <span><strong>${_alojMoney(deposit)}</strong></span>
+      <span>${t('payNowLabel')}</span>
+      <span><strong>${_alojMoney(payNow)}</strong></span>
     </div>
-    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(total-deposit))}</div>
+    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(total-payNow))}</div>
   </div>
   <div class="card">
     <div class="card-title" style="font-size:1rem">${t('alojMsgExtra')}</div>
@@ -1489,7 +1497,7 @@ function _renderAddonPackAvailable(){
                color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem;resize:vertical"></textarea></div>
   </div>
   <button class="btn" id="pk-pay-btn" onclick="_submitAddonPackOnly()" style="margin-bottom:.6rem">
-    ${t('addonPayPackOnly', _alojMoney(deposit))}
+    ${t('addonPayPackOnly', _alojMoney(payNow))}
   </button>
   <button class="btn btn-secondary" onclick="_addonPackCartAppend()" style="margin-bottom:.5rem;width:100%">
     ${t('expCartAdd')}
@@ -2026,8 +2034,10 @@ async function _submitAlojSolicitud(){
 
 function _renderAlojAvailable(){
   const {a, checkIn, checkOut, nights, pricePerNight} = _alojState;
-  const total   = pricePerNight * nights;
-  const deposit = Math.round(total * 0.5);
+  const total = pricePerNight * nights;
+  // Alojamiento "solo" (sin HotBoat) cobra el monto completo.
+  const payNow = total;
+  const remaining = Math.max(0, total - payNow);
   document.getElementById('aloj-booking-result').innerHTML = `
   <div class="card">
     <div class="card-title" style="font-size:1rem">${t('alojYourBooking')}</div>
@@ -2040,16 +2050,16 @@ function _renderAlojAvailable(){
       <span><strong>${_alojMoney(total)}</strong></span>
     </div>
     <div class="summary-row" style="color:var(--gold)">
-      <span>${t('alojDepositNow')}</span>
-      <span><strong>${_alojMoney(deposit)}</strong></span>
+      <span>${t('payNowLabel')}</span>
+      <span><strong>${_alojMoney(payNow)}</strong></span>
     </div>
-    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">
-      ${t('alojBalanceArrival', _alojMoney(total-deposit))}
-    </div>
+    ${remaining>0 ? `<div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">
+      ${t('alojBalanceArrival', _alojMoney(remaining))}
+    </div>` : ''}
   </div>
 
   <button class="btn" id="ab-pay-btn" onclick="_submitAlojBooking()" style="margin-bottom:.6rem">
-    ${t('alojPayLodging', _alojMoney(deposit))}
+    ${t('alojPayLodging', _alojMoney(payNow))}
   </button>
   <button class="btn btn-secondary" onclick="_startHotboatWithAloj()">
     ${t('alojAddHotboat')}
