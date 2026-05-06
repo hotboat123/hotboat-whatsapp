@@ -251,14 +251,11 @@ def get_urgency_day_override(d: date) -> Optional[bool]:
 def is_high_season_web_addon(d: date, entity_type: str, entity_slug: str) -> bool:
     """
     Temporada alta for web extras (no online payment / requires email):
-    product-specific urgency row wins; otherwise same rule as global HotBoat calendar.
+    only product-scoped overrides apply (no implicit fallback to HotBoat global urgency).
     """
     et, slug = normalize_urgency_entity(entity_type, entity_slug)
     ov = get_urgency_day_override_for_scope(d, et, slug)
-    if ov is not None:
-        return ov is True
-    g = get_urgency_day_override(d)
-    return (g if g is not None else is_urgency_mode()) is True
+    return ov is True
 
 
 def set_urgency_day(
