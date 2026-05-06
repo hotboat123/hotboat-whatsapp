@@ -744,7 +744,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div class="form-group-adm"><label>Descripción</label><input id="aloj-desc" placeholder="Domo transparente con tina de baño interior..."></div>
           <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
             <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
-            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .6rem">Si están vacías, la reserva web muestra el español. Solo afecta la página pública /booking.</p>
+            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .35rem">Si están vacías, la reserva web muestra el español. Solo afecta la página pública /booking.</p>
+            <div style="margin:0 0 .55rem">
+              <button type="button" class="sync-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .55rem;border:none;border-radius:6px;cursor:pointer"
+                onclick="autoTranslateAlojI18n()" title="Desde nombre, grupo y descripción en español (requiere GROQ_API_KEY)">✨ Traducir con IA</button>
+            </div>
             <div class="form-group-adm"><label>Nombre (English)</label><input id="aloj-name-en" placeholder="Optional"></div>
             <div class="form-group-adm"><label>Nombre (Português)</label><input id="aloj-name-pt" placeholder="Opcional"></div>
             <div class="form-group-adm"><label>Grupo (English)</label><input id="aloj-group-en" placeholder="Optional"></div>
@@ -856,7 +860,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div class="form-group-adm"><label>Descripción</label><input id="exp-desc" placeholder="Rio Trancura · Bajo o Alto"></div>
           <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
             <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
-            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .6rem">Si están vacías, la reserva web muestra el español.</p>
+            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .35rem">Si están vacías, la reserva web muestra el español.</p>
+            <div style="margin:0 0 .55rem">
+              <button type="button" class="sync-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .55rem;border:none;border-radius:6px;cursor:pointer"
+                onclick="autoTranslateExpI18n()" title="Desde nombre y descripción en español (requiere GROQ_API_KEY)">✨ Traducir con IA</button>
+            </div>
             <div class="form-group-adm"><label>Nombre (English)</label><input id="exp-name-en" placeholder="Optional"></div>
             <div class="form-group-adm"><label>Nombre (Português)</label><input id="exp-name-pt" placeholder="Opcional"></div>
             <div class="form-group-adm"><label>Descripción (English)</label><input id="exp-desc-en" placeholder="Optional"></div>
@@ -916,7 +924,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div class="form-group-adm"><label>Descripción</label><input id="pack-desc" placeholder="Escapada romántica..."></div>
           <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
             <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
-            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .6rem">Si están vacías, la reserva web muestra el español.</p>
+            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .35rem">Si están vacías, la reserva web muestra el español.</p>
+            <div style="margin:0 0 .55rem">
+              <button type="button" class="sync-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .55rem;border:none;border-radius:6px;cursor:pointer"
+                onclick="autoTranslatePackI18n()" title="Desde nombre y descripción en español (requiere GROQ_API_KEY)">✨ Traducir con IA</button>
+            </div>
             <div class="form-group-adm"><label>Nombre (English)</label><input id="pack-name-en" placeholder="Optional"></div>
             <div class="form-group-adm"><label>Nombre (Português)</label><input id="pack-name-pt" placeholder="Opcional"></div>
             <div class="form-group-adm"><label>Descripción (English)</label><input id="pack-desc-en" placeholder="Optional"></div>
@@ -4594,6 +4606,59 @@ function showToast(msg){
     document.body.appendChild(t); }
   t.textContent=msg; t.style.opacity='1';
   clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity='0',3000);
+}
+
+async function fetchCatalogI18nTranslate(payload){
+  return api('/api/admin/auto-translate-catalog-i18n',{
+    method:'POST',
+    body:JSON.stringify(payload)
+  });
+}
+function fillCatalogI18nFields(prefix, d){
+  const ids = [['name-en','name_en'],['name-pt','name_pt'],['desc-en','description_en'],['desc-pt','description_pt']];
+  for(const [suffix, apiKey] of ids){
+    const el = document.getElementById(prefix+suffix);
+    if(el&&d[apiKey]!==undefined) el.value=d[apiKey];
+  }
+  if(prefix==='aloj-'){
+    const ge=document.getElementById('aloj-group-en'), gp=document.getElementById('aloj-group-pt');
+    if(ge&&d.group_name_en!==undefined) ge.value=d.group_name_en;
+    if(gp&&d.group_name_pt!==undefined) gp.value=d.group_name_pt;
+  }
+}
+async function autoTranslateExpI18n(){
+  const name_es=document.getElementById('exp-name')?.value?.trim()||'';
+  const description_es=document.getElementById('exp-desc')?.value?.trim()||'';
+  if(!name_es){ showToast('Completa el nombre en español primero'); return; }
+  try{
+    showToast('Traduciendo con IA...');
+    const d = await fetchCatalogI18nTranslate({name_es,description_es,group_es:''});
+    fillCatalogI18nFields('exp-',d);
+    showToast('EN / PT listos — pulsa Guardar para aplicar');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+async function autoTranslatePackI18n(){
+  const name_es=document.getElementById('pack-name')?.value?.trim()||'';
+  const description_es=document.getElementById('pack-desc')?.value?.trim()||'';
+  if(!name_es){ showToast('Completa el nombre en español primero'); return; }
+  try{
+    showToast('Traduciendo con IA...');
+    const d = await fetchCatalogI18nTranslate({name_es,description_es,group_es:''});
+    fillCatalogI18nFields('pack-',d);
+    showToast('EN / PT listos — pulsa Guardar para aplicar');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+async function autoTranslateAlojI18n(){
+  const name_es=document.getElementById('aloj-name')?.value?.trim()||'';
+  const description_es=document.getElementById('aloj-desc')?.value?.trim()||'';
+  const group_es=document.getElementById('aloj-group')?.value?.trim()||'';
+  if(!name_es){ showToast('Completa el nombre en español primero'); return; }
+  try{
+    showToast('Traduciendo con IA...');
+    const d = await fetchCatalogI18nTranslate({name_es,description_es,group_es});
+    fillCatalogI18nFields('aloj-',d);
+    showToast('EN / PT listos — pulsa Guardar para aplicar');
+  }catch(e){ showToast('Error: '+e.message); }
 }
 
 // helper: return current admin key (KEY is set by doLogin)

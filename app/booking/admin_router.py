@@ -1798,6 +1798,38 @@ async def auto_translate_precio_extra(extra_id: str, x_admin_key: str = Header("
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+class CatalogI18nTranslateBody(BaseModel):
+    name_es: str
+    description_es: str = ""
+    group_es: str = ""
+
+
+@admin_router.post("/api/admin/auto-translate-catalog-i18n")
+async def auto_translate_catalog_i18n(
+    body: CatalogI18nTranslateBody, x_admin_key: str = Header("")
+):
+    """Suggest EN / PT strings for catalog modals from Spanish fields (Groq). Does not persist."""
+    _check_auth(x_admin_key)
+    try:
+        from app.booking.extras_translate import translate_catalog_i18n_fields
+
+        out = translate_catalog_i18n_fields(
+            body.name_es,
+            body.description_es,
+            group_es=body.group_es or "",
+        )
+        return {"ok": True, **out}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        logger.error("auto_translate_catalog_i18n: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 # ── WooCommerce: send payment link ────────────────────────────────────────────
 
 @admin_router.post("/api/admin/reservas/{rid}/send-payment-link")
