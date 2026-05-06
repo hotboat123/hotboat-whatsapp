@@ -214,6 +214,7 @@ const S = {
   depositAmount: 0,       // overridden for combined aloj+HotBoat payments
 };
 let _isSubmittingBooking = false;
+let _payingExperienceCart = false;
 
 // ── i18n ──────────────────────────────────────────────────────────────────────
 const I18N = {
@@ -331,6 +332,16 @@ const I18N = {
     cartHbSubtitle: '🚤 Tu reserva HotBoat',
     payDatosHint: 'Nombre y WhatsApp para generar el link de pago (solo esta compra). Si combinas con HotBoat, también los pediremos una vez al final.',
     payDatosContinue: 'Continuar al pago',
+    expCartPayOnly: '💳 Pagar',
+    expCartPaymentTitle: '💳 Pagar carrito HotBoat',
+    expCartPaymentSub: (n) => `${n} ítem(es)`,
+    expCartGrandTotal: 'Total carrito',
+    expCartPayFootnote:
+      'El saldo restante de cada experiencia o pack se coordina al confirmar la actividad.',
+    expCartSecureLine: 'Pago seguro · Débito, crédito, Webpay y más',
+    expCartCreatedNoPayment: 'Reserva creada. Te contactamos por WhatsApp para coordinar el pago.',
+    expCartSaldoRow: 'Saldo pendiente',
+    expCartDepositLbl: 'Abono ahora (50%)',
   },
   en: {
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
@@ -438,6 +449,16 @@ const I18N = {
     cartHbSubtitle: '🚤 Your HotBoat booking',
     payDatosHint: 'We need your name and WhatsApp to create the payment link (this purchase only). If you add a HotBoat booking, we’ll ask once at checkout.',
     payDatosContinue: 'Continue to payment',
+    expCartPayOnly: '💳 Pay',
+    expCartPaymentTitle: '💳 Pay HotBoat cart',
+    expCartPaymentSub: (n) => `${n} item(s)`,
+    expCartGrandTotal: 'Cart total',
+    expCartPayFootnote:
+      'The remaining balance for each experience or package is coordinated when you confirm the activity.',
+    expCartSecureLine: 'Secure checkout · Debit, credit, Webpay and more',
+    expCartCreatedNoPayment: 'Booking saved. We will reach out on WhatsApp to coordinate payment.',
+    expCartSaldoRow: 'Remaining balance',
+    expCartDepositLbl: 'Deposit now (50%)',
   },
   pt: {
     days: ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],
@@ -545,6 +566,16 @@ const I18N = {
     cartHbSubtitle: '🚤 Sua reserva HotBoat',
     payDatosHint: 'Nome e WhatsApp para gerar o link de pagamento (só esta compra). Se combinar com HotBoat, pediremos uma vez no final.',
     payDatosContinue: 'Ir para o pagamento',
+    expCartPayOnly: '💳 Pagar',
+    expCartPaymentTitle: '💳 Pagar carrinho HotBoat',
+    expCartPaymentSub: (n) => `${n} item(ns)`,
+    expCartGrandTotal: 'Total do carrinho',
+    expCartPayFootnote:
+      'O saldo restante de cada experiência ou pacote é combinado ao confirmar a atividade.',
+    expCartSecureLine: 'Pagamento seguro · Débito, crédito, Webpay e mais',
+    expCartCreatedNoPayment: 'Reserva criada. Entraremos em contato pelo WhatsApp para o pagamento.',
+    expCartSaldoRow: 'Saldo pendente',
+    expCartDepositLbl: 'Sinal agora (50%)',
   },
 };
 let LANG = localStorage.getItem('hb_lang') || 'es';
@@ -843,9 +874,7 @@ function renderExperienceCartScreen(){
   if(!_experienceCart.length){
     mc.innerHTML = `
     <div class="card"><p style="color:var(--muted)">${t('expCartEmpty')}</p></div>
-    <button class="btn" onclick="showExperiencias()">${t('menuExp')} →</button>
-    <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showPacks()">${t('menuPacks')} →</button>
-    <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
+    <button class="btn btn-secondary" onclick="renderMenu()">${t('backToMenu')}</button>`;
     return;
   }
   let sum = 0, depSum = 0;
@@ -884,10 +913,142 @@ function renderExperienceCartScreen(){
     <p style="color:var(--gold);font-size:.85rem;margin-top:.35rem">${t('alojDepositNow')}: ${_alojMoney(depSum)}</p>
     <p style="color:var(--muted);font-size:.76rem">${t('addonBalanceActivity', _alojMoney(sum-depSum))}</p>
   </div>
-  <button class="btn" onclick="goReservar()">${t('expCartGoHb')}</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">${t('menuExp')} →</button>
-  <button class="btn btn-secondary" style="margin-top:.35rem" onclick="showPacks()">${t('menuPacks')} →</button>
+  <div class="card">
+    <div class="card-title" style="font-size:1.05rem">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
+    <div class="form-group"><label>${t('labelName')} *</label>
+      <input type="text" id="ec-name" placeholder="${t('labelName')}" value="${S.customerName||''}"></div>
+    <div class="form-group"><label>${t('labelPhone')} *</label>
+      <input type="tel" id="ec-phone" placeholder="+56 9 xxxx xxxx" value="${S.customerPhone||''}"></div>
+    <div class="form-group"><label>${t('alojEmailOpt')}</label>
+      <input type="email" id="ec-email" placeholder="tu@email.com" value="${S.customerEmail||''}"></div>
+  </div>
+  <button class="btn" onclick="_submitExperienceCartPayOnly()">${t('expCartPayOnly')}</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="goReservar()">${t('expCartGoHb')}</button>
   <button class="btn btn-secondary" style="margin-top:.35rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
+}
+
+function _cartItemsPayloadFromLines(){
+  return _experienceCart.map(li=>{
+    const isPack = li.kind==='pack' || !!li.pack_slug;
+    if(isPack){
+      return {
+        item_type:'pack',
+        pack_slug: li.pack_slug,
+        pack_name: li.pack_name,
+        start_date: li.start_date,
+        end_date: li.end_date || null,
+        num_people: Math.max(1, Number(li.num_people)||1),
+        unit_price_per_person: Number(li.unit_price_per_person)||0,
+        notes: (li.notes||'').trim()||null,
+      };
+    }
+    return {
+      item_type:'experience',
+      experience_slug: li.experience_slug,
+      experience_name: li.experience_name,
+      start_date: li.start_date,
+      end_date: li.end_date || null,
+      num_people: Math.max(1, Number(li.num_people)||1),
+      price_per_person: Number(li.price_per_person)||0,
+      notes: (li.notes||'').trim()||null,
+    };
+  });
+}
+
+async function _submitExperienceCartPayOnly(){
+  if(_payingExperienceCart || !_experienceCart.length) return;
+  const name = ($('ec-name')?.value||'').trim();
+  const phone = ($('ec-phone')?.value||'').trim();
+  const email = ($('ec-email')?.value||'').trim();
+  if(!name){ showToast(t('alojEnterName')); return; }
+  if(!phone){ showToast(t('alojEnterPhone')); return; }
+  S.customerName = name;
+  S.customerPhone = phone;
+  S.customerEmail = email;
+  _payingExperienceCart = true;
+  const items = _cartItemsPayloadFromLines();
+  mc.innerHTML = `<div class="card" style="text-align:center;padding:1.5rem">
+    <div style="font-size:2rem;margin-bottom:.6rem">⏳</div>
+    <p style="color:var(--muted)">${t('alojProcessing')}</p>
+  </div>`;
+  try{
+    const er = await fetch('/api/booking/experience-cart-create',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        items,
+        customer_name: S.customerName,
+        customer_phone: S.customerPhone,
+        customer_email: S.customerEmail||null,
+        hotboat_booking_ref: null,
+      }),
+    });
+    const edata = await er.json();
+    if(!er.ok) throw new Error(edata.detail || 'Error');
+    const expSumTotal = Number(edata.total_price)||0;
+    _experienceCart = [];
+    _expCartPersist();
+    S.bookingRef = edata.primary_ref || (edata.booking_refs && edata.booking_refs[0]) || '';
+    S.paymentUrl = edata.payment_url || '';
+    S.totalPrice = expSumTotal;
+    S.depositAmount = Math.round(expSumTotal * 0.5);
+    if(!edata.payment_url && edata.requires_email){
+      const refs = (edata.booking_refs||[]).join(', ');
+      mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+        <div style="font-size:3rem;margin-bottom:1rem">📧</div>
+        <div class="card-title">${t('addonHighSeasonTitle')}</div>
+        <p style="color:var(--muted);margin-top:.6rem">
+          ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+        </p>
+        <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Refs: <strong>${refs||S.bookingRef}</strong></p>
+        <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">${t('backToMenu')}</button>
+      </div>`;
+      return;
+    }
+    _trackEvent('cart_only_payment_ready', S.bookingRef);
+    renderExperienceCartPaymentScreen(items.length);
+  }catch(ex){
+    showToast((ex.message||'') || t('alojPayErr'));
+    renderExperienceCartScreen();
+  }finally{
+    _payingExperienceCart = false;
+  }
+}
+
+function renderExperienceCartPaymentScreen(itemCount){
+  const deposit = S.depositAmount || Math.round(S.totalPrice * 0.5);
+  S.depositAmount = 0;
+  const resto = S.totalPrice - deposit;
+  const sub = t('expCartPaymentSub', itemCount);
+  mc.innerHTML = `
+  ${stepsHtml('pago')}
+  <div class="card" style="text-align:center">
+    <div style="font-size:1.05rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--gold);margin-bottom:.3rem">${t('expCartPaymentTitle')}</div>
+    <p style="color:var(--muted);margin-bottom:.5rem;font-size:.85rem">${sub}</p>
+    <p style="color:var(--muted);margin-bottom:.8rem;font-size:.85rem">Ref: <strong>${S.bookingRef}</strong></p>
+    <div style="background:var(--bg);border-radius:12px;padding:1rem;margin:.75rem 0">
+      <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem">${t('expCartDepositLbl')}</div>
+      <div style="font-size:2rem;font-weight:800;color:var(--gold)">$${deposit.toLocaleString('es-CL')}</div>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.75rem 1rem;margin:.5rem 0;display:flex;justify-content:space-between;align-items:center;font-size:.85rem">
+      <span style="color:var(--muted)">${t('expCartGrandTotal')}</span>
+      <span style="font-weight:700">$${S.totalPrice.toLocaleString('es-CL')}</span>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.75rem 1rem;margin:.5rem 0;display:flex;justify-content:space-between;align-items:center;font-size:.85rem">
+      <span style="color:var(--muted)">${t('expCartSaldoRow')}</span>
+      <span style="font-weight:700">$${resto.toLocaleString('es-CL')}</span>
+    </div>
+    <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.7rem 1rem;margin:.75rem 0;font-size:.8rem;color:var(--muted);text-align:left">
+      ${t('expCartPayFootnote')}
+    </div>
+    ${S.paymentUrl ? `
+      <a href="${S.paymentUrl}" class="btn" style="text-decoration:none;margin-top:.5rem;font-size:1rem;padding:.9rem">
+        ${t('expCartPayOnly')} $${deposit.toLocaleString('es-CL')}
+      </a>
+      <p style="color:var(--muted);font-size:.78rem;margin-top:.7rem">${t('expCartSecureLine')}</p>` : `
+      <div class="info-box">${t('expCartCreatedNoPayment')}</div>`}
+  </div>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
 }
 
 function showPrices(){
