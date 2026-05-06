@@ -115,7 +115,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "label_date":   "📅 \u00a0Fecha",
         "label_time":   "⏰ \u00a0Hora",
         "label_people": "👥 \u00a0Personas",
-        "label_paid":   "✅ \u00a0Pagado (50%)",
+        "label_paid":           "✅ \u00a0Pagado (50%)",
+        "label_deposit_due":    "💳 \u00a0Depósito a pagar (50%)",
         "label_total":  "💰 \u00a0Total",
         "hrs":          "hrs",
         "footer_questions": "¿Tienes preguntas? Escríbenos por WhatsApp",
@@ -165,7 +166,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "label_date":   "📅 \u00a0Date",
         "label_time":   "⏰ \u00a0Time",
         "label_people": "👥 \u00a0People",
-        "label_paid":   "✅ \u00a0Paid (50%)",
+        "label_paid":           "✅ \u00a0Paid (50%)",
+        "label_deposit_due":    "💳 \u00a0Deposit due (50%)",
         "label_total":  "💰 \u00a0Total",
         "hrs":          "h",
         "footer_questions": "Any questions? Message us on WhatsApp",
@@ -208,7 +210,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "label_date":   "📅 \u00a0Data",
         "label_time":   "⏰ \u00a0Hora",
         "label_people": "👥 \u00a0Pessoas",
-        "label_paid":   "✅ \u00a0Pago (50%)",
+        "label_paid":           "✅ \u00a0Pago (50%)",
+        "label_deposit_due":    "💳 \u00a0Sinal de reserva (50%)",
         "label_total":  "💰 \u00a0Total",
         "hrs":          "h",
         "footer_questions": "Tem dúvidas? Fale conosco pelo WhatsApp",
@@ -308,8 +311,16 @@ def _footer(ctx: Dict[str, str]) -> str:
 </td></tr></table></td></tr></table></body></html>"""
 
 
-def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str,
-                         accent_bar: str, extra_body: str, cta_rows: str) -> str:
+def _hotboat_email_card(
+    ctx: Dict[str, str],
+    hero_title: str,
+    hero_subtitle: str,
+    accent_bar: str,
+    extra_body: str,
+    cta_rows: str,
+    *,
+    deposit_row_i18n_key: str = "label_paid",
+) -> str:
     """Shared dark-card layout used by booking_created and booking_confirmed."""
     phone   = ctx.get("business_phone", "")
     website = ctx.get("business_website", "#")
@@ -395,7 +406,7 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
 
         <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
-            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_paid")}</td>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang, deposit_row_i18n_key)}</td>
             <td align="right" style="color:#e8b86d;font-size:14px;font-weight:700;">{deposit}</td>
           </tr></table>
         </td></tr>
@@ -527,6 +538,7 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
         accent_bar=accent,
         extra_body=payment_note,
         cta_rows=cta_rows,
+        deposit_row_i18n_key="label_deposit_due",
     )
 
 
