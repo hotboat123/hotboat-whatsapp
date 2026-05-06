@@ -137,6 +137,11 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem;font-
 .flatpickr-day.selected,.flatpickr-day.selected:hover{background:var(--coral)!important;border-color:var(--coral)!important}
 .flatpickr-day.inRange{background:rgba(255,92,53,.15)!important;border-color:transparent!important}
 .flatpickr-day.startRange,.flatpickr-day.endRange{background:var(--coral)!important;border-color:var(--coral)!important}
+#hb-pay-datos-overlay{
+  position:fixed;inset:0;z-index:10000;background:rgba(10,22,40,.92);
+  display:flex;align-items:center;justify-content:center;padding:1rem;
+}
+#hb-pay-datos-overlay .hb-pay-inner{margin:0}
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -323,6 +328,9 @@ const I18N = {
     expCartRm: 'Quitar',
     expCartToast: 'Agregado al carrito',
     expCartPayHb: '💳 Pagar carrito + HotBoat',
+    cartHbSubtitle: '🚤 Tu reserva HotBoat',
+    payDatosHint: 'Nombre y WhatsApp para generar el link de pago (solo esta compra). Si combinas con HotBoat, también los pediremos una vez al final.',
+    payDatosContinue: 'Continuar al pago',
   },
   en: {
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
@@ -427,6 +435,9 @@ const I18N = {
     expCartRm: 'Remove',
     expCartToast: 'Added to cart',
     expCartPayHb: '💳 Pay cart + HotBoat',
+    cartHbSubtitle: '🚤 Your HotBoat booking',
+    payDatosHint: 'We need your name and WhatsApp to create the payment link (this purchase only). If you add a HotBoat booking, we’ll ask once at checkout.',
+    payDatosContinue: 'Continue to payment',
   },
   pt: {
     days: ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],
@@ -531,10 +542,59 @@ const I18N = {
     expCartRm: 'Remover',
     expCartToast: 'Adicionado ao carrinho',
     expCartPayHb: '💳 Pagar carrinho + HotBoat',
+    cartHbSubtitle: '🚤 Sua reserva HotBoat',
+    payDatosHint: 'Nome e WhatsApp para gerar o link de pagamento (só esta compra). Se combinar com HotBoat, pediremos uma vez no final.',
+    payDatosContinue: 'Ir para o pagamento',
   },
 };
 let LANG = localStorage.getItem('hb_lang') || 'es';
 function t(key, ...args){ const v = I18N[LANG][key]; return typeof v === 'function' ? v(...args) : (v || I18N.es[key] || key); }
+function _customerBasicsOk(){
+  return !!(String(S.customerName||'').trim() && String(S.customerPhone||'').trim());
+}
+/** Solo para “pagar solo” experiencia/pack/aloj: si no hay datos en S, pide una vez en overlay. */
+function _ensureCustomerOneOffThen(run){
+  const invoke = ()=>{
+    const out = run();
+    if(out && typeof out.then === 'function'){
+      out.catch(ex=>{ console.error(ex); showToast((ex.message||'')||t('alojConnErr')); });
+    }
+  };
+  if(_customerBasicsOk()){ invoke(); return; }
+  document.getElementById('hb-pay-datos-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'hb-pay-datos-overlay';
+  ov.setAttribute('role','dialog');
+  ov.setAttribute('aria-modal','true');
+  ov.innerHTML = `
+    <div class="card hb-pay-inner" style="max-width:420px;width:100%">
+      <div class="card-title" style="font-size:1.25rem">${t('alojYourData')}</div>
+      <p style="color:var(--muted);font-size:.82rem;margin-bottom:.75rem;line-height:1.45">${t('payDatosHint')}</p>
+      <div class="form-group"><label>${t('labelName')} *</label>
+        <input type="text" id="hb-od-name" autocomplete="name" placeholder="${t('labelName')}"></div>
+      <div class="form-group"><label>${t('labelPhone')} *</label>
+        <input type="tel" id="hb-od-phone" autocomplete="tel" placeholder="+56 9 xxxx xxxx"></div>
+      <div class="form-group"><label>${t('alojEmailOpt')}</label>
+        <input type="email" id="hb-od-email" autocomplete="email" placeholder="tu@email.com"></div>
+      <button class="btn" type="button" id="hb-od-go">${t('payDatosContinue')}</button>
+      <button class="btn btn-secondary" type="button" id="hb-od-x" style="margin-top:.5rem">${t('back')}</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const clean = ()=>{ ov.remove(); };
+  $('hb-od-x').onclick = clean;
+  $('hb-od-go').onclick = ()=>{
+    const n = $('hb-od-name').value.trim();
+    const p = $('hb-od-phone').value.trim();
+    const e = ($('hb-od-email')?.value||'').trim();
+    if(!n){ showToast(t('alojEnterName')); return; }
+    if(!p){ showToast(t('alojEnterPhone')); return; }
+    S.customerName = n;
+    S.customerPhone = p;
+    S.customerEmail = e || '';
+    clean();
+    invoke();
+  };
+}
 function _moneyLocale(){ return LANG==='en'?'en-US':LANG==='pt'?'pt-BR':'es-CL'; }
 function _alojMoney(n){ return '$'+Number(n).toLocaleString(_moneyLocale()); }
 function _alojPickLang(raw){
@@ -1092,15 +1152,9 @@ function _renderAddonExpAvailable(){
     <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(total-deposit))}</div>
   </div>
   <div class="card">
-    <div class="card-title" style="font-size:1rem">${t('alojYourData')}</div>
-    <div class="form-group"><label>${t('labelName')} *</label>
-      <input type="text" id="ax-name" placeholder="${t('labelName')}"></div>
-    <div class="form-group"><label>${t('labelPhone')} *</label>
-      <input type="tel" id="ax-phone" placeholder="+56 9 xxxx xxxx"></div>
-    <div class="form-group"><label>${t('alojEmailOpt')}</label>
-      <input type="email" id="ax-email" placeholder="tu@email.com"></div>
-    <div class="form-group"><label>${t('alojMsgExtra')}</label>
-      <textarea id="ax-notes" rows="2" placeholder="${t('alojPhNotes')}"
+    <div class="card-title" style="font-size:1rem">${t('alojMsgExtra')}</div>
+    <div class="form-group" style="margin-bottom:0">
+      <textarea id="ax-notes" rows="3" placeholder="${t('alojPhNotes')}"
         style="width:100%;background:var(--deep);border:1px solid var(--border);
                color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem;resize:vertical"></textarea></div>
   </div>
@@ -1157,67 +1211,60 @@ function _addonPackCartAppend(){
 async function _submitAddonExpOnly(){
   const st=_addonExpState;
   if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
-  const name=(document.getElementById('ax-name')?.value||'').trim();
-  const phone=(document.getElementById('ax-phone')?.value||'').trim();
-  if(!name){ showToast(t('alojEnterName')); return; }
-  if(!phone){ showToast(t('alojEnterPhone')); return; }
-  const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
-  const btn=document.getElementById('ax-pay-btn');
-  if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
-  const endDate=st.checkOut===st.checkIn?null:st.checkOut;
-  const payload={
-    experience_slug:st.slug,
-    experience_name:st.name,
-    start_date:st.checkIn,
-    end_date:endDate,
-    num_people:people,
-    price_per_person:st.pricePerPerson,
-    customer_name:name,
-    customer_phone:phone,
-    customer_email:(document.getElementById('ax-email')?.value||'').trim()||null,
-    notes:(document.getElementById('ax-notes')?.value||'').trim()||null,
-  };
-  try{
-    const r=await fetch('/api/booking/experience-create',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload),
-    });
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.detail||'Error');
-    if(d.payment_url){
-      window.location.href=d.payment_url;
-      return;
+  _ensureCustomerOneOffThen(async ()=>{
+    const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
+    const btn=document.getElementById('ax-pay-btn');
+    if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
+    const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+    const payload={
+      experience_slug:st.slug,
+      experience_name:st.name,
+      start_date:st.checkIn,
+      end_date:endDate,
+      num_people:people,
+      price_per_person:st.pricePerPerson,
+      customer_name:S.customerName.trim(),
+      customer_phone:S.customerPhone.trim(),
+      customer_email:(S.customerEmail||'').trim()||null,
+      notes:(document.getElementById('ax-notes')?.value||'').trim()||null,
+    };
+    try{
+      const r=await fetch('/api/booking/experience-create',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+      });
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.detail||'Error');
+      if(d.payment_url){
+        window.location.href=d.payment_url;
+        return;
+      }
+      if(d.requires_email){
+        const ref=d.booking_ref||'';
+        document.getElementById('addon-booking-result').innerHTML=`
+          <div class="card" style="text-align:center;padding:1.2rem">
+            <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
+            <div class="card-title">${t('addonHighSeasonTitle')}</div>
+            <p style="color:var(--muted);margin-top:.6rem">
+              ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+            </p>
+            <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
+            <button class="btn btn-secondary" style="margin-top:1rem" onclick="showExperiencias()">${t('backToMenu')}</button>
+          </div>`;
+        return;
+      }
+      throw new Error(t('alojPayErr'));
+    }catch(ex){
+      showToast((ex.message||'')||t('alojPayErr'));
+      if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortExp'); }
     }
-    if(d.requires_email){
-      const ref=d.booking_ref||'';
-      document.getElementById('addon-booking-result').innerHTML=`
-        <div class="card" style="text-align:center;padding:1.2rem">
-          <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
-          <div class="card-title">${t('addonHighSeasonTitle')}</div>
-          <p style="color:var(--muted);margin-top:.6rem">
-            ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
-          </p>
-          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
-          <button class="btn btn-secondary" style="margin-top:1rem" onclick="showExperiencias()">${t('backToMenu')}</button>
-        </div>`;
-      return;
-    }
-    throw new Error(t('alojPayErr'));
-  }catch(ex){
-    showToast((ex.message||'')||t('alojPayErr'));
-    if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortExp'); }
-  }
+  });
 }
 
 function _startHotboatWithAddonExp(){
   const st=_addonExpState;
   if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
-  const name=(document.getElementById('ax-name')?.value||'').trim();
-  const phone=(document.getElementById('ax-phone')?.value||'').trim();
-  if(!name){ showToast(t('alojEnterName')); return; }
-  if(!phone){ showToast(t('alojEnterPhone')); return; }
-  const email=(document.getElementById('ax-email')?.value||'').trim()||null;
   const notes=(document.getElementById('ax-notes')?.value||'').trim()||'';
   const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
   const endDate=st.checkOut===st.checkIn?null:st.checkOut;
@@ -1231,14 +1278,11 @@ function _startHotboatWithAddonExp(){
     end_date:endDate,
     num_people:people,
     price_per_person:st.pricePerPerson,
-    customer_name:name,
-    customer_phone:phone,
-    customer_email:email,
+    customer_name:'',
+    customer_phone:'',
+    customer_email:null,
     notes,
   });
-  S.customerName=name;
-  S.customerPhone=phone;
-  S.customerEmail=email||'';
   S.numPeople=people;
   goReservar();
 }
@@ -1319,15 +1363,9 @@ function _renderAddonPackAvailable(){
     <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(total-deposit))}</div>
   </div>
   <div class="card">
-    <div class="card-title" style="font-size:1rem">${t('alojYourData')}</div>
-    <div class="form-group"><label>${t('labelName')} *</label>
-      <input type="text" id="pk-name" placeholder="${t('labelName')}"></div>
-    <div class="form-group"><label>${t('labelPhone')} *</label>
-      <input type="tel" id="pk-phone" placeholder="+56 9 xxxx xxxx"></div>
-    <div class="form-group"><label>${t('alojEmailOpt')}</label>
-      <input type="email" id="pk-email" placeholder="tu@email.com"></div>
-    <div class="form-group"><label>${t('alojMsgExtra')}</label>
-      <textarea id="pk-notes" rows="2" placeholder="${t('alojPhNotes')}"
+    <div class="card-title" style="font-size:1rem">${t('alojMsgExtra')}</div>
+    <div class="form-group" style="margin-bottom:0">
+      <textarea id="pk-notes" rows="3" placeholder="${t('alojPhNotes')}"
         style="width:100%;background:var(--deep);border:1px solid var(--border);
                color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem;resize:vertical"></textarea></div>
   </div>
@@ -1345,68 +1383,61 @@ function _renderAddonPackAvailable(){
 async function _submitAddonPackOnly(){
   const st=_addonPackState;
   if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
-  const name=(document.getElementById('pk-name')?.value||'').trim();
-  const phone=(document.getElementById('pk-phone')?.value||'').trim();
-  if(!name){ showToast(t('alojEnterName')); return; }
-  if(!phone){ showToast(t('alojEnterPhone')); return; }
-  const people=Math.max(1, parseInt(document.getElementById('addon-pk-people')?.value||'1',10)||1);
-  const unitPrice=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
-  const btn=document.getElementById('pk-pay-btn');
-  if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
-  const endDate=st.checkOut===st.checkIn?null:st.checkOut;
-  const payload={
-    pack_slug:st.slug,
-    pack_name:st.name,
-    start_date:st.checkIn,
-    end_date:endDate,
-    num_people:people,
-    unit_price_per_person:unitPrice,
-    customer_name:name,
-    customer_phone:phone,
-    customer_email:(document.getElementById('pk-email')?.value||'').trim()||null,
-    notes:(document.getElementById('pk-notes')?.value||'').trim()||null,
-  };
-  try{
-    const r=await fetch('/api/booking/pack-create',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload),
-    });
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.detail||'Error');
-    if(d.payment_url){
-      window.location.href=d.payment_url;
-      return;
+  _ensureCustomerOneOffThen(async ()=>{
+    const people=Math.max(1, parseInt(document.getElementById('addon-pk-people')?.value||'1',10)||1);
+    const unitPrice=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
+    const btn=document.getElementById('pk-pay-btn');
+    if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
+    const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+    const payload={
+      pack_slug:st.slug,
+      pack_name:st.name,
+      start_date:st.checkIn,
+      end_date:endDate,
+      num_people:people,
+      unit_price_per_person:unitPrice,
+      customer_name:S.customerName.trim(),
+      customer_phone:S.customerPhone.trim(),
+      customer_email:(S.customerEmail||'').trim()||null,
+      notes:(document.getElementById('pk-notes')?.value||'').trim()||null,
+    };
+    try{
+      const r=await fetch('/api/booking/pack-create',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+      });
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.detail||'Error');
+      if(d.payment_url){
+        window.location.href=d.payment_url;
+        return;
+      }
+      if(d.requires_email){
+        const ref=d.booking_ref||'';
+        document.getElementById('addon-pack-booking-result').innerHTML=`
+          <div class="card" style="text-align:center;padding:1.2rem">
+            <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
+            <div class="card-title">${t('addonHighSeasonTitle')}</div>
+            <p style="color:var(--muted);margin-top:.6rem">
+              ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+            </p>
+            <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
+            <button class="btn btn-secondary" style="margin-top:1rem" onclick="showPacks()">${t('backToMenu')}</button>
+          </div>`;
+        return;
+      }
+      throw new Error(t('alojPayErr'));
+    }catch(ex){
+      showToast((ex.message||'')||t('alojPayErr'));
+      if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortPack'); }
     }
-    if(d.requires_email){
-      const ref=d.booking_ref||'';
-      document.getElementById('addon-pack-booking-result').innerHTML=`
-        <div class="card" style="text-align:center;padding:1.2rem">
-          <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
-          <div class="card-title">${t('addonHighSeasonTitle')}</div>
-          <p style="color:var(--muted);margin-top:.6rem">
-            ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
-          </p>
-          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
-          <button class="btn btn-secondary" style="margin-top:1rem" onclick="showPacks()">${t('backToMenu')}</button>
-        </div>`;
-      return;
-    }
-    throw new Error(t('alojPayErr'));
-  }catch(ex){
-    showToast((ex.message||'')||t('alojPayErr'));
-    if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortPack'); }
-  }
+  });
 }
 
 function _startHotboatWithAddonPack(){
   const st=_addonPackState;
   if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
-  const name=(document.getElementById('pk-name')?.value||'').trim();
-  const phone=(document.getElementById('pk-phone')?.value||'').trim();
-  if(!name){ showToast(t('alojEnterName')); return; }
-  if(!phone){ showToast(t('alojEnterPhone')); return; }
-  const email=(document.getElementById('pk-email')?.value||'').trim()||null;
   const notes=(document.getElementById('pk-notes')?.value||'').trim()||'';
   const people=Math.max(1, parseInt(document.getElementById('addon-pk-people')?.value||'1',10)||1);
   const unitPrice=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
@@ -1421,14 +1452,11 @@ function _startHotboatWithAddonPack(){
     end_date:endDate,
     num_people:people,
     unit_price_per_person:unitPrice,
-    customer_name:name,
-    customer_phone:phone,
-    customer_email:email,
+    customer_name:'',
+    customer_phone:'',
+    customer_email:null,
     notes,
   };
-  S.customerName=name;
-  S.customerPhone=phone;
-  S.customerEmail=email||'';
   S.numPeople=people;
   goReservar();
 }
@@ -1926,16 +1954,6 @@ function _renderAlojAvailable(){
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-title" style="font-size:1rem">${t('alojYourData')}</div>
-    <div class="form-group"><label>${t('labelName')} *</label>
-      <input type="text" id="ab-name" placeholder="${t('labelName')}"></div>
-    <div class="form-group"><label>${t('labelPhone')} *</label>
-      <input type="tel" id="ab-phone" placeholder="+56 9 xxxx xxxx"></div>
-    <div class="form-group"><label>${t('alojEmailOpt')}</label>
-      <input type="email" id="ab-email" placeholder="tu@email.com"></div>
-  </div>
-
   <button class="btn" id="ab-pay-btn" onclick="_submitAlojBooking()" style="margin-bottom:.6rem">
     ${t('alojPayLodging', _alojMoney(deposit))}
   </button>
@@ -1945,69 +1963,62 @@ function _renderAlojAvailable(){
 }
 
 async function _submitAlojBooking(){
-  const name  = (document.getElementById('ab-name')?.value||'').trim();
-  const phone = (document.getElementById('ab-phone')?.value||'').trim();
-  if(!name)  return showToast(t('alojEnterName'));
-  if(!phone) return showToast(t('alojEnterPhone'));
-  const btn = document.getElementById('ab-pay-btn');
-  if(btn){btn.disabled=true;btn.textContent=t('alojProcessing');}
-  const {alojId,a,checkIn,checkOut,pricePerNight}=_alojState;
-  const payload={
-    accommodation_id:   alojId,
-    accommodation_name: a.name,
-    accommodation_slug: a.id,
-    check_in:  checkIn,
-    check_out: checkOut,
-    num_people: a.cap,
-    price_per_night: pricePerNight,
-    customer_name:  name,
-    customer_phone: phone,
-    customer_email: document.getElementById('ab-email')?.value||null,
-  };
-  try{
-    const r = await fetch('/api/booking/accommodation-create',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload),
-    });
-    const j = await r.json();
-    if(!r.ok) throw new Error(j.detail || t('alojPayErr'));
-    if(j.payment_url){
-      window.location.href=j.payment_url;
-      return;
-    }
-    if(j.requires_email){
-      const ref=j.booking_ref||'';
-      const box=document.getElementById('aloj-booking-result');
-      if(box){
-        box.innerHTML=`
-        <div class="card" style="text-align:center;padding:1.2rem;margin-top:.75rem">
-          <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
-          <div class="card-title">${t('addonHighSeasonTitle')}</div>
-          <p style="color:var(--muted);margin-top:.6rem">
-            ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
-          </p>
-          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
-          <button class="btn btn-secondary" style="margin-top:1rem" onclick="showAlojamientos()">${t('alojMoreOptions')}</button>
-        </div>`;
+  _ensureCustomerOneOffThen(async ()=>{
+    const btn = document.getElementById('ab-pay-btn');
+    if(btn){btn.disabled=true;btn.textContent=t('alojProcessing');}
+    const {alojId,a,checkIn,checkOut,pricePerNight}=_alojState;
+    const payload={
+      accommodation_id:   alojId,
+      accommodation_name: a.name,
+      accommodation_slug: a.id,
+      check_in:  checkIn,
+      check_out: checkOut,
+      num_people: a.cap,
+      price_per_night: pricePerNight,
+      customer_name:  S.customerName.trim(),
+      customer_phone: S.customerPhone.trim(),
+      customer_email: (S.customerEmail||'').trim()||null,
+    };
+    try{
+      const r = await fetch('/api/booking/accommodation-create',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if(!r.ok) throw new Error(j.detail || t('alojPayErr'));
+      if(j.payment_url){
+        window.location.href=j.payment_url;
+        return;
       }
-      if(btn){btn.disabled=false;btn.textContent=t('alojPayLodging');}
-      return;
+      if(j.requires_email){
+        const ref=j.booking_ref||'';
+        const box=document.getElementById('aloj-booking-result');
+        if(box){
+          box.innerHTML=`
+          <div class="card" style="text-align:center;padding:1.2rem;margin-top:.75rem">
+            <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
+            <div class="card-title">${t('addonHighSeasonTitle')}</div>
+            <p style="color:var(--muted);margin-top:.6rem">
+              ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+            </p>
+            <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
+            <button class="btn btn-secondary" style="margin-top:1rem" onclick="showAlojamientos()">${t('alojMoreOptions')}</button>
+          </div>`;
+        }
+        if(btn){btn.disabled=false;btn.textContent=t('alojPayLodging');}
+        return;
+      }
+      showToast(t('alojPayErr'));
+      if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
+    }catch(e){
+      showToast(t('alojConnErr'));
+      if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
     }
-    showToast(t('alojPayErr'));
-    if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
-  }catch(e){
-    showToast(t('alojConnErr'));
-    if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
-  }
+  });
 }
 
 function _startHotboatWithAloj(){
-  const name  = (document.getElementById('ab-name')?.value||'').trim();
-  const phone = (document.getElementById('ab-phone')?.value||'').trim();
-  if(!name)  return showToast(t('alojEnterName'));
-  if(!phone) return showToast(t('alojEnterPhone'));
-  const email = (document.getElementById('ab-email')?.value||'').trim();
   const {alojId,a,checkIn,checkOut,pricePerNight}=_alojState;
   _experienceCart = [];
   _expCartPersist();
@@ -2019,14 +2030,10 @@ function _startHotboatWithAloj(){
     check_out:       checkOut,
     num_people:      a.cap,
     price_per_night: pricePerNight,
-    customer_name:   name,
-    customer_phone:  phone,
-    customer_email:  email || null,
+    customer_name:   '',
+    customer_phone:  '',
+    customer_email:  null,
   };
-  // Pre-fill the HotBoat booking form with the same customer data
-  S.customerName  = name;
-  S.customerPhone = phone;
-  S.customerEmail = email;
   goReservar();
 }
 
@@ -2616,8 +2623,11 @@ function renderForm(){
 
   // Accommodation / experiencia / pack summary (addon + HotBoat)
   let alojBlock = '';
-  let expPackBlock = '';
   let combinedDepositNote = '';
+  /** Lines above HotBoat (cart or single pending pack): shown inside unified “Carrito HotBoat”. */
+  let unifiedCartTopInner = '';
+  const mergeHbIntoCartCard = !!( _experienceCart.length || _pendingPackBooking );
+
   if(_pendingAlojBooking){
     const p = _pendingAlojBooking;
     const alojNights = (new Date(p.check_out) - new Date(p.check_in)) / 86400000;
@@ -2664,13 +2674,10 @@ function renderForm(){
     const hbDeposit = Math.round(hbTotal * 0.5);
     const combinedTotal = hbTotal + expTotalAll;
     const combinedDeposit = hbDeposit + expDepositAll;
-    expPackBlock = `
-    <div class="card" style="border-color:var(--coral)">
-      <div class="card-title" style="font-size:.95rem">${t('expCartTitle')}</div>
+    unifiedCartTopInner = `
       ${rows}
       <div class="summary-row" style="color:var(--gold);margin-top:.35rem;padding-top:.35rem;border-top:1px solid var(--border)"><span>${t('alojDepositNow')}</span><span><strong>${_alojMoney(expDepositAll)}</strong></span></div>
-      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(expTotalAll - expDepositAll))}</div>
-    </div>`;
+      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(expTotalAll - expDepositAll))}</div>`;
     combinedDepositNote = `
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
       🎫🚤 <strong style="color:var(--gold)">Total abono ahora: ${_alojMoney(combinedDeposit)}</strong><br>
@@ -2685,14 +2692,12 @@ function renderForm(){
     const combinedTotal = hbTotal + packTotal;
     const combinedDeposit = hbDeposit + packDeposit;
     const dateEnd = p.end_date || p.start_date;
-    expPackBlock = `
-    <div class="card" style="border-color:var(--coral)">
-      <div class="card-title" style="font-size:.95rem">📦 ${p.pack_name||''}</div>
+    unifiedCartTopInner = `
+      <div style="margin-bottom:.5rem;font-weight:600;color:var(--text);font-size:.95rem">📦 ${p.pack_name||''}</div>
       <div class="summary-row"><span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span></div>
       <div class="summary-row"><span>${_alojMoney(p.unit_price_per_person)}/pers. × ${p.num_people} × ${days}</span><span><strong>${_alojMoney(packTotal)}</strong></span></div>
       <div class="summary-row" style="color:var(--gold)"><span>${t('alojDepositNow')}</span><span><strong>${_alojMoney(packDeposit)}</strong></span></div>
-      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(packTotal - packDeposit))}</div>
-    </div>`;
+      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(packTotal - packDeposit))}</div>`;
     combinedDepositNote = `
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
       📦🚤 <strong style="color:var(--gold)">Total abono ahora: ${_alojMoney(combinedDeposit)}</strong><br>
@@ -2700,25 +2705,13 @@ function renderForm(){
     </div>`;
   }
 
-  mc.innerHTML = `
-  ${stepsHtml('datos')}
-  ${alojBlock}
-  ${expPackBlock}
-  <div class="card">
-    <div class="card-title">${t('formTitle')}</div>
-    <div class="summary-row"><span>${t('labelDate')}</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
-    <div class="summary-row"><span>${t('labelPeople')}</span><span>${S.numPeople}</span></div>
-    <div class="summary-row"><span>${t('labelBase')}</span><span>$${sub.toLocaleString('es-CL')}${(()=>{if(S.dpEnabled&&mult!==1.0){const c=mult>1?'#e74c3c':'#2ecc71';const p=Math.round((mult-1)*100);const s=p>0?'+':'';return ` <span style="font-size:.72rem;color:${c}">(${s}${p}%)</span>`;}return '';})()}</span></div>
-    ${extRows}
-    ${flex ? `<div class="summary-row"><span>${t('labelFlex')}</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
-    ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón <strong>${S.couponCode}</strong></span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>` : ''}
-    <div class="summary-row total" id="summary-total-row"><span>${t('labelTotal')}</span><span id="summary-total-val">$${hbTotal.toLocaleString('es-CL')}</span></div>
-    ${combinedDepositNote || `
+  const hbGoldenFallback = `
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
       🚤 <strong style="color:var(--gold)">50% ($${Math.round(hbTotal*0.5).toLocaleString('es-CL')})</strong> — ${t('depositNote')}
-    </div>`}
-    ${S.couponExtra ? `<div style="margin-top:.6rem;padding:.6rem .9rem;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:10px;font-size:.85rem;color:#a5b4fc">🎁 <strong>${LANG==='en'?'Bonus':'Beneficio'}:</strong> ${S.couponExtra}</div>` : ''}
-    <!-- Cupón input -->
+    </div>`;
+  const depositBoxHtml = combinedDepositNote || hbGoldenFallback;
+
+  const couponBlockHtml = `
     <div style="margin-top:.9rem">
       <div style="display:flex;gap:.5rem;align-items:stretch">
         <input type="text" id="coupon-input" placeholder="${LANG==='pt'?'Código de cupom':LANG==='en'?'Coupon code':'Código de cupón'}"
@@ -2738,8 +2731,40 @@ function renderForm(){
           ? '* O desconto aplica-se apenas ao valor base da reserva HotBoat, não aos extras.'
           : '* El descuento aplica solo sobre la tarifa base de la reserva HotBoat, no sobre los extras.'}
       </div>
+    </div>`;
+
+  const hbDetailInner = `
+    <div class="summary-row"><span>${t('labelDate')}</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
+    <div class="summary-row"><span>${t('labelPeople')}</span><span>${S.numPeople}</span></div>
+    <div class="summary-row"><span>${t('labelBase')}</span><span>$${sub.toLocaleString('es-CL')}${(()=>{if(S.dpEnabled&&mult!==1.0){const c=mult>1?'#e74c3c':'#2ecc71';const p=Math.round((mult-1)*100);const s=p>0?'+':'';return ` <span style="font-size:.72rem;color:${c}">(${s}${p}%)</span>`;}return '';})()}</span></div>
+    ${extRows}
+    ${flex ? `<div class="summary-row"><span>${t('labelFlex')}</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
+    ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón <strong>${S.couponCode}</strong></span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>` : ''}
+    <div class="summary-row total" id="summary-total-row"><span>${t('labelTotal')}</span><span id="summary-total-val">$${hbTotal.toLocaleString('es-CL')}</span></div>
+    ${depositBoxHtml}
+    ${S.couponExtra ? `<div style="margin-top:.6rem;padding:.6rem .9rem;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:10px;font-size:.85rem;color:#a5b4fc">🎁 <strong>${LANG==='en'?'Bonus':'Beneficio'}:</strong> ${S.couponExtra}</div>` : ''}
+    ${couponBlockHtml}`;
+
+  const standaloneHbCardHtml = `
+  <div class="card">
+    <div class="card-title">${t('formTitle')}</div>
+    ${hbDetailInner}
+  </div>`;
+
+  const unifiedCartHbCardHtml = `
+  <div class="card" style="border-color:var(--coral)">
+    <div class="card-title">${t('expCartTitle')}</div>
+    ${unifiedCartTopInner}
+    <div style="margin-top:1.05rem;padding-top:1rem;border-top:2px solid var(--border)">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:clamp(1.05rem,3.8vw,1.35rem);color:var(--gold);letter-spacing:.05em;margin-bottom:.65rem;line-height:1.2">${t('cartHbSubtitle')}</div>
+      ${hbDetailInner}
     </div>
-  </div>
+  </div>`;
+
+  mc.innerHTML = `
+  ${stepsHtml('datos')}
+  ${alojBlock}
+  ${mergeHbIntoCartCard ? unifiedCartHbCardHtml : standaloneHbCardHtml}
   <div class="card">
     <div class="card-title">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
     <div class="form-group"><label>${t('labelName')} *</label>
@@ -2823,7 +2848,6 @@ async function applyCoupon(){
 
 async function submitBooking(){
   if(_isSubmittingBooking) return;
-  _isSubmittingBooking = true;
   S.customerName = $('f-name').value.trim();
   S.customerPhone = $('f-phone').value.trim();
   S.customerEmail = $('f-email').value.trim();
@@ -2832,6 +2856,7 @@ async function submitBooking(){
     showToast('Por favor ingresa nombre y telefono');
     return;
   }
+  _isSubmittingBooking = true;
   const basepp = S.prices[S.numPeople] || 69990;
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const pp = Math.round(basepp * mult / 1000) * 1000;
@@ -2881,6 +2906,9 @@ async function submitBooking(){
     if(_pendingAlojBooking){
       // Create combined WooCommerce order: accommodation + HotBoat in one payment
       const alojPayload = { ..._pendingAlojBooking, hotboat_booking_ref: data.booking_ref };
+      alojPayload.customer_name = S.customerName;
+      alojPayload.customer_phone = S.customerPhone;
+      alojPayload.customer_email = S.customerEmail || null;
       const alojNights = (new Date(alojPayload.check_out) - new Date(alojPayload.check_in)) / 86400000;
       _pendingAlojBooking = null;
       const ar = await fetch('/api/booking/accommodation-create',{
@@ -2977,6 +3005,9 @@ async function submitBooking(){
     } else if(_pendingPackBooking){
       // Create combined WooCommerce order: pack + HotBoat
       const packPayload = { ..._pendingPackBooking, hotboat_booking_ref: data.booking_ref };
+      packPayload.customer_name = S.customerName;
+      packPayload.customer_phone = S.customerPhone;
+      packPayload.customer_email = S.customerEmail || null;
       packPayload.num_people = S.numPeople;
       const start = new Date(packPayload.start_date);
       const end   = packPayload.end_date ? new Date(packPayload.end_date) : null;
