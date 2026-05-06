@@ -1356,55 +1356,29 @@ function _addonPackCartAppend(){
 async function _submitAddonExpOnly(){
   const st=_addonExpState;
   if(!st?.checkIn){ showToast(t('addonNeedDateExp')); return; }
-  _ensureCustomerOneOffThen(async ()=>{
-    const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
-    const btn=document.getElementById('ax-pay-btn');
-    if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
-    const endDate=null;
-    const payload={
+  const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
+  const btn=document.getElementById('ax-pay-btn');
+  if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
+  try{
+    appendExperienceCartLine({
+      kind:'experience',
       experience_slug:st.slug,
       experience_name:st.name,
       start_date:st.checkIn,
-      end_date:endDate,
+      end_date:null,
       num_people:people,
       price_per_person:st.pricePerPerson,
-      customer_name:S.customerName.trim(),
-      customer_phone:S.customerPhone.trim(),
-      customer_email:(S.customerEmail||'').trim()||null,
-      notes:(document.getElementById('ax-notes')?.value||'').trim()||null,
-    };
-    try{
-      const r=await fetch('/api/booking/experience-create',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(payload),
-      });
-      const d=await r.json();
-      if(!r.ok) throw new Error(d.detail||'Error');
-      if(d.payment_url){
-        window.location.href=d.payment_url;
-        return;
-      }
-      if(d.requires_email){
-        const ref=d.booking_ref||'';
-        document.getElementById('addon-booking-result').innerHTML=`
-          <div class="card" style="text-align:center;padding:1.2rem">
-            <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
-            <div class="card-title">${t('addonHighSeasonTitle')}</div>
-            <p style="color:var(--muted);margin-top:.6rem">
-              ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
-            </p>
-            <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
-            <button class="btn btn-secondary" style="margin-top:1rem" onclick="showExperiencias()">${t('backToMenu')}</button>
-          </div>`;
-        return;
-      }
-      throw new Error(t('alojPayErr'));
-    }catch(ex){
-      showToast((ex.message||'')||t('alojPayErr'));
-      if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortExp'); }
-    }
-  });
+      notes:(document.getElementById('ax-notes')?.value||'').trim()||'',
+      customer_name:'', customer_phone:'', customer_email:null,
+    });
+    // Always route "Pagar" through cart checkout so contact data is requested first.
+    renderExperienceCartScreen();
+  }catch(ex){
+    showToast((ex.message||'')||t('alojPayErr'));
+    if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortExp'); }
+    return;
+  }
+  if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortExp'); }
 }
 
 function _startHotboatWithAddonExp(){
@@ -1528,56 +1502,31 @@ function _renderAddonPackAvailable(){
 async function _submitAddonPackOnly(){
   const st=_addonPackState;
   if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
-  _ensureCustomerOneOffThen(async ()=>{
-    const people=Math.max(1, parseInt(document.getElementById('addon-pk-people')?.value||'1',10)||1);
-    const unitPrice=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
-    const btn=document.getElementById('pk-pay-btn');
-    if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
-    const endDate=st.checkOut===st.checkIn?null:st.checkOut;
-    const payload={
+  const people=Math.max(1, parseInt(document.getElementById('addon-pk-people')?.value||'1',10)||1);
+  const unitPrice=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
+  const btn=document.getElementById('pk-pay-btn');
+  if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
+  const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+  try{
+    appendExperienceCartLine({
+      kind:'pack',
       pack_slug:st.slug,
       pack_name:st.name,
       start_date:st.checkIn,
       end_date:endDate,
       num_people:people,
       unit_price_per_person:unitPrice,
-      customer_name:S.customerName.trim(),
-      customer_phone:S.customerPhone.trim(),
-      customer_email:(S.customerEmail||'').trim()||null,
-      notes:(document.getElementById('pk-notes')?.value||'').trim()||null,
-    };
-    try{
-      const r=await fetch('/api/booking/pack-create',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(payload),
-      });
-      const d=await r.json();
-      if(!r.ok) throw new Error(d.detail||'Error');
-      if(d.payment_url){
-        window.location.href=d.payment_url;
-        return;
-      }
-      if(d.requires_email){
-        const ref=d.booking_ref||'';
-        document.getElementById('addon-pack-booking-result').innerHTML=`
-          <div class="card" style="text-align:center;padding:1.2rem">
-            <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
-            <div class="card-title">${t('addonHighSeasonTitle')}</div>
-            <p style="color:var(--muted);margin-top:.6rem">
-              ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
-            </p>
-            <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
-            <button class="btn btn-secondary" style="margin-top:1rem" onclick="showPacks()">${t('backToMenu')}</button>
-          </div>`;
-        return;
-      }
-      throw new Error(t('alojPayErr'));
-    }catch(ex){
-      showToast((ex.message||'')||t('alojPayErr'));
-      if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortPack'); }
-    }
-  });
+      notes:(document.getElementById('pk-notes')?.value||'').trim()||'',
+      customer_name:'', customer_phone:'', customer_email:null,
+    });
+    // Always route "Pagar" through cart checkout so contact data is requested first.
+    renderExperienceCartScreen();
+  }catch(ex){
+    showToast((ex.message||'')||t('alojPayErr'));
+    if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortPack'); }
+    return;
+  }
+  if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortPack'); }
 }
 
 function _startHotboatWithAddonPack(){
