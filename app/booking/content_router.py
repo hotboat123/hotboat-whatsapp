@@ -106,7 +106,10 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
 
 
 @content_router.get("/api/content/alojamientos")
-def list_alojamientos(active_only: bool = True):
+def list_alojamientos(active_only: bool = True, lang: str = Query("es", description="es | en | pt")):
+    lang = (lang or "es").lower().strip()[:2]
+    if lang not in ("es", "en", "pt"):
+        lang = "es"
     with get_connection() as conn:
         with conn.cursor() as cur:
             q = ("SELECT id,slug,name,group_name,icon,description,"
@@ -122,7 +125,19 @@ def list_alojamientos(active_only: bool = True):
             q += " ORDER BY display_order,id"
             cur.execute(q)
             cols = [d.name for d in cur.description]
-            return {"alojamientos": [dict(zip(cols, r)) for r in cur.fetchall()]}
+            rows = []
+            for r in cur.fetchall():
+                row = dict(zip(cols, r))
+                if lang == "en":
+                    row["name"] = (row.get("name_en") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_en") or "").strip() or row.get("description")
+                    row["group_name"] = (row.get("group_name_en") or "").strip() or row.get("group_name")
+                elif lang == "pt":
+                    row["name"] = (row.get("name_pt") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_pt") or "").strip() or row.get("description")
+                    row["group_name"] = (row.get("group_name_pt") or "").strip() or row.get("group_name")
+                rows.append(row)
+            return {"alojamientos": rows}
 
 
 @content_router.get("/api/content/accommodation-availability/{slug}")
@@ -231,6 +246,8 @@ def list_packs(active_only: bool = True, lang: str = Query("es", description="es
             cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS name_pt TEXT")
             cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_en TEXT")
             cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_pt TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS includes_en JSONB DEFAULT '[]'::jsonb")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS includes_pt JSONB DEFAULT '[]'::jsonb")
             cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
             cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
             q = (
@@ -239,7 +256,10 @@ def list_packs(active_only: bool = True, lang: str = Query("es", description="es
                 "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
                 "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
                 "personas,price_from,cost_from,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
-                "includes,is_active,display_order FROM packs"
+                "COALESCE(includes,'[]'::jsonb) AS includes,"
+                "COALESCE(includes_en,'[]'::jsonb) AS includes_en,"
+                "COALESCE(includes_pt,'[]'::jsonb) AS includes_pt,"
+                "is_active,display_order FROM packs"
             )
             if active_only:
                 q += " WHERE is_active=TRUE"
@@ -252,12 +272,20 @@ def list_packs(active_only: bool = True, lang: str = Query("es", description="es
                 if isinstance(row.get("includes"), str):
                     import json
                     row["includes"] = json.loads(row["includes"])
+                if isinstance(row.get("includes_en"), str):
+                    import json
+                    row["includes_en"] = json.loads(row["includes_en"])
+                if isinstance(row.get("includes_pt"), str):
+                    import json
+                    row["includes_pt"] = json.loads(row["includes_pt"])
                 if lang == "en":
                     row["name"] = (row.get("name_en") or "").strip() or row.get("name")
                     row["description"] = (row.get("description_en") or "").strip() or row.get("description")
+                    row["includes"] = row.get("includes_en") or row.get("includes") or []
                 elif lang == "pt":
                     row["name"] = (row.get("name_pt") or "").strip() or row.get("name")
                     row["description"] = (row.get("description_pt") or "").strip() or row.get("description")
+                    row["includes"] = row.get("includes_pt") or row.get("includes") or []
                 rows.append(row)
             return {"packs": rows}
 

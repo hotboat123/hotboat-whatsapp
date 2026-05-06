@@ -680,9 +680,8 @@ async function setLang(l){
   LANG = l;
   localStorage.setItem('hb_lang', l);
   document.documentElement.lang = l;
-  await fetchExtrasCatalog();
+  await Promise.all([fetchExtrasCatalog(), loadDynamicContent()]);
   renderLangSwitcher();
-  rebuildAlojamientosFromDyn();
   renderMenu();
 }
 function renderLangSwitcher(){
@@ -1136,7 +1135,7 @@ async function loadDynamicContent(){
     const [er, pr, ar, ms] = await Promise.all([
       fetch(`/api/content/experiencias?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
       fetch(`/api/content/packs?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
-      fetch('/api/content/alojamientos').then(r=>r.json()),
+      fetch(`/api/content/alojamientos?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
       fetch('/api/content/menu-settings').then(r=>r.json()).catch(()=>({})),
     ]);
     if(ms && typeof ms === 'object') S.menuSettings = {...S.menuSettings, ...ms};
@@ -1167,9 +1166,9 @@ async function loadDynamicContent(){
 function showExperiencias(){
   _trackEvent('view_experiencias');
   const list = DYN_EXPERIENCIAS.length ? DYN_EXPERIENCIAS : [
-    {slug:'rafting',icon:'🚣',name:'Rafting',description:'Rio Trancura · Bajo o Alto',price_per_person:30000,image_path:'/media/images/experiencias/rafting/Rafting.jpg'},
-    {slug:'cabalgata',icon:'🐴',name:'Cabalgata',description:'Parque Ojos del Caburguá',price_per_person:50000,image_path:'/media/images/experiencias/cabalgata/CAbalgatas.jpg'},
-    {slug:'velerismo',icon:'⛵',name:'Navegacion a Vela',description:'Lago Villarrica',price_per_person:50000,image_path:'/media/images/experiencias/velerismo/Velerismo.jpg'},
+    {slug:'rafting',icon:'🚣',name:'Rafting',description:(LANG==='en'?'Trancura River · Low or High':LANG==='pt'?'Rio Trancura · Baixo ou Alto':'Rio Trancura · Bajo o Alto'),price_per_person:30000,image_path:'/media/images/experiencias/rafting/Rafting.jpg'},
+    {slug:'cabalgata',icon:'🐴',name:(LANG==='en'?'Horseback Riding':LANG==='pt'?'Cavalgada':'Cabalgata'),description:(LANG==='en'?'Ojos del Caburguá Park':'Parque Ojos del Caburguá'),price_per_person:50000,image_path:'/media/images/experiencias/cabalgata/CAbalgatas.jpg'},
+    {slug:'velerismo',icon:'⛵',name:(LANG==='en'?'Sailing':LANG==='pt'?'Vela':'Navegacion a Vela'),description:(LANG==='en'?'Villarrica Lake':'Lago Villarrica'),price_per_person:50000,image_path:'/media/images/experiencias/velerismo/Velerismo.jpg'},
   ];
   const btns = list.map(e=>`
     <button class="menu-btn" onclick="showExperienciaDetail('${e.slug}')" style="flex-direction:row;align-items:center;gap:.75rem">
@@ -1190,9 +1189,9 @@ function showExperiencias(){
 function showExperienciaDetail(slug){
   _trackEvent('view_experiencia_detail', slug);
   const list = DYN_EXPERIENCIAS.length ? DYN_EXPERIENCIAS : [
-    {slug:'rafting',icon:'🚣',name:'Rafting',description:'Rio Trancura · Bajo o Alto',price_per_person:30000,image_path:'/media/images/experiencias/rafting/Rafting.jpg'},
-    {slug:'cabalgata',icon:'🐴',name:'Cabalgata',description:'Parque Ojos del Caburguá',price_per_person:50000,image_path:'/media/images/experiencias/cabalgata/CAbalgatas.jpg'},
-    {slug:'velerismo',icon:'⛵',name:'Navegacion a Vela',description:'Lago Villarrica',price_per_person:50000,image_path:'/media/images/experiencias/velerismo/Velerismo.jpg'},
+    {slug:'rafting',icon:'🚣',name:'Rafting',description:(LANG==='en'?'Trancura River · Low or High':LANG==='pt'?'Rio Trancura · Baixo ou Alto':'Rio Trancura · Bajo o Alto'),price_per_person:30000,image_path:'/media/images/experiencias/rafting/Rafting.jpg'},
+    {slug:'cabalgata',icon:'🐴',name:(LANG==='en'?'Horseback Riding':LANG==='pt'?'Cavalgada':'Cabalgata'),description:(LANG==='en'?'Ojos del Caburguá Park':'Parque Ojos del Caburguá'),price_per_person:50000,image_path:'/media/images/experiencias/cabalgata/CAbalgatas.jpg'},
+    {slug:'velerismo',icon:'⛵',name:(LANG==='en'?'Sailing':LANG==='pt'?'Vela':'Navegacion a Vela'),description:(LANG==='en'?'Villarrica Lake':'Lago Villarrica'),price_per_person:50000,image_path:'/media/images/experiencias/velerismo/Velerismo.jpg'},
   ];
   const e = list.find(x=>x.slug===slug);
   if(!e){ showExperiencias(); return; }
