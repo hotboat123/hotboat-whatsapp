@@ -312,6 +312,9 @@ const I18N = {
     addonHighSeasonTitle: 'Alta temporada — Coordinamos por email',
     addonHighSeasonBody: 'Para confirmar, escribe a',
     addonNeedDates: 'Selecciona fechas de inicio y término',
+    addonNeedDateExp: 'Selecciona la fecha de la actividad',
+    addonExpPickDateTitle: '📅 Fecha',
+    addonExpDateLbl: 'Fecha de la actividad',
     addonInvalidDates: 'La fecha de término debe ser igual o posterior al inicio',
     addonPriceHint: '/ persona · día',
     addonPackRefNote: 'Referencia según temporada y versión del pack',
@@ -429,6 +432,9 @@ const I18N = {
     addonHighSeasonTitle: 'Peak season — We’ll coordinate by email',
     addonHighSeasonBody: 'To confirm, write to',
     addonNeedDates: 'Select start and end dates',
+    addonNeedDateExp: 'Pick the activity date',
+    addonExpPickDateTitle: '📅 Date',
+    addonExpDateLbl: 'Activity date',
     addonInvalidDates: 'End date must be on or after the start date',
     addonPriceHint: '/ person · day',
     addonPackRefNote: 'Indicative — varies by season and package version',
@@ -546,6 +552,9 @@ const I18N = {
     addonHighSeasonTitle: 'Alta temporada — Coordenamos por e-mail',
     addonHighSeasonBody: 'Para confirmar, escreva para',
     addonNeedDates: 'Selecione as datas de início e fim',
+    addonNeedDateExp: 'Escolha a data da atividade',
+    addonExpPickDateTitle: '📅 Data',
+    addonExpDateLbl: 'Data da atividade',
     addonInvalidDates: 'A data de fim deve ser igual ou após o início',
     addonPriceHint: '/ pessoa · dia',
     addonPackRefNote: 'Valor de referência conforme temporada e versão',
@@ -888,13 +897,16 @@ function renderExperienceCartScreen(){
     const de = li.end_date || li.start_date;
     const title = isPack ? (li.pack_name||'') : (li.experience_name||'');
     const ic = isPack ? '📦' : '🎫';
+    const dateLine = !isPack && !li.end_date
+      ? `📅 ${_fmtDate(li.start_date)} · ${t('addonDaysLabel', days)}`
+      : `📅 ${_fmtDate(li.start_date)} → ${_fmtDate(de)} · ${t('addonDaysLabel', days)}`;
     return `
     <div class="card" style="margin-bottom:.6rem;padding:1rem;border-color:var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
         <div>
           <div style="font-weight:700;color:var(--coral)">${ic} ${title}</div>
           <div style="font-size:.82rem;color:var(--muted);margin-top:.25rem">
-            📅 ${_fmtDate(li.start_date)} → ${_fmtDate(de)} · ${t('addonDaysLabel', days)}
+            ${dateLine}
           </div>
           <div style="font-size:.85rem;margin-top:.35rem">
             ${_alojMoney(pp)}/pers · ${li.num_people} · <strong>${_alojMoney(tot)}</strong>
@@ -1192,7 +1204,7 @@ function showExperienciaDetail(slug){
   }
   _destroyAddonPickers();
   _addonPackState = null;
-  _addonExpState = {e, slug, name: e.name, pricePerPerson, checkIn:null, checkOut:null};
+  _addonExpState = {e, slug, name: e.name, pricePerPerson, checkIn:null};
   const expImgs = _expImagesList(e);
   const gid = `gal-exp-${String(slug).replace(/[^a-z0-9_-]/gi, '')}`;
   const imgHtml = _galBuild(gid, expImgs, e.icon || '🎫');
@@ -1205,20 +1217,12 @@ function showExperienciaDetail(slug){
     <p style="color:var(--muted);font-size:.85rem;margin-top:.8rem;line-height:1.5">${e.description||''}</p>
   </div>
   <div class="card">
-    <div class="card-title" style="font-size:1rem;margin-bottom:.6rem">${t('alojSelectDates')}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-      <div>
-        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">${t('alojLblCheckIn')}</div>
-        <input type="text" id="addon-exp-in" readonly placeholder="${t('alojPhArrival')}"
-          style="width:100%;background:var(--deep);border:1px solid var(--border);
-                 color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
-      </div>
-      <div>
-        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">${t('alojLblCheckOut')}</div>
-        <input type="text" id="addon-exp-out" readonly placeholder="${t('alojPhDeparture')}"
-          style="width:100%;background:var(--deep);border:1px solid var(--border);
-                 color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
-      </div>
+    <div class="card-title" style="font-size:1rem;margin-bottom:.6rem">${t('addonExpPickDateTitle')}</div>
+    <div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">${t('addonExpDateLbl')}</div>
+      <input type="text" id="addon-exp-in" readonly placeholder="${t('alojPhArrival')}"
+        style="width:100%;background:var(--deep);border:1px solid var(--border);
+               color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
     </div>
     <div class="form-group" style="margin-top:.75rem;margin-bottom:.3rem">
       <label style="display:block;margin-bottom:.45rem">${t('addonSelectPeople')}</label>
@@ -1230,7 +1234,6 @@ function showExperienciaDetail(slug){
       <input type="hidden" id="addon-exp-people" value="2" data-min="1" data-max="99">
       <p style="font-size:.72rem;color:var(--muted);text-align:center;margin-top:.4rem">1–99 ${t('personsLabel')}</p>
     </div>
-    <div id="addon-exp-days-hint" style="font-size:.8rem;color:var(--muted);text-align:center;margin-top:.35rem"></div>
   </div>
   <div id="addon-booking-result"></div>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">${t('alojMoreOptions')}</button>`;
@@ -1250,46 +1253,28 @@ function _initAddonExpFlatpickr(){
     onChange(sel){
       if(!sel.length) return;
       st.checkIn = flatpickr.formatDate(sel[0],'Y-m-d');
-      st.checkOut = null;
       const el=document.getElementById('addon-booking-result'); if(el) el.innerHTML='';
-      const h=document.getElementById('addon-exp-days-hint'); if(h) h.textContent='';
-      _addonFpOut.set('minDate', sel[0]);
-      _addonFpOut.clear();
-      setTimeout(()=>_addonFpOut.open(), 120);
-    },
-  });
-  _addonFpOut = flatpickr('#addon-exp-out', {
-    ...fpCfg,
-    minDate:'today',
-    onChange(sel){
-      if(!sel.length||!st.checkIn) return;
-      st.checkOut = flatpickr.formatDate(sel[0],'Y-m-d');
       _onAddonExpDatesSelected();
     },
   });
 }
 
 function _onAddonExpPeopleChange(){
-  if(!_addonExpState?.checkIn||!_addonExpState?.checkOut) return;
+  if(!_addonExpState?.checkIn) return;
   _onAddonExpDatesSelected();
 }
 
 function _onAddonExpDatesSelected(){
   const st=_addonExpState;
-  if(!st||!st.checkIn||!st.checkOut) return;
-  const days=_addonComputeDays(st.checkIn, st.checkOut);
-  if(days<1){ showToast(t('addonInvalidDates')); return;}
-  const h=document.getElementById('addon-exp-days-hint');
-  if(h) h.textContent = t('addonDaysLabel', days);
+  if(!st||!st.checkIn) return;
   _renderAddonExpAvailable();
 }
 
 function _renderAddonExpAvailable(){
   const st=_addonExpState;
-  if(!st) return;
+  if(!st||!st.checkIn) return;
   const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
-  const days=_addonComputeDays(st.checkIn, st.checkOut);
-  if(!days) return;
+  const days=1;
   const unit=st.pricePerPerson;
   const total=unit*people*days;
   const deposit=Math.round(total*0.5);
@@ -1299,11 +1284,11 @@ function _renderAddonExpAvailable(){
   <div class="card">
     <div class="card-title" style="font-size:1rem">${t('alojYourBooking')}</div>
     <div class="summary-row">
-      <span>📅 ${_fmtDate(st.checkIn)} → ${_fmtDate(st.checkOut)}</span>
-      <span>${t('addonDaysLabel', days)}</span>
+      <span>📅 ${_fmtDate(st.checkIn)}</span>
+      <span style="opacity:.85">${t('addonDaysLabel', days)}</span>
     </div>
     <div class="summary-row">
-      <span>${_alojMoney(unit)}/pers. × ${people} × ${days}</span>
+      <span>${_alojMoney(unit)}/pers. × ${people}</span>
       <span><strong>${_alojMoney(total)}</strong></span>
     </div>
     <div class="summary-row" style="color:var(--gold)">
@@ -1332,9 +1317,9 @@ function _renderAddonExpAvailable(){
 
 function _addonExperienceCartAppend(){
   const st=_addonExpState;
-  if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
+  if(!st?.checkIn){ showToast(t('addonNeedDateExp')); return; }
   const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
-  const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+  const endDate=null;
   appendExperienceCartLine({
     kind:'experience',
     experience_slug:st.slug,
@@ -1371,12 +1356,12 @@ function _addonPackCartAppend(){
 
 async function _submitAddonExpOnly(){
   const st=_addonExpState;
-  if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
+  if(!st?.checkIn){ showToast(t('addonNeedDateExp')); return; }
   _ensureCustomerOneOffThen(async ()=>{
     const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
     const btn=document.getElementById('ax-pay-btn');
     if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
-    const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+    const endDate=null;
     const payload={
       experience_slug:st.slug,
       experience_name:st.name,
@@ -1425,10 +1410,10 @@ async function _submitAddonExpOnly(){
 
 function _startHotboatWithAddonExp(){
   const st=_addonExpState;
-  if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
+  if(!st?.checkIn){ showToast(t('addonNeedDateExp')); return; }
   const notes=(document.getElementById('ax-notes')?.value||'').trim()||'';
   const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
-  const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+  const endDate=null;
   _pendingAlojBooking=null;
   _pendingPackBooking=null;
   appendExperienceCartLine({
@@ -1845,7 +1830,7 @@ function removeExperienceCartLine(cid){
 
 _expCartLoad();
 let _pendingPackBooking = null;  // pack held while user picks HotBoat slot
-/** @type {{e:any, slug:string, name:string, pricePerPerson:number, checkIn:string|null, checkOut:string|null}|null} */
+/** @type {{e:any, slug:string, name:string, pricePerPerson:number, checkIn:string|null}|null} */
 let _addonExpState = null;
 /** @type {{p:any, slug:string, name:string, priceFrom:number, checkIn:string|null, checkOut:string|null}|null} */
 let _addonPackState = null;
@@ -2824,11 +2809,17 @@ function renderForm(){
       const dateEnd = p.end_date || p.start_date;
       const ic = isPack ? '📦' : '🎫';
       const nm = isPack ? (p.pack_name||'') : (p.experience_name||'');
+      const dateRow = !isPack && !p.end_date
+        ? `<span>📅 ${_fmtDate(p.start_date)}</span><span>${t('addonDaysLabel', days)}</span>`
+        : `<span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span>`;
+      const pxRow = days>1
+        ? `${_alojMoney(pp)}/pers. × ${p.num_people} × ${days}`
+        : `${_alojMoney(pp)}/pers. × ${p.num_people}`;
       return `
       <div style="border-bottom:1px solid var(--border);padding:.55rem 0;margin-bottom:.45rem">
         <div style="font-weight:600;margin-bottom:.2rem;color:var(--text)">${ic} ${nm}</div>
-        <div class="summary-row"><span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span></div>
-        <div class="summary-row"><span>${_alojMoney(pp)}/pers. × ${p.num_people} × ${days}</span><span><strong>${_alojMoney(expTotal)}</strong></span></div>
+        <div class="summary-row">${dateRow}</div>
+        <div class="summary-row"><span>${pxRow}</span><span><strong>${_alojMoney(expTotal)}</strong></span></div>
       </div>`;
     }).join('');
     const expDepositAll = Math.round(expTotalAll * 0.5);
