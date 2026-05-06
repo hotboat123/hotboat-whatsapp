@@ -301,12 +301,23 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         extras_list = [e.dict() for e in request.extras]
         extras_total = sum(e["price"] * e["quantity"] for e in extras_list)
         flex_amount = int(subtotal * 0.1) if request.has_flex else 0
-        total = subtotal + extras_total + flex_amount
+        cdisc = float(request.coupon_discount or 0)
+        boat_cap = float(subtotal + flex_amount)
+        if cdisc < 0:
+            cdisc = 0
+        if cdisc > boat_cap:
+            cdisc = boat_cap
+        ccode = (request.coupon_code or "").strip() or None
+        cextra = (request.coupon_extra_benefit or "").strip() or None
+        total = subtotal + extras_total + flex_amount - int(round(cdisc))
+        if total < 0:
+            total = 0
         data = {
             "customer_name": request.customer_name,
             "customer_phone": request.customer_phone,
             "customer_email": request.customer_email,
             "customer_birthday": request.customer_birthday,
+            "customer_language": request.customer_language or "es",
             "booking_date": request.booking_date,
             "booking_time": request.booking_time,
             "num_people": n,
@@ -316,9 +327,12 @@ async def create_booking_endpoint(request: CreateBookingRequest):
             "extras_total": extras_total,
             "has_flex": request.has_flex,
             "flex_amount": flex_amount,
-            "total_price": total,
+            "total_price": float(total),
             "source": request.source,
             "notes": request.notes,
+            "coupon_code": ccode,
+            "coupon_discount": cdisc,
+            "coupon_extra_benefit": cextra if ccode else None,
         }
         result = create_booking(data)
         booking_ref = result["booking_ref"]
@@ -337,9 +351,10 @@ async def create_booking_endpoint(request: CreateBookingRequest):
             woo_monto_extras  = 0
             logger.info(f"TEST MODE: overriding WooCommerce total to {request.test_price} CLP for {booking_ref}")
         else:
-            # Charge 50% upfront as deposit via Webpay/Transbank
-            woo_monto_reserva = round((subtotal + flex_amount) * 0.5)
-            woo_monto_extras  = round(extras_total * 0.5)
+            # Charge 50% upfront as deposit via Webpay/Transbank (coupon reduces boat line only)
+            boat_net = max(0, int(subtotal + flex_amount - round(cdisc)))
+            woo_monto_reserva = round(boat_net * 0.5)
+            woo_monto_extras = round(extras_total * 0.5)
 
         payment_url = None
         woo_order_id = None

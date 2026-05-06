@@ -2710,8 +2710,9 @@ async function saveModal(id){
   // Cupón
   body.coupon_code = _appliedCoupon ? _appliedCoupon.code : null;
   body.coupon_discount = _appliedCoupon ? (_appliedCoupon.discount_amount || 0) : 0;
+  body.coupon_extra_benefit = _appliedCoupon ? ((_appliedCoupon.extra_benefit||'').trim()||null) : null;
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount']);
+  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount','coupon_extra_benefit']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -4243,7 +4244,11 @@ function addDescuento(){
 // ── Cupones en modal ──────────────────────────────────────────────────────────
 function initCouponSection(r){
   _appliedCoupon = r.coupon_code
-    ? { code: r.coupon_code, discount_amount: +r.coupon_discount||0 }
+    ? {
+        code: r.coupon_code,
+        discount_amount: +r.coupon_discount||0,
+        extra_benefit: r.coupon_extra_benefit || '',
+      }
     : null;
   renderCouponSection();
 }
@@ -4256,8 +4261,12 @@ function renderCouponSection(){
     appliedRow.style.display = 'flex';
     inputRow.style.display   = 'none';
     document.getElementById('coupon-applied-code').textContent = _appliedCoupon.code;
+    const discPart = _appliedCoupon.discount_amount > 0
+      ? '-'+fmtMoney(_appliedCoupon.discount_amount)
+      : 'sin descuento monetario';
+    const extraPart = (_appliedCoupon.extra_benefit||'').trim();
     document.getElementById('coupon-applied-desc').textContent =
-      _appliedCoupon.discount_amount > 0 ? '-'+fmtMoney(_appliedCoupon.discount_amount) : 'sin descuento monetario';
+      extraPart ? discPart+' · '+extraPart : discPart;
   } else {
     appliedRow.style.display = 'none';
     inputRow.style.display   = 'flex';
@@ -4276,7 +4285,7 @@ async function applyCouponToModal(){
     let disc = 0;
     if(d.discount_percent) disc = Math.round(base * d.discount_percent / 100 * 100) / 100;
     else if(d.discount_fixed) disc = +d.discount_fixed;
-    _appliedCoupon = { code: d.code, discount_amount: disc };
+    _appliedCoupon = { code: d.code, discount_amount: disc, extra_benefit: d.extra_description || '' };
     renderCouponSection();
     updateExtrasTotals();
     showToast(`Cupón ${d.code} aplicado ✅`);

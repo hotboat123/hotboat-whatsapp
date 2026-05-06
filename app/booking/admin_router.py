@@ -176,7 +176,8 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
                     if r.get(k): r[k] = r[k].isoformat()
                 if r.get("hora"): r["hora"] = str(r["hora"])
                 for k in ("ingreso_reserva", "ingreso_extras", "ingreso_total",
-                          "costo_operativo_fijo", "costo_operativo_variable", "costo_operativo_total"):
+                          "costo_operativo_fijo", "costo_operativo_variable", "costo_operativo_total",
+                          "coupon_discount"):
                     if r.get(k) is not None: r[k] = float(r[k])
                 # Ensure every reservation has a usable booking_ref for T&C firma links.
                 # hotboat_web bookings: source_id IS the booking_ref (HB-xxxx).
@@ -231,6 +232,7 @@ class UpdateReservaRequest(BaseModel):
     flex_amount: Optional[float] = None
     coupon_code: Optional[str] = None
     coupon_discount: Optional[float] = None
+    coupon_extra_benefit: Optional[str] = None
 
 
 @admin_router.put("/api/admin/reservas/{rid}")
@@ -238,12 +240,18 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
     _check_auth(x_admin_key)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     # coupon fields are nullable — include them if explicitly sent in the request
-    if 'coupon_code' in body.model_fields_set or 'coupon_discount' in body.model_fields_set:
+    if (
+        'coupon_code' in body.model_fields_set
+        or 'coupon_discount' in body.model_fields_set
+        or 'coupon_extra_benefit' in body.model_fields_set
+    ):
         _ensure_coupons_table()
     if 'coupon_code' in body.model_fields_set:
         updates['coupon_code'] = body.coupon_code
     if 'coupon_discount' in body.model_fields_set:
         updates['coupon_discount'] = body.coupon_discount or 0
+    if 'coupon_extra_benefit' in body.model_fields_set:
+        updates['coupon_extra_benefit'] = body.coupon_extra_benefit
     # has_flex is a boolean that can be False — include if explicitly sent
     if 'has_flex' in body.model_fields_set:
         updates['has_flex'] = body.has_flex
@@ -2973,6 +2981,8 @@ def _ensure_coupons_table():
                     ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0;
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS coupon_extra_benefit TEXT DEFAULT NULL;
             """)
             conn.commit()
 

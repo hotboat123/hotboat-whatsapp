@@ -97,6 +97,7 @@ def _legacy_booking_from_aa(d: Dict[str, Any]) -> Dict[str, Any]:
         "customer_language": d.get("customer_language") or "es",
         "coupon_code": d.get("coupon_code"),
         "coupon_discount": float(d.get("coupon_discount") or 0),
+        "coupon_extra_benefit": d.get("coupon_extra_benefit"),
         "customer_birthday": str(d["customer_birthday"]) if d.get("customer_birthday") else None,
     }
 
@@ -137,6 +138,9 @@ def create_booking(data: dict) -> dict:
         lang = "es"
     coupon_code = data.get("coupon_code") or None
     coupon_discount = float(data.get("coupon_discount") or 0)
+    coupon_extra = (data.get("coupon_extra_benefit") or "").strip() or None
+    if not coupon_code:
+        coupon_extra = None
     extras_payload = {
         "price_per_person": int(data["price_per_person"]),
         "extras": data.get("extras") or [],
@@ -154,7 +158,7 @@ def create_booking(data: dict) -> dict:
                     has_flex, flex_amount,
                     extras_json, observaciones,
                     status, customer_language,
-                    coupon_code, coupon_discount,
+                    coupon_code, coupon_discount, coupon_extra_benefit,
                     customer_birthday,
                     created_at, updated_at
                 )
@@ -167,7 +171,7 @@ def create_booking(data: dict) -> dict:
                     %s, %s,
                     %s, %s,
                     'pending_payment', %s,
-                    %s, %s,
+                    %s, %s, %s,
                     %s,
                     NOW(), NOW()
                 )
@@ -193,6 +197,7 @@ def create_booking(data: dict) -> dict:
                     lang,
                     coupon_code,
                     coupon_discount,
+                    coupon_extra,
                     bday,
                 ),
             )
@@ -257,7 +262,7 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                        status, payment_id, payment_order_id, payment_status,
                        paid_at, observaciones, created_at, confirmation_email_sent_at,
                        COALESCE(customer_language,'es'), coupon_code, coupon_discount,
-                       customer_birthday, source
+                       coupon_extra_benefit, customer_birthday, source
                 FROM all_appointments
                 WHERE source = 'hotboat_web' AND TRIM(source_id) = TRIM(%s)
                 """,
@@ -291,6 +296,7 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                     "customer_language",
                     "coupon_code",
                     "coupon_discount",
+                    "coupon_extra_benefit",
                     "customer_birthday",
                     "source",
                 ]
@@ -916,6 +922,7 @@ def ensure_db_columns() -> None:
                 ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS customer_birthday DATE;
                 ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS coupon_code TEXT;
                 ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0;
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS coupon_extra_benefit TEXT;
                 ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS customer_language VARCHAR(5) DEFAULT 'es';
 
                 -- 021: multiple images per alojamiento

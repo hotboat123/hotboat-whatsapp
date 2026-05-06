@@ -2997,6 +2997,7 @@ async function submitBooking(){
       has_flex: S.hasFlex,
       coupon_code: S.couponCode || null,
       coupon_discount: S.couponDiscount || 0,
+      coupon_extra_benefit: (S.couponExtra || '').trim() || null,
     };
     if(testPrice) payload.test_price = parseInt(testPrice);
     // If coming from accommodation flow, create HotBoat booking without payment order
