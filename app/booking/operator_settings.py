@@ -1,1 +1,752 @@
-"""\nOperator settings: vacation days, urgency mode config, dynamic pricing.\nAll settings stored in hotboat_settings (key/value) table.\n"""\nimport json\nimport logging\nfrom datetime import date, timedelta\nfrom typing import Optional\n\nfrom app.db.connection import get_connection\n\nlogger = logging.getLogger(__name__)\n\n\n# ── Generic settings store ─────────────────────────────────────────────────────\n\ndef get_setting(key: str, default: str = "") -> str:\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                cur.execute("SELECT value FROM hotboat_settings WHERE key=%s", (key,))\n                row = cur.fetchone()\n                return row[0] if row else default\n    except Exception as e:\n        logger.warning(f"get_setting({key}) failed: {e}")\n        return default\n\n\ndef set_setting(key: str, value: str) -> bool:\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                cur.execute("""\n                    INSERT INTO hotboat_settings (key, value, updated_at)\n                    VALUES (%s, %s, NOW())\n                    ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()\n                """, (key, value))\n                conn.commit()\n        return True\n    except Exception as e:\n        logger.error(f"set_setting({key}) failed: {e}")\n        return False\n\n\ndef _json_setting(key: str, default: dict) -> dict:\n    raw = get_setting(key, "")\n    if not raw:\n        return default.copy()\n    try:\n        return json.loads(raw)\n    except Exception:\n        return default.copy()\n\n\n# ── Urgency mode ───────────────────────────────────────────────────────────────\n\nURGENCY_CONFIG_DEFAULT = {\n    "seed_times": ["10:00", "18:00"],\n    "gap_hours": 3,\n}\n\n\ndef is_urgency_mode() -> bool:\n    return get_setting("urgency_mode", "false").lower() == "true"\n\n\ndef get_urgency_config() -> dict:\n    return _json_setting("urgency_config", URGENCY_CONFIG_DEFAULT)\n\n\ndef set_urgency_config(cfg: dict) -> bool:\n    return set_setting("urgency_config", json.dumps(cfg))\n\n\n# ── Schedule types & urgency modes (named presets) ──────────────────────────────\n\ndef get_schedule_types() -> list:\n    """Return list of {id, name, hours} schedule type presets."""\n    return _json_setting("schedule_types", [])\n\n\ndef set_schedule_types(types: list) -> bool:\n    return set_setting("schedule_types", json.dumps(types))\n\n\ndef get_urgency_modes() -> list:\n    """Return list of {id, name, seed_times, gap_hours} urgency mode presets."""\n    return _json_setting("urgency_modes", [])\n\n\ndef set_urgency_modes(modes: list) -> bool:\n    return set_setting("urgency_modes", json.dumps(modes))\n\n\ndef get_profile_by_id(profile_id: str) -> Optional[dict]:\n    """Return a schedule type or urgency mode by its id, or None."""\n    if not profile_id:\n        return None\n    for t in get_schedule_types():\n        if t.get("id") == profile_id:\n            return {"kind": "schedule", **t}\n    for m in get_urgency_modes():\n        if m.get("id") == profile_id:\n            return {"kind": "urgency", **m}\n    return None\n\n\n# ── Vacation days ─────────────────────────────────────────────────────────────\n\ndef get_vacation_days(from_date: Optional[date] = None, to_date: Optional[date] = None) -> list:\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                wheres, params = [], []\n                if from_date:\n                    wheres.append("fecha >= %s"); params.append(from_date)\n                if to_date:\n                    wheres.append("fecha <= %s"); params.append(to_date)\n                where = ("WHERE " + " AND ".join(wheres)) if wheres else ""\n                cur.execute(f"SELECT fecha, reason FROM vacation_days {where} ORDER BY fecha", params)\n                return [{"date": str(r[0]), "reason": r[1] or ""} for r in cur.fetchall()]\n    except Exception as e:\n        logger.error(f"get_vacation_days failed: {e}")\n        return []\n\n\ndef is_vacation_day(d: date) -> bool:\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                cur.execute("SELECT 1 FROM vacation_days WHERE fecha=%s", (d,))\n                return cur.fetchone() is not None\n    except Exception:\n        return False\n\n\ndef add_vacation_day(d: date, reason: str = "") -> bool:\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                cur.execute(\n                    "INSERT INTO vacation_days (fecha, reason) VALUES (%s, %s) ON CONFLICT DO NOTHING",\n                    (d, reason),\n                )\n                conn.commit()\n        return True\n    except Exception as e:\n        logger.error(f"add_vacation_day failed: {e}")\n        return False\n\n\ndef remove_vacation_day(d: date) -> bool:\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                cur.execute("DELETE FROM vacation_days WHERE fecha=%s", (d,))\n                conn.commit()\n        return True\n    except Exception as e:\n        logger.error(f"remove_vacation_day failed: {e}")\n        return False\n\n\n# ── Per-day urgency overrides ─────────────────────────────────────────────────\n\ndef _ensure_profile_key_col():\n    """Add profile_key column to urgency_days if not yet present."""\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                cur.execute("ALTER TABLE urgency_days ADD COLUMN IF NOT EXISTS profile_key TEXT")\n                conn.commit()\n    except Exception:\n        pass\n\n\ndef get_urgency_days(from_date: Optional[date] = None, to_date: Optional[date] = None) -> list:\n    """Return list of {date, enabled, reason, profile_key} for days with urgency override."""\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                wheres, params = [], []\n                if from_date:\n                    wheres.append("fecha >= %s"); params.append(from_date)\n                if to_date:\n                    wheres.append("fecha <= %s"); params.append(to_date)\n                where = ("WHERE " + " AND ".join(wheres)) if wheres else ""\n                try:\n                    cur.execute(\n                        f"SELECT fecha, enabled, reason, profile_key FROM urgency_days {where} ORDER BY fecha",\n                        params,\n                    )\n                    return [\n                        {"date": str(r[0]), "enabled": r[1], "reason": r[2] or "", "profile_key": r[3]}\n                        for r in cur.fetchall()\n                    ]\n                except Exception:\n                    conn.rollback()\n                    cur.execute(f"SELECT fecha, enabled, reason FROM urgency_days {where} ORDER BY fecha", params)\n                    return [{"date": str(r[0]), "enabled": r[1], "reason": r[2] or "", "profile_key": None} for r in cur.fetchall()]\n    except Exception as e:\n        logger.error(f"get_urgency_days failed: {e}")\n        return []\n\n\ndef get_urgency_day_override(d: date) -> Optional[bool]:\n    """Returns True/False if the day has an explicit override, None if no override."""\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                cur.execute("SELECT enabled FROM urgency_days WHERE fecha=%s", (d,))\n                row = cur.fetchone()\n                return row[0] if row else None\n    except Exception:\n        return None\n\n\ndef get_day_profile(d: date) -> Optional[dict]:\n    """\n    Return the full profile dict for a day, or None if no override.\n    For profile_key rows: returns the matching schedule type or urgency mode.\n    For legacy enabled=True/False rows: returns synthetic profile.\n    """\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                try:\n                    cur.execute("SELECT enabled, profile_key FROM urgency_days WHERE fecha=%s", (d,))\n                except Exception:\n                    conn.rollback()\n                    cur.execute("SELECT enabled, NULL FROM urgency_days WHERE fecha=%s", (d,))\n                row = cur.fetchone()\n                if not row:\n                    return None\n                enabled, profile_key = row\n                if profile_key:\n                    return get_profile_by_id(profile_key)\n                # Legacy: enabled=True → treat as global urgency mode, enabled=False → closed\n                if enabled is False:\n                    return {"kind": "closed"}\n                return {"kind": "urgency_legacy"}\n    except Exception:\n        return None\n\n\ndef set_urgency_day(d: date, enabled: bool, reason: str = "", profile_key: str = None) -> bool:\n    _ensure_profile_key_col()\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                cur.execute(\n                    """INSERT INTO urgency_days (fecha, enabled, reason, profile_key)\n                       VALUES (%s, %s, %s, %s)\n                       ON CONFLICT (fecha) DO UPDATE\n                         SET enabled=EXCLUDED.enabled,\n                             reason=EXCLUDED.reason,\n                             profile_key=EXCLUDED.profile_key""",\n                    (d, enabled, reason, profile_key),\n                )\n                conn.commit()\n        return True\n    except Exception as e:\n        logger.error(f"set_urgency_day failed: {e}")\n        return False\n\n\ndef remove_urgency_day(d: date) -> bool:\n    try:\n        with get_connection() as conn:\n            with conn.cursor() as cur:\n                cur.execute("DELETE FROM urgency_days WHERE fecha=%s", (d,))\n                conn.commit()\n        return True\n    except Exception as e:\n        logger.error(f"remove_urgency_day failed: {e}")\n        return False\n\n\n# ── Urgency filter ────────────────────────────────────────────────────────────\n\ndef apply_urgency_filter(\n    available_times: list,\n    booked_times: list,\n    config: Optional[dict] = None,\n) -> list:\n    """\n    Urgency algorithm:\n\n    • Sin reservas → mostrar las horas semilla (seed_times) que estén libres.\n    • Con reservas → para CADA reserva en X, ofrecer X - gap y X + gap.\n      Los seed_times ya NO se muestran; los reemplazan los slots de expansión.\n\n    Ejemplos con seeds=[10,18,21] gap=3:\n      - Sin reservas          → [10:00, 18:00, 21:00]\n      - Reserva a las 18:00   → [15:00, 21:00]\n      - Reserva a las 21:00   → [18:00] (24:00 fuera de rango)\n      - Reservas 18:00+21:00  → [15:00, 18:00, 24:00→ignorado] = [15:00, 18:00]\n    """\n    if not available_times:\n        return []\n\n    cfg = config if config is not None else get_urgency_config()\n    seed_times: list = cfg.get("seed_times") or get_operating_hours()\n    gap_hours: float = float(cfg.get("gap_hours", 3))\n\n    def _to_min(t: str) -> int:\n        h, m = map(int, t.split(":"))\n        return h * 60 + m\n\n    def _from_min(total_min: int) -> str:\n        return f"{total_min // 60:02d}:{total_min % 60:02d}"\n\n    booked_set = set(booked_times)\n    free_set = set(t for t in available_times if t not in booked_set)\n\n    if not free_set:\n        return []\n\n    gap_min = int(gap_hours * 60)\n    TOLERANCE = 30  # minutes — cómo de cerca debe estar el slot encontrado\n\n    pool: set = set()\n\n    # 1. Siempre mostrar los seeds que estén libres (no reservados)\n    for st in seed_times:\n        if st in free_set:\n            pool.add(st)\n        elif st not in booked_set:\n            # Seed generado en horario no exacto → buscar dentro de tolerancia\n            target = _to_min(st)\n            candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]\n            if candidates:\n                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))\n\n    # 2. Para cada reserva, agregar reserva ± gap (reemplaza solo ese seed reservado)\n    for bt in booked_times:\n        bt_min = _to_min(bt)\n        for delta in (-gap_min, gap_min):\n            target = bt_min + delta\n            candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]\n            if candidates:\n                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))\n\n    return sorted([t for t in free_set if t in pool], key=_to_min)\n\n\ndef get_urgency_fake_slots(config: Optional[dict] = None) -> list:\n    """\n    Calcula los slots \"fantasma\" que se muestran en GRIS (deshabilitados) en la app\n    cuando el modo urgencia está activo y NO hay reservas reales en el día.\n\n    Lógica: para cada seed S, calcular S±gap_hours.\n    Si el resultado NO es un seed y está dentro del rango 06:00-23:00 → slot gris.\n\n    Ejemplo: seeds=[10:00,18:00,21:00] gap=3\n      10+3=13:00 (no seed) → gris\n      10-3=07:00 (no seed) → gris\n      18+3=21:00 (ES seed) → omitir\n      18-3=15:00 (no seed) → gris\n      21+3=24:00 (fuera)   → omitir\n      21-3=18:00 (ES seed) → omitir\n    Resultado: [07:00, 13:00, 15:00]\n    """\n    cfg = config if config is not None else get_urgency_config()\n    seed_times: list = cfg.get("seed_times") or get_operating_hours()\n    gap_hours: float = float(cfg.get("gap_hours", 3))\n\n    def _to_min(t: str) -> int:\n        h, m = map(int, t.split(":"))\n        return h * 60 + m\n\n    def _from_min(total_min: int) -> str:\n        return f"{total_min // 60:02d}:{total_min % 60:02d}"\n\n    seed_set = set(seed_times)\n    seed_mins = [_to_min(s) for s in seed_times]\n    gap_min = int(gap_hours * 60)\n    fake = set()\n\n    for s_min in seed_mins:\n        for delta in (-gap_min, gap_min):\n            target = s_min + delta\n            if target < 6 * 60 or target >= 24 * 60:\n                continue\n            candidate = _from_min(target)\n            if candidate not in seed_set:\n                fake.add(candidate)\n\n    return sorted(fake, key=_to_min)\n\n\n# ── Dynamic Pricing ───────────────────────────────────────────────────────────\n\nDP_CONFIG_DEFAULT = {\n    "enabled": False,\n    # Each entry: {min_bookings, multiplier}  (sorted descending to find first match)\n    "fill_rate": [\n        {"min_bookings": 2, "multiplier": 1.18, "label": "2+ reservas"},\n        {"min_bookings": 1, "multiplier": 1.08, "label": "1 reserva"},\n    ],\n    # Each entry: {min_days, multiplier, label}  (sorted descending → first match wins)\n    "advance_booking": [\n        {"min_days": 14, "multiplier": 0.90, "label": "14+ días (anticipado)"},\n        {"min_days":  7, "multiplier": 0.95, "label": "7-13 días"},\n        {"min_days":  3, "multiplier": 1.00, "label": "3-6 días (normal)"},\n        {"min_days":  0, "multiplier": 1.12, "label": "0-2 días (última hora)"},\n    ],\n    # Python weekday: 0=Mon … 6=Sun\n    "weekday": {\n        "0": 1.00, "1": 1.00, "2": 1.00,\n        "3": 1.00, "4": 1.05, "5": 1.18, "6": 1.22,\n    },\n    "min_mult": 0.80,\n    "max_mult": 1.60,\n}\n\n\ndef get_dp_config() -> dict:\n    return _json_setting("dynamic_pricing", DP_CONFIG_DEFAULT)\n\n\ndef set_dp_config(cfg: dict) -> bool:\n    return set_setting("dynamic_pricing", json.dumps(cfg))\n\n\ndef calculate_dynamic_multiplier(\n    booking_date: date,\n    bookings_on_day: int,\n    days_advance: int,\n    config: Optional[dict] = None,\n) -> float:\n    """\n    Returns the price multiplier for a given date based on demand signals.\n\n    Factors (multiplicative):\n      1. Fill rate  – how booked is the day already\n      2. Advance    – how far ahead the customer is booking\n      3. Weekday    – base demand by day of week\n\n    Returns 1.0 if dynamic pricing is disabled.\n    """\n    cfg = config if config is not None else get_dp_config()\n    if not cfg.get("enabled"):\n        return 1.0\n\n    mult = 1.0\n\n    # ── 1. Fill rate ──────────────────────────────────────────────────────────\n    fill_rules = sorted(\n        cfg.get("fill_rate", []),\n        key=lambda r: r["min_bookings"],\n        reverse=True,\n    )\n    for rule in fill_rules:\n        if bookings_on_day >= rule["min_bookings"]:\n            mult *= float(rule["multiplier"])\n            break\n\n    # ── 2. Advance booking ────────────────────────────────────────────────────\n    adv_rules = sorted(\n        cfg.get("advance_booking", []),\n        key=lambda r: r["min_days"],\n        reverse=True,\n    )\n    for rule in adv_rules:\n        if days_advance >= rule["min_days"]:\n            mult *= float(rule["multiplier"])\n            break\n\n    # ── 3. Day of week (0=Mon, 6=Sun in Python) ───────────────────────────────\n    weekday = booking_date.weekday()\n    wk = cfg.get("weekday", {})\n    mult *= float(wk.get(str(weekday), 1.0))\n\n    # ── Clamp ─────────────────────────────────────────────────────────────────\n    lo = float(cfg.get("min_mult", 0.8))\n    hi = float(cfg.get("max_mult", 1.6))\n    return round(max(lo, min(hi, mult)), 4)\n\n\n# ── Booking email workflows (Booknetic-style multi-trigger) ─────────────────\n\nTRIGGER_META: dict = {\n    "booking_created": {\n        "label": "Nueva reserva (pendiente pago)",\n        "description": "Se envía al cliente justo al crear la reserva, antes de completar el pago.",\n        "default_subject": "Recibimos tu reserva — {{booking_ref}}",\n        "icon": "📋",\n    },\n    "booking_confirmed": {\n        "label": "Pago confirmado",\n        "description": "Se envía cuando el pago queda registrado correctamente (WooCommerce / Transbank).",\n        "default_subject": "Reserva confirmada — {{booking_ref}}",\n        "icon": "✅",\n    },\n    "booking_cancelled": {\n        "label": "Reserva cancelada",\n        "description": "Se envía cuando el estado de la reserva cambia a 'cancelled'.",\n        "default_subject": "Tu reserva fue cancelada — {{booking_ref}}",\n        "icon": "❌",\n    },\n    "booking_status_changed": {\n        "label": "Estado cambiado por el admin",\n        "description": "Se envía cuando el administrador cambia el estado manualmente (cualquier estado).",\n        "default_subject": "Actualización de tu reserva — {{booking_ref}}",\n        "icon": "🔄",\n    },\n    "booking_followup": {\n        "label": "Seguimiento post-reserva",\n        "description": (\n            "Se envía automáticamente N horas después del horario de la reserva. "\n            "Pide reseña en TripAdvisor y encuesta de satisfacción."\n        ),\n        "default_subject": "¡Gracias por navegar con nosotros! — {{booking_ref}}",\n        "icon": "⭐",\n        "extra_fields": [\n            {\n                "key": "hours_after",\n                "label": "Horas después del horario de la reserva",\n                "type": "number",\n                "default": 2,\n                "min": 1,\n                "max": 72,\n            }\n        ],\n    },\n    "admin_new_lead": {\n        "label": "Nuevo lead en formulario de reserva",\n        "description": (\n            "Se envía AL ADMINISTRADOR (no al cliente) cuando alguien completa "\n            "sus datos y hace clic en 'Ir a pagar'."\n        ),\n        "default_subject": "🔔 Nuevo lead: {{customer_name}} — {{booking_date}} {{booking_time}}",\n        "icon": "🔔",\n        "recipient": "admin",\n    },\n    "admin_booking_confirmed": {\n        "label": "Pago confirmado (notificación al operador)",\n        "description": (\n            "Se envía AL ADMINISTRADOR (no al cliente) cuando el pago queda confirmado. "\n            "Ideal para recibir la notificación de nueva reserva pagada en tu correo."\n        ),\n        "default_subject": "✅ Reserva pagada: {{customer_name}} — {{booking_date}} {{booking_time}}",\n        "icon": "✅",\n        "recipient": "admin",\n    },\n    "admin_pending_payment": {\n        "label": "Pago pendiente — recordatorio al operador (5 min)",\n        "description": (\n            "Se envía AL ADMINISTRADOR 5 minutos después de que un cliente avanzó al pago "\n            "pero no lo completó. Incluye botón de WhatsApp para contactar al cliente."\n        ),\n        "default_subject": "⚠️ Sin pago: {{customer_name}} — {{booking_date}} {{booking_time}}",\n        "icon": "⚠️",\n        "recipient": "admin",\n    },\n    "customer_birthday": {\n        "label": "Cumpleaños del cliente",\n        "description": (\n            "El servidor revisa cada día si algún cliente cumple años hoy. "\n            "Requiere que el cliente ingrese su fecha de nacimiento al reservar."\n        ),\n        "default_subject": "¡Feliz cumpleaños de parte de HotBoat! 🎂",\n        "icon": "🎂",\n    },\n}\n\n# Triggers activos por defecto\n_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed", "booking_created", "admin_new_lead", "admin_booking_confirmed", "admin_pending_payment"}\n\n\ndef seed_email_workflow_defaults() -> None:\n    """\n    Called once at startup: enable triggers that should be on by default\n    but haven't been explicitly configured yet in the DB.\n    This is idempotent — it never overwrites an explicitly saved setting.\n    """\n    try:\n        raw = _json_setting("email_workflows", {})\n        changed = False\n        for trigger in _TRIGGERS_ENABLED_DEFAULT:\n            if trigger not in raw:\n                # Not yet touched by the user → seed as enabled\n                raw[trigger] = {"enabled": True}\n                changed = True\n        if changed:\n            set_setting("email_workflows", json.dumps(raw))\n            logger.info("Email workflow defaults seeded: %s", _TRIGGERS_ENABLED_DEFAULT - set(raw.keys() - {k for k in raw}))\n    except Exception as e:\n        logger.warning(f"seed_email_workflow_defaults: {e}")\n\n\ndef get_email_workflows() -> dict:\n    """Returns {trigger: {enabled, subject, body_html, ...extras}} for all known triggers."""\n    raw = _json_setting("email_workflows", {})\n    # Migrate legacy email_booking config into booking_confirmed\n    legacy = _json_setting("email_booking", {})\n    result = {}\n    for trigger, meta in TRIGGER_META.items():\n        saved = raw.get(trigger) or {}\n        defaults_for_trigger: dict = {\n            "enabled": trigger in _TRIGGERS_ENABLED_DEFAULT,\n            "subject": meta["default_subject"],\n            "body_html": "",\n        }\n        # Defaults for extra_fields (e.g. days_after)\n        for ef in meta.get("extra_fields", []):\n            defaults_for_trigger[ef["key"]] = ef["default"]\n        if trigger == "booking_confirmed" and not saved and legacy:\n            if "confirmation_enabled" in legacy:\n                defaults_for_trigger["enabled"] = bool(legacy["confirmation_enabled"])\n            if legacy.get("subject"):\n                defaults_for_trigger["subject"] = legacy["subject"]\n            if legacy.get("body_html"):\n                defaults_for_trigger["body_html"] = legacy["body_html"]\n        result[trigger] = {**defaults_for_trigger, **saved}\n    return result\n\n\ndef get_email_workflow(trigger: str) -> dict:\n    return get_email_workflows().get(trigger, {})\n\n\ndef set_email_workflow(trigger: str, cfg: dict) -> bool:\n    if trigger not in TRIGGER_META:\n        return False\n    all_raw = _json_setting("email_workflows", {})\n    existing = dict(all_raw.get(trigger) or {})\n    for k in ("enabled", "subject", "body_html"):\n        if k in cfg:\n            existing[k] = cfg[k]\n    # Extra fields specific to each trigger (e.g. days_after)\n    for ef in TRIGGER_META[trigger].get("extra_fields", []):\n        if ef["key"] in cfg:\n            existing[ef["key"]] = cfg[ef["key"]]\n    all_raw[trigger] = existing\n    return set_setting("email_workflows", json.dumps(all_raw))\n\n\n# Keep legacy alias so old call sites don't break during migration\ndef get_email_booking_config() -> dict:\n    cfg = get_email_workflow("booking_confirmed")\n    return {\n        "confirmation_enabled": cfg.get("enabled", True),\n        "on_payment_confirmed": True,\n        "subject": cfg.get("subject", TRIGGER_META["booking_confirmed"]["default_subject"]),\n        "body_html": cfg.get("body_html", ""),\n    }\n\n\ndef set_email_booking_config(cfg: dict) -> bool:\n    return set_email_workflow("booking_confirmed", {\n        "enabled": cfg.get("confirmation_enabled", True),\n        "subject": cfg.get("subject", ""),\n        "body_html": cfg.get("body_html", ""),\n    })\n\n\n# ── Operating hours (available time slots for HotBoat) ───────────────────────\n\nOPERATING_HOURS_DEFAULT = ["10:00", "18:00", "21:00"]\n\n\ndef get_operating_hours() -> list:\n    """Return list of 'HH:MM' strings — the base available time slots."""\n    raw = get_setting("operating_hours", "")\n    if raw:\n        try:\n            parsed = json.loads(raw)\n            if isinstance(parsed, list) and parsed:\n                return sorted(parsed)\n        except Exception:\n            pass\n    return OPERATING_HOURS_DEFAULT.copy()\n\n\ndef set_operating_hours(hours: list) -> bool:\n    """Store list of 'HH:MM' strings."""\n    cleaned = sorted({h.strip() for h in hours if h.strip()})\n    return set_setting("operating_hours", json.dumps(cleaned))\n\n\ndef get_operating_hours_as_ints() -> list:\n    """Return operating hours as list of integers for compatibility."""\n    result = []\n    for h in get_operating_hours():\n        try:\n            result.append(int(h.split(":")[0]))\n        except Exception:\n            pass\n    return result\n\n\n# ── Menu visibility settings ─────────────────────────────────────────────────\n# Controls which sections appear in the WhatsApp bot menu AND in booking.html.\n\nMENU_SETTINGS_DEFAULTS = {\n    "show_experiencias": True,       # WhatsApp option 6 + booking page button\n    "show_alojamientos": True,       # WhatsApp option 7 (aloj branch) + booking page button\n    "show_packs": True,              # WhatsApp option 7 (packs branch) + booking page button\n    "show_arma_pack": True,          # booking page \"Arma tu Pack\" button\n    # Legacy key kept for backwards-compat; ignored in new code\n    "show_packs_alojamientos": True,\n}\n\n\ndef get_menu_settings() -> dict:\n    raw = get_setting("menu_visibility", "")\n    if raw:\n        try:\n            stored = json.loads(raw)\n            result = MENU_SETTINGS_DEFAULTS.copy()\n            result.update(stored)\n            return result\n        except Exception:\n            pass\n    return MENU_SETTINGS_DEFAULTS.copy()\n\n\ndef set_menu_settings(cfg: dict) -> bool:\n    current = get_menu_settings()\n    current.update(cfg)\n    return set_setting("menu_visibility", json.dumps(current))\n
+"""
+Operator settings: vacation days, urgency mode config, dynamic pricing.
+All settings stored in hotboat_settings (key/value) table.
+"""
+import json
+import logging
+from datetime import date, timedelta
+from typing import Optional, Tuple
+
+from app.db.connection import get_connection
+
+logger = logging.getLogger(__name__)
+
+
+# ── Generic settings store ─────────────────────────────────────────────────────
+
+def get_setting(key: str, default: str = "") -> str:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT value FROM hotboat_settings WHERE key=%s", (key,))
+                row = cur.fetchone()
+                return row[0] if row else default
+    except Exception as e:
+        logger.warning(f"get_setting({key}) failed: {e}")
+        return default
+
+
+def set_setting(key: str, value: str) -> bool:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO hotboat_settings (key, value, updated_at)
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
+                """, (key, value))
+                conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"set_setting({key}) failed: {e}")
+        return False
+
+
+def _json_setting(key: str, default: dict) -> dict:
+    raw = get_setting(key, "")
+    if not raw:
+        return default.copy()
+    try:
+        return json.loads(raw)
+    except Exception:
+        return default.copy()
+
+
+# ── Urgency mode ───────────────────────────────────────────────────────────────
+
+URGENCY_CONFIG_DEFAULT = {
+    "seed_times": ["10:00", "18:00"],
+    "gap_hours": 3,
+}
+
+
+def is_urgency_mode() -> bool:
+    return get_setting("urgency_mode", "false").lower() == "true"
+
+
+def get_urgency_config() -> dict:
+    return _json_setting("urgency_config", URGENCY_CONFIG_DEFAULT)
+
+
+def set_urgency_config(cfg: dict) -> bool:
+    return set_setting("urgency_config", json.dumps(cfg))
+
+
+def _time_str_sort_key(t: str) -> int:
+    h, m = map(int, t.split(":"))
+    return h * 60 + m
+
+
+def _normalize_seed_time(t: str) -> Optional[str]:
+    """Accept 'H:MM' or 'HH:MM' → 'HH:MM', or None if invalid."""
+    if not t or not str(t).strip():
+        return None
+    parts = str(t).strip().split(":")
+    if len(parts) < 2:
+        return None
+    try:
+        h, m = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        return None
+    return f"{h:02d}:{m:02d}"
+
+
+def get_effective_urgency_seed_times(config: Optional[dict] = None) -> list:
+    """
+    Semillas HH:MM para el filtro de urgencia (y slots grises).
+
+    - Si `urgency_config.seed_times` tiene entradas válidas: **solo** esas horas
+      actúan como semillas (escasez), más la lógica ±gap alrededor de reservas.
+    - Si seed_times está vacío: se usan todos los `operating_hours` HotBoat.
+
+    No se hace unión con operating_hours cuando ya hay seed_times: unir ambos
+    hacía que casi todo el grid libre coincidiera con una semilla y se mostraran
+    demasiados horarios «disponibles».
+    """
+    cfg = config if config is not None else get_urgency_config()
+    oh = get_operating_hours()
+    raw = cfg.get("seed_times") or []
+    normalized: list = []
+    for x in raw:
+        s = _normalize_seed_time(str(x))
+        if s:
+            normalized.append(s)
+    if normalized:
+        return sorted(set(normalized), key=_time_str_sort_key)
+    return sorted(oh, key=_time_str_sort_key)
+
+
+# ── Vacation days ─────────────────────────────────────────────────────────────
+
+def get_vacation_days(from_date: Optional[date] = None, to_date: Optional[date] = None) -> list:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                wheres, params = [], []
+                if from_date:
+                    wheres.append("fecha >= %s"); params.append(from_date)
+                if to_date:
+                    wheres.append("fecha <= %s"); params.append(to_date)
+                where = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+                cur.execute(f"SELECT fecha, reason FROM vacation_days {where} ORDER BY fecha", params)
+                return [{"date": str(r[0]), "reason": r[1] or ""} for r in cur.fetchall()]
+    except Exception as e:
+        logger.error(f"get_vacation_days failed: {e}")
+        return []
+
+
+def is_vacation_day(d: date) -> bool:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM vacation_days WHERE fecha=%s", (d,))
+                return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+def add_vacation_day(d: date, reason: str = "") -> bool:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO vacation_days (fecha, reason) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    (d, reason),
+                )
+                conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"add_vacation_day failed: {e}")
+        return False
+
+
+def remove_vacation_day(d: date) -> bool:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM vacation_days WHERE fecha=%s", (d,))
+                conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"remove_vacation_day failed: {e}")
+        return False
+
+
+# ── Per-day urgency overrides ─────────────────────────────────────────────────
+
+
+def normalize_urgency_entity(entity_type: str, entity_slug: str) -> Tuple[str, str]:
+    """Canonical scope for urgency_days rows (also used by admin APIs)."""
+    et = (entity_type or "hotboat").strip().lower()
+    if et not in ("hotboat", "experience", "pack", "alojamiento"):
+        et = "hotboat"
+    slug = (entity_slug or "").strip()
+    if len(slug) > 160:
+        slug = slug[:160]
+    return et, slug
+
+
+def get_urgency_days(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    *,
+    entity_type: str = "hotboat",
+    entity_slug: str = "",
+) -> list:
+    """Return list of {date, enabled, reason, entity_type, entity_slug} for the given scope."""
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                wheres, params = ["entity_type = %s", "entity_slug = %s"], [et, slug]
+                if from_date:
+                    wheres.append("fecha >= %s")
+                    params.append(from_date)
+                if to_date:
+                    wheres.append("fecha <= %s")
+                    params.append(to_date)
+                where = "WHERE " + " AND ".join(wheres)
+                cur.execute(
+                    f"SELECT fecha, enabled, reason, entity_type, entity_slug FROM urgency_days {where} ORDER BY fecha",
+                    params,
+                )
+                return [
+                    {
+                        "date": str(r[0]),
+                        "enabled": r[1],
+                        "reason": r[2] or "",
+                        "entity_type": r[3],
+                        "entity_slug": r[4] or "",
+                    }
+                    for r in cur.fetchall()
+                ]
+    except Exception as e:
+        logger.error(f"get_urgency_days failed: {e}")
+        return []
+
+
+def get_urgency_day_override_for_scope(d: date, entity_type: str, entity_slug: str) -> Optional[bool]:
+    """True/False if the day has an explicit override for this scope, None if no row."""
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT enabled FROM urgency_days WHERE entity_type=%s AND entity_slug=%s AND fecha=%s",
+                    (et, slug, d),
+                )
+                row = cur.fetchone()
+                return row[0] if row else None
+    except Exception:
+        return None
+
+
+def get_urgency_day_override(d: date) -> Optional[bool]:
+    """HotBoat/global slot urgency override (entity_type=hotboat, empty slug)."""
+    return get_urgency_day_override_for_scope(d, "hotboat", "")
+
+
+def is_high_season_web_addon(d: date, entity_type: str, entity_slug: str) -> bool:
+    """
+    Temporada alta for web extras (no online payment / requires email):
+    only product-scoped overrides apply (no implicit fallback to HotBoat global urgency).
+    """
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    ov = get_urgency_day_override_for_scope(d, et, slug)
+    return ov is True
+
+
+def set_urgency_day(
+    d: date,
+    enabled: bool,
+    reason: str = "",
+    *,
+    entity_type: str = "hotboat",
+    entity_slug: str = "",
+) -> bool:
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO urgency_days (entity_type, entity_slug, fecha, enabled, reason)
+                       VALUES (%s, %s, %s, %s, %s)
+                       ON CONFLICT (entity_type, entity_slug, fecha)
+                       DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason""",
+                    (et, slug, d, enabled, reason),
+                )
+                conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"set_urgency_day failed: {e}")
+        return False
+
+
+def remove_urgency_day(
+    d: date,
+    *,
+    entity_type: str = "hotboat",
+    entity_slug: str = "",
+) -> bool:
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM urgency_days WHERE entity_type=%s AND entity_slug=%s AND fecha=%s",
+                    (et, slug, d),
+                )
+                conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"remove_urgency_day failed: {e}")
+        return False
+
+
+# ── Urgency filter ────────────────────────────────────────────────────────────
+
+def apply_urgency_filter(
+    available_times: list,
+    booked_times: list,
+    config: Optional[dict] = None,
+) -> list:
+    """
+    Urgency algorithm:
+
+    • Conjunto base de "semillas" = seed_times (si hay) o bien todos los operating_hours.
+    • Sin reservas → mostrar esas semillas que estén libres (en el grid del día).
+    • Con reservas → además, para cada reserva en X, sugerir X ± gap si cae en cupo libre.
+
+    Ejemplos con seeds=[10,18,21] gap=3:
+      - Sin reservas          → [10:00, 18:00, 21:00]
+      - Reserva a las 18:00   → [15:00, 21:00]
+      - Reserva a las 21:00   → [18:00] (24:00 fuera de rango)
+      - Reservas 18:00+21:00  → [15:00, 18:00, 24:00→ignorado] = [15:00, 18:00]
+    """
+    if not available_times:
+        return []
+
+    cfg = config if config is not None else get_urgency_config()
+    seed_times: list = get_effective_urgency_seed_times(cfg)
+    gap_hours: float = float(cfg.get("gap_hours", 3))
+
+    def _to_min(t: str) -> int:
+        h, m = map(int, t.split(":"))
+        return h * 60 + m
+
+    def _from_min(total_min: int) -> str:
+        return f"{total_min // 60:02d}:{total_min % 60:02d}"
+
+    booked_set = set(booked_times)
+    free_set = set(t for t in available_times if t not in booked_set)
+
+    if not free_set:
+        return []
+
+    gap_min = int(gap_hours * 60)
+    TOLERANCE = 30  # minutes — cómo de cerca debe estar el slot encontrado
+
+    pool: set = set()
+
+    # 1. Siempre mostrar los seeds que estén libres (no reservados)
+    for st in seed_times:
+        if st in free_set:
+            pool.add(st)
+        elif st not in booked_set:
+            # Seed generado en horario no exacto → buscar dentro de tolerancia
+            target = _to_min(st)
+            candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]
+            if candidates:
+                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
+
+    # 2. Para cada reserva, agregar reserva ± gap (reemplaza solo ese seed reservado)
+    for bt in booked_times:
+        bt_min = _to_min(bt)
+        for delta in (-gap_min, gap_min):
+            target = bt_min + delta
+            candidates = [t for t in free_set if abs(_to_min(t) - target) <= TOLERANCE]
+            if candidates:
+                pool.add(min(candidates, key=lambda t: abs(_to_min(t) - target)))
+
+    return sorted([t for t in free_set if t in pool], key=_to_min)
+
+
+def get_urgency_fake_slots(config: Optional[dict] = None) -> list:
+    """
+    Calcula los slots "fantasma" que se muestran en GRIS (deshabilitados) en la app
+    cuando el modo urgencia está activo y NO hay reservas reales en el día.
+
+    Lógica: para cada seed S, calcular S±gap_hours.
+    Si el resultado NO es un seed y está dentro del rango 06:00-23:00 → slot gris.
+
+    Ejemplo: seeds=[10:00,18:00,21:00] gap=3
+      10+3=13:00 (no seed) → gris
+      10-3=07:00 (no seed) → gris
+      18+3=21:00 (ES seed) → omitir
+      18-3=15:00 (no seed) → gris
+      21+3=24:00 (fuera)   → omitir
+      21-3=18:00 (ES seed) → omitir
+    Resultado: [07:00, 13:00, 15:00]
+    """
+    cfg = config if config is not None else get_urgency_config()
+    seed_times: list = get_effective_urgency_seed_times(cfg)
+    gap_hours: float = float(cfg.get("gap_hours", 3))
+
+    def _to_min(t: str) -> int:
+        h, m = map(int, t.split(":"))
+        return h * 60 + m
+
+    def _from_min(total_min: int) -> str:
+        return f"{total_min // 60:02d}:{total_min % 60:02d}"
+
+    seed_set = set(seed_times)
+    seed_mins = [_to_min(s) for s in seed_times]
+    gap_min = int(gap_hours * 60)
+    fake = set()
+
+    for s_min in seed_mins:
+        for delta in (-gap_min, gap_min):
+            target = s_min + delta
+            if target < 6 * 60 or target >= 24 * 60:
+                continue
+            candidate = _from_min(target)
+            if candidate not in seed_set:
+                fake.add(candidate)
+
+    return sorted(fake, key=_to_min)
+
+
+# ── Dynamic Pricing ───────────────────────────────────────────────────────────
+
+DP_CONFIG_DEFAULT = {
+    "enabled": False,
+    # Each entry: {min_bookings, multiplier}  (sorted descending to find first match)
+    "fill_rate": [
+        {"min_bookings": 2, "multiplier": 1.18, "label": "2+ reservas"},
+        {"min_bookings": 1, "multiplier": 1.08, "label": "1 reserva"},
+    ],
+    # Each entry: {min_days, multiplier, label}  (sorted descending → first match wins)
+    "advance_booking": [
+        {"min_days": 14, "multiplier": 0.90, "label": "14+ días (anticipado)"},
+        {"min_days":  7, "multiplier": 0.95, "label": "7-13 días"},
+        {"min_days":  3, "multiplier": 1.00, "label": "3-6 días (normal)"},
+        {"min_days":  0, "multiplier": 1.12, "label": "0-2 días (última hora)"},
+    ],
+    # Python weekday: 0=Mon … 6=Sun
+    "weekday": {
+        "0": 1.00, "1": 1.00, "2": 1.00,
+        "3": 1.00, "4": 1.05, "5": 1.18, "6": 1.22,
+    },
+    "min_mult": 0.80,
+    "max_mult": 1.60,
+}
+
+
+def get_dp_config() -> dict:
+    return _json_setting("dynamic_pricing", DP_CONFIG_DEFAULT)
+
+
+def set_dp_config(cfg: dict) -> bool:
+    return set_setting("dynamic_pricing", json.dumps(cfg))
+
+
+def calculate_dynamic_multiplier(
+    booking_date: date,
+    bookings_on_day: int,
+    days_advance: int,
+    config: Optional[dict] = None,
+) -> float:
+    """
+    Returns the price multiplier for a given date based on demand signals.
+
+    Factors (multiplicative):
+      1. Fill rate  – how booked is the day already
+      2. Advance    – how far ahead the customer is booking
+      3. Weekday    – base demand by day of week
+
+    Returns 1.0 if dynamic pricing is disabled.
+    """
+    cfg = config if config is not None else get_dp_config()
+    if not cfg.get("enabled"):
+        return 1.0
+
+    mult = 1.0
+
+    # ── 1. Fill rate ──────────────────────────────────────────────────────────
+    fill_rules = sorted(
+        cfg.get("fill_rate", []),
+        key=lambda r: r["min_bookings"],
+        reverse=True,
+    )
+    for rule in fill_rules:
+        if bookings_on_day >= rule["min_bookings"]:
+            mult *= float(rule["multiplier"])
+            break
+
+    # ── 2. Advance booking ────────────────────────────────────────────────────
+    adv_rules = sorted(
+        cfg.get("advance_booking", []),
+        key=lambda r: r["min_days"],
+        reverse=True,
+    )
+    for rule in adv_rules:
+        if days_advance >= rule["min_days"]:
+            mult *= float(rule["multiplier"])
+            break
+
+    # ── 3. Day of week (0=Mon, 6=Sun in Python) ───────────────────────────────
+    weekday = booking_date.weekday()
+    wk = cfg.get("weekday", {})
+    mult *= float(wk.get(str(weekday), 1.0))
+
+    # ── Clamp ─────────────────────────────────────────────────────────────────
+    lo = float(cfg.get("min_mult", 0.8))
+    hi = float(cfg.get("max_mult", 1.6))
+    return round(max(lo, min(hi, mult)), 4)
+
+
+# ── Booking email workflows (Booknetic-style multi-trigger) ─────────────────
+
+TRIGGER_META: dict = {
+    "booking_created": {
+        "label": "Nueva reserva (pendiente pago)",
+        "description": "Se envía al cliente justo al crear la reserva, antes de completar el pago.",
+        "default_subject": "Recibimos tu reserva — {{booking_ref}}",
+        "icon": "📋",
+    },
+    "booking_confirmed": {
+        "label": "Pago confirmado",
+        "description": "Se envía cuando el pago queda registrado correctamente (WooCommerce / Transbank).",
+        "default_subject": "Reserva confirmada — {{booking_ref}}",
+        "icon": "✅",
+    },
+    "booking_cancelled": {
+        "label": "Reserva cancelada",
+        "description": "Se envía cuando el estado de la reserva cambia a 'cancelled'.",
+        "default_subject": "Tu reserva fue cancelada — {{booking_ref}}",
+        "icon": "❌",
+    },
+    "booking_status_changed": {
+        "label": "Estado cambiado por el admin",
+        "description": "Se envía cuando el administrador cambia el estado manualmente (cualquier estado).",
+        "default_subject": "Actualización de tu reserva — {{booking_ref}}",
+        "icon": "🔄",
+    },
+    "booking_followup": {
+        "label": "Seguimiento post-reserva",
+        "description": (
+            "Se envía automáticamente N horas después del horario de la reserva. "
+            "Pide reseña en TripAdvisor y encuesta de satisfacción."
+        ),
+        "default_subject": "¡Gracias por navegar con nosotros! — {{booking_ref}}",
+        "icon": "⭐",
+        "extra_fields": [
+            {
+                "key": "hours_after",
+                "label": "Horas después del horario de la reserva",
+                "type": "number",
+                "default": 2,
+                "min": 1,
+                "max": 72,
+            }
+        ],
+    },
+    "admin_new_lead": {
+        "label": "Nuevo lead en formulario de reserva",
+        "description": (
+            "Se envía AL ADMINISTRADOR (no al cliente) cuando alguien completa "
+            "sus datos y hace clic en 'Ir a pagar'."
+        ),
+        "default_subject": "🔔 Nuevo lead: {{customer_name}} — {{booking_date}} {{booking_time}}",
+        "icon": "🔔",
+        "recipient": "admin",
+    },
+    "admin_booking_confirmed": {
+        "label": "Pago confirmado (notificación al operador)",
+        "description": (
+            "Se envía AL ADMINISTRADOR (no al cliente) cuando el pago queda confirmado. "
+            "Ideal para recibir la notificación de nueva reserva pagada en tu correo."
+        ),
+        "default_subject": "✅ Reserva pagada: {{customer_name}} — {{booking_date}} {{booking_time}}",
+        "icon": "✅",
+        "recipient": "admin",
+    },
+    "admin_pending_payment": {
+        "label": "Pago pendiente — recordatorio al operador (5 min)",
+        "description": (
+            "Se envía AL ADMINISTRADOR 5 minutos después de que un cliente avanzó al pago "
+            "pero no lo completó. Incluye botón de WhatsApp para contactar al cliente."
+        ),
+        "default_subject": "⚠️ Sin pago: {{customer_name}} — {{booking_date}} {{booking_time}}",
+        "icon": "⚠️",
+        "recipient": "admin",
+    },
+    "customer_birthday": {
+        "label": "Cumpleaños del cliente",
+        "description": (
+            "El servidor revisa cada día si algún cliente cumple años hoy. "
+            "Requiere que el cliente ingrese su fecha de nacimiento al reservar."
+        ),
+        "default_subject": "¡Feliz cumpleaños de parte de HotBoat! 🎂",
+        "icon": "🎂",
+    },
+}
+
+# Triggers activos por defecto
+_TRIGGERS_ENABLED_DEFAULT = {"booking_confirmed", "booking_created", "admin_new_lead", "admin_booking_confirmed", "admin_pending_payment"}
+
+
+def seed_email_workflow_defaults() -> None:
+    """
+    Called once at startup: enable triggers that should be on by default
+    but haven't been explicitly configured yet in the DB.
+    This is idempotent — it never overwrites an explicitly saved setting.
+    """
+    try:
+        raw = _json_setting("email_workflows", {})
+        changed = False
+        for trigger in _TRIGGERS_ENABLED_DEFAULT:
+            if trigger not in raw:
+                # Not yet touched by the user → seed as enabled
+                raw[trigger] = {"enabled": True}
+                changed = True
+        if changed:
+            set_setting("email_workflows", json.dumps(raw))
+            logger.info("Email workflow defaults seeded: %s", _TRIGGERS_ENABLED_DEFAULT - set(raw.keys() - {k for k in raw}))
+    except Exception as e:
+        logger.warning(f"seed_email_workflow_defaults: {e}")
+
+
+def get_email_workflows() -> dict:
+    """Returns {trigger: {enabled, subject, body_html, ...extras}} for all known triggers."""
+    raw = _json_setting("email_workflows", {})
+    # Migrate legacy email_booking config into booking_confirmed
+    legacy = _json_setting("email_booking", {})
+    result = {}
+    for trigger, meta in TRIGGER_META.items():
+        saved = raw.get(trigger) or {}
+        defaults_for_trigger: dict = {
+            "enabled": trigger in _TRIGGERS_ENABLED_DEFAULT,
+            "subject": meta["default_subject"],
+            "body_html": "",
+        }
+        # Defaults for extra_fields (e.g. days_after)
+        for ef in meta.get("extra_fields", []):
+            defaults_for_trigger[ef["key"]] = ef["default"]
+        if trigger == "booking_confirmed" and not saved and legacy:
+            if "confirmation_enabled" in legacy:
+                defaults_for_trigger["enabled"] = bool(legacy["confirmation_enabled"])
+            if legacy.get("subject"):
+                defaults_for_trigger["subject"] = legacy["subject"]
+            if legacy.get("body_html"):
+                defaults_for_trigger["body_html"] = legacy["body_html"]
+        result[trigger] = {**defaults_for_trigger, **saved}
+    return result
+
+
+def get_email_workflow(trigger: str) -> dict:
+    return get_email_workflows().get(trigger, {})
+
+
+def set_email_workflow(trigger: str, cfg: dict) -> bool:
+    if trigger not in TRIGGER_META:
+        return False
+    all_raw = _json_setting("email_workflows", {})
+    existing = dict(all_raw.get(trigger) or {})
+    for k in ("enabled", "subject", "body_html"):
+        if k in cfg:
+            existing[k] = cfg[k]
+    # Extra fields specific to each trigger (e.g. days_after)
+    for ef in TRIGGER_META[trigger].get("extra_fields", []):
+        if ef["key"] in cfg:
+            existing[ef["key"]] = cfg[ef["key"]]
+    all_raw[trigger] = existing
+    return set_setting("email_workflows", json.dumps(all_raw))
+
+
+# Keep legacy alias so old call sites don't break during migration
+def get_email_booking_config() -> dict:
+    cfg = get_email_workflow("booking_confirmed")
+    return {
+        "confirmation_enabled": cfg.get("enabled", True),
+        "on_payment_confirmed": True,
+        "subject": cfg.get("subject", TRIGGER_META["booking_confirmed"]["default_subject"]),
+        "body_html": cfg.get("body_html", ""),
+    }
+
+
+def set_email_booking_config(cfg: dict) -> bool:
+    return set_email_workflow("booking_confirmed", {
+        "enabled": cfg.get("confirmation_enabled", True),
+        "subject": cfg.get("subject", ""),
+        "body_html": cfg.get("body_html", ""),
+    })
+
+
+# ── Operating hours (available time slots for HotBoat) ───────────────────────
+
+OPERATING_HOURS_DEFAULT = ["10:00", "18:00", "21:00"]
+
+
+def get_operating_hours() -> list:
+    """Return list of 'HH:MM' strings — the base available time slots."""
+    raw = get_setting("operating_hours", "")
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and parsed:
+                return sorted(parsed)
+        except Exception:
+            pass
+    return OPERATING_HOURS_DEFAULT.copy()
+
+
+def set_operating_hours(hours: list) -> bool:
+    """Store list of 'HH:MM' strings."""
+    cleaned = sorted({h.strip() for h in hours if h.strip()})
+    return set_setting("operating_hours", json.dumps(cleaned))
+
+
+def get_operating_hours_as_ints() -> list:
+    """Return operating hours as list of integers for compatibility."""
+    result = []
+    for h in get_operating_hours():
+        try:
+            result.append(int(h.split(":")[0]))
+        except Exception:
+            pass
+    return result
+
+
+# ── Menu visibility settings ─────────────────────────────────────────────────
+# Controls which sections appear in the WhatsApp bot menu AND in booking.html.
+
+MENU_SETTINGS_DEFAULTS = {
+    "show_experiencias": True,       # WhatsApp option 6 + booking page button
+    "show_alojamientos": True,       # WhatsApp option 7 (aloj branch) + booking page button
+    "show_packs": True,              # WhatsApp option 7 (packs branch) + booking page button
+    "show_arma_pack": True,          # booking page "Arma tu Pack" button
+    # Legacy key kept for backwards-compat; ignored in new code
+    "show_packs_alojamientos": True,
+}
+
+
+def get_menu_settings() -> dict:
+    raw = get_setting("menu_visibility", "")
+    if raw:
+        try:
+            stored = json.loads(raw)
+            result = MENU_SETTINGS_DEFAULTS.copy()
+            result.update(stored)
+            return result
+        except Exception:
+            pass
+    return MENU_SETTINGS_DEFAULTS.copy()
+
+
+def set_menu_settings(cfg: dict) -> bool:
+    current = get_menu_settings()
+    current.update(cfg)
+    return set_setting("menu_visibility", json.dumps(current))
