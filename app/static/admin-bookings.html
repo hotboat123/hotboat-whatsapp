@@ -1429,6 +1429,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right">I.Aloj.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Exp.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Ext.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Descuentos manual + cupón (prorrateados en I.Reserva…I.Ext.)">Desc.</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Comis.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Neto</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo operativo: N reservas × costo_operativo_por_reserva (config)">C.Op</th>
@@ -6715,7 +6716,8 @@ function exportFinancialTableCsv(){
     const { data, view, totals } = _finLastPnl;
     const headers = [
       'periodo', 'vista_agregacion', 'fecha_desde', 'fecha_hasta', 'n_reservas', 'ingreso_bruto',
-      'ingreso_reserva', 'ingreso_aloj', 'ingreso_exp', 'ingreso_extra', 'comisiones', 'ingreso_neto',
+      'ingreso_reserva', 'ingreso_aloj', 'ingreso_exp', 'ingreso_extra', 'descuentos',
+      'comisiones', 'ingreso_neto',
       'costo_operacional', 'cv_aloj', 'cv_exp', 'cv_extra', 'costo_estructural',
       'marketing', 'resultado', 'margen_pct_sobre_bruto',
     ];
@@ -6730,6 +6732,7 @@ function exportFinancialTableCsv(){
         finCsvNum(row.ingreso_aloj),
         finCsvNum(row.ingreso_exp),
         finCsvNum(row.ingreso_extra),
+        finCsvNum(row.total_descuentos),
         finCsvNum(row.commission_deduction),
         finCsvNum(row.net_income),
         finCsvNum(row.costo_operacional),
@@ -6753,6 +6756,7 @@ function exportFinancialTableCsv(){
         finCsvNum(t.ingreso_aloj),
         finCsvNum(t.ingreso_exp),
         finCsvNum(t.ingreso_extra),
+        finCsvNum(t.total_descuentos),
         finCsvNum(t.commission_deduction),
         finCsvNum(t.net_income),
         finCsvNum(t.costo_operacional),
@@ -6910,6 +6914,7 @@ function renderPnlKpis(t, periodDays, structure){
       {label:'Ingreso alojamientos',   value: fmtClp(t.ingreso_aloj||0),    color:'var(--text)'},
       {label:'Ingreso experiencias',   value: fmtClp(t.ingreso_exp||0),     color:'#5dade2'},
       {label:'Ingreso extras',         value: fmtClp(t.ingreso_extra||0),   color:'var(--muted)'},
+      {label:'Descuentos',              value: '-'+fmtClp(t.total_descuentos||0), color:'var(--red)'},
       {label:'C. var. aloj / exp / ext', value: '-'+fmtClp((t.cv_aloj||0)+(t.cv_exp||0)+(t.cv_extra||0)),
        color:'var(--red)', sub: `${fmtClp(t.cv_aloj||0)} · ${fmtClp(t.cv_exp||0)} · ${fmtClp(t.cv_extra||0)}`},
     ];
@@ -6921,6 +6926,7 @@ function _pnlRowTds(row, sm){
   const p = sm ? 'padding:.4rem .4rem;font-size:.74rem' : 'padding:.5rem .4rem';
   const margin = row.gross ? Math.round(row.resultado/row.gross*100) : 0;
   const v = (k)=> Math.round(Number(row[k])||0);
+  const desc = v('total_descuentos');
   return `
     <td style="${p};text-align:right;color:var(--muted)">${row.n_reservas}</td>
     <td style="${p};text-align:right">${fmtClp(row.gross)}</td>
@@ -6928,6 +6934,7 @@ function _pnlRowTds(row, sm){
     <td style="${p};text-align:right">${fmtClp(v('ingreso_aloj'))}</td>
     <td style="${p};text-align:right">${fmtClp(v('ingreso_exp'))}</td>
     <td style="${p};text-align:right">${fmtClp(v('ingreso_extra'))}</td>
+    <td style="${p};text-align:right;color:var(--red)">${desc ? '-'+fmtClp(desc) : '—'}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.commission_deduction)}</td>
     <td style="${p};text-align:right;color:var(--gold)">${fmtClp(row.net_income)}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.costo_operacional)}</td>
@@ -6943,7 +6950,7 @@ function _pnlRowTds(row, sm){
 function renderPnlTable(data, view, totals){
   const tbody = document.getElementById('fin-pnl-tbody');
   const tfoot = document.getElementById('fin-pnl-tfoot');
-  const COLSP = 17;
+  const COLSP = 18;
   tbody.innerHTML = '';
 
   data.forEach((row, idx) => {
@@ -6980,6 +6987,7 @@ function renderPnlTable(data, view, totals){
     const t = totals;
     const margin = t.gross ? Math.round(t.resultado/t.gross*100) : 0;
     const tv = (k)=> Math.round(Number(t[k])||0);
+    const tdesc = tv('total_descuentos');
     tfoot.innerHTML = `<tr style="background:var(--card);font-weight:600;font-size:.8rem;border-top:2px solid var(--border)">
       <td style="padding:.55rem .7rem">Σ período</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--muted)">${t.n_reservas}</td>
@@ -6988,6 +6996,7 @@ function renderPnlTable(data, view, totals){
       <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_aloj'))}</td>
       <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_exp'))}</td>
       <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_extra'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">${tdesc ? '-'+fmtClp(tdesc) : '—'}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.commission_deduction)}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--gold)">${fmtClp(t.net_income)}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.costo_operacional)}</td>

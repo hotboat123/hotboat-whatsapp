@@ -12,13 +12,16 @@ from app.db.connection import get_connection
 from app.booking.operator_settings import get_setting, set_setting
 from app.booking.financial_breakdown import (
     aggregate_breakdown_into_week_month,
+    apply_discount_to_income_split,
     apply_structural_to_days,
+    booking_discount_total_clp,
     finalize_pnl_day,
     get_financial_structure,
     iso_dates_inclusive,
     load_aloj_cost_catalog,
     load_extra_cost_catalog,
     merge_day_breakdown,
+    merge_day_discount,
     new_empty_day,
     split_booking_financials,
 )
@@ -89,6 +92,7 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
                     COALESCE(costo_operativo_total, 0),
                     COALESCE(pagos,      '[]'::jsonb),
                     COALESCE(descuentos, '[]'::jsonb),
+                    COALESCE(coupon_discount, 0),
                     COALESCE(nombre_cliente, ''),
                     COALESCE(status, ''),
                     COALESCE(num_personas::text, '0'),
@@ -100,7 +104,7 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
             """, (date_from, date_to, list(CONFIRMED_STATUSES)))
             cols = ["id", "fecha", "ingreso_reserva", "ingreso_extras",
                     "ingreso_total", "costo_fijo", "costo_variable", "costo_total",
-                    "pagos", "descuentos", "nombre_cliente", "status", "num_personas",
+                    "pagos", "descuentos", "coupon_discount", "nombre_cliente", "status", "num_personas",
                     "extras_json"]
             rows = []
             for r in cur.fetchall():
@@ -111,6 +115,7 @@ def _get_bookings_range(date_from: date, date_to: date) -> List[Dict]:
                 d["costo_total"]    = float(d["costo_total"])
                 d["costo_fijo"]     = float(d["costo_fijo"])
                 d["costo_variable"] = float(d["costo_variable"])
+                d["coupon_discount"] = float(d.get("coupon_discount") or 0)
                 pagos = d["pagos"]
                 if isinstance(pagos, str):
                     pagos = json.loads(pagos)
@@ -377,11 +382,13 @@ def _build_pnl_days(
         if day not in days:
             days[day] = new_empty_day(day)
         sp = split_booking_financials(b, cost_catalog, wl, aloj_cost_catalog)
+        disc_raw = booking_discount_total_clp(b)
+        sp_net, disc_applied = apply_discount_to_income_split(sp, disc_raw)
         gross_split = (
-            float(sp["ingreso_reserva"]) +
-            float(sp["ingreso_aloj"]) +
-            float(sp["ingreso_exp"]) +
-            float(sp["ingreso_extra"])
+            float(sp_net["ingreso_reserva"]) +
+            float(sp_net["ingreso_aloj"]) +
+            float(sp_net["ingreso_exp"]) +
+            float(sp_net["ingreso_extra"])
         )
         pnl = _calc_booking_pnl(
             b,
@@ -395,7 +402,8 @@ def _build_pnl_days(
         d["commission_deduction"] += pnl["commission_deduction"]
         d["net_income"] += pnl["net_income"]
         d["costo_operacional"] += pnl["costo_operacional"]
-        merge_day_breakdown(d, sp)
+        merge_day_breakdown(d, sp_net)
+        merge_day_discount(d, disc_applied)
         d["bookings"].append({
             "id":               b["id"],
             "nombre_cliente":   b["nombre_cliente"],
@@ -404,13 +412,14 @@ def _build_pnl_days(
             "net_income":       pnl["net_income"],
             "costo":            pnl["costo_operacional"],
             "pagos":            b["pagos"],
-            "ingreso_reserva":  sp["ingreso_reserva"],
-            "ingreso_aloj":     sp["ingreso_aloj"],
-            "ingreso_exp":      sp["ingreso_exp"],
-            "ingreso_extra":    sp["ingreso_extra"],
-            "cv_aloj":          sp["cv_aloj"],
-            "cv_exp":           sp["cv_exp"],
-            "cv_extra":         sp["cv_extra"],
+            "ingreso_reserva":  sp_net["ingreso_reserva"],
+            "ingreso_aloj":     sp_net["ingreso_aloj"],
+            "ingreso_exp":      sp_net["ingreso_exp"],
+            "ingreso_extra":    sp_net["ingreso_extra"],
+            "descuentos_aplicados": disc_applied,
+            "cv_aloj":          sp_net["cv_aloj"],
+            "cv_exp":           sp_net["cv_exp"],
+            "cv_extra":         sp_net["cv_extra"],
         })
 
     apply_structural_to_days(days, d_from, d_to, daily_struct)
@@ -440,6 +449,7 @@ def _aggregate_weeks(days: Dict[str, Dict]) -> List[Dict]:
                 "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
                 "costo_estructural": 0,
                 "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
+                "total_descuentos": 0,
                 "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0,
                 "days": [],
             }
@@ -467,6 +477,7 @@ def _aggregate_months(days: Dict[str, Dict]) -> List[Dict]:
                 "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
                 "costo_estructural": 0,
                 "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
+                "total_descuentos": 0,
                 "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0,
                 "days": [],
             }
@@ -809,6 +820,7 @@ async def get_pnl(
         "ingreso_aloj": sum(d.get("ingreso_aloj", 0) for d in days.values()),
         "ingreso_exp": sum(d.get("ingreso_exp", 0) for d in days.values()),
         "ingreso_extra": sum(d.get("ingreso_extra", 0) for d in days.values()),
+        "total_descuentos": sum(d.get("total_descuentos", 0) for d in days.values()),
         "cv_aloj": sum(d.get("cv_aloj", 0) for d in days.values()),
         "cv_exp": sum(d.get("cv_exp", 0) for d in days.values()),
         "cv_extra": sum(d.get("cv_extra", 0) for d in days.values()),
