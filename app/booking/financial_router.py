@@ -12,7 +12,6 @@ from app.db.connection import get_connection
 from app.booking.operator_settings import get_setting, set_setting
 from app.booking.financial_breakdown import (
     aggregate_breakdown_into_week_month,
-    apply_discount_to_income_split,
     apply_structural_to_days,
     booking_discount_total_clp,
     finalize_pnl_day,
@@ -382,14 +381,17 @@ def _build_pnl_days(
         if day not in days:
             days[day] = new_empty_day(day)
         sp = split_booking_financials(b, cost_catalog, wl, aloj_cost_catalog)
-        disc_raw = booking_discount_total_clp(b)
-        sp_net, disc_applied = apply_discount_to_income_split(sp, disc_raw)
-        gross_split = (
-            float(sp_net["ingreso_reserva"]) +
-            float(sp_net["ingreso_aloj"]) +
-            float(sp_net["ingreso_exp"]) +
-            float(sp_net["ingreso_extra"])
+        base_inc = (
+            float(sp["ingreso_reserva"])
+            + float(sp["ingreso_aloj"])
+            + float(sp["ingreso_exp"])
+            + float(sp["ingreso_extra"])
         )
+        disc_raw = booking_discount_total_clp(b)
+        # Cap discount so it never exceeds stated income split (same CLP basis as columns)
+        disc_applied = min(max(0, int(round(disc_raw))), max(0, int(round(base_inc))))
+        gross_split = base_inc - float(disc_applied)
+
         pnl = _calc_booking_pnl(
             b,
             commissions,
@@ -402,7 +404,7 @@ def _build_pnl_days(
         d["commission_deduction"] += pnl["commission_deduction"]
         d["net_income"] += pnl["net_income"]
         d["costo_operacional"] += pnl["costo_operacional"]
-        merge_day_breakdown(d, sp_net)
+        merge_day_breakdown(d, sp)
         merge_day_discount(d, disc_applied)
         d["bookings"].append({
             "id":               b["id"],
@@ -412,14 +414,14 @@ def _build_pnl_days(
             "net_income":       pnl["net_income"],
             "costo":            pnl["costo_operacional"],
             "pagos":            b["pagos"],
-            "ingreso_reserva":  sp_net["ingreso_reserva"],
-            "ingreso_aloj":     sp_net["ingreso_aloj"],
-            "ingreso_exp":      sp_net["ingreso_exp"],
-            "ingreso_extra":    sp_net["ingreso_extra"],
+            "ingreso_reserva":  sp["ingreso_reserva"],
+            "ingreso_aloj":     sp["ingreso_aloj"],
+            "ingreso_exp":      sp["ingreso_exp"],
+            "ingreso_extra":    sp["ingreso_extra"],
             "descuentos_aplicados": disc_applied,
-            "cv_aloj":          sp_net["cv_aloj"],
-            "cv_exp":           sp_net["cv_exp"],
-            "cv_extra":         sp_net["cv_extra"],
+            "cv_aloj":          sp["cv_aloj"],
+            "cv_exp":           sp["cv_exp"],
+            "cv_extra":         sp["cv_extra"],
         })
 
     apply_structural_to_days(days, d_from, d_to, daily_struct)

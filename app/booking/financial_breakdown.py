@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import re
 import unicodedata
 from datetime import date, timedelta
@@ -321,40 +320,6 @@ def booking_discount_total_clp(booking: Dict[str, Any]) -> float:
         elif isinstance(item, (int, float)):
             total += float(item)
     return max(0.0, total)
-
-
-def apply_discount_to_income_split(
-    sp: Dict[str, int],
-    discount_clp: float,
-) -> Tuple[Dict[str, int], int]:
-    """
-    Reduce ingreso_* proportionally by discount (cap discount at sum of income lines).
-    Returns (adjusted split with cv_* unchanged, discount_applied).
-    """
-    keys_inc = ("ingreso_reserva", "ingreso_aloj", "ingreso_exp", "ingreso_extra")
-    vals = [int(sp.get(k, 0)) for k in keys_inc]
-    base = sum(vals)
-    disc = max(0.0, float(discount_clp))
-    if disc <= TOL or base <= 0:
-        return dict(sp), 0
-
-    applied = int(min(round(disc), base))
-    if applied <= 0:
-        return dict(sp), 0
-
-    # Largest-remainder method for integer allocation of `applied` across lines
-    exacts = [(applied * v / base) if base > 0 else 0.0 for v in vals]
-    floors = [int(math.floor(ex + 1e-9)) for ex in exacts]
-    shortfall = applied - sum(floors)
-    order = sorted(range(4), key=lambda i: -(exacts[i] - floors[i]))
-    for k in range(min(shortfall, 4)):
-        floors[order[k]] += 1
-
-    out = dict(sp)
-    for i, ik in enumerate(keys_inc):
-        net = max(0, vals[i] - floors[i])
-        out[ik] = net
-    return out, applied
 
 
 def iso_dates_inclusive(d0: date, d1: date) -> List[str]:
