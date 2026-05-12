@@ -99,6 +99,11 @@ def _legacy_booking_from_aa(d: Dict[str, Any]) -> Dict[str, Any]:
         "coupon_discount": float(d.get("coupon_discount") or 0),
         "coupon_extra_benefit": d.get("coupon_extra_benefit"),
         "customer_birthday": str(d["customer_birthday"]) if d.get("customer_birthday") else None,
+        "utm_source": d.get("utm_source") or "",
+        "utm_medium": d.get("utm_medium") or "",
+        "utm_campaign": d.get("utm_campaign") or "",
+        "utm_content": d.get("utm_content") or "",
+        "parametro_url": d.get("parametro_url") or "",
     }
 
 
@@ -145,6 +150,12 @@ def create_booking(data: dict) -> dict:
         "price_per_person": int(data["price_per_person"]),
         "extras": data.get("extras") or [],
     }
+    utm_source   = str(data.get("utm_source") or "")[:200]
+    utm_medium   = str(data.get("utm_medium") or "")[:200]
+    utm_campaign = str(data.get("utm_campaign") or "")[:500]
+    utm_content  = str(data.get("utm_content") or "")[:500]
+    parametro_url = str(data.get("parametro_url") or "")[:500]
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -160,6 +171,7 @@ def create_booking(data: dict) -> dict:
                     status, customer_language,
                     coupon_code, coupon_discount, coupon_extra_benefit,
                     customer_birthday,
+                    utm_source, utm_medium, utm_campaign, utm_content, parametro_url,
                     created_at, updated_at
                 )
                 VALUES (
@@ -173,6 +185,7 @@ def create_booking(data: dict) -> dict:
                     'pending_payment', %s,
                     %s, %s, %s,
                     %s,
+                    %s, %s, %s, %s, %s,
                     NOW(), NOW()
                 )
                 RETURNING id, status
@@ -199,6 +212,11 @@ def create_booking(data: dict) -> dict:
                     coupon_discount,
                     coupon_extra,
                     bday,
+                    utm_source,
+                    utm_medium,
+                    utm_campaign,
+                    utm_content,
+                    parametro_url,
                 ),
             )
             row = cur.fetchone()
@@ -262,7 +280,10 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                        status, payment_id, payment_order_id, payment_status,
                        paid_at, observaciones, created_at, confirmation_email_sent_at,
                        COALESCE(customer_language,'es'), coupon_code, coupon_discount,
-                       coupon_extra_benefit, customer_birthday, source
+                       coupon_extra_benefit, customer_birthday, source,
+                       COALESCE(utm_source,''), COALESCE(utm_medium,''),
+                       COALESCE(utm_campaign,''), COALESCE(utm_content,''),
+                       COALESCE(parametro_url,'')
                 FROM all_appointments
                 WHERE source = 'hotboat_web' AND TRIM(source_id) = TRIM(%s)
                 """,
@@ -299,6 +320,11 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                     "coupon_extra_benefit",
                     "customer_birthday",
                     "source",
+                    "utm_source",
+                    "utm_medium",
+                    "utm_campaign",
+                    "utm_content",
+                    "parametro_url",
                 ]
                 d = dict(zip(cols, row))
                 out = _legacy_booking_from_aa(d)
@@ -1069,6 +1095,13 @@ def ensure_db_columns() -> None:
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 );
                 CREATE INDEX IF NOT EXISTS idx_accom_blocked_aloj ON accommodation_blocked_dates(accommodation_id);
+
+                -- 035: UTM ad source tracking for web bookings
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS utm_source   TEXT DEFAULT '';
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS utm_medium   TEXT DEFAULT '';
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS utm_campaign TEXT DEFAULT '';
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS utm_content  TEXT DEFAULT '';
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS parametro_url TEXT DEFAULT '';
 
                 -- 033: booking page visitor funnel (analytics)
                 CREATE TABLE IF NOT EXISTS booking_visitor_events (

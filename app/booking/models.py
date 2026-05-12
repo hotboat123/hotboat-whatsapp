@@ -28,6 +28,11 @@ class CreateBookingRequest(BaseModel):
     coupon_extra_benefit: Optional[str] = None  # e.g. benefit text from coupons.extra_description
     test_price: Optional[int] = None  # Override total for testing (e.g. 100 CLP)
     skip_payment: bool = False         # Create booking in DB but skip WooCommerce order
+    utm_source: Optional[str] = ""
+    utm_medium: Optional[str] = ""
+    utm_campaign: Optional[str] = ""
+    utm_content: Optional[str] = ""
+    parametro_url: Optional[str] = ""
 
 
 class BookingResponse(BaseModel):

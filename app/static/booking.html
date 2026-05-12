@@ -3011,6 +3011,11 @@ async function submitBooking(){
       coupon_code: S.couponCode || null,
       coupon_discount: S.couponDiscount || 0,
       coupon_extra_benefit: (S.couponExtra || '').trim() || null,
+      utm_source: S.utm_source || '',
+      utm_medium: S.utm_medium || '',
+      utm_campaign: S.utm_campaign || '',
+      utm_content: S.utm_content || '',
+      parametro_url: S.parametro_url || '',
     };
     if(testPrice) payload.test_price = parseInt(testPrice);
     // If coming from accommodation flow, create HotBoat booking without payment order

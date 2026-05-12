@@ -74,7 +74,13 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
         "business_website":   getattr(s, "business_website", ""),
         "firma_url":          firma_url,
         "customer_language":  lang,
+        "utm_source":   str(booking.get("utm_source") or ""),
+        "utm_medium":   str(booking.get("utm_medium") or ""),
+        "utm_campaign": str(booking.get("utm_campaign") or ""),
+        "utm_content":  str(booking.get("utm_content") or ""),
+        "parametro_url": str(booking.get("parametro_url") or ""),
     }
+    ctx["ad_source_label"] = ctx["utm_campaign"] or ctx["parametro_url"] or ctx["utm_source"]
     if extra:
         ctx.update(extra)
     return ctx
@@ -718,6 +724,16 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
   </p>
 </td></tr>"""
     )
+    _ad = ctx.get("ad_source_label", "")
+    _ad_row = (
+        "<tr><td colspan='2' style='padding:0 26px 8px;'>"
+        "<table role='presentation' width='100%' style='background:#eff6ff;border-radius:8px;"
+        "border:1px solid #bfdbfe;font-size:14px;color:#1e40af;'>"
+        "<tr><td style='padding:10px 16px'><strong>Anuncio (origen)</strong></td>"
+        "<td style='padding:10px 16px;text-align:right;font-weight:600'>\U0001f4e2 " + _ad + "</td>"
+        "</tr></table></td></tr>"
+        if _ad else ""
+    )
     return (
         _header(ctx, "Nuevo lead en formulario", "#7c3aed")
         + f"""<tr><td style="padding:22px 26px 6px;color:#0f172a;font-size:15px;line-height:1.65;">
@@ -744,6 +760,7 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
         <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right;color:#b45309">pendiente de pago</td></tr>
   </table>
 </td></tr>"""
+        + _ad_row
         + wa_btn
         + _footer(ctx)
     )

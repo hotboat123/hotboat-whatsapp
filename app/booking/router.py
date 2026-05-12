@@ -333,9 +333,29 @@ async def create_booking_endpoint(request: CreateBookingRequest):
             "coupon_code": ccode,
             "coupon_discount": cdisc,
             "coupon_extra_benefit": cextra if ccode else None,
+            "utm_source": (request.utm_source or "").strip(),
+            "utm_medium": (request.utm_medium or "").strip(),
+            "utm_campaign": (request.utm_campaign or "").strip(),
+            "utm_content": (request.utm_content or "").strip(),
+            "parametro_url": (request.parametro_url or "").strip(),
         }
         result = create_booking(data)
         booking_ref = result["booking_ref"]
+
+        # Update leads.ad_source by phone if UTM campaign/parametro_url present
+        _utm_label = data["utm_campaign"] or data["parametro_url"] or data["utm_source"]
+        if _utm_label:
+            try:
+                with __import__("app.db.connection", fromlist=["get_connection"]).get_connection() as _conn:
+                    with _conn.cursor() as _cur:
+                        _cur.execute(
+                            "UPDATE whatsapp_leads SET ad_source=%s, updated_at=NOW()"
+                            " WHERE phone_number=%s AND (ad_source IS NULL OR ad_source='')",
+                            (_utm_label[:200], request.customer_phone),
+                        )
+                    _conn.commit()
+            except Exception as _ue:
+                logger.debug("web booking leads.ad_source update: %s", _ue)
 
         # Fire admin_new_lead immediately; booking_created is sent by the
         # pending-payment sweep after 5 min if payment not yet confirmed.
