@@ -1397,9 +1397,30 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
 
     pagos = _parse_json(d.get("pagos"))
     descuentos = _parse_json(d.get("descuentos"))
-    extras_json = _parse_json(d.get("extras_json")) if d.get("extras_json") else {}
-    if isinstance(extras_json, list):
-        extras_json = {}
+
+    # Normalize extras_json to dict {key: {qty, unit_price, name}}
+    # Three formats exist:
+    #   1. dict  {key: {qty, unit_price, name?, ...}}  — admin-saved
+    #   2. list  [{name, price, quantity}]              — web booking
+    #   3. dict  {extras: [{name, price, quantity}], price_per_person: N}  — web HotBoat envelope
+    raw_ej = _parse_json(d.get("extras_json")) if d.get("extras_json") else {}
+    if isinstance(raw_ej, dict) and isinstance(raw_ej.get("extras"), list):
+        raw_ej = raw_ej["extras"]  # unwrap envelope → now a list
+    if isinstance(raw_ej, list):
+        converted: dict = {}
+        for i, e in enumerate(raw_ej):
+            if not isinstance(e, dict):
+                continue
+            raw_name = str(e.get("name") or f"extra_{i}")
+            key = raw_name.lower().replace(" ", "_")[:40] or f"extra_{i}"
+            converted[key] = {
+                "qty": int(e.get("quantity") or e.get("qty") or 1),
+                "unit_price": float(e.get("price") or e.get("unit_price") or 0),
+                "name": raw_name,
+            }
+        extras_dict: dict = converted
+    else:
+        extras_dict = raw_ej if isinstance(raw_ej, dict) else {}
 
     booking = _legacy_booking_from_aa(d)
     to_addr = (booking.get("customer_email") or "").strip()
@@ -1439,19 +1460,29 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
         value=_fmt_clp(ingreso_reserva),
     ))
     # Individual extras
-    for key, val in extras_json.items():
+    extras_itemized_total = 0.0
+    for key, val in extras_dict.items():
         if not isinstance(val, dict):
             continue
         qty        = int(val.get("qty") or 1)
         unit_price = float(val.get("unit_price") or 0)
         if unit_price <= 0:
             continue
-        name = (val.get("name") or key).replace("<", "&lt;")
+        name = (val.get("name") or key.replace("_", " ")).replace("<", "&lt;")
         label = f"{name} ×{qty}" if qty > 1 else name
+        line_total = qty * unit_price
+        extras_itemized_total += line_total
         extra_rows.append(ROW.format(
             label=label,
             color="#e2e8f0",
-            value=_fmt_clp(qty * unit_price),
+            value=_fmt_clp(line_total),
+        ))
+    # Fallback: if ingreso_extras > 0 but no itemized extras found, show total line
+    if ingreso_extras > 0 and extras_itemized_total == 0:
+        extra_rows.append(ROW.format(
+            label="Extras",
+            color="#e2e8f0",
+            value=_fmt_clp(ingreso_extras),
         ))
     # Flex
     if has_flex and flex_amount > 0:
