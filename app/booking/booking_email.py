@@ -1429,6 +1429,26 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
 
     ctx = _booking_ctx(booking)
 
+    # ── Load extras catalog for name lookup ──────────────────────────────────
+    import unicodedata as _unicodedata
+    def _slug(s: str) -> str:
+        s = _unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
+        return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+    catalog_by_key: Dict[str, Dict] = {}
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT extra_name_lower, name, COALESCE(precio_venta,0) FROM extras_visibility"
+                )
+                for (name_lower, name, price) in cur.fetchall():
+                    display = name or name_lower
+                    catalog_by_key[_slug(display)] = {"name": display, "price": float(price)}
+                    catalog_by_key[name_lower]     = {"name": display, "price": float(price)}
+    except Exception as _ce:
+        logger.warning("Could not load extras_visibility for email: %s", _ce)
+
     # ── Compute real amounts ────────────────────────────────────────────────
     ingreso_reserva   = float(d.get("ingreso_reserva") or 0)
     ingreso_extras    = float(d.get("ingreso_extras") or 0)
@@ -1459,26 +1479,32 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
         color="#e2e8f0",
         value=_fmt_clp(ingreso_reserva),
     ))
-    # Individual extras
+    # Individual extras — show all items with qty > 0, resolve names from catalog
     extras_itemized_total = 0.0
+    has_any_extra = False
     for key, val in extras_dict.items():
         if not isinstance(val, dict):
             continue
-        qty        = int(val.get("qty") or 1)
+        qty = int(val.get("qty") or val.get("nights") or 1)
+        if qty <= 0:
+            continue
+        has_any_extra = True
+        # Resolve unit price: stored value first, then catalog fallback
         unit_price = float(val.get("unit_price") or 0)
         if unit_price <= 0:
-            continue
-        name = (val.get("name") or key.replace("_", " ")).replace("<", "&lt;")
+            unit_price = float((catalog_by_key.get(key) or {}).get("price") or 0)
+        # Resolve display name: stored name → catalog → humanise key
+        cat_name = (catalog_by_key.get(key) or {}).get("name") or ""
+        stored_name = str(val.get("name") or "").strip()
+        raw_name = stored_name or cat_name or key.replace("_", " ").title()
+        name = raw_name.replace("<", "&lt;")
         label = f"{name} ×{qty}" if qty > 1 else name
         line_total = qty * unit_price
         extras_itemized_total += line_total
-        extra_rows.append(ROW.format(
-            label=label,
-            color="#e2e8f0",
-            value=_fmt_clp(line_total),
-        ))
-    # Fallback: if ingreso_extras > 0 but no itemized extras found, show total line
-    if ingreso_extras > 0 and extras_itemized_total == 0:
+        value_str = _fmt_clp(line_total) if unit_price > 0 else "—"
+        extra_rows.append(ROW.format(label=label, color="#e2e8f0", value=value_str))
+    # Fallback: no items resolved at all but ingreso_extras > 0
+    if not has_any_extra and ingreso_extras > 0:
         extra_rows.append(ROW.format(
             label="Extras",
             color="#e2e8f0",
