@@ -326,6 +326,8 @@ def _hotboat_email_card(
     cta_rows: str,
     *,
     deposit_row_i18n_key: str = "label_paid",
+    extra_detail_rows_html: str = "",
+    after_total_rows_html: str = "",
 ) -> str:
     """Shared dark-card layout used by booking_created and booking_confirmed."""
     phone   = ctx.get("business_phone", "")
@@ -410,6 +412,8 @@ def _hotboat_email_card(
           </tr></table>
         </td></tr>
 
+        {extra_detail_rows_html}
+
         <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
             <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang, deposit_row_i18n_key)}</td>
@@ -423,6 +427,8 @@ def _hotboat_email_card(
             <td align="right" style="color:#10b981;font-size:18px;font-weight:800;">{total}</td>
           </tr></table>
         </td></tr>
+
+        {after_total_rows_html}
 
       </table>
     </td></tr>
@@ -1336,9 +1342,10 @@ def run_pending_payment_email_sweep(delay_minutes: int = 5) -> dict:
 def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
     """
     Force-send booking_confirmed email for any all_appointments row by integer id.
-    Uses the same _legacy_booking_from_aa → _booking_ctx → _render_and_send path
-    as normal web confirmations, bypassing status and idempotency guards.
+    Shows real extras, flex, coupon, and actual paid/balance amounts from the DB.
+    Bypasses status/idempotency guards and any custom body_html template.
     """
+    import json as _json
     from app.booking.db import get_connection, _legacy_booking_from_aa
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -1346,14 +1353,17 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
                 """SELECT id, source_id, nombre_cliente, telefono, email,
                           fecha, hora, num_personas,
                           ingreso_reserva, ingreso_extras, ingreso_total,
-                          extras_json, has_flex, flex_amount,
+                          extras_json, has_flex, COALESCE(flex_amount,0),
                           status, payment_id, payment_order_id, payment_status,
                           paid_at, observaciones, created_at, confirmation_email_sent_at,
-                          COALESCE(customer_language,'es'), coupon_code, coupon_discount,
+                          COALESCE(customer_language,'es'), coupon_code,
+                          COALESCE(coupon_discount,0),
                           coupon_extra_benefit, customer_birthday, source,
                           COALESCE(utm_source,''), COALESCE(utm_medium,''),
                           COALESCE(utm_campaign,''), COALESCE(utm_content,''),
-                          COALESCE(parametro_url,'')
+                          COALESCE(parametro_url,''),
+                          COALESCE(pagos,'[]'::jsonb),
+                          COALESCE(descuentos,'[]'::jsonb)
                    FROM all_appointments WHERE id=%s""",
                 (booking_id,),
             )
@@ -1370,13 +1380,144 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
         "customer_language", "coupon_code", "coupon_discount",
         "coupon_extra_benefit", "customer_birthday", "source",
         "utm_source", "utm_medium", "utm_campaign", "utm_content", "parametro_url",
+        "pagos", "descuentos",
     ]
     d = dict(zip(cols, row))
+
+    # Parse JSON fields (psycopg may return them already as dicts/lists)
+    def _parse_json(v):
+        if v is None:
+            return []
+        if isinstance(v, (list, dict)):
+            return v
+        try:
+            return _json.loads(v)
+        except Exception:
+            return []
+
+    pagos = _parse_json(d.get("pagos"))
+    descuentos = _parse_json(d.get("descuentos"))
+    extras_json = _parse_json(d.get("extras_json")) if d.get("extras_json") else {}
+    if isinstance(extras_json, list):
+        extras_json = {}
+
     booking = _legacy_booking_from_aa(d)
     to_addr = (booking.get("customer_email") or "").strip()
     if not to_addr:
         return {"sent": False, "reason": "no_customer_email"}
+
     ctx = _booking_ctx(booking)
+
+    # ── Compute real amounts ────────────────────────────────────────────────
+    ingreso_reserva   = float(d.get("ingreso_reserva") or 0)
+    ingreso_extras    = float(d.get("ingreso_extras") or 0)
+    ingreso_total     = float(d.get("ingreso_total") or 0)
+    has_flex          = bool(d.get("has_flex"))
+    flex_amount       = float(d.get("flex_amount") or 0)
+    coupon_discount   = float(d.get("coupon_discount") or 0)
+    manual_discounts  = sum(float(dc.get("amount") or 0) for dc in descuentos if isinstance(dc, dict))
+    total_paid        = sum(float(p.get("amount") or 0) for p in pagos if isinstance(p, dict))
+    balance_due       = max(0.0, ingreso_total - total_paid)
+
+    # Override deposit to show real paid
+    ctx["deposit_fmt"] = _fmt_clp(total_paid)
+
+    # ── Build extras detail rows ─────────────────────────────────────────────
+    ROW = (
+        '<tr><td style="padding:10px 20px;border-bottom:1px solid #1a2740;">'
+        '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+        '<td style="color:#94a3b8;font-size:12px;">{label}</td>'
+        '<td align="right" style="color:{color};font-size:13px;font-weight:600;">{value}</td>'
+        '</tr></table></td></tr>'
+    )
+
+    extra_rows = []
+    # Base reservation
+    extra_rows.append(ROW.format(
+        label="Experiencia HotBoat",
+        color="#e2e8f0",
+        value=_fmt_clp(ingreso_reserva),
+    ))
+    # Individual extras
+    for key, val in extras_json.items():
+        if not isinstance(val, dict):
+            continue
+        qty        = int(val.get("qty") or 1)
+        unit_price = float(val.get("unit_price") or 0)
+        if unit_price <= 0:
+            continue
+        name = (val.get("name") or key).replace("<", "&lt;")
+        label = f"{name} ×{qty}" if qty > 1 else name
+        extra_rows.append(ROW.format(
+            label=label,
+            color="#e2e8f0",
+            value=_fmt_clp(qty * unit_price),
+        ))
+    # Flex
+    if has_flex and flex_amount > 0:
+        extra_rows.append(ROW.format(
+            label="🔒 Reserva Flex",
+            color="#60a5fa",
+            value=_fmt_clp(flex_amount),
+        ))
+    # Coupon discount
+    if coupon_discount > 0:
+        code = d.get("coupon_code") or ""
+        label = f"Descuento cupón{' ' + code if code else ''}"
+        extra_rows.append(ROW.format(
+            label=label,
+            color="#f87171",
+            value=f"-{_fmt_clp(coupon_discount)}",
+        ))
+    # Manual discounts
+    for dc in descuentos:
+        if not isinstance(dc, dict):
+            continue
+        amt = float(dc.get("amount") or 0)
+        if amt <= 0:
+            continue
+        desc_label = (dc.get("description") or "Descuento").replace("<", "&lt;")
+        extra_rows.append(ROW.format(
+            label=desc_label,
+            color="#f87171",
+            value=f"-{_fmt_clp(amt)}",
+        ))
+
+    extra_detail_rows_html = "".join(extra_rows)
+
+    # ── Payment rows (after total) ────────────────────────────────────────────
+    after_rows = []
+    PAID_ROW = (
+        '<tr><td style="padding:10px 20px;border-bottom:1px solid #1a2740;">'
+        '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+        '<td style="color:#94a3b8;font-size:12px;">{label}</td>'
+        '<td align="right" style="color:#4ade80;font-size:13px;font-weight:600;">{value}</td>'
+        '</tr></table></td></tr>'
+    )
+    for p in pagos:
+        if not isinstance(p, dict):
+            continue
+        amt = float(p.get("amount") or 0)
+        if amt <= 0:
+            continue
+        method = (p.get("method") or p.get("tipo") or "Pago").replace("<", "&lt;")
+        pdate  = p.get("date") or ""
+        label  = f"✅ {method}{' · ' + pdate if pdate else ''}"
+        after_rows.append(PAID_ROW.format(label=label, value=_fmt_clp(amt)))
+
+    if balance_due > 0:
+        after_rows.append(
+            '<tr><td style="padding:14px 20px;background:rgba(251,191,36,.07);">'
+            '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+            '<td style="color:#fcd34d;font-size:12px;font-weight:700;">💳 Saldo pendiente</td>'
+            '<td align="right" style="color:#fbbf24;font-size:15px;font-weight:800;">'
+            + _fmt_clp(balance_due)
+            + '</td></tr></table></td></tr>'
+        )
+
+    after_total_rows_html = "".join(after_rows)
+
+    # ── Build and send email ──────────────────────────────────────────────────
     # Clear idempotency flag so resend is not blocked
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -1385,13 +1526,12 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
                 (booking_id,),
             )
             conn.commit()
-    # Build HTML using the default code template, ignoring any custom body_html
-    # stored in email_workflows (which may contain hardcoded sample data from a preview).
-    # The subject still comes from the workflow config so operators can customise it.
+
     s = get_settings()
     api_key = (getattr(s, "resend_api_key", "") or "").strip()
     if not api_key:
         return {"sent": False, "reason": "no_resend_key"}
+
     cfg = get_email_workflow("booking_confirmed")
     raw_subject = (cfg.get("subject") or "").strip()
     if not raw_subject:
@@ -1399,7 +1539,67 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
             "default_subject", "Confirmación de reserva"
         )
     subject = _apply_template(raw_subject, ctx)
-    html = _default_html_booking_confirmed(ctx)
+
+    lang = ctx.get("customer_language", "es")
+    name = ctx.get("customer_name", "")
+    website  = ctx.get("business_website", "#")
+    firma_url = ctx.get("firma_url", "") or website
+    accent = (
+        '<td width="50%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="50%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
+    )
+    confirmed_note = f"""
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 16px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+             style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:12px;">
+      <tr><td style="padding:15px 20px;">
+        <p style="margin:0;color:#6ee7b7;font-size:13px;line-height:1.65;">
+          <strong>{_t(lang,"confirmed_payment_title")}</strong><br>
+          {_t(lang,"confirmed_payment_body")}
+        </p>
+      </td></tr>
+      </table>
+    </td></tr>
+    </table>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+             style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;">
+      <tr><td style="padding:15px 20px;">
+        <p style="margin:0 0 8px;color:#fcd34d;font-size:13px;font-weight:700;">
+          {_t(lang,"tc_title")}
+        </p>
+        <p style="margin:0;color:#fde68a;font-size:12px;line-height:1.6;">
+          {_t(lang,"tc_body")}
+        </p>
+        <p style="margin:10px 0 0;">
+          <a href="{firma_url}" style="color:#fbbf24;font-weight:700;font-size:12px;word-break:break-all;">{firma_url}</a>
+        </p>
+      </td></tr>
+      </table>
+    </td></tr>
+    </table>"""
+    cta_rows = f"""
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
+    <tr>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_sign_tc"), firma_url, solid=False)}</td>
+    </tr>
+    </table>"""
+
+    html = _hotboat_email_card(
+        ctx,
+        hero_title=_t(lang, "confirmed_title"),
+        hero_subtitle=_t(lang, "confirmed_subtitle", name=name),
+        accent_bar=accent,
+        extra_body=confirmed_note,
+        cta_rows=cta_rows,
+        deposit_row_i18n_key="label_paid",
+        extra_detail_rows_html=extra_detail_rows_html,
+        after_total_rows_html=after_total_rows_html,
+    )
+
     from_addr = _get_from_addr(s)
     reply_to_addr = _get_admin_email(s) or None
     out: Dict[str, Any] = {"sent": False, "reason": ""}
