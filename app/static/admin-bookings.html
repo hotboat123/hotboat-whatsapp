@@ -2655,11 +2655,14 @@ async function sendConfirmationEmail(rid){
   if(!confirm('¿Enviar mail de confirmación de reserva al cliente?')) return;
   try{
     const res = await api(`/api/admin/reservas/${rid}/send-confirmation`,{method:'POST'});
+    console.log('[send-confirmation debug]', JSON.stringify(res._debug));
     if(res.ok){
       const sent = res.result?.sent;
       const reason = res.result?.reason;
-      if(sent) showToast(`📧 Confirmación enviada a ${res.email}`);
-      else showToast(`No enviado: ${reason||'sin motivo'}`);
+      const dbg = res._debug;
+      const extrasInfo = dbg ? ` | extras_json: ${JSON.stringify(dbg.extras_json_raw)} | ingreso_extras: ${dbg.ingreso_extras}` : '';
+      if(sent) showToast(`📧 Confirmación enviada a ${res.email}${extrasInfo}`);
+      else showToast(`No enviado: ${reason||'sin motivo'}${extrasInfo}`);
     } else {
       showToast('Error al enviar confirmación');
     }

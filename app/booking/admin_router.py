@@ -1161,20 +1161,32 @@ async def send_confirmation_for_reserva(rid: int, x_admin_key: str = Header(""))
     """Send (or resend) the booking_confirmed email for any reservation, regardless of source."""
     _check_auth(x_admin_key)
     try:
-        # Verify email exists before calling the email function
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"SELECT nombre_cliente, email FROM {TABLE} WHERE id=%s", (rid,))
+                cur.execute(
+                    f"SELECT nombre_cliente, email, extras_json, ingreso_extras FROM {TABLE} WHERE id=%s",
+                    (rid,),
+                )
                 row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Reserva {rid} no encontrada")
-        nombre, email = row
+        nombre, email, raw_extras, ingreso_extras = row
         email = (email or "").strip()
         if not email:
             raise HTTPException(status_code=422, detail="La reserva no tiene email del cliente")
         from app.booking.booking_email import send_confirmation_admin_force
         result = send_confirmation_admin_force(rid)
-        return {"ok": True, "rid": rid, "email": email, "customer": nombre, "result": result}
+        return {
+            "ok": True,
+            "rid": rid,
+            "email": email,
+            "customer": nombre,
+            "result": result,
+            "_debug": {
+                "extras_json_raw": raw_extras,
+                "ingreso_extras": float(ingreso_extras or 0),
+            },
+        }
     except HTTPException:
         raise
     except Exception as e:
