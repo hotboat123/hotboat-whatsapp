@@ -1333,6 +1333,61 @@ def run_pending_payment_email_sweep(delay_minutes: int = 5) -> dict:
 
 # ── Legacy aliases (backwards compat) ─────────────────────────────────────────
 
+def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
+    """
+    Force-send booking_confirmed email for any all_appointments row by integer id.
+    Uses the same _legacy_booking_from_aa → _booking_ctx → _render_and_send path
+    as normal web confirmations, bypassing status and idempotency guards.
+    """
+    from app.booking.db import get_connection, _legacy_booking_from_aa
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, source_id, nombre_cliente, telefono, email,
+                          fecha, hora, num_personas,
+                          ingreso_reserva, ingreso_extras, ingreso_total,
+                          extras_json, has_flex, flex_amount,
+                          status, payment_id, payment_order_id, payment_status,
+                          paid_at, observaciones, created_at, confirmation_email_sent_at,
+                          COALESCE(customer_language,'es'), coupon_code, coupon_discount,
+                          coupon_extra_benefit, customer_birthday, source,
+                          COALESCE(utm_source,''), COALESCE(utm_medium,''),
+                          COALESCE(utm_campaign,''), COALESCE(utm_content,''),
+                          COALESCE(parametro_url,'')
+                   FROM all_appointments WHERE id=%s""",
+                (booking_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        return {"sent": False, "reason": "not_found"}
+    cols = [
+        "id", "source_id", "nombre_cliente", "telefono", "email",
+        "fecha", "hora", "num_personas",
+        "ingreso_reserva", "ingreso_extras", "ingreso_total",
+        "extras_json", "has_flex", "flex_amount",
+        "status", "payment_id", "payment_order_id", "payment_status",
+        "paid_at", "observaciones", "created_at", "confirmation_email_sent_at",
+        "customer_language", "coupon_code", "coupon_discount",
+        "coupon_extra_benefit", "customer_birthday", "source",
+        "utm_source", "utm_medium", "utm_campaign", "utm_content", "parametro_url",
+    ]
+    d = dict(zip(cols, row))
+    booking = _legacy_booking_from_aa(d)
+    to_addr = (booking.get("customer_email") or "").strip()
+    if not to_addr:
+        return {"sent": False, "reason": "no_customer_email"}
+    ctx = _booking_ctx(booking)
+    # Clear idempotency flag so resend is not blocked
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE all_appointments SET confirmation_email_sent_at=NULL WHERE id=%s",
+                (booking_id,),
+            )
+            conn.commit()
+    return _render_and_send("booking_confirmed", to_addr, ctx)
+
+
 def try_send_booking_confirmation_after_payment(booking_ref: str) -> Dict[str, Any]:
     result = send_email_for_trigger("booking_confirmed", booking_ref)
     # Also notify the operator

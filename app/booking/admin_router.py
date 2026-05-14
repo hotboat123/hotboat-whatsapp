@@ -1161,48 +1161,19 @@ async def send_confirmation_for_reserva(rid: int, x_admin_key: str = Header(""))
     """Send (or resend) the booking_confirmed email for any reservation, regardless of source."""
     _check_auth(x_admin_key)
     try:
+        # Verify email exists before calling the email function
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"""SELECT id, source, source_id, nombre_cliente, email, telefono,
-                               fecha, hora, num_personas,
-                               ingreso_reserva, ingreso_extras, ingreso_total,
-                               status, COALESCE(customer_language,'es')
-                        FROM {TABLE} WHERE id=%s""",
-                    (rid,),
-                )
+                cur.execute(f"SELECT nombre_cliente, email FROM {TABLE} WHERE id=%s", (rid,))
                 row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail=f"Reserva {rid} no encontrada")
-        (apt_id, source, source_id, nombre, email, telefono,
-         fecha, hora, num_personas,
-         ingreso_reserva, ingreso_extras, ingreso_total,
-         status, lang) = row
+        nombre, email = row
         email = (email or "").strip()
         if not email:
             raise HTTPException(status_code=422, detail="La reserva no tiene email del cliente")
-        apt_id_val = apt_id
-        raw_source_id = (source_id or "").strip()
-        booking_ref = raw_source_id if raw_source_id else f"AA-{apt_id_val}"
-        data = {
-            "id":               apt_id_val,
-            "booking_ref":      booking_ref,
-            "source_id":        raw_source_id,
-            "customer_name":    nombre or "Cliente",
-            "customer_email":   email,
-            "customer_phone":   telefono or "",
-            "booking_date":     str(fecha) if fecha else "",
-            "booking_time":     str(hora)[:5] if hora else "",
-            "num_people":       num_personas or "",
-            "subtotal":         float(ingreso_reserva or 0),
-            "extras_total":     float(ingreso_extras or 0),
-            "total_price":      float(ingreso_total or 0),
-            "status":           status or "confirmed",
-            "source":           source or "",
-            "customer_language": lang,
-        }
-        from app.booking.booking_email import send_email_for_trigger_with_data
-        result = send_email_for_trigger_with_data("booking_confirmed", email, data)
+        from app.booking.booking_email import send_confirmation_admin_force
+        result = send_confirmation_admin_force(rid)
         return {"ok": True, "rid": rid, "email": email, "customer": nombre, "result": result}
     except HTTPException:
         raise
