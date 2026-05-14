@@ -328,6 +328,35 @@ async def _run_pre_booking_notif_scheduler():
         await asyncio.sleep(POLL_SECONDS)
 
 
+async def _run_yesterday_weekly_scheduler():
+    """Every morning at 09:00 Santiago: send yesterday's bookings summary.
+    On Mondays also send the weekly summary."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    SEND_HOUR = 9  # 09:00 Santiago
+
+    while True:
+        now = datetime.now(CHILE_TZ)
+        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_secs = (target - now).total_seconds()
+        logger.info("📬 Yesterday/weekly notif scheduled in %.0f min (at %s Santiago)", wait_secs / 60, target.strftime("%H:%M %d/%m"))
+        await asyncio.sleep(wait_secs)
+        try:
+            from app.booking.booking_email import send_yesterday_summary_email, send_weekly_summary_email
+            today = datetime.now(CHILE_TZ)
+            result_daily = await asyncio.to_thread(send_yesterday_summary_email)
+            logger.info("📬 Yesterday summary: %s", result_daily)
+            if today.weekday() == 0:  # Monday
+                result_weekly = await asyncio.to_thread(send_weekly_summary_email)
+                logger.info("📆 Weekly summary: %s", result_weekly)
+        except Exception as _e:
+            logger.error("Yesterday/weekly summary scheduler error: %s", _e)
+        await asyncio.sleep(60)
+
+
 def _ensure_extras_visibility_table():
     """Create extras_visibility table if it doesn't exist (survives Sheets re-sync)."""
     try:
@@ -401,14 +430,16 @@ async def lifespan(app: FastAPI):
     daily_task      = asyncio.create_task(_run_daily_summary_scheduler())
     sig_task        = asyncio.create_task(_run_signature_summary_scheduler())
     prebooking_task = asyncio.create_task(_run_pre_booking_notif_scheduler())
+    notif_task      = asyncio.create_task(_run_yesterday_weekly_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
     logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
     logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
     logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
     logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
     logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
+    logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
     yield
-    for task in (sync_task, email_task, pending_task, daily_task, sig_task, prebooking_task):
+    for task in (sync_task, email_task, pending_task, daily_task, sig_task, prebooking_task, notif_task):
         task.cancel()
         try:
             await task

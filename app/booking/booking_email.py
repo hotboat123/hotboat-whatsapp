@@ -1973,3 +1973,370 @@ def send_daily_summary_email() -> Dict[str, Any]:
         logger.error("daily_summary: send error: %s", send_err)
 
     return out
+
+    return out
+
+
+# ── Yesterday & Weekly summary emails ─────────────────────────────────────────
+
+_NOTIF_TO = "hotboatnotification@gmail.com"
+
+
+def _fmt_clp_local(v) -> str:
+    try:
+        return f"${int(float(v or 0)):,}".replace(",", ".")
+    except Exception:
+        return "$0"
+
+
+def _build_booking_card_html(b: dict, is_weekly: bool = False) -> str:
+    """Render one booking as a dark HTML card with full detail + missing-data alerts."""
+    import json as _json
+
+    def _p(v) -> str:
+        return str(v or "").strip()
+
+    nombre   = _p(b.get("nombre_cliente")) or "Sin nombre"
+    fecha    = _p(b.get("fecha"))
+    hora     = _p(b.get("hora"))[:5] if b.get("hora") else "-"
+    personas = _p(b.get("num_personas")) or "-"
+    total    = float(b.get("ingreso_total") or 0)
+    ciudad   = _p(b.get("ciudad_origen"))
+    como     = _p(b.get("como_supieron"))
+    quien    = _p(b.get("quien_atendio"))
+    obs      = _p(b.get("observaciones"))
+    telefono = _p(b.get("telefono"))
+    email_c  = _p(b.get("email"))
+    status   = _p(b.get("status"))
+
+    # Payments
+    raw_pagos = b.get("pagos") or []
+    if isinstance(raw_pagos, str):
+        try:
+            raw_pagos = _json.loads(raw_pagos)
+        except Exception:
+            raw_pagos = []
+    pagos = [p for p in raw_pagos if isinstance(p, dict)]
+    total_paid = sum(float(p.get("amount") or 0) for p in pagos)
+    balance    = max(0.0, total - total_paid)
+
+    # Extras
+    raw_ej = b.get("extras_json") or {}
+    if isinstance(raw_ej, str):
+        try:
+            raw_ej = _json.loads(raw_ej)
+        except Exception:
+            raw_ej = {}
+    if isinstance(raw_ej, dict) and isinstance(raw_ej.get("extras"), list):
+        raw_ej = raw_ej["extras"]
+    if isinstance(raw_ej, list):
+        extras_str = ", ".join(
+            str(e.get("name") or "Extra") + (f" ×{e.get('quantity',1)}" if int(e.get("quantity") or 1) > 1 else "")
+            for e in raw_ej if isinstance(e, dict)
+        )
+    elif isinstance(raw_ej, dict):
+        parts = []
+        for k, v in raw_ej.items():
+            qty = int(v) if isinstance(v, (int, float)) else int((v or {}).get("qty") or (v or {}).get("cantidad") or 1)
+            name = k.replace("_", " ").title()
+            if isinstance(v, dict):
+                name = str(v.get("name") or name)
+            parts.append(f"{name}{' ×'+str(qty) if qty > 1 else ''}")
+        extras_str = ", ".join(parts)
+    else:
+        extras_str = ""
+
+    # Missing data detection
+    alerts = []
+    if not ciudad:
+        alerts.append("🔴 <strong>Ciudad de origen</strong> no registrada")
+    if not como:
+        alerts.append("🔴 <strong>Cómo supieron</strong> de HotBoat no registrado")
+    if not quien:
+        alerts.append("🟡 <strong>Quién atendió</strong> no registrado")
+    if balance > 0:
+        alerts.append(f"🔴 <strong>Saldo pendiente</strong>: {_fmt_clp_local(balance)}")
+    if not email_c:
+        alerts.append("🟡 <strong>Email del cliente</strong> no registrado")
+
+    status_color = {"confirmed": "#10b981", "pending_payment": "#f59e0b", "cancelled": "#ef4444"}.get(status, "#64748b")
+    status_label = {"confirmed": "Confirmada", "pending_payment": "Pago pendiente", "cancelled": "Cancelada"}.get(status, status or "Sin estado")
+
+    alerts_html = ""
+    if alerts:
+        items = "".join(f'<li style="margin:4px 0;color:#fca5a5;font-size:12px;">{a}</li>' for a in alerts)
+        alerts_html = f"""
+        <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);border-radius:8px;padding:10px 14px;margin:10px 0;">
+          <p style="margin:0 0 6px;color:#f87171;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">⚠️ Datos faltantes</p>
+          <ul style="margin:0;padding-left:16px;">{items}</ul>
+        </div>"""
+
+    pagos_html = ""
+    if pagos:
+        rows = "".join(
+            f'<span style="display:inline-block;margin:2px 4px 2px 0;background:rgba(16,185,129,.15);color:#6ee7b7;'
+            f'border-radius:6px;padding:3px 8px;font-size:11px;">'
+            f'💳 {p.get("method") or p.get("tipo") or "Pago"} · {_fmt_clp_local(p.get("amount"))}'
+            f'{" · " + str(p.get("date",""))[:10] if p.get("date") else ""}</span>'
+            for p in pagos
+        )
+        pagos_html = f'<div style="margin:6px 0;">{rows}</div>'
+    else:
+        pagos_html = '<p style="margin:4px 0;color:#94a3b8;font-size:12px;">Sin pagos registrados</p>'
+
+    def row(label, val, urgent=False):
+        if not val:
+            return ""
+        color = "#fca5a5" if urgent else "#e2e8f0"
+        return (
+            f'<tr><td style="color:#64748b;font-size:11px;padding:4px 8px 4px 0;white-space:nowrap;vertical-align:top;">{label}</td>'
+            f'<td style="color:{color};font-size:12px;padding:4px 0;font-weight:500;">{val}</td></tr>'
+        )
+
+    date_header = f"{fecha} · {hora} hs · " if is_weekly else f"{hora} hs · "
+
+    return f"""
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px 20px;margin:12px 0;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="color:#f8fafc;font-size:15px;font-weight:700;">{date_header}{nombre}</span>
+        <span style="background:{status_color}22;color:{status_color};border:1px solid {status_color}55;
+               border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;">{status_label}</span>
+        <span style="margin-left:auto;color:#10b981;font-size:15px;font-weight:800;">{_fmt_clp_local(total)}</span>
+      </div>
+      {alerts_html}
+      <table cellspacing="0" cellpadding="0" style="width:100%;margin:8px 0;">
+        {row("👥 Personas", personas)}
+        {row("📍 Ciudad origen", ciudad or ('<span style="color:#f87171">—</span>' if not ciudad else ""), urgent=not ciudad)}
+        {row("📣 Cómo supieron", como or ('<span style="color:#f87171">—</span>' if not como else ""), urgent=not como)}
+        {row("🙋 Atendió", quien or "")}
+        {row("📦 Extras", extras_str or "")}
+        {row("📞 Teléfono", telefono)}
+        {row("📧 Email", email_c)}
+        {row("📝 Observaciones", obs)}
+      </table>
+      <div style="border-top:1px solid #334155;padding-top:8px;margin-top:4px;">
+        <p style="margin:0 0 4px;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1px;">PAGOS</p>
+        {pagos_html}
+        {f'<p style="margin:6px 0 0;color:#fbbf24;font-size:12px;font-weight:700;">💳 Saldo pendiente: {_fmt_clp_local(balance)}</p>' if balance > 0 else ""}
+      </div>
+    </div>"""
+
+
+def send_yesterday_summary_email() -> Dict[str, Any]:
+    """Send yesterday's booking summary to hotboatnotification@gmail.com at 09:00."""
+    from datetime import date, timedelta
+    from app.db.connection import get_connection
+
+    out: Dict[str, Any] = {"sent": False, "reason": "", "count": 0}
+    s = get_settings()
+    api_key = (getattr(s, "resend_api_key", "") or "").strip()
+    if not api_key:
+        out["reason"] = "no_resend_key"
+        return out
+
+    yesterday = date.today() - timedelta(days=1)
+    yesterday_str = yesterday.strftime("%d/%m/%Y")
+    weekday_name = yesterday.strftime("%A")
+    weekday_es = {"Monday":"Lunes","Tuesday":"Martes","Wednesday":"Miércoles",
+                  "Thursday":"Jueves","Friday":"Viernes","Saturday":"Sábado","Sunday":"Domingo"}.get(weekday_name, weekday_name)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT nombre_cliente, email, telefono, fecha, hora, num_personas,
+                          ingreso_total, status, extras_json, observaciones,
+                          ciudad_origen, como_supieron, quien_atendio,
+                          COALESCE(pagos,'[]'::jsonb)
+                   FROM all_appointments
+                   WHERE fecha = %s AND status NOT IN ('cancelled','rejected')
+                   ORDER BY hora ASC NULLS LAST""",
+                (yesterday,),
+            )
+            cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
+                    "ingreso_total","status","extras_json","observaciones",
+                    "ciudad_origen","como_supieron","quien_atendio","pagos"]
+            bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    out["count"] = len(bookings)
+    n_alerts = sum(
+        1 for b in bookings
+        if not b.get("ciudad_origen") or not b.get("como_supieron")
+        or max(0.0, float(b.get("ingreso_total") or 0)
+               - sum(float(p.get("amount") or 0) for p in (b.get("pagos") or []) if isinstance(p, dict))) > 0
+    )
+
+    urgency_banner = ""
+    if n_alerts > 0:
+        urgency_banner = f"""
+        <div style="background:rgba(239,68,68,.15);border:2px solid #ef4444;border-radius:12px;
+                    padding:14px 20px;margin:0 0 20px;">
+          <p style="margin:0;color:#f87171;font-size:14px;font-weight:700;">
+            🚨 {n_alerts} reserva{'s' if n_alerts!=1 else ''} {'tienen' if n_alerts!=1 else 'tiene'} datos incompletos — completar hoy
+          </p>
+        </div>"""
+
+    if bookings:
+        cards = "".join(_build_booking_card_html(b) for b in bookings)
+        total_rev = sum(float(b.get("ingreso_total") or 0) for b in bookings)
+        total_pax = sum(int(b.get("num_personas") or 0) for b in bookings)
+        stats = f"""
+        <div style="display:flex;gap:12px;margin:0 0 16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Reservas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{len(bookings)}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Personas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{total_pax}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Total</div>
+            <div style="color:#10b981;font-size:20px;font-weight:800;">{_fmt_clp_local(total_rev)}</div>
+          </div>
+        </div>"""
+        body_content = stats + urgency_banner + cards
+    else:
+        body_content = '<p style="color:#94a3b8;text-align:center;padding:32px 0;font-size:15px;">😴 Sin reservas el día anterior</p>'
+
+    html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>Resumen {yesterday_str}</title></head>
+<body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<table width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
+<tr><td align="center" style="padding:28px 16px 40px;">
+<table width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;">
+  <tr><td style="background:#131c2e;border-radius:16px;overflow:hidden;padding:28px;">
+    <h1 style="margin:0 0 4px;color:#f8fafc;font-size:20px;font-weight:800;">
+      📋 Resumen {weekday_es} {yesterday_str}
+    </h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:13px;">Reservas del día anterior · HotBoat</p>
+    {body_content}
+    <p style="margin:24px 0 0;color:#475569;font-size:11px;text-align:center;">
+      Enviado automáticamente por HotBoat · 09:00 Santiago
+    </p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+
+    subject = f"📋 Ayer ({weekday_es} {yesterday_str}) — {len(bookings)} reserva{'s' if len(bookings)!=1 else ''}"
+    if n_alerts > 0:
+        subject = f"🚨 " + subject[2:] + f" · {n_alerts} con datos faltantes"
+
+    from_addr = _get_from_addr(s)
+    try:
+        result = send_booking_html(
+            to=_NOTIF_TO,
+            subject=subject,
+            html=html,
+            from_address=from_addr,
+            api_key=api_key,
+        )
+        out["sent"] = True
+        out["resend_id"] = result.get("id") if isinstance(result, dict) else str(result)
+        logger.info("yesterday_summary: sent %s bookings, %s alerts", len(bookings), n_alerts)
+    except Exception as e:
+        out["reason"] = str(e)
+        logger.error("yesterday_summary send error: %s", e)
+    return out
+
+
+def send_weekly_summary_email() -> Dict[str, Any]:
+    """Send this week's booking overview to hotboatnotification@gmail.com (sent on Mondays)."""
+    from datetime import date, timedelta
+    from app.db.connection import get_connection
+
+    out: Dict[str, Any] = {"sent": False, "reason": "", "count": 0}
+    s = get_settings()
+    api_key = (getattr(s, "resend_api_key", "") or "").strip()
+    if not api_key:
+        out["reason"] = "no_resend_key"
+        return out
+
+    today = date.today()
+    week_start = today  # Monday = today
+    week_end   = today + timedelta(days=6)  # Sunday
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT nombre_cliente, email, telefono, fecha, hora, num_personas,
+                          ingreso_total, status, extras_json, observaciones,
+                          ciudad_origen, como_supieron, quien_atendio,
+                          COALESCE(pagos,'[]'::jsonb)
+                   FROM all_appointments
+                   WHERE fecha BETWEEN %s AND %s
+                     AND status NOT IN ('cancelled','rejected')
+                   ORDER BY fecha ASC, hora ASC NULLS LAST""",
+                (week_start, week_end),
+            )
+            cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
+                    "ingreso_total","status","extras_json","observaciones",
+                    "ciudad_origen","como_supieron","quien_atendio","pagos"]
+            bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    out["count"] = len(bookings)
+
+    week_start_str = week_start.strftime("%d/%m")
+    week_end_str   = week_end.strftime("%d/%m/%Y")
+
+    if bookings:
+        cards = "".join(_build_booking_card_html(b, is_weekly=True) for b in bookings)
+        total_rev = sum(float(b.get("ingreso_total") or 0) for b in bookings)
+        total_pax = sum(int(b.get("num_personas") or 0) for b in bookings)
+        stats = f"""
+        <div style="display:flex;gap:12px;margin:0 0 16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Reservas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{len(bookings)}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Personas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{total_pax}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Total semana</div>
+            <div style="color:#10b981;font-size:20px;font-weight:800;">{_fmt_clp_local(total_rev)}</div>
+          </div>
+        </div>"""
+        body_content = stats + cards
+    else:
+        body_content = '<p style="color:#94a3b8;text-align:center;padding:32px 0;font-size:15px;">📭 Sin reservas esta semana</p>'
+
+    html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>Semana {week_start_str}–{week_end_str}</title></head>
+<body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<table width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
+<tr><td align="center" style="padding:28px 16px 40px;">
+<table width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;">
+  <tr><td style="background:#131c2e;border-radius:16px;overflow:hidden;padding:28px;">
+    <h1 style="margin:0 0 4px;color:#f8fafc;font-size:20px;font-weight:800;">
+      📆 Semana {week_start_str} – {week_end_str}
+    </h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:13px;">Reservas de la semana · HotBoat</p>
+    {body_content}
+    <p style="margin:24px 0 0;color:#475569;font-size:11px;text-align:center;">
+      Enviado automáticamente cada lunes · 09:00 Santiago
+    </p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+
+    subject = f"📆 Semana {week_start_str}–{week_end_str} — {len(bookings)} reserva{'s' if len(bookings)!=1 else ''}"
+
+    from_addr = _get_from_addr(s)
+    try:
+        result = send_booking_html(
+            to=_NOTIF_TO,
+            subject=subject,
+            html=html,
+            from_address=from_addr,
+            api_key=api_key,
+        )
+        out["sent"] = True
+        out["resend_id"] = result.get("id") if isinstance(result, dict) else str(result)
+        logger.info("weekly_summary: sent %s bookings for week %s–%s", len(bookings), week_start_str, week_end_str)
+    except Exception as e:
+        out["reason"] = str(e)
+        logger.error("weekly_summary send error: %s", e)
+    return out
