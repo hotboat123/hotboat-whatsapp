@@ -1385,7 +1385,40 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
                 (booking_id,),
             )
             conn.commit()
-    return _render_and_send("booking_confirmed", to_addr, ctx)
+    # Build HTML using the default code template, ignoring any custom body_html
+    # stored in email_workflows (which may contain hardcoded sample data from a preview).
+    # The subject still comes from the workflow config so operators can customise it.
+    s = get_settings()
+    api_key = (getattr(s, "resend_api_key", "") or "").strip()
+    if not api_key:
+        return {"sent": False, "reason": "no_resend_key"}
+    cfg = get_email_workflow("booking_confirmed")
+    raw_subject = (cfg.get("subject") or "").strip()
+    if not raw_subject:
+        raw_subject = (TRIGGER_META.get("booking_confirmed") or {}).get(
+            "default_subject", "Confirmación de reserva"
+        )
+    subject = _apply_template(raw_subject, ctx)
+    html = _default_html_booking_confirmed(ctx)
+    from_addr = _get_from_addr(s)
+    reply_to_addr = _get_admin_email(s) or None
+    out: Dict[str, Any] = {"sent": False, "reason": ""}
+    try:
+        send_booking_html(
+            to=to_addr,
+            subject=subject,
+            html=html,
+            from_address=from_addr,
+            api_key=api_key,
+            bcc=_get_bcc(s),
+            reply_to=reply_to_addr,
+        )
+        out["sent"] = True
+        out["reason"] = "ok"
+    except Exception as e:
+        out["reason"] = str(e)
+        logger.error("send_confirmation_admin_force failed booking_id=%s to=%s: %s", booking_id, to_addr, e)
+    return out
 
 
 def try_send_booking_confirmation_after_payment(booking_ref: str) -> Dict[str, Any]:
