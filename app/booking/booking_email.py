@@ -1483,19 +1483,25 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
     extras_itemized_total = 0.0
     has_any_extra = False
     for key, val in extras_dict.items():
-        if not isinstance(val, dict):
+        # val can be: {qty, unit_price, name?}  OR  a plain number (qty)
+        if isinstance(val, (int, float)):
+            qty = int(val)
+            unit_price = 0.0
+            stored_name = ""
+        elif isinstance(val, dict):
+            qty = int(val.get("qty") or val.get("nights") or val.get("cantidad") or 1)
+            unit_price = float(val.get("unit_price") or 0)
+            stored_name = str(val.get("name") or "").strip()
+        else:
             continue
-        qty = int(val.get("qty") or val.get("nights") or 1)
         if qty <= 0:
             continue
         has_any_extra = True
-        # Resolve unit price: stored value first, then catalog fallback
-        unit_price = float(val.get("unit_price") or 0)
+        # Price: stored value → catalog fallback
         if unit_price <= 0:
             unit_price = float((catalog_by_key.get(key) or {}).get("price") or 0)
-        # Resolve display name: stored name → catalog → humanise key
+        # Name: stored → catalog → humanise key
         cat_name = (catalog_by_key.get(key) or {}).get("name") or ""
-        stored_name = str(val.get("name") or "").strip()
         raw_name = stored_name or cat_name or key.replace("_", " ").title()
         name = raw_name.replace("<", "&lt;")
         label = f"{name} ×{qty}" if qty > 1 else name
