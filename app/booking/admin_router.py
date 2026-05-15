@@ -3326,3 +3326,114 @@ async def test_meta_capi(x_admin_key: str = Header("")):
         "No se pueden simular porque Meta valida que el ctwa_clid sea real."
     )
     return results
+
+
+@admin_router.post("/api/admin/test-notif-email")
+async def test_notif_email(
+    x_admin_key: str = Header(""),
+    target_date: Optional[str] = Query(None, description="YYYY-MM-DD — the day whose reservations to include (default: yesterday)"),
+    weekly: bool = Query(False, description="Also send weekly summary for the week containing target_date"),
+):
+    """Manually trigger the daily/weekly notification email for testing."""
+    _check_auth(x_admin_key)
+    import asyncio
+    from datetime import date, timedelta
+    from app.booking.booking_email import send_yesterday_summary_email, send_weekly_summary_email, _NOTIF_TO, _build_booking_card_html, _fmt_clp_local, _get_from_addr
+    from app.booking.booking_email import send_booking_html, get_settings
+    from app.db.connection import get_connection
+
+    out: dict = {}
+
+    # Resolve the target date (the day whose reservations we want to show)
+    if target_date:
+        target = date.fromisoformat(target_date)
+    else:
+        target = date.today() - timedelta(days=1)
+
+    # Build and send daily summary for target date
+    s = get_settings()
+    api_key = (getattr(s, "resend_api_key", "") or "").strip()
+    if not api_key:
+        return {"error": "no_resend_key"}
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT nombre_cliente, email, telefono, fecha, hora, num_personas,
+                          ingreso_total, status, extras_json, observaciones,
+                          ciudad_origen, como_supieron, quien_atendio,
+                          COALESCE(pagos,'[]'::jsonb)
+                   FROM all_appointments
+                   WHERE fecha = %s
+                     AND status NOT IN ('cancelled','rejected')
+                   ORDER BY hora ASC NULLS LAST""",
+                (target,),
+            )
+            cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
+                    "ingreso_total","status","extras_json","observaciones",
+                    "ciudad_origen","como_supieron","quien_atendio","pagos"]
+            bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    target_str = target.strftime("%d/%m/%Y")
+    weekday_name = target.strftime("%A")
+    weekday_es = {"Monday":"Lunes","Tuesday":"Martes","Wednesday":"Miércoles",
+                  "Thursday":"Jueves","Friday":"Viernes","Saturday":"Sábado","Sunday":"Domingo"}.get(weekday_name, weekday_name)
+
+    if bookings:
+        cards = "".join(_build_booking_card_html(b) for b in bookings)
+        total_rev = sum(float(b.get("ingreso_total") or 0) for b in bookings)
+        total_pax = sum(int(b.get("num_personas") or 0) for b in bookings)
+        n_alerts = sum(1 for b in bookings if not b.get("ciudad_origen") or not b.get("como_supieron"))
+        stats = f"""
+        <div style="display:flex;gap:12px;margin:0 0 16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Reservas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{len(bookings)}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Personas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{total_pax}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Ingresos</div>
+            <div style="color:#10b981;font-size:20px;font-weight:800;">{_fmt_clp_local(total_rev)}</div>
+          </div>
+          {f'<div style="flex:1;min-width:100px;background:#7f1d1d;border-radius:10px;padding:12px 16px;text-align:center;"><div style="color:#fca5a5;font-size:11px;text-transform:uppercase;letter-spacing:1px;">⚠️ Alertas</div><div style="color:#fef2f2;font-size:22px;font-weight:800;">{n_alerts}</div></div>' if n_alerts else ""}
+        </div>"""
+        body_content = stats + cards
+    else:
+        body_content = f'<p style="color:#94a3b8;text-align:center;padding:32px 0;font-size:15px;">📭 Sin reservas el {target_str}</p>'
+
+    html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>{weekday_es} {target_str}</title></head>
+<body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<table width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
+<tr><td align="center" style="padding:28px 16px 40px;">
+<table width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;">
+  <tr><td style="background:#131c2e;border-radius:16px;overflow:hidden;padding:28px;">
+    <h1 style="margin:0 0 4px;color:#f8fafc;font-size:20px;font-weight:800;">
+      🚤 {weekday_es} {target_str}
+    </h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:13px;">Reservas del día · HotBoat <em>(test manual)</em></p>
+    {body_content}
+    <p style="margin:24px 0 0;color:#475569;font-size:11px;text-align:center;">
+      Enviado manualmente para prueba
+    </p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+
+    subject = f"🚤 [TEST] {weekday_es} {target_str} — {len(bookings)} reserva{'s' if len(bookings)!=1 else ''}"
+    from_addr = _get_from_addr(s)
+    try:
+        result = send_booking_html(to=_NOTIF_TO, subject=subject, html=html, from_address=from_addr, api_key=api_key)
+        out["daily"] = {"sent": True, "count": len(bookings), "date": str(target), "resend_id": result.get("id") if isinstance(result, dict) else str(result)}
+    except Exception as e:
+        out["daily"] = {"sent": False, "error": str(e)}
+
+    if weekly:
+        result_weekly = await asyncio.to_thread(send_weekly_summary_email)
+        out["weekly"] = result_weekly
+
+    return out
