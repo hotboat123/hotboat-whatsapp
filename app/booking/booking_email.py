@@ -2253,8 +2253,8 @@ def send_weekly_summary_email() -> Dict[str, Any]:
         return out
 
     today = date.today()
-    week_start = today  # Monday = today
-    week_end   = today + timedelta(days=6)  # Sunday
+    week_end   = today - timedelta(days=1)   # yesterday = last Sunday
+    week_start = today - timedelta(days=7)   # last Monday
 
     with get_connection() as conn:
         with conn.cursor() as cur:
