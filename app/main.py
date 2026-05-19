@@ -999,6 +999,15 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 "message_sent": "Packs Completos: imagen + texto enviados",
                 "whatsapp_response": {}
             }
+        elif menu_option == 10:
+            # Bebestibles — opciones para celebrar (solo adultos)
+            response_text = (
+                "🍷 *Opciones para celebrar* (solo adultos)\n\n"
+                "$6.000 → Cerveza artesanal 330ml\n"
+                "$15.000 → Vino reserva\n"
+                "$26.000 → Champaña Riccadonna\n"
+                "$20.000 → Pack de 4 cervezas artesanales"
+            )
         elif menu_option == 9:
             # Solo alojamientos — equivale al flujo menú 7 → 2
             import asyncio
