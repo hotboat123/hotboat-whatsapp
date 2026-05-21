@@ -1063,8 +1063,14 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 "message_sent": f"Alojamientos: texto + {len(image_paths)} imágenes enviadas",
                 "whatsapp_response": {}
             }
+        elif menu_option == 11:
+            # Traer comida o pedir aquí
+            response_text = (
+                "1) Pueden traer lo que quieran para comer o tomar\n"
+                "2) o pueden pedir aquí 🙂"
+            )
         else:
-            raise HTTPException(status_code=400, detail="Invalid menu option (must be 0-9)")
+            raise HTTPException(status_code=400, detail="Invalid menu option")
         
         # Send message via WhatsApp
         result = await whatsapp_client.send_text_message(
