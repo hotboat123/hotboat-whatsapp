@@ -1243,7 +1243,7 @@ audio::-webkit-media-controls-volume-slider {
 /* Quick Reply Section */
 .quick-reply-section {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.4rem;
 }
 
@@ -1251,10 +1251,12 @@ audio::-webkit-media-controls-volume-slider {
     font-size: 0.5rem;
     color: var(--text-secondary);
     white-space: nowrap;
+    padding-top: 0.3rem;
 }
 
 .quick-reply-buttons {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.2rem;
 }
 
