@@ -3437,3 +3437,55 @@ async def test_notif_email(
         out["weekly"] = result_weekly
 
     return out
+
+
+@admin_router.get("/api/admin/debug-extras")
+async def debug_extras(
+    x_admin_key: str = Header(""),
+    nombre: Optional[str] = Query(None, description="Nombre del cliente (búsqueda parcial)"),
+    rid: Optional[int] = Query(None, description="ID de la reserva"),
+):
+    """Inspect raw extras_json for a booking and show how _parse_extras interprets it."""
+    _check_auth(x_admin_key)
+    from app.booking.signatures_email import _parse_extras
+
+    where = []
+    params = []
+    if rid:
+        where.append("id = %s")
+        params.append(rid)
+    elif nombre:
+        where.append("nombre_cliente ILIKE %s")
+        params.append(f"%{nombre}%")
+    else:
+        return {"error": "Provide nombre or rid"}
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""SELECT id, nombre_cliente, fecha, hora, extras_json, ingreso_extras, status
+                    FROM all_appointments
+                    WHERE {' AND '.join(where)}
+                    ORDER BY fecha DESC LIMIT 5""",
+                params,
+            )
+            cols = ["id","nombre_cliente","fecha","hora","extras_json","ingreso_extras","status"]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    result = []
+    for row in rows:
+        raw = row["extras_json"]
+        parsed = _parse_extras(raw)
+        result.append({
+            "id": row["id"],
+            "nombre": row["nombre_cliente"],
+            "fecha": str(row["fecha"]),
+            "hora": str(row["hora"] or ""),
+            "status": row["status"],
+            "ingreso_extras": row["ingreso_extras"],
+            "extras_json_raw": raw,
+            "extras_json_type": type(raw).__name__,
+            "parsed_extras": parsed,
+            "parsed_count": len(parsed),
+        })
+    return result
