@@ -2018,7 +2018,8 @@ def _build_booking_card_html(b: dict, is_weekly: bool = False) -> str:
             raw_pagos = []
     pagos = [p for p in raw_pagos if isinstance(p, dict)]
     total_paid = sum(float(p.get("amount") or 0) for p in pagos)
-    balance    = max(0.0, total - total_paid)
+    flex       = float(b.get("flex_amount") or 0)
+    balance    = max(0.0, total + flex - total_paid)
 
     # Extras
     raw_ej = b.get("extras_json") or {}
@@ -2146,7 +2147,8 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
                 """SELECT nombre_cliente, email, telefono, fecha, hora, num_personas,
                           ingreso_total, status, extras_json, observaciones,
                           ciudad_origen, como_supieron, quien_atendio,
-                          COALESCE(pagos,'[]'::jsonb)
+                          COALESCE(pagos,'[]'::jsonb),
+                          COALESCE(flex_amount,0)
                    FROM all_appointments
                    WHERE fecha = %s AND status NOT IN ('cancelled','rejected')
                    ORDER BY hora ASC NULLS LAST""",
@@ -2154,7 +2156,7 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
             )
             cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
                     "ingreso_total","status","extras_json","observaciones",
-                    "ciudad_origen","como_supieron","quien_atendio","pagos"]
+                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount"]
             bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
 
     out["count"] = len(bookings)
@@ -2162,6 +2164,7 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
         1 for b in bookings
         if not b.get("ciudad_origen") or not b.get("como_supieron")
         or max(0.0, float(b.get("ingreso_total") or 0)
+               + float(b.get("flex_amount") or 0)
                - sum(float(p.get("amount") or 0) for p in (b.get("pagos") or []) if isinstance(p, dict))) > 0
     )
 
@@ -2262,7 +2265,8 @@ def send_weekly_summary_email() -> Dict[str, Any]:
                 """SELECT nombre_cliente, email, telefono, fecha, hora, num_personas,
                           ingreso_total, status, extras_json, observaciones,
                           ciudad_origen, como_supieron, quien_atendio,
-                          COALESCE(pagos,'[]'::jsonb)
+                          COALESCE(pagos,'[]'::jsonb),
+                          COALESCE(flex_amount,0)
                    FROM all_appointments
                    WHERE fecha BETWEEN %s AND %s
                      AND status NOT IN ('cancelled','rejected')
@@ -2271,7 +2275,7 @@ def send_weekly_summary_email() -> Dict[str, Any]:
             )
             cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
                     "ingreso_total","status","extras_json","observaciones",
-                    "ciudad_origen","como_supieron","quien_atendio","pagos"]
+                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount"]
             bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
 
     out["count"] = len(bookings)

@@ -3362,7 +3362,8 @@ async def test_notif_email(
                 """SELECT nombre_cliente, email, telefono, fecha, hora, num_personas,
                           ingreso_total, status, extras_json, observaciones,
                           ciudad_origen, como_supieron, quien_atendio,
-                          COALESCE(pagos,'[]'::jsonb)
+                          COALESCE(pagos,'[]'::jsonb),
+                          COALESCE(flex_amount,0)
                    FROM all_appointments
                    WHERE fecha = %s
                      AND status NOT IN ('cancelled','rejected')
@@ -3371,7 +3372,7 @@ async def test_notif_email(
             )
             cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
                     "ingreso_total","status","extras_json","observaciones",
-                    "ciudad_origen","como_supieron","quien_atendio","pagos"]
+                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount"]
             bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
 
     target_str = target.strftime("%d/%m/%Y")
