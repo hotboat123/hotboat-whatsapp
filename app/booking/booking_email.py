@@ -2030,22 +2030,53 @@ def _build_booking_card_html(b: dict, is_weekly: bool = False) -> str:
             raw_ej = {}
     if isinstance(raw_ej, dict) and isinstance(raw_ej.get("extras"), list):
         raw_ej = raw_ej["extras"]
+
+    # Load catalog for proper names
+    catalog = {}
+    try:
+        from app.db.connection import get_connection as _gc
+        with _gc() as _conn:
+            with _conn.cursor() as _cur:
+                _cur.execute("SELECT extra_name_lower, COALESCE(name, extra_name_lower) FROM extras_visibility")
+                for _k, _n in _cur.fetchall():
+                    catalog[_k.lower()] = _n
+    except Exception:
+        pass
+
+    extras_items = []
     if isinstance(raw_ej, list):
-        extras_str = ", ".join(
-            str(e.get("name") or "Extra") + (f" ×{e.get('quantity',1)}" if int(e.get("quantity") or 1) > 1 else "")
-            for e in raw_ej if isinstance(e, dict)
-        )
+        for e in raw_ej:
+            if not isinstance(e, dict):
+                continue
+            name = str(e.get("name") or "Extra").strip()
+            qty  = int(e.get("quantity") or 1)
+            extras_items.append(f"{name}{' ×'+str(qty) if qty > 1 else ''}")
     elif isinstance(raw_ej, dict):
-        parts = []
         for k, v in raw_ej.items():
-            qty = int(v) if isinstance(v, (int, float)) else int((v or {}).get("qty") or (v or {}).get("cantidad") or 1)
-            name = k.replace("_", " ").title()
+            if isinstance(v, (int, float)):
+                qty = int(v)
+            elif isinstance(v, dict):
+                qty = int(v.get("qty") or v.get("cantidad") or 1)
+            else:
+                continue
+            if qty <= 0:
+                continue
+            name = ""
             if isinstance(v, dict):
-                name = str(v.get("name") or name)
-            parts.append(f"{name}{' ×'+str(qty) if qty > 1 else ''}")
-        extras_str = ", ".join(parts)
+                name = str(v.get("name") or "").strip()
+            name = name or catalog.get(k.lower()) or k.replace("_", " ").title()
+            extras_items.append(f"{name}{' ×'+str(qty) if qty > 1 else ''}")
+
+    if extras_items:
+        badges = "".join(
+            f'<span style="display:inline-block;margin:2px 3px 2px 0;background:rgba(99,102,241,.15);'
+            f'color:#a5b4fc;border:1px solid rgba(99,102,241,.3);border-radius:6px;'
+            f'padding:2px 8px;font-size:11px;white-space:normal;word-break:break-word;">{e}</span>'
+            for e in extras_items
+        )
+        extras_html = f'<div style="display:flex;flex-wrap:wrap;gap:0;">{badges}</div>'
     else:
-        extras_str = ""
+        extras_html = ""
 
     # Missing data detection
     alerts = []
@@ -2110,7 +2141,7 @@ def _build_booking_card_html(b: dict, is_weekly: bool = False) -> str:
         {row("📍 Ciudad origen", ciudad or ('<span style="color:#f87171">—</span>' if not ciudad else ""), urgent=not ciudad)}
         {row("📣 Cómo supieron", como or ('<span style="color:#f87171">—</span>' if not como else ""), urgent=not como)}
         {row("🙋 Atendió", quien or "")}
-        {row("📦 Extras", extras_str or "")}
+        {row("📦 Extras", extras_html) if extras_html else ""}
         {row("📞 Teléfono", telefono)}
         {row("📧 Email", email_c)}
         {row("📝 Observaciones", obs)}
