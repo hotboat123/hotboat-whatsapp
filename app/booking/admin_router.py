@@ -3489,3 +3489,46 @@ async def debug_extras(
             "parsed_count": len(parsed),
         })
     return result
+
+
+@admin_router.post("/api/admin/test-prebooking-notif/{rid}")
+async def test_prebooking_notif(rid: int, x_admin_key: str = Header("")):
+    """Resend the 1-hour pre-booking notification for a specific booking (for testing)."""
+    _check_auth(x_admin_key)
+    import asyncio
+    from app.booking.signatures_email import send_pre_booking_notification
+    from app.booking.db import count_previous_bookings
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id,
+                       CASE WHEN COALESCE(source,'')='hotboat_web' AND COALESCE(TRIM(source_id),'')!=''
+                            THEN TRIM(source_id) ELSE 'MANUAL-'||id::text END AS booking_ref,
+                       nombre_cliente, telefono, email, fecha, hora,
+                       NULLIF(num_personas,'')::integer,
+                       ingreso_total, status,
+                       COALESCE(source,'manual'),
+                       COALESCE(customer_language,'es'),
+                       extras_json,
+                       COALESCE(ingreso_extras,0),
+                       observaciones
+                FROM all_appointments WHERE id = %s
+            """, (rid,))
+            row = cur.fetchone()
+
+    if not row:
+        return {"error": f"Booking {rid} not found"}
+
+    cols = ["id","booking_ref","customer_name","customer_phone","customer_email",
+            "booking_date","booking_time","num_people","total_price","status",
+            "source","customer_language","extras","extras_total","notes"]
+    booking = dict(zip(cols, row))
+    for k in ("booking_date","booking_time"):
+        if booking.get(k):
+            booking[k] = str(booking[k])
+
+    phone = booking.get("customer_phone","")
+    prev = await asyncio.to_thread(count_previous_bookings, phone, rid)
+    await asyncio.to_thread(send_pre_booking_notification, booking, prev)
+    return {"ok": True, "rid": rid, "nombre": booking["customer_name"], "extras_parsed": len(__import__('app.booking.signatures_email', fromlist=['_parse_extras'])._parse_extras(booking["extras"]))}
