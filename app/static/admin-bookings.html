@@ -101,7 +101,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .cal-hdr{background:var(--surface);padding:.5rem;text-align:center;font-size:.73rem;
   color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .cal-day{background:var(--card);border:1px solid var(--border);border-radius:6px;
-  min-height:90px;padding:.4rem;position:relative;cursor:pointer;transition:border-color .15s}
+  min-height:90px;padding:.4rem;position:relative;cursor:pointer;transition:border-color .15s;height:auto}
 .cal-day:hover{border-color:var(--gold)}
 .cal-day.empty{background:transparent;border-color:transparent;cursor:default}
 .cal-day.today{border-color:var(--gold)}
@@ -1741,7 +1741,7 @@ function renderCal(){
     const dt=new Date(calYear,calMonth,d);
     const isToday = dt.getTime()===today.getTime();
     const rsvs=byDate[dateStr]||[];
-    const pills = rsvs.slice().sort((a,b)=>(a.hora||'').localeCompare(b.hora||'')).slice(0,3).map(r=>{
+    const pills = rsvs.slice().sort((a,b)=>(a.hora||'').localeCompare(b.hora||'')).map(r=>{
       const col = statusColor(r.status);
       const firstName = (r.nombre_cliente||'Sin nombre').trim().split(/\s+/)[0];
       const hora = r.hora ? r.hora.substring(0,5) : '';
@@ -1757,10 +1757,9 @@ function renderCal(){
         ${(personas||icons||faltHtml)?`<div class="cal-pill-sub">${personas?`<span>${personas}</span>`:''}${icons?`<span class="cal-pill-icons">${icons}</span>`:''}${faltHtml}</div>`:''}
       </div>`;
     }).join('');
-    const more = rsvs.length>3?`<div style="font-size:.6rem;color:var(--muted)">+${rsvs.length-3} más</div>`:'';
     html+=`<div class="cal-day${isToday?' today':''}" onclick="${rsvs.length?`showDayReservas('${dateStr}')`:`openNewReservaModal('${dateStr}')`}">
       <div class="cal-day-num">${d}${rsvs.length?` <span style="color:var(--gold);font-size:.6rem">(${rsvs.length})</span>`:''}</div>
-      ${pills}${more}
+      ${pills}
     </div>`;
   }
   grid.innerHTML=html;
