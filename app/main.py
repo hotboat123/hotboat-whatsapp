@@ -1016,11 +1016,37 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 "¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
             )
         elif menu_option == 11:
-            # Traer comida o pedir aquí
-            response_text = (
-                "1) Pueden traer lo que quieran para comer o tomar\n"
-                "2) o pueden pedir aquí 🙂"
-            )
+            # Traer comida o pedir aquí — dos mensajes separados
+            import asyncio
+            sequence = [
+                "Pueden traer lo que quieran para comer o tomar 🍕🥗",
+                "o pueden pedir aquí 🙂",
+            ]
+            for i, msg in enumerate(sequence):
+                if i > 0:
+                    await asyncio.sleep(1.5)
+                await whatsapp_client.send_text_message(to=phone_number, message=msg)
+                await save_conversation(
+                    phone_number=phone_number,
+                    customer_name=customer_name,
+                    message_text="",
+                    response_text=msg,
+                    message_type="text",
+                    direction="outgoing"
+                )
+                conversation["messages"].append({
+                    "role": "assistant",
+                    "content": msg,
+                    "timestamp": datetime.now(CHILE_TZ).isoformat()
+                })
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "menu_option": menu_option,
+                "message_sent": "2 mensajes enviados",
+                "whatsapp_response": {}
+            }
         else:
             raise HTTPException(status_code=400, detail="Invalid menu option")
         
