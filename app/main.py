@@ -1009,60 +1009,12 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 "$20.000 → Pack de 4 cervezas artesanales"
             )
         elif menu_option == 9:
-            # Solo alojamientos — equivale al flujo menú 7 → 2
-            import asyncio
-            from app.utils.media_handler import get_alojamientos_images
-            text_intro = get_text("accommodations_only_intro", language)
-            # Send text intro
-            await whatsapp_client.send_text_message(to=phone_number, message=text_intro)
-            await save_conversation(
-                phone_number=phone_number,
-                customer_name=customer_name,
-                message_text="",
-                response_text=text_intro,
-                message_type="text",
-                direction="outgoing"
+            # Solo alojamientos — link directo a página de reservas
+            response_text = (
+                "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n"
+                "👉 https://whatsapp.hotboat.cl/booking\n\n"
+                "¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
             )
-            conversation["messages"].append({
-                "role": "assistant",
-                "content": text_intro,
-                "timestamp": datetime.now(CHILE_TZ).isoformat()
-            })
-            # Send accommodation images
-            image_paths = get_alojamientos_images()
-            for idx, image_path in enumerate(image_paths, 1):
-                try:
-                    media_id_img = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
-                    if media_id_img:
-                        caption = "📄 Información completa de alojamientos" if idx == 1 else None
-                        await whatsapp_client.send_image_message(
-                            to=phone_number,
-                            media_id=media_id_img,
-                            caption=caption
-                        )
-                        await asyncio.sleep(0.5)
-                except Exception as img_err:
-                    logger.warning(f"Could not send alojamiento image {idx}: {img_err}")
-            # Set accommodation_flow so the bot continues the flow when user replies
-            conversation["metadata"]["accommodation_flow"] = {
-                "step": "choosing_property",
-                "property": None,
-                "room_type": None,
-                "guests": None,
-                "checkin_date": None,
-                "checkout_date": None,
-            }
-            # Clear any conflicting flows
-            for key in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
-                conversation["metadata"].pop(key, None)
-            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
-            return {
-                "status": "success",
-                "phone_number": phone_number,
-                "menu_option": menu_option,
-                "message_sent": f"Alojamientos: texto + {len(image_paths)} imágenes enviadas",
-                "whatsapp_response": {}
-            }
         elif menu_option == 11:
             # Traer comida o pedir aquí
             response_text = (
