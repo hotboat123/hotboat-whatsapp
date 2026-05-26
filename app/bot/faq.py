@@ -264,7 +264,45 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
     def set_language(self, language: str):
         """Set the language for responses"""
         self.language = language
-    
+
+    def _build_extras_from_db(self, language: str = "es") -> Optional[str]:
+        """Build extras menu dynamically from extras_visibility table."""
+        try:
+            from app.db.connection import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT COALESCE(name, extra_name_lower),
+                               COALESCE(precio_venta, 0),
+                               COALESCE(icon, '✨')
+                        FROM extras_visibility
+                        WHERE show_in_booking = true
+                        ORDER BY sort_order, extra_name_lower
+                    """)
+                    items = cur.fetchall()
+        except Exception:
+            return None
+
+        if not items:
+            return None
+
+        lines = []
+        for name, price, icon in items:
+            price_fmt = f"${price:,}".replace(",", ".")
+            lines.append(f"{icon} {name} - {price_fmt}")
+
+        if language == "en":
+            header = "✨ *HotBoat Extras:*\n\nWant to add something special to your HotBoat?\n\n"
+            footer = "\n\n📝 *Let us know which extra you'd like to add* 🚤"
+        elif language == "pt":
+            header = "✨ *Extras HotBoat:*\n\nQuer adicionar algo especial ao seu HotBoat?\n\n"
+            footer = "\n\n📝 *Nos diga qual extra deseja adicionar* 🚤"
+        else:
+            header = "✨ *Extras HotBoat:*\n\n¿Quieres agregar algo especial a tu HotBoat?\n\n"
+            footer = "\n\n📝 *Escríbenos qué extra deseas agregar* 🚤"
+
+        return header + "\n".join(lines) + footer
+
     def get_response(self, message: str, language: str = None) -> Optional[str]:
         """
         Get FAQ response if message matches a question
@@ -311,6 +349,11 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
             if actual_keyword in faq_to_translation:
                 translation_key = faq_to_translation[actual_keyword]
                 logger.info(f"FAQ match found for keyword: {keyword} -> {translation_key}")
+                # For extras: build dynamically from DB so prices are always current
+                if actual_keyword == "extras":
+                    dynamic = self._build_extras_from_db(lang)
+                    if dynamic:
+                        return dynamic
                 return get_text(translation_key, lang)
             else:
                 # Fallback to original response if no translation available
