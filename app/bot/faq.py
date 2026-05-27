@@ -266,42 +266,148 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
         self.language = language
 
     def _build_extras_from_db(self, language: str = "es") -> Optional[str]:
-        """Build extras menu dynamically from extras_visibility table."""
+        """Build extras menu keeping exact structure/numbering, pulling prices from DB."""
+        # Load price lookup from extras_visibility
+        prices = {}
         try:
             from app.db.connection import get_connection
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        SELECT COALESCE(name, extra_name_lower),
-                               COALESCE(precio_venta, 0),
-                               COALESCE(icon, '✨')
+                        SELECT extra_name_lower, COALESCE(precio_venta, 0)
                         FROM extras_visibility
-                        WHERE show_in_booking = true
-                        ORDER BY sort_order, extra_name_lower
                     """)
-                    items = cur.fetchall()
+                    for key, price in cur.fetchall():
+                        prices[key.lower()] = int(price)
         except Exception:
             return None
 
-        if not items:
+        if not prices:
             return None
 
-        lines = []
-        for name, price, icon in items:
-            price_fmt = f"${price:,}".replace(",", ".")
-            lines.append(f"{icon} {name} - {price_fmt}")
+        def p(key: str, default: int) -> str:
+            v = prices.get(key, default)
+            return f"${v:,}".replace(",", ".")
 
         if language == "en":
-            header = "✨ *HotBoat Extras:*\n\nWant to add something special to your HotBoat?\n\n"
-            footer = "\n\n📝 *Let us know which extra you'd like to add* 🚤"
-        elif language == "pt":
-            header = "✨ *Extras HotBoat:*\n\nQuer adicionar algo especial ao seu HotBoat?\n\n"
-            footer = "\n\n📝 *Nos diga qual extra deseja adicionar* 🚤"
-        else:
-            header = "✨ *Extras HotBoat:*\n\n¿Quieres agregar algo especial a tu HotBoat?\n\n"
-            footer = "\n\n📝 *Escríbenos qué extra deseas agregar* 🚤"
+            return f"""✨ *HotBoat Extras:*
 
-        return header + "\n".join(lines) + footer
+Want to add something special to your HotBoat?
+
+🍇 *Charcuterie Boards*
+1️⃣ Large board (4 people) - {p('tabla_4_personas', 25000)} CLP
+2️⃣ Small board (2 people) - {p('tabla_2_personas', 20000)} CLP
+
+🥤 *Drinks and Juices* (non-alcoholic)
+3️⃣ Natural juice 1L (pineapple or orange) - {p('jugo_natural', 10000)} CLP
+4️⃣ Canned drink (Coca-Cola or Fanta) - {p('lata_bebida', 2900)} CLP
+5️⃣ Mineral water 1.5 L - {p('agua_mineral', 2500)} CLP
+6️⃣ Individual ice cream (Cookies & Cream 🍪 or Raspberry 🍫) - {p('helado', 3500)} CLP
+
+🌹 *Romantic Mode*
+7️⃣ Rose petals and special decoration - {p('modo_romantico', 25000)} CLP
+
+🌙 *Extra Night Decoration*
+8️⃣ Decorative LED candles - {p('velas_led', 10000)} CLP
+9️⃣ Illuminated letters "Te Amo" / "Love" - {p('letras_luminosas', 15000)} CLP
+🔟 Complete pack (candles + letters) - {p('pack_velas_letras', 20000)} CLP
+
+✨🎥 *Personalized video*
+1️⃣1️⃣ 15s video - {p('video_15_seg', 30000)} CLP
+1️⃣2️⃣ 60s video - {p('video_1_min', 40000)} CLP
+
+🚐 *Transportation*
+1️⃣3️⃣ Round trip from Pucón - {p('transporte', 50000)} CLP
+
+🧻 *Towels*
+1️⃣4️⃣ Regular towel - {p('toalla_normal', 9000)} CLP
+1️⃣5️⃣ Poncho towel - {p('toalla_poncho', 10000)} CLP
+
+🩴 *Other*
+1️⃣6️⃣ Shower sandals - {p('chalas', 10000)} CLP
+1️⃣7️⃣ FLEX Booking (+10% - cancel/reschedule anytime)
+
+📝 *Write the number of the extra you want to add* 🚤"""
+
+        elif language == "pt":
+            return f"""✨ *Extras HotBoat:*
+
+Quer adicionar algo especial ao seu HotBoat?
+
+🍇 *Tábuas de Frios*
+1️⃣ Tábua grande (4 pessoas) - {p('tabla_4_personas', 25000)} CLP
+2️⃣ Tábua pequena (2 pessoas) - {p('tabla_2_personas', 20000)} CLP
+
+🥤 *Bebidas e Sucos* (sem álcool)
+3️⃣ Suco natural 1L (abacaxi ou laranja) - {p('jugo_natural', 10000)} CLP
+4️⃣ Lata de refrigerante (Coca-Cola ou Fanta) - {p('lata_bebida', 2900)} CLP
+5️⃣ Água mineral 1,5 L - {p('agua_mineral', 2500)} CLP
+6️⃣ Sorvete individual (Cookies & Cream 🍪 ou Framboesa 🍫) - {p('helado', 3500)} CLP
+
+🌹 *Modo Romântico*
+7️⃣ Pétalas de rosas e decoração especial - {p('modo_romantico', 25000)} CLP
+
+🌙 *Decoração Noturna Extra*
+8️⃣ Velas LED decorativas - {p('velas_led', 10000)} CLP
+9️⃣ Letras luminosas "Te Amo" / "Love" - {p('letras_luminosas', 15000)} CLP
+🔟 Pack completo (velas + letras) - {p('pack_velas_letras', 20000)} CLP
+
+✨🎥 *Vídeo personalizado*
+1️⃣1️⃣ Vídeo 15s - {p('video_15_seg', 30000)} CLP
+1️⃣2️⃣ Vídeo 60s - {p('video_1_min', 40000)} CLP
+
+🚐 *Transporte*
+1️⃣3️⃣ Ida e volta de Pucón - {p('transporte', 50000)} CLP
+
+🧻 *Toalhas*
+1️⃣4️⃣ Toalha normal - {p('toalla_normal', 9000)} CLP
+1️⃣5️⃣ Toalha poncho - {p('toalla_poncho', 10000)} CLP
+
+🩴 *Outros*
+1️⃣6️⃣ Chinelos de banho - {p('chalas', 10000)} CLP
+1️⃣7️⃣ Reserva FLEX (+10% - cancele/remarque quando quiser)
+
+📝 *Escreva o número do extra que deseja adicionar* 🚤"""
+
+        else:  # es
+            return f"""✨ *Extras HotBoat:*
+
+¿Quieres agregar algo especial a tu HotBoat?
+
+🍇 *Tablas de Picoteo*
+1️⃣ Tabla grande (4 personas) - {p('tabla_4_personas', 25000)}
+2️⃣ Tabla pequeña (2 personas) - {p('tabla_2_personas', 20000)}
+
+🥤 *Bebidas y Jugos* (sin alcohol)
+3️⃣ Jugo natural 1L (piña o naranja) - {p('jugo_natural', 10000)}
+4️⃣ Lata bebida (Coca-Cola o Fanta) - {p('lata_bebida', 2900)}
+5️⃣ Agua mineral 1,5 L - {p('agua_mineral', 2500)}
+6️⃣ Helado individual (Cookies & Cream 🍪 o Frambuesa 🍫) - {p('helado', 3500)}
+
+🌹 *Modo Romántico*
+7️⃣ Pétalos de rosas y decoración especial - {p('modo_romantico', 25000)}
+
+🌙 *Decoración Nocturna Extra*
+8️⃣ Velas LED decorativas - {p('velas_led', 10000)}
+9️⃣ Letras luminosas "Te Amo" / "Love" - {p('letras_luminosas', 15000)}
+🔟 Pack completo (velas + letras) - {p('pack_velas_letras', 20000)}
+
+✨🎥 *Video personalizado*
+1️⃣1️⃣ Video 15s - {p('video_15_seg', 30000)}
+1️⃣2️⃣ Video 60s - {p('video_1_min', 40000)}
+
+🚐 *Transporte*
+1️⃣3️⃣ Ida y vuelta desde Pucón - {p('transporte', 50000)}
+
+🧻 *Toallas*
+1️⃣4️⃣ Toalla normal - {p('toalla_normal', 9000)}
+1️⃣5️⃣ Toalla poncho - {p('toalla_poncho', 10000)}
+
+🩴 *Otros*
+1️⃣6️⃣ Chalas de ducha - {p('chalas', 10000)}
+1️⃣7️⃣ Reserva FLEX (+10% - cancela/reprograma cuando quieras)
+
+📝 *Escribe el número del extra que deseas agregar* 🚤"""
 
     def get_response(self, message: str, language: str = None) -> Optional[str]:
         """
