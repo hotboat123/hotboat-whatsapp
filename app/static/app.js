@@ -1931,7 +1931,7 @@ async function sendQuickReply(menuOption) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ menu_option: menuOption })
+            body: JSON.stringify({ menu_option: menuOption, translate_to: activeTranslateLang || null })
         });
         
         if (!response.ok) {

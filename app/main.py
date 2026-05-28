@@ -835,7 +835,32 @@ async def update_conversation_priority(phone_number: str, update: PriorityUpdate
 
 
 class QuickReplyRequest(BaseModel):
-    menu_option: int  # 1-5 for menu options
+    menu_option: int
+    translate_to: Optional[str] = None  # "en", "pt", "fr" or None
+
+
+def _translate_text(text: str, target_lang: str) -> str:
+    """Translate text using Groq LLM (synchronous helper for quick-reply flow)."""
+    lang_names = {"en": "English", "pt": "Portuguese (Brazilian)", "fr": "French"}
+    lang_name = lang_names.get(target_lang)
+    if not lang_name:
+        return text
+    try:
+        from openai import OpenAI as _OAI
+        client = _OAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1")
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": f"You are a translator. Translate the user's message to {lang_name}. Return ONLY the translated text, no explanations, no quotes."},
+                {"role": "user", "content": text},
+            ],
+            max_tokens=1024,
+            temperature=0.1,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        logger.warning(f"Translation error (falling back to original): {e}")
+        return text
 
 
 @app.post("/api/conversations/{phone_number}/quick-reply")
@@ -860,6 +885,17 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         # Determine response based on menu option
         response_text = ""
         menu_option = request.menu_option
+        tgt_lang = (request.translate_to or "").strip().lower() or None
+
+        async def _send(msg: str) -> None:
+            """Translate (if requested) then send a WhatsApp text message."""
+            out = await asyncio.to_thread(_translate_text, msg, tgt_lang) if tgt_lang else msg
+            await whatsapp_client.send_text_message(to=phone_number, message=out)
+            await save_conversation(phone_number=phone_number, customer_name=customer_name,
+                                    message_text="", response_text=out,
+                                    message_type="text", direction="outgoing")
+            conversation["messages"].append({"role": "assistant", "content": out,
+                                             "timestamp": datetime.now(CHILE_TZ).isoformat()})
 
         if menu_option == 0:
             # Saludo de Tomás — secuencia de 4 mensajes con pequeño delay entre cada uno
@@ -874,28 +910,12 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             for i, msg in enumerate(sequence):
                 if i > 0:
                     await asyncio.sleep(1.5)
-                await whatsapp_client.send_text_message(to=phone_number, message=msg)
-                await save_conversation(
-                    phone_number=phone_number,
-                    customer_name=customer_name,
-                    message_text="",
-                    response_text=msg,
-                    message_type="text",
-                    direction="outgoing"
-                )
-                conversation["messages"].append({
-                    "role": "assistant",
-                    "content": msg,
-                    "timestamp": datetime.now(CHILE_TZ).isoformat()
-                })
+                await _send(msg)
             conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
-            return {
-                "status": "success",
-                "phone_number": phone_number,
-                "menu_option": menu_option,
-                "message_sent": f"Secuencia de {len(sequence)} mensajes enviada",
-                "whatsapp_response": {}
-            }
+            return {"status": "success", "phone_number": phone_number,
+                    "menu_option": menu_option,
+                    "message_sent": f"Secuencia de {len(sequence)} mensajes enviada",
+                    "whatsapp_response": {}}
         elif menu_option == 1:
             # Disponibilidad y horarios
             response_text = conv_manager._ask_for_reservation_date(conversation, language)
@@ -1017,7 +1037,6 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             )
         elif menu_option == 11:
             # Traer comida o pedir aquí — dos mensajes separados
-            import asyncio
             sequence = [
                 "Pueden traer lo que quieran para comer o tomar 🍕🥗",
                 "o pueden pedir aquí 🙂",
@@ -1025,53 +1044,23 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             for i, msg in enumerate(sequence):
                 if i > 0:
                     await asyncio.sleep(1.5)
-                await whatsapp_client.send_text_message(to=phone_number, message=msg)
-                await save_conversation(
-                    phone_number=phone_number,
-                    customer_name=customer_name,
-                    message_text="",
-                    response_text=msg,
-                    message_type="text",
-                    direction="outgoing"
-                )
-                conversation["messages"].append({
-                    "role": "assistant",
-                    "content": msg,
-                    "timestamp": datetime.now(CHILE_TZ).isoformat()
-                })
+                await _send(msg)
             conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
-            return {
-                "status": "success",
-                "phone_number": phone_number,
-                "menu_option": menu_option,
-                "message_sent": "2 mensajes enviados",
-                "whatsapp_response": {}
-            }
+            return {"status": "success", "phone_number": phone_number,
+                    "menu_option": menu_option, "message_sent": "2 mensajes enviados",
+                    "whatsapp_response": {}}
         else:
             raise HTTPException(status_code=400, detail="Invalid menu option")
         
-        # Send message via WhatsApp
-        result = await whatsapp_client.send_text_message(
-            to=phone_number,
-            message=response_text
-        )
-        
-        # Save to database
-        await save_conversation(
-            phone_number=phone_number,
-            customer_name=customer_name,
-            message_text="",  # No incoming message, this is an outgoing response
-            response_text=response_text,
-            message_type="text",
-            direction="outgoing"
-        )
-        
-        # Add to conversation history (in-memory)
-        conversation["messages"].append({
-            "role": "assistant",
-            "content": response_text,
-            "timestamp": datetime.now(CHILE_TZ).isoformat()
-        })
+        # Translate if requested, then send
+        if tgt_lang:
+            response_text = await asyncio.to_thread(_translate_text, response_text, tgt_lang)
+        result = await whatsapp_client.send_text_message(to=phone_number, message=response_text)
+        await save_conversation(phone_number=phone_number, customer_name=customer_name,
+                                message_text="", response_text=response_text,
+                                message_type="text", direction="outgoing")
+        conversation["messages"].append({"role": "assistant", "content": response_text,
+                                         "timestamp": datetime.now(CHILE_TZ).isoformat()})
         
         # Update last interaction
         conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
