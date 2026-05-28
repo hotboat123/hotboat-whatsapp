@@ -477,7 +477,11 @@ async function refreshCurrentConversation() {
         }
         
         if (hadChanges) {
-            renderCurrentChat();
+            const container = document.getElementById('messagesContainer');
+            const isNearBottom = container
+                ? container.scrollHeight - container.scrollTop - container.clientHeight < 120
+                : true;
+            renderCurrentChat({ scrollToBottom: isNearBottom, preserveScroll: !isNearBottom });
         }
     } catch (error) {
         console.log('Auto-refresh failed:', error);
