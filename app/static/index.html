@@ -55,6 +55,13 @@
                             <span><strong>✓ Buscar en todo</strong> (mensajes, nombre, notas del lead)</span>
                         </label>
                     </div>
+                    <div class="priority-filter-row">
+                        <span style="font-size:.7rem;color:var(--text-secondary);white-space:nowrap;">Filtrar:</span>
+                        <button class="pf-btn" id="pfBtn0" onclick="togglePriorityFilter(0)" title="Todas">Todas</button>
+                        <button class="pf-btn pf-1" id="pfBtn1" onclick="togglePriorityFilter(1)" title="Prioridad Alta">🔴 Alta</button>
+                        <button class="pf-btn pf-2" id="pfBtn2" onclick="togglePriorityFilter(2)" title="Prioridad Media">🟡 Media</button>
+                        <button class="pf-btn pf-3" id="pfBtn3" onclick="togglePriorityFilter(3)" title="Prioridad Baja">🟢 Baja</button>
+                    </div>
                 </div>
 
                 <div class="conversations-list" id="conversationsList">
