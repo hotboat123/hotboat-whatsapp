@@ -610,6 +610,17 @@ function renderCurrentChat(options = {}) {
             </div>
         `;
     } else {
+        // Collect the last 10 incoming text message IDs for translation
+        const translatableIds = new Set();
+        if (activeTranslateLang) {
+            const incomingTextMsgs = currentConversation.messages.filter(m => {
+                const dir = m.direction ?? (m.role === 'assistant' ? 'outgoing' : 'incoming');
+                const t = (m.message_type || 'text');
+                return dir === 'incoming' && t !== 'image' && t !== 'audio' && m.id;
+            });
+            incomingTextMsgs.slice(-10).forEach(m => translatableIds.add(m.id));
+        }
+
         const messagesHtml = currentConversation.messages.map(msg => {
             const text = (msg.message_text ?? msg.content ?? '').trim();
             const direction = msg.direction ?? (msg.role === 'assistant' ? 'outgoing' : 'incoming');
@@ -672,7 +683,7 @@ function renderCurrentChat(options = {}) {
                 `;
             } else {
                 let translationHtml = '';
-                if (isIncoming && activeTranslateLang && text) {
+                if (isIncoming && activeTranslateLang && text && translatableIds.has(messageId)) {
                     const cacheKey = `${messageId}_${activeTranslateLang}`;
                     const cached = translationCache[cacheKey];
                     const translatedText = cached && cached !== '⏳' ? '🌐 ' + cached : '⏳ traduciendo...';
