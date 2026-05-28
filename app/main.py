@@ -881,7 +881,7 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         # Get or create conversation with the correct customer name
         conversation = await conv_manager.get_conversation(phone_number, customer_name)
         language = conversation.get("metadata", {}).get("language", "es")
-        
+
         # Determine response based on menu option
         response_text = ""
         menu_option = request.menu_option
@@ -899,7 +899,6 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
 
         if menu_option == 0:
             # Saludo de Tomás — secuencia de 4 mensajes con pequeño delay entre cada uno
-            import asyncio
             first_name = customer_name.split()[0] if customer_name else customer_name
             sequence = [
                 f"Hola {first_name}! 👋",
@@ -934,7 +933,6 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             response_text = faq_handler.get_response("ubicación", language)
         elif menu_option == 6:
             # Alojamientos — equivale al flujo menú 6
-            import asyncio
             from app.utils.media_handler import get_alojamientos_images
             text_intro = get_text("accommodations_only_intro", language)
             await whatsapp_client.send_text_message(to=phone_number, message=text_intro)
@@ -975,7 +973,7 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             }
         elif menu_option == 8:
             # Packs Completos — equivale al flujo menú 7 → 1
-            import asyncio, os
+            import os
             from app.utils.media_handler import PACKS_IMAGES_DIR
             pack_text = get_text("complete_packages_menu", language)
             resumen_path = os.path.join(PACKS_IMAGES_DIR, "resumen-packs.jpg")
