@@ -686,9 +686,11 @@ function renderCurrentChat(options = {}) {
                 if (isIncoming && activeTranslateLang && text && translatableIds.has(messageId)) {
                     const cacheKey = `${messageId}_${activeTranslateLang}`;
                     const cached = translationCache[cacheKey];
-                    const translatedText = cached && cached !== '⏳' ? '🌐 ' + cached : '⏳ traduciendo...';
-                    translationHtml = `<div class="incoming-translation" data-msg-id="${messageId}" style="margin-top:4px;font-size:0.78rem;color:#94a3b8;border-top:1px solid rgba(255,255,255,0.08);padding-top:4px;font-style:italic;">${escapeHtml(translatedText)}</div>`;
-                    if (!cached) translateIncomingMessage(messageId, text);
+                    if (cached !== 'ERROR') {
+                        const translatedText = cached && cached !== '⏳' ? '🌐 ' + cached : '⏳ traduciendo...';
+                        translationHtml = `<div class="incoming-translation" data-msg-id="${messageId}" style="margin-top:4px;font-size:0.78rem;color:#94a3b8;border-top:1px solid rgba(255,255,255,0.08);padding-top:4px;font-style:italic;">${escapeHtml(translatedText)}</div>`;
+                        if (!cached) translateIncomingMessage(messageId, text);
+                    }
                 }
                 messageHtml = `
                     <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
@@ -959,19 +961,17 @@ async function translateText(text, targetLang) {
 async function translateIncomingMessage(msgId, text) {
     if (!msgId || !text || !activeTranslateLang) return;
     const cacheKey = `${msgId}_${activeTranslateLang}`;
-    if (translationCache[cacheKey]) return; // already done
+    if (translationCache[cacheKey] && translationCache[cacheKey] !== 'ERROR') return;
     translationCache[cacheKey] = '⏳'; // placeholder
-    // Update the placeholder immediately
-    const el = document.querySelector(`.incoming-translation[data-msg-id="${msgId}"]`);
-    if (el) el.textContent = '⏳ traduciendo...';
     try {
         const translated = await translateText(text, 'es');
         translationCache[cacheKey] = translated;
-        // Update in DOM directly without full re-render
         const els = document.querySelectorAll(`.incoming-translation[data-msg-id="${msgId}"]`);
         els.forEach(e => { e.textContent = '🌐 ' + translated; });
     } catch (e) {
-        translationCache[cacheKey] = null; // mark as failed so we don't retry forever
+        translationCache[cacheKey] = 'ERROR'; // truthy → won't retry on next render
+        const els = document.querySelectorAll(`.incoming-translation[data-msg-id="${msgId}"]`);
+        els.forEach(e => { e.textContent = ''; });
     }
 }
 

@@ -841,7 +841,7 @@ class QuickReplyRequest(BaseModel):
 
 def _translate_text(text: str, target_lang: str) -> str:
     """Translate text using Groq LLM (synchronous helper for quick-reply flow)."""
-    lang_names = {"en": "English", "pt": "Portuguese (Brazilian)", "fr": "French"}
+    lang_names = {"en": "English", "pt": "Portuguese (Brazilian)", "fr": "French", "es": "Spanish"}
     lang_name = lang_names.get(target_lang)
     if not lang_name:
         return text
@@ -1409,27 +1409,17 @@ class TranslateRequest(BaseModel):
 @app.post("/api/translate")
 async def translate_message(request: TranslateRequest):
     """Translate text using Groq LLM."""
-    lang_names = {"en": "English", "pt": "Portuguese (Brazilian)", "fr": "French"}
+    lang_names = {
+        "en": "English",
+        "pt": "Portuguese (Brazilian)",
+        "fr": "French",
+        "es": "Spanish",
+    }
     lang_name = lang_names.get(request.target_lang)
     if not lang_name:
-        raise HTTPException(status_code=400, detail="target_lang must be en, pt or fr")
-    try:
-        from openai import OpenAI as _OAI
-        client = _OAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1")
-        resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": f"You are a translator. Translate the user's message to {lang_name}. Return ONLY the translated text, no explanations, no quotes."},
-                {"role": "user", "content": request.text},
-            ],
-            max_tokens=1024,
-            temperature=0.1,
-        )
-        translated = resp.choices[0].message.content.strip()
-        return {"translated": translated, "target_lang": request.target_lang}
-    except Exception as e:
-        logger.error(f"Translation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail="target_lang must be en, pt, fr or es")
+    translated = await asyncio.to_thread(_translate_text, request.text, request.target_lang)
+    return {"translated": translated, "target_lang": request.target_lang}
 
 
 class SendMessageRequest(BaseModel):
