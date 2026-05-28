@@ -1345,3 +1345,42 @@ audio::-webkit-media-controls-volume-slider {
     background: rgba(167, 139, 250, 0.15);
     box-shadow: 0 0 0 1px #a78bfa44;
 }
+
+/* Priority filter row */
+.priority-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px 6px;
+    flex-wrap: nowrap;
+}
+
+.pf-btn {
+    padding: 2px 7px;
+    font-size: 0.65rem;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.pf-btn:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-primary);
+}
+
+.pf-btn.active {
+    color: #fff;
+    border-color: transparent;
+}
+
+.pf-btn:first-of-type.active {
+    background: var(--text-secondary);
+}
+
+.pf-1.active { background: #dc3545; border-color: #dc3545; }
+.pf-2.active { background: #c48c00; border-color: #c48c00; }
+.pf-3.active { background: #28a745; border-color: #28a745; }

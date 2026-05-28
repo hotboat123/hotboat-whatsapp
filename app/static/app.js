@@ -328,12 +328,16 @@ function renderConversations() {
     const container = document.getElementById('conversationsList');
     if (!container) return;
 
-    if (conversations.length === 0) {
+    const displayConvs = activePriorityFilter === 0
+        ? conversations
+        : conversations.filter(c => (c.priority || 0) === activePriorityFilter);
+
+    if (displayConvs.length === 0) {
         container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No conversations yet</div>';
         return;
     }
 
-    container.innerHTML = conversations.map(conv => {
+    container.innerHTML = displayConvs.map(conv => {
         const unreadCount = conv.unread_count || 0;
         const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
         
@@ -2038,9 +2042,13 @@ async function sendReaction(messageId, emoji) {
 document.addEventListener('DOMContentLoaded', () => {
     attachReactionListeners();
     console.log('✅ Reaction listeners attached');
-    
+
     // Initialize search
     initializeSearch();
+
+    // Mark "Todas" as active by default
+    const btn0 = document.getElementById('pfBtn0');
+    if (btn0) btn0.classList.add('active');
 });
 
 // ==================== SEARCH FUNCTIONALITY ====================
@@ -2048,6 +2056,16 @@ document.addEventListener('DOMContentLoaded', () => {
 let allConversations = []; // Store all conversations for search
 let searchCache = new Map(); // Cache for message searches
 let filterDebounceTimer = null;
+let activePriorityFilter = 0; // 0=all, 1=alta, 2=media, 3=baja
+
+function togglePriorityFilter(p) {
+    activePriorityFilter = (activePriorityFilter === p) ? 0 : p;
+    [0, 1, 2, 3].forEach(i => {
+        const btn = document.getElementById(`pfBtn${i}`);
+        if (btn) btn.classList.toggle('active', i === activePriorityFilter);
+    });
+    renderConversations();
+}
 
 // Debounced filter - prevents excessive API calls while typing
 function debouncedFilterConversations() {
