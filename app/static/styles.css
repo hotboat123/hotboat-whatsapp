@@ -1289,6 +1289,13 @@ audio::-webkit-media-controls-volume-slider {
     padding-top: 0.3rem;
 }
 
+.quick-reply-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    flex: 1;
+}
+
 .quick-reply-buttons {
     display: flex;
     flex-wrap: wrap;

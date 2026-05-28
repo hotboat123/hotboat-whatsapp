@@ -1047,6 +1047,35 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             return {"status": "success", "phone_number": phone_number,
                     "menu_option": menu_option, "message_sent": "2 mensajes enviados",
                     "whatsapp_response": {}}
+        elif menu_option == 12:
+            # Lluvia — secuencia 3 mensajes
+            sequence = [
+                "Con lluvia la experiencia es aún mejor ☔🔥",
+                "¡El HotBoat es una tina de agua caliente! La lluvia se siente increíble desde adentro 🌧️🛁",
+                "Te pasamos sombreros para que no te llegue el agua en la cara todo el tiempo 🎩😄",
+            ]
+            for i, msg in enumerate(sequence):
+                if i > 0:
+                    await asyncio.sleep(1.5)
+                await _send(msg)
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {"status": "success", "phone_number": phone_number,
+                    "menu_option": menu_option, "message_sent": "3 mensajes enviados",
+                    "whatsapp_response": {}}
+        elif menu_option == 13:
+            # Niños — secuencia 2 mensajes
+            sequence = [
+                "Sí!, los niños lo pasan increíble 🎉",
+                "Pagan desde los 6 años, a los menores no los consideres en el número de personas de la reserva 👍",
+            ]
+            for i, msg in enumerate(sequence):
+                if i > 0:
+                    await asyncio.sleep(1.5)
+                await _send(msg)
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {"status": "success", "phone_number": phone_number,
+                    "menu_option": menu_option, "message_sent": "2 mensajes enviados",
+                    "whatsapp_response": {}}
         else:
             raise HTTPException(status_code=400, detail="Invalid menu option")
         
