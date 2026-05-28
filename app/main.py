@@ -357,6 +357,28 @@ async def _run_yesterday_weekly_scheduler():
         await asyncio.sleep(60)
 
 
+def _ensure_web_push_table():
+    """Create web_push_subscriptions table if it doesn't exist."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+                        id           SERIAL PRIMARY KEY,
+                        endpoint     TEXT UNIQUE NOT NULL,
+                        p256dh       TEXT NOT NULL,
+                        auth         TEXT NOT NULL,
+                        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                conn.commit()
+        logger.info("✅ web_push_subscriptions table ready")
+    except Exception as e:
+        logger.warning(f"web_push_subscriptions table setup failed: {e}")
+
+
 def _ensure_extras_visibility_table():
     """Create extras_visibility table if it doesn't exist (survives Sheets re-sync)."""
     try:
@@ -394,6 +416,7 @@ def _ensure_extras_visibility_table():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
+    _ensure_web_push_table()
     _ensure_extras_visibility_table()
     try:
         from app.bot.cart import CartManager
@@ -587,6 +610,57 @@ async def pago_order_proxy(order_id: int):
     except Exception as e:
         logger.warning(f"pago_order_proxy error for order {order_id}: {e}")
         return {}
+
+
+@app.get("/sw.js")
+async def serve_service_worker():
+    """Serve service worker at root scope for full-app push notification support."""
+    from fastapi.responses import FileResponse
+    sw_path = os.path.join(os.path.dirname(__file__), "static", "sw.js")
+    return FileResponse(sw_path, media_type="application/javascript", headers={
+        "Service-Worker-Allowed": "/",
+        "Cache-Control": "no-cache",
+    })
+
+
+@app.get("/manifest.json")
+async def serve_manifest():
+    """Serve PWA manifest at root."""
+    from fastapi.responses import FileResponse
+    manifest_path = os.path.join(os.path.dirname(__file__), "static", "manifest.json")
+    return FileResponse(manifest_path, media_type="application/manifest+json")
+
+
+class PushSubscribeRequest(BaseModel):
+    endpoint: str
+    keys: dict  # { p256dh: str, auth: str }
+
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(request: PushSubscribeRequest):
+    """Register a Web Push subscription."""
+    from app.notifications import push_notifier
+    ok = await push_notifier.register_subscription(
+        endpoint=request.endpoint,
+        p256dh=request.keys.get("p256dh", ""),
+        auth=request.keys.get("auth", ""),
+    )
+    return {"status": "ok" if ok else "error"}
+
+
+@app.delete("/api/push/subscribe")
+async def push_unsubscribe(request: Request):
+    """Remove a Web Push subscription."""
+    from app.notifications import push_notifier
+    data = await request.json()
+    ok = await push_notifier.unregister_subscription(data.get("endpoint", ""))
+    return {"status": "ok" if ok else "error"}
+
+
+@app.get("/api/push/vapid-public-key")
+async def get_vapid_public_key():
+    """Return the VAPID public key so the frontend can subscribe."""
+    return {"publicKey": settings.vapid_public_key or ""}
 
 
 @app.get("/health")

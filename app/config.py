@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     email_password: str = ""
     email_use_tls: str = ""
     email_use_ssl: str = ""
+
+    # Web Push (PWA notifications) — generate with: openssl ecparam -name prime256v1 -genkey
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
     
     # Server
     port: int = 8000

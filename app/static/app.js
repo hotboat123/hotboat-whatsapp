@@ -197,7 +197,93 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(loadConversations, 10000); // Refresh every 10 seconds
     setInterval(refreshCurrentConversation, 5000); // Refresh current chat every 5 seconds
     setupResponsiveLayout();
+    initPWA();
 });
+
+// ── PWA / Web Push ────────────────────────────────────────────────────────────
+
+async function initPWA() {
+    if (!('serviceWorker' in navigator)) return;
+
+    try {
+        const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        console.log('✅ Service Worker registered');
+
+        // Listen for SW → open chat messages
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data?.type === 'OPEN_CHAT' && event.data.phone) {
+                selectConversation(event.data.phone);
+            }
+        });
+
+        // Auto-open conversation if app was opened from a notification
+        const urlParams = new URLSearchParams(window.location.search);
+        const phoneParam = urlParams.get('phone');
+        if (phoneParam) {
+            // Wait for conversations to load, then select
+            const trySelect = setInterval(() => {
+                if (conversations.length > 0) {
+                    clearInterval(trySelect);
+                    selectConversation(phoneParam);
+                }
+            }, 300);
+            setTimeout(() => clearInterval(trySelect), 5000);
+        }
+
+        // Request push permission and subscribe
+        await setupPushSubscription(reg);
+    } catch (err) {
+        console.warn('Service Worker registration failed:', err);
+    }
+}
+
+async function setupPushSubscription(reg) {
+    if (!('PushManager' in window)) return;
+    if (Notification.permission === 'denied') return;
+
+    try {
+        // Get VAPID public key from server
+        const resp = await fetch('/api/push/vapid-public-key');
+        const { publicKey } = await resp.json();
+        if (!publicKey) return;
+
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) {
+            // Already subscribed — just make sure server knows
+            await savePushSubscription(existing);
+            return;
+        }
+
+        // Ask permission & subscribe
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
+
+        const subscription = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: _urlBase64ToUint8Array(publicKey),
+        });
+        await savePushSubscription(subscription);
+        console.log('✅ Push notifications subscribed');
+    } catch (err) {
+        console.warn('Push subscription failed:', err);
+    }
+}
+
+async function savePushSubscription(subscription) {
+    const json = subscription.toJSON();
+    await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+    });
+}
+
+function _urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
 
 // Event Listeners
 function setupEventListeners() {

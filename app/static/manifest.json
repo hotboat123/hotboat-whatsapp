@@ -1,0 +1,24 @@
+{
+  "name": "Kia-Ai WhatsApp",
+  "short_name": "Kia-Ai",
+  "description": "Gestión de mensajes WhatsApp de HotBoat",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1e293b",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://hotboatchile.com/wp-content/uploads/cropped-Screenshot_3-192x192.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://hotboatchile.com/wp-content/uploads/cropped-Screenshot_3-192x192.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

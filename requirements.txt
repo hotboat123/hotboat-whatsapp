@@ -30,6 +30,9 @@ resend>=0.8.0
 # Booking Platform - Payment
 mercadopago>=2.2.0
 
+# Web Push notifications (PWA)
+pywebpush>=2.0.0
+
 
 
 
