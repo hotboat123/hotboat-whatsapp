@@ -663,9 +663,17 @@ function renderCurrentChat(options = {}) {
                     </div>
                 `;
             } else {
+                let translationHtml = '';
+                if (isIncoming && activeTranslateLang && text) {
+                    const cacheKey = `${messageId}_${activeTranslateLang}`;
+                    const cached = translationCache[cacheKey];
+                    const translatedText = cached && cached !== '⏳' ? '🌐 ' + cached : '⏳ traduciendo...';
+                    translationHtml = `<div class="incoming-translation" data-msg-id="${messageId}" style="margin-top:4px;font-size:0.78rem;color:#94a3b8;border-top:1px solid rgba(255,255,255,0.08);padding-top:4px;font-style:italic;">${escapeHtml(translatedText)}</div>`;
+                    if (!cached) translateIncomingMessage(messageId, text);
+                }
                 messageHtml = `
                     <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
-                        <div class="message-text">${sanitized || '&nbsp;'}</div>
+                        <div class="message-text">${sanitized || '&nbsp;'}${translationHtml}</div>
                         <div class="message-time">${formatTime(msg.timestamp)}</div>
                     </div>
                 `;
@@ -893,6 +901,7 @@ function updateBotToggleUI(enabled) {
 
 // ── Translation language selector ──────────────────────────────────────────
 let activeTranslateLang = null;
+const translationCache = {}; // { messageId: translatedText }
 
 function toggleTranslateLang(lang) {
     if (activeTranslateLang === lang) {
@@ -904,6 +913,8 @@ function toggleTranslateLang(lang) {
         const btn = document.getElementById(`translateBtn${l}`);
         if (btn) btn.classList.toggle('active', activeTranslateLang === l.toLowerCase());
     });
+    // Re-render chat to show/hide translations
+    renderCurrentChat({ scrollToBottom: false, preserveScroll: true });
 }
 
 async function translateText(text, targetLang) {
@@ -915,6 +926,25 @@ async function translateText(text, targetLang) {
     if (!resp.ok) throw new Error('Translation failed');
     const data = await resp.json();
     return data.translated;
+}
+
+async function translateIncomingMessage(msgId, text) {
+    if (!msgId || !text || !activeTranslateLang) return;
+    const cacheKey = `${msgId}_${activeTranslateLang}`;
+    if (translationCache[cacheKey]) return; // already done
+    translationCache[cacheKey] = '⏳'; // placeholder
+    // Update the placeholder immediately
+    const el = document.querySelector(`.incoming-translation[data-msg-id="${msgId}"]`);
+    if (el) el.textContent = '⏳ traduciendo...';
+    try {
+        const translated = await translateText(text, 'es');
+        translationCache[cacheKey] = translated;
+        // Update in DOM directly without full re-render
+        const els = document.querySelectorAll(`.incoming-translation[data-msg-id="${msgId}"]`);
+        els.forEach(e => { e.textContent = '🌐 ' + translated; });
+    } catch (e) {
+        translationCache[cacheKey] = null; // mark as failed so we don't retry forever
+    }
 }
 
 // Send Message (Reply in Conversation)
