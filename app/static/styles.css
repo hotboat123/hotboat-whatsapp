@@ -1188,6 +1188,14 @@ audio::-webkit-media-controls-volume-slider {
 }
 
 /* Priority Section in Message Input */
+.priority-translate-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.4rem;
+}
+
 .priority-section {
     display: flex;
     align-items: center;
