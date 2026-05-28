@@ -891,13 +891,39 @@ function updateBotToggleUI(enabled) {
     }
 }
 
+// ── Translation language selector ──────────────────────────────────────────
+let activeTranslateLang = null;
+
+function toggleTranslateLang(lang) {
+    if (activeTranslateLang === lang) {
+        activeTranslateLang = null;
+    } else {
+        activeTranslateLang = lang;
+    }
+    ['EN','PT','FR'].forEach(l => {
+        const btn = document.getElementById(`translateBtn${l}`);
+        if (btn) btn.classList.toggle('active', activeTranslateLang === l.toLowerCase());
+    });
+}
+
+async function translateText(text, targetLang) {
+    const resp = await fetch('/api/translate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text, target_lang: targetLang})
+    });
+    if (!resp.ok) throw new Error('Translation failed');
+    const data = await resp.json();
+    return data.translated;
+}
+
 // Send Message (Reply in Conversation)
 async function sendMessage(event) {
     event.preventDefault();
-    
+
     const input = document.getElementById('messageInput');
-    const message = input.value.trim();
-    
+    let message = input.value.trim();
+
     // Check if user recorded an audio
     if (recordedAudioBlob) {
         await sendAudioFromRecording();
@@ -911,7 +937,20 @@ async function sendMessage(event) {
     }
     
     if (!message || !currentConversation) return;
-    
+
+    // Translate if a language is selected
+    if (activeTranslateLang) {
+        try {
+            const sendBtn = document.querySelector('#messageForm button[type="submit"]');
+            if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = '⏳'; }
+            message = await translateText(message, activeTranslateLang);
+            if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+        } catch(e) {
+            console.error('Translation error:', e);
+            // Proceed with original message if translation fails
+        }
+    }
+
     try {
         const payload = {
             to: currentConversation.phone_number,

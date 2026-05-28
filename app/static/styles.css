@@ -1284,3 +1284,37 @@ audio::-webkit-media-controls-volume-slider {
     transform: translateY(0);
     box-shadow: 0 1px 3px rgba(33, 150, 243, 0.3);
 }
+
+.translate-section {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.translate-buttons {
+    display: flex;
+    gap: 0.2rem;
+}
+
+.translate-btn {
+    padding: 0.2rem 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-light);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+    opacity: 0.5;
+}
+
+.translate-btn:hover {
+    opacity: 0.85;
+    border-color: #a78bfa;
+}
+
+.translate-btn.active {
+    opacity: 1;
+    border-color: #a78bfa;
+    background: rgba(167, 139, 250, 0.15);
+    box-shadow: 0 0 0 1px #a78bfa44;
+}
