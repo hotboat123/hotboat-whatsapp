@@ -866,9 +866,9 @@ body {
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    font-size: 1.2rem;
+    width: 28px;
+    height: 28px;
+    font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
@@ -885,6 +885,33 @@ body {
 
 .btn-attachment:active {
     transform: scale(0.95);
+}
+
+.btn-collapse-input {
+    background: var(--bg-light);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.btn-collapse-input:hover {
+    background: var(--bg-medium);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+.message-input-area.collapsed #messageForm {
+    display: none;
+}
+.message-input-area.collapsed {
+    padding: 0.25rem 0.9rem;
 }
 
 .btn-microphone.recording {

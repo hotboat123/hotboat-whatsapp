@@ -903,6 +903,15 @@ function updateBotToggleUI(enabled) {
     }
 }
 
+// ── Collapse input panel ───────────────────────────────────────────────────
+function toggleInputCollapse() {
+    const area = document.getElementById('messageInputArea');
+    const btn  = document.getElementById('collapseInputBtn');
+    if (!area) return;
+    const collapsed = area.classList.toggle('collapsed');
+    if (btn) btn.textContent = collapsed ? '▲' : '▼';
+}
+
 // ── Translation language selector ──────────────────────────────────────────
 let activeTranslateLang = null;
 const translationCache = {}; // { messageId: translatedText }

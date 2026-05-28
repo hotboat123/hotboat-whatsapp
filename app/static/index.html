@@ -89,6 +89,9 @@
                 </div>
 
                 <div class="message-input-area" id="messageInputArea" style="display: none;">
+                    <div style="display:flex;justify-content:flex-end;padding:0.15rem 0 0.1rem;">
+                        <button type="button" class="btn-collapse-input" id="collapseInputBtn" onclick="toggleInputCollapse()" title="Ocultar / mostrar panel de escritura">▼</button>
+                    </div>
                     <form onsubmit="sendMessage(event)" id="messageForm">
                         <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
                             <button type="button" class="btn-attachment" onclick="document.getElementById('imageFileInput').click()" title="Adjuntar imagen">
