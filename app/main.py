@@ -718,6 +718,39 @@ async def get_vapid_public_key():
     return {"publicKey": settings.vapid_public_key or ""}
 
 
+@app.get("/api/push/debug")
+async def push_debug():
+    """Diagnose Web Push configuration."""
+    # Check pywebpush
+    try:
+        import pywebpush  # noqa
+        pw_ok = True
+        pw_version = getattr(pywebpush, "__version__", "installed")
+    except ImportError as e:
+        pw_ok = False
+        pw_version = str(e)
+
+    # Check subscriptions
+    try:
+        from app.notifications import push_notifier as _pn
+        subs = await _pn._get_subscriptions()
+        sub_count = len(subs)
+        sub_sample = subs[0]["endpoint"][:60] + "..." if subs else None
+    except Exception as e:
+        sub_count = -1
+        sub_sample = str(e)
+
+    return {
+        "vapid_private_key_set": bool(settings.vapid_private_key),
+        "vapid_public_key_set": bool(settings.vapid_public_key),
+        "pywebpush_installed": pw_ok,
+        "pywebpush_version": pw_version,
+        "subscriptions_count": sub_count,
+        "subscription_endpoint_sample": sub_sample,
+        "notifier_enabled": bool(settings.vapid_private_key),
+    }
+
+
 @app.get("/health")
 async def health():
     """Detailed health check"""

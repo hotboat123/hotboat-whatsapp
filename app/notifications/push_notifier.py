@@ -21,6 +21,10 @@ def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_ke
     """Blocking Web Push send — run inside asyncio.to_thread."""
     try:
         from pywebpush import webpush, WebPushException
+    except ImportError:
+        logger.error("pywebpush not installed — cannot send Web Push. Add pywebpush>=2.0.0 to requirements.txt")
+        return False
+    try:
         webpush(
             subscription_info=subscription_info,
             data=json.dumps(payload),
@@ -29,7 +33,8 @@ def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_ke
         )
         return True
     except Exception as exc:
-        logger.warning("Web Push send failed: %s", exc)
+        logger.warning("Web Push send failed (endpoint: %s...): %s",
+                       subscription_info.get("endpoint", "")[:40], exc)
         return False
 
 
