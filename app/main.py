@@ -612,9 +612,15 @@ async def pago_order_proxy(order_id: int):
         return {}
 
 
+@app.get("/")
+async def root_redirect():
+    """Redirect root to chat interface."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/chat", status_code=302)
+
+
 @app.get("/sw.js")
-async def serve_service_worker():
-    """Serve service worker at root scope for full-app push notification support."""
+async def serve_service_worker():    """Serve service worker at root scope for full-app push notification support."""
     from fastapi.responses import FileResponse
     sw_path = os.path.join(os.path.dirname(__file__), "static", "sw.js")
     return FileResponse(sw_path, media_type="application/javascript", headers={
