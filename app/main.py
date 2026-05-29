@@ -15,6 +15,7 @@ from app.booking.content_router import content_router
 from app.booking.signatures_router import signatures_router
 from app.booking.stock_router import stock_router
 from app.booking.financial_router import financial_router
+from app.booking.bot_config_router import bot_config_router, _ensure_tables as _ensure_bot_tables, seed_defaults as seed_bot_defaults
 from app.meta_pixel import apply_meta_pixel_placeholder, is_meta_pixel_enabled
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
@@ -481,6 +482,11 @@ async def lifespan(app: FastAPI):
         ensure_signatures_table()
     except Exception as _e:
         logger.warning(f"ensure_signatures_table skipped: {_e}")
+    try:
+        _ensure_bot_tables()
+        seed_bot_defaults()
+    except Exception as _e:
+        logger.warning(f"bot config setup skipped: {_e}")
 
     sync_task       = asyncio.create_task(_run_auto_sync())
     email_task      = asyncio.create_task(_run_email_sweeps_scheduler())
@@ -547,6 +553,7 @@ app.include_router(content_router)
 app.include_router(signatures_router)
 app.include_router(stock_router)
 app.include_router(financial_router)
+app.include_router(bot_config_router)
 
 
 def _serve_chat_html() -> HTMLResponse:
@@ -1025,6 +1032,22 @@ async def update_conversation_priority(phone_number: str, update: PriorityUpdate
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _get_bot_response_content(response_key: str, lang: str = "es") -> Optional[str]:
+    """Return bot response content from DB for the given key and language, or None if not set."""
+    try:
+        from app.db.connection import get_connection
+        col = {"es": "content_es", "en": "content_en", "pt": "content_pt"}.get(lang, "content_es")
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT {col}, content_es FROM bot_responses WHERE response_key = %s", (response_key,))
+                row = cur.fetchone()
+        if row:
+            return row[0] or row[1]  # fallback to es if requested lang is empty
+    except Exception:
+        pass
+    return None
+
+
 class QuickReplyRequest(BaseModel):
     menu_option: int
     translate_to: Optional[str] = None  # "en", "pt", "fr" or None
@@ -1210,7 +1233,7 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             }
         elif menu_option == 10:
             # Bebestibles — opciones para celebrar (solo adultos)
-            response_text = (
+            response_text = _get_bot_response_content("bebestibles", language) or (
                 "🍷 *Opciones para celebrar* (solo adultos)\n\n"
                 "$6.000 → Cerveza artesanal 330ml\n"
                 "$15.000 → Vino reserva\n"
@@ -1225,8 +1248,9 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 "¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
             )
         elif menu_option == 11:
-            # Traer comida o pedir aquí — dos mensajes separados
-            sequence = [
+            # Traer comida o pedir aquí
+            _db_comida = _get_bot_response_content("comida", language)
+            sequence = [p.strip() for p in _db_comida.split("\n---\n")] if _db_comida else [
                 "Pueden traer lo que quieran para comer o tomar 🍕🥗",
                 "o pueden pedir aquí 🙂",
             ]
@@ -1236,11 +1260,12 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 await _send(msg)
             conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
             return {"status": "success", "phone_number": phone_number,
-                    "menu_option": menu_option, "message_sent": "2 mensajes enviados",
+                    "menu_option": menu_option, "message_sent": f"{len(sequence)} mensajes enviados",
                     "whatsapp_response": {}}
         elif menu_option == 12:
-            # Lluvia — secuencia 3 mensajes
-            sequence = [
+            # Lluvia
+            _db_lluvia = _get_bot_response_content("lluvia", language)
+            sequence = [p.strip() for p in _db_lluvia.split("\n---\n")] if _db_lluvia else [
                 "Con lluvia la experiencia es aún mejor ☔🔥",
                 "¡El HotBoat es una tina de agua caliente! La lluvia se siente increíble desde adentro 🌧️🛁",
                 "Te pasamos sombreros para que no te llegue el agua en la cara todo el tiempo 🎩😄",
@@ -1251,11 +1276,12 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 await _send(msg)
             conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
             return {"status": "success", "phone_number": phone_number,
-                    "menu_option": menu_option, "message_sent": "3 mensajes enviados",
+                    "menu_option": menu_option, "message_sent": f"{len(sequence)} mensajes enviados",
                     "whatsapp_response": {}}
         elif menu_option == 13:
-            # Niños — secuencia 2 mensajes
-            sequence = [
+            # Niños
+            _db_ninos = _get_bot_response_content("niños", language)
+            sequence = [p.strip() for p in _db_ninos.split("\n---\n")] if _db_ninos else [
                 "Sí!, los niños lo pasan increíble 🎉",
                 "Pagan desde los 6 años, a los menores no los consideres en el número de personas de la reserva 👍",
             ]
@@ -1265,7 +1291,7 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 await _send(msg)
             conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
             return {"status": "success", "phone_number": phone_number,
-                    "menu_option": menu_option, "message_sent": "2 mensajes enviados",
+                    "menu_option": menu_option, "message_sent": f"{len(sequence)} mensajes enviados",
                     "whatsapp_response": {}}
         else:
             raise HTTPException(status_code=400, detail="Invalid menu option")

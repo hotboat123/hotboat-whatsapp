@@ -389,6 +389,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('logs')" id="nav-logs">
       <span class="ni">🔍</span> Logs
     </div>
+    <div class="nav-item" onclick="showSection('chatbot')" id="nav-chatbot">
+      <span class="ni">🤖</span> Chatbot
+    </div>
     <div class="nav-item" onclick="showSection('settings')" id="nav-settings">
       <span class="ni">⚙️</span> Configuracion
     </div>
@@ -1531,6 +1534,51 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div><!-- /section-financial -->
 
     <!-- ══ LOGS SECTION ══════════════════════════════════════════════════════ -->
+    <!-- ── Chatbot Admin ─────────────────────────────────────────── -->
+    <div id="section-chatbot" class="section">
+      <div style="display:grid;gap:1.2rem">
+
+        <!-- Responses card -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+          <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem">
+            <span style="font-weight:600;font-size:.95rem">💬 Mensajes del chatbot</span>
+            <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Usa <code>---</code> en una línea sola para separar en múltiples mensajes de WhatsApp</span>
+            <button onclick="loadBotResponses()" style="margin-left:auto;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
+          </div>
+          <div id="bot-responses-list" style="padding:.8rem 1.2rem;display:flex;flex-direction:column;gap:.8rem"></div>
+        </div>
+
+        <!-- Keywords card -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+          <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem">
+            <span style="font-weight:600;font-size:.95rem">🔑 Keywords del chatbot</span>
+            <button onclick="loadBotKeywords()" style="margin-left:auto;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
+          </div>
+          <div style="padding:.8rem 1.2rem">
+            <!-- Add new keyword form -->
+            <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
+              <input id="new-kw-word" type="text" placeholder="Keyword (ej: cuanto vale)" style="flex:1;min-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.38rem .7rem;font-size:.83rem;outline:none">
+              <select id="new-kw-key" style="flex:1;min-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.38rem .7rem;font-size:.83rem;outline:none">
+                <option value="">— Respuesta —</option>
+              </select>
+              <button onclick="addBotKeyword()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.38rem .9rem;font-size:.83rem;cursor:pointer;font-weight:600">Agregar</button>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:.83rem" id="bot-kw-table">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:.4rem .6rem;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)">Keyword</th>
+                  <th style="text-align:left;padding:.4rem .6rem;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)">Respuesta</th>
+                  <th style="width:40px;border-bottom:1px solid var(--border)"></th>
+                </tr>
+              </thead>
+              <tbody id="bot-kw-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /section-chatbot -->
+
     <div id="section-logs" class="section">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
         <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
@@ -1666,7 +1714,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',logs:'Logs del servidor'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',logs:'Logs del servidor',chatbot:'Chatbot'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
@@ -1680,6 +1728,7 @@ function showSection(name){
   if(name==='packs-admin') loadPacksAdmin();
   if(name==='cal-extras') loadCalExtras();
   if(name==='financial') initFinancialSection();
+  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); }
   if(name==='logs') initLogsSection();
   else clearInterval(_logAutoRefresh);
 }
@@ -7724,6 +7773,131 @@ function initLogsSection(){
   loadLogs();
   clearInterval(_logAutoRefresh);
   _logAutoRefresh = setInterval(loadLogs, 15000);
+}
+
+// ── Chatbot Admin ─────────────────────────────────────────────────────────────
+
+let _botResponses = [];
+
+async function loadBotResponses(){
+  const el = document.getElementById('bot-responses-list');
+  el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Cargando…</span>';
+  try {
+    const r = await fetch('/api/admin/bot/responses');
+    const d = await r.json();
+    _botResponses = d.responses || [];
+    // Populate keyword response select
+    const sel = document.getElementById('new-kw-key');
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">— Respuesta —</option>' +
+      _botResponses.map(rs=>`<option value="${rs.response_key}">${rs.label||rs.response_key}</option>`).join('');
+    if(prev) sel.value = prev;
+    // Render response editors
+    el.innerHTML = '';
+    if(!_botResponses.length){ el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Sin respuestas configuradas.</span>'; return; }
+    _botResponses.forEach(rs => {
+      const div = document.createElement('div');
+      div.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;display:flex;flex-direction:column;gap:.4rem';
+      div.innerHTML = `
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <span style="font-weight:600;font-size:.85rem">${rs.label||rs.response_key}</span>
+          <code style="font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.06);padding:.1rem .4rem;border-radius:4px">${rs.response_key}</code>
+          <span style="margin-left:auto;font-size:.7rem;color:var(--muted)">${rs.updated_at ? new Date(rs.updated_at).toLocaleDateString('es-CL') : ''}</span>
+        </div>
+        <textarea id="br-es-${rs.response_key}" rows="3" placeholder="Español…"
+          style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.8rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_es||'')}</textarea>
+        <div style="display:flex;gap:.4rem">
+          <textarea id="br-en-${rs.response_key}" rows="2" placeholder="English…"
+            style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_en||'')}</textarea>
+          <textarea id="br-pt-${rs.response_key}" rows="2" placeholder="Português…"
+            style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_pt||'')}</textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end">
+          <button onclick="saveBotResponse('${rs.response_key}')"
+            style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.3rem .8rem;font-size:.8rem;cursor:pointer;font-weight:600">Guardar</button>
+        </div>`;
+      el.appendChild(div);
+    });
+  } catch(e){
+    el.innerHTML = `<span style="color:var(--red);font-size:.83rem">Error: ${e.message}</span>`;
+  }
+}
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function saveBotResponse(key){
+  const content_es = document.getElementById(`br-es-${key}`)?.value ?? null;
+  const content_en = document.getElementById(`br-en-${key}`)?.value || null;
+  const content_pt = document.getElementById(`br-pt-${key}`)?.value || null;
+  try {
+    const r = await fetch(`/api/admin/bot/responses/${encodeURIComponent(key)}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({content_es, content_en, content_pt})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Guardado');
+    loadBotResponses();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function loadBotKeywords(){
+  const tbody = document.getElementById('bot-kw-body');
+  tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted);padding:.5rem .6rem;font-size:.83rem">Cargando…</td></tr>';
+  try {
+    const r = await fetch('/api/admin/bot/keywords');
+    const d = await r.json();
+    const kws = d.keywords || [];
+    if(!kws.length){ tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted);padding:.5rem .6rem;font-size:.83rem">Sin keywords.</td></tr>'; return; }
+    tbody.innerHTML = kws.map(kw=>`
+      <tr>
+        <td style="padding:.35rem .6rem">${escHtml(kw.keyword)}</td>
+        <td style="padding:.35rem .6rem;color:var(--muted)">${escHtml(kw.response_key)}</td>
+        <td style="padding:.35rem .6rem;text-align:center">
+          <button onclick="deleteBotKeyword(${kw.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem" title="Eliminar">✕</button>
+        </td>
+      </tr>`).join('');
+  } catch(e){
+    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--red);font-size:.83rem;padding:.5rem .6rem">Error: ${e.message}</td></tr>`;
+  }
+}
+
+async function addBotKeyword(){
+  const kw = document.getElementById('new-kw-word').value.trim();
+  const rk = document.getElementById('new-kw-key').value;
+  if(!kw || !rk){ showToast('Ingresa keyword y respuesta', true); return; }
+  try {
+    const r = await fetch('/api/admin/bot/keywords', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({keyword: kw, response_key: rk})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    document.getElementById('new-kw-word').value = '';
+    showToast('✅ Keyword agregada');
+    loadBotKeywords();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function deleteBotKeyword(id){
+  if(!confirm('¿Eliminar esta keyword?')) return;
+  try {
+    const r = await fetch(`/api/admin/bot/keywords/${id}`, {method:'DELETE'});
+    if(!r.ok) throw new Error(await r.text());
+    showToast('Eliminada');
+    loadBotKeywords();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+function showToast(msg, isErr=false){
+  let t = document.getElementById('_chatbot-toast');
+  if(!t){ t = document.createElement('div'); t.id='_chatbot-toast';
+    t.style.cssText='position:fixed;bottom:1.4rem;right:1.4rem;z-index:9999;padding:.5rem 1rem;border-radius:8px;font-size:.85rem;font-weight:600;pointer-events:none;transition:opacity .3s';
+    document.body.appendChild(t); }
+  t.textContent = msg;
+  t.style.background = isErr ? 'var(--red)' : '#166534';
+  t.style.color = '#fff';
+  t.style.opacity = '1';
+  clearTimeout(t._tid);
+  t._tid = setTimeout(()=>t.style.opacity='0', 2800);
 }
 </script>
 
