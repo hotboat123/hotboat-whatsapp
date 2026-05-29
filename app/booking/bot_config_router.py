@@ -17,6 +17,9 @@ class ResponseUpdate(BaseModel):
     content_es: Optional[str] = None
     content_en: Optional[str] = None
     content_pt: Optional[str] = None
+    menu_option: Optional[int] = None
+    active: Optional[bool] = None
+    button_label: Optional[str] = None
 
 
 class KeywordCreate(BaseModel):
@@ -42,9 +45,23 @@ def _ensure_tables():
                         content_es   TEXT,
                         content_en   TEXT,
                         content_pt   TEXT,
+                        menu_option  INT,
+                        active       BOOLEAN NOT NULL DEFAULT TRUE,
+                        button_label TEXT,
                         updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
+                # Add columns that may be missing in existing tables
+                for col_def in [
+                    "menu_option  INT",
+                    "active       BOOLEAN NOT NULL DEFAULT TRUE",
+                    "button_label TEXT",
+                ]:
+                    col_name = col_def.split()[0]
+                    try:
+                        cur.execute(f"ALTER TABLE bot_responses ADD COLUMN IF NOT EXISTS {col_def}")
+                    except Exception:
+                        pass
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS bot_keywords (
                         id           SERIAL PRIMARY KEY,
@@ -68,8 +85,11 @@ async def get_responses():
         with _get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT response_key, label, content_es, content_en, content_pt, updated_at
-                    FROM bot_responses ORDER BY response_key
+                    SELECT response_key, label, content_es, content_en, content_pt,
+                           menu_option, active, button_label, updated_at
+                    FROM bot_responses ORDER BY
+                        CASE WHEN menu_option IS NULL THEN 9999 ELSE menu_option END,
+                        response_key
                 """)
                 rows = cur.fetchall()
         return {"responses": [
@@ -79,7 +99,10 @@ async def get_responses():
                 "content_es": r[2],
                 "content_en": r[3],
                 "content_pt": r[4],
-                "updated_at": r[5].isoformat() if r[5] else None,
+                "menu_option": r[5],
+                "active": r[6],
+                "button_label": r[7],
+                "updated_at": r[8].isoformat() if r[8] else None,
             }
             for r in rows
         ]}
@@ -94,16 +117,54 @@ async def update_response(key: str, data: ResponseUpdate):
         with _get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO bot_responses (response_key, label, content_es, content_en, content_pt)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO bot_responses
+                        (response_key, label, content_es, content_en, content_pt,
+                         menu_option, active, button_label)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (response_key) DO UPDATE
-                    SET content_es = COALESCE(EXCLUDED.content_es, bot_responses.content_es),
-                        content_en = COALESCE(EXCLUDED.content_en, bot_responses.content_en),
-                        content_pt = COALESCE(EXCLUDED.content_pt, bot_responses.content_pt),
-                        updated_at = NOW()
-                """, (key, key, data.content_es, data.content_en, data.content_pt))
+                    SET content_es   = COALESCE(EXCLUDED.content_es,   bot_responses.content_es),
+                        content_en   = COALESCE(EXCLUDED.content_en,   bot_responses.content_en),
+                        content_pt   = COALESCE(EXCLUDED.content_pt,   bot_responses.content_pt),
+                        menu_option  = EXCLUDED.menu_option,
+                        active       = EXCLUDED.active,
+                        button_label = EXCLUDED.button_label,
+                        updated_at   = NOW()
+                """, (
+                    key, key,
+                    data.content_es, data.content_en, data.content_pt,
+                    data.menu_option,
+                    data.active if data.active is not None else True,
+                    data.button_label,
+                ))
                 conn.commit()
         return {"status": "ok", "key": key}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Quick-reply list (used by chat UI) ────────────────────────────────────────
+
+@bot_config_router.get("/quick-replies")
+async def get_quick_replies():
+    """Return active quick-reply buttons sorted by menu_option."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT menu_option, button_label, response_key, label
+                    FROM bot_responses
+                    WHERE menu_option IS NOT NULL AND active = TRUE
+                    ORDER BY menu_option
+                """)
+                rows = cur.fetchall()
+        return {"buttons": [
+            {
+                "menu_option": r[0],
+                "button_label": r[1] or r[3] or r[2],
+                "response_key": r[2],
+            }
+            for r in rows
+        ]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -172,10 +233,57 @@ async def delete_keyword(kw_id: int):
 _DEFAULT_RESPONSES = {
     "bienvenida": {
         "label": "Saludo de bienvenida (opción 0)",
+        "menu_option": 0,
+        "button_label": "👋 Tomás",
         "content_es": "¡Hola {name}! 👋\nSoy Capitán HotBoat 🚤\n¿En qué puedo ayudarte hoy?",
+    },
+    "reservar": {
+        "label": "Disponibilidad y horarios (opción 1)",
+        "menu_option": 1,
+        "button_label": "📅 Reservar",
+    },
+    "precio": {
+        "label": "Precios por persona (opción 2)",
+        "menu_option": 2,
+        "button_label": "💰 Precio",
+        "content_es": (
+            "💰 *Precios HotBoat:*\n\n"
+            "👥 *2 personas*\n• $69.990 x persona\n• Total: *$139.980*\n\n"
+            "👥 *3 personas*\n• $54.990 x persona\n• Total: *$164.970*\n\n"
+            "👥 *4 personas*\n• $44.990 x persona\n• Total: *$179.960*\n\n"
+            "👥 *5 personas*\n• $38.990 x persona\n• Total: *$194.950*\n\n"
+            "👥 *6 personas*\n• $32.990 x persona\n• Total: *$197.940*\n\n"
+            "👥 *7 personas*\n• $29.990 x persona\n• Total: *$209.930*\n\n"
+            "_*niños pagan desde los 6 años_\n\n"
+            "Aquí puedes reservar tu horario directo 👇\nhttps://whatsapp.hotboat.cl/booking"
+        ),
+        "content_en": (
+            "💰 *HotBoat Prices:*\n\n"
+            "👥 *2 people*\n• $69,990 per person\n• Total: *$139,980 CLP*\n\n"
+            "👥 *3 people*\n• $54,990 per person\n• Total: *$164,970 CLP*\n\n"
+            "👥 *4 people*\n• $44,990 per person\n• Total: *$179,960 CLP*\n\n"
+            "👥 *5 people*\n• $38,990 per person\n• Total: *$194,950 CLP*\n\n"
+            "👥 *6 people*\n• $32,990 per person\n• Total: *$197,940 CLP*\n\n"
+            "👥 *7 people*\n• $29,990 per person\n• Total: *$209,930 CLP*\n\n"
+            "_*children pay from 6 years old_\n\n"
+            "Book your time slot here 👇\nhttps://whatsapp.hotboat.cl/booking"
+        ),
+        "content_pt": (
+            "💰 *Preços HotBoat:*\n\n"
+            "👥 *2 pessoas*\n• $69.990 por pessoa\n• Total: *$139.980 CLP*\n\n"
+            "👥 *3 pessoas*\n• $54.990 por pessoa\n• Total: *$164.970 CLP*\n\n"
+            "👥 *4 pessoas*\n• $44.990 por pessoa\n• Total: *$179.960 CLP*\n\n"
+            "👥 *5 pessoas*\n• $38.990 por pessoa\n• Total: *$194.950 CLP*\n\n"
+            "👥 *6 pessoas*\n• $32.990 por pessoa\n• Total: *$197.940 CLP*\n\n"
+            "👥 *7 pessoas*\n• $29.990 por pessoa\n• Total: *$209.930 CLP*\n\n"
+            "_*crianças pagam a partir dos 6 anos_\n\n"
+            "Reserve seu horário aqui 👇\nhttps://whatsapp.hotboat.cl/booking"
+        ),
     },
     "caracteristicas": {
         "label": "Características del HotBoat (opción 3)",
+        "menu_option": 3,
+        "button_label": "🚤 HotBoat",
         "content_es": (
             "Estas son las características de la experiencia HotBoat 🚤🔥:\n\n"
             "⚡ Motor eléctrico (silencioso y sustentable)\n"
@@ -216,44 +324,15 @@ _DEFAULT_RESPONSES = {
             "Gostaria de reservar sua experiência?"
         ),
     },
-    "precio": {
-        "label": "Precios por persona (opción 2)",
-        "content_es": (
-            "💰 *Precios HotBoat:*\n\n"
-            "👥 *2 personas*\n• $69.990 x persona\n• Total: *$139.980*\n\n"
-            "👥 *3 personas*\n• $54.990 x persona\n• Total: *$164.970*\n\n"
-            "👥 *4 personas*\n• $44.990 x persona\n• Total: *$179.960*\n\n"
-            "👥 *5 personas*\n• $38.990 x persona\n• Total: *$194.950*\n\n"
-            "👥 *6 personas*\n• $32.990 x persona\n• Total: *$197.940*\n\n"
-            "👥 *7 personas*\n• $29.990 x persona\n• Total: *$209.930*\n\n"
-            "_*niños pagan desde los 6 años_\n\n"
-            "Aquí puedes reservar tu horario directo 👇\nhttps://whatsapp.hotboat.cl/booking"
-        ),
-        "content_en": (
-            "💰 *HotBoat Prices:*\n\n"
-            "👥 *2 people*\n• $69,990 per person\n• Total: *$139,980 CLP*\n\n"
-            "👥 *3 people*\n• $54,990 per person\n• Total: *$164,970 CLP*\n\n"
-            "👥 *4 people*\n• $44,990 per person\n• Total: *$179,960 CLP*\n\n"
-            "👥 *5 people*\n• $38,990 per person\n• Total: *$194,950 CLP*\n\n"
-            "👥 *6 people*\n• $32,990 per person\n• Total: *$197,940 CLP*\n\n"
-            "👥 *7 people*\n• $29,990 per person\n• Total: *$209,930 CLP*\n\n"
-            "_*children pay from 6 years old_\n\n"
-            "Book your time slot here 👇\nhttps://whatsapp.hotboat.cl/booking"
-        ),
-        "content_pt": (
-            "💰 *Preços HotBoat:*\n\n"
-            "👥 *2 pessoas*\n• $69.990 por pessoa\n• Total: *$139.980 CLP*\n\n"
-            "👥 *3 pessoas*\n• $54.990 por pessoa\n• Total: *$164.970 CLP*\n\n"
-            "👥 *4 pessoas*\n• $44.990 por pessoa\n• Total: *$179.960 CLP*\n\n"
-            "👥 *5 pessoas*\n• $38.990 por pessoa\n• Total: *$194.950 CLP*\n\n"
-            "👥 *6 pessoas*\n• $32.990 por pessoa\n• Total: *$197.940 CLP*\n\n"
-            "👥 *7 pessoas*\n• $29.990 por pessoa\n• Total: *$209.930 CLP*\n\n"
-            "_*crianças pagam a partir dos 6 anos_\n\n"
-            "Reserve seu horário aqui 👇\nhttps://whatsapp.hotboat.cl/booking"
-        ),
+    "extras": {
+        "label": "Extras y promociones (opción 4)",
+        "menu_option": 4,
+        "button_label": "🎁 Extras",
     },
     "ubicación": {
         "label": "Ubicación y cómo llegar (opción 5)",
+        "menu_option": 5,
+        "button_label": "📍 Ubicación",
         "content_es": (
             "📍 *Ubicación HotBoat:*\n\n"
             "📍 Estamos entre Pucón y Curarrehue, en pleno corazón de La Araucanía 🌿\n\n"
@@ -281,6 +360,47 @@ _DEFAULT_RESPONSES = {
             "• Pucón: 25 min\n• Villarrica centro: 50 min\n• Temuco: 2 horas\n\n"
             "Gostaria de reservar sua experiência?"
         ),
+    },
+    "packs": {
+        "label": "Packs Completos (opción 8)",
+        "menu_option": 8,
+        "button_label": "📦 Packs",
+    },
+    "alojamientos": {
+        "label": "Solo Alojamientos (opción 9)",
+        "menu_option": 9,
+        "button_label": "🏠 Alojam.",
+    },
+    "bebestibles": {
+        "label": "Bebestibles / bebidas (opción 🍷)",
+        "menu_option": 10,
+        "button_label": "🍷 Bebidas",
+        "content_es": (
+            "🍷 *Opciones para celebrar* (solo adultos)\n\n"
+            "$6.000 → Cerveza artesanal 330ml\n"
+            "$6.000 → Cerveza Corona 330ml\n"
+            "$15.000 → Vino tinto o blanco (botella)\n"
+            "$26.000 → Champagne\n"
+            "$20.000 → Pack 4 cervezas artesanales"
+        ),
+    },
+    "comida": {
+        "label": "Política de comida (opción 🍽️)",
+        "menu_option": 11,
+        "button_label": "🍽️ Comida",
+        "content_es": "Pueden traer lo que quieran para comer o tomar 🍕🥗\n---\no pueden pedir aquí 🙂",
+    },
+    "lluvia": {
+        "label": "Respuesta sobre lluvia (opción 🌧️)",
+        "menu_option": 12,
+        "button_label": "🌧️ Lluvia",
+        "content_es": "Con lluvia la experiencia es aún mejor ☔🔥\n---\n¡El HotBoat es una tina de agua caliente! La lluvia se siente increíble desde adentro 🌧️🛁\n---\nTe pasamos sombreros para que no te llegue el agua en la cara todo el tiempo 🎩😄",
+    },
+    "niños": {
+        "label": "Info sobre niños (opción 👶)",
+        "menu_option": 13,
+        "button_label": "👶 Niños",
+        "content_es": "Sí!, los niños lo pasan increíble 🎉\n---\nPagan desde los 6 años, a los menores no los consideres en el número de personas de la reserva 👍",
     },
     "clima": {
         "label": "Temporada / mejor época",
@@ -387,29 +507,6 @@ _DEFAULT_RESPONSES = {
             "Pronto para a aventura?"
         ),
     },
-    "bebestibles": {
-        "label": "Bebestibles / bebidas (opción 🍷)",
-        "content_es": (
-            "🍷 *Opciones para celebrar* (solo adultos)\n\n"
-            "$6.000 → Cerveza artesanal 330ml\n"
-            "$6.000 → Cerveza Corona 330ml\n"
-            "$15.000 → Vino tinto o blanco (botella)\n"
-            "$26.000 → Champagne\n"
-            "$20.000 → Pack 4 cervezas artesanales"
-        ),
-    },
-    "niños": {
-        "label": "Info sobre niños (opción 👶)",
-        "content_es": "Sí!, los niños lo pasan increíble 🎉\n---\nPagan desde los 6 años, a los menores no los consideres en el número de personas de la reserva 👍",
-    },
-    "lluvia": {
-        "label": "Respuesta sobre lluvia (opción 🌧️)",
-        "content_es": "Con lluvia la experiencia es aún mejor ☔🔥\n---\n¡El HotBoat es una tina de agua caliente! La lluvia se siente increíble desde adentro 🌧️🛁\n---\nTe pasamos sombreros para que no te llegue el agua en la cara todo el tiempo 🎩😄",
-    },
-    "comida": {
-        "label": "Política de comida (opción 🍽️)",
-        "content_es": "Pueden traer lo que quieran para comer o tomar 🍕🥗\n---\no pueden pedir aquí 🙂",
-    },
 }
 
 _DEFAULT_KEYWORDS = {
@@ -449,19 +546,25 @@ def seed_defaults():
             with conn.cursor() as cur:
                 for key, val in _DEFAULT_RESPONSES.items():
                     cur.execute("""
-                        INSERT INTO bot_responses (response_key, label, content_es, content_en, content_pt)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO bot_responses
+                            (response_key, label, content_es, content_en, content_pt,
+                             menu_option, active, button_label)
+                        VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s)
                         ON CONFLICT (response_key) DO UPDATE
-                        SET label      = EXCLUDED.label,
-                            content_es = COALESCE(bot_responses.content_es, EXCLUDED.content_es),
-                            content_en = COALESCE(bot_responses.content_en, EXCLUDED.content_en),
-                            content_pt = COALESCE(bot_responses.content_pt, EXCLUDED.content_pt)
+                        SET label        = EXCLUDED.label,
+                            content_es   = COALESCE(bot_responses.content_es, EXCLUDED.content_es),
+                            content_en   = COALESCE(bot_responses.content_en, EXCLUDED.content_en),
+                            content_pt   = COALESCE(bot_responses.content_pt, EXCLUDED.content_pt),
+                            menu_option  = COALESCE(bot_responses.menu_option, EXCLUDED.menu_option),
+                            button_label = COALESCE(bot_responses.button_label, EXCLUDED.button_label)
                     """, (
                         key,
                         val.get("label", key),
                         val.get("content_es"),
                         val.get("content_en"),
                         val.get("content_pt"),
+                        val.get("menu_option"),
+                        val.get("button_label"),
                     ))
 
                 cur.execute("SELECT COUNT(*) FROM bot_keywords")

@@ -198,6 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(refreshCurrentConversation, 5000); // Refresh current chat every 5 seconds
     setupResponsiveLayout();
     initPWA();
+    loadQuickReplyButtons();
 });
 
 // ── PWA / Web Push ────────────────────────────────────────────────────────────
@@ -2084,43 +2085,59 @@ function updatePriorityUI(priority) {
     }
 }
 
+// ── Dynamic quick-reply buttons ───────────────────────────────────────────────
+
+let _qrButtons = [];  // cached from API
+
+async function loadQuickReplyButtons() {
+    try {
+        const r = await fetch('/api/admin/bot/quick-replies');
+        const d = await r.json();
+        _qrButtons = d.buttons || [];
+    } catch (e) {
+        console.warn('Could not load quick-reply buttons:', e);
+        _qrButtons = [];
+    }
+    renderQuickReplyButtons();
+}
+
+function renderQuickReplyButtons() {
+    const container = document.getElementById('quick-reply-dynamic');
+    if (!container) return;
+    if (!_qrButtons.length) {
+        container.innerHTML = '<span style="color:var(--muted);font-size:.75rem">Sin botones configurados</span>';
+        return;
+    }
+    container.innerHTML = _qrButtons.map(b => {
+        const lbl = b.button_label || String(b.menu_option);
+        return `<button type="button" class="quick-reply-btn" onclick="sendQuickReply(${b.menu_option})" title="${lbl}">${lbl}</button>`;
+    }).join('');
+}
+
 // Send quick reply menu option
 async function sendQuickReply(menuOption) {
     if (!currentConversation) {
         showToast('Selecciona una conversación primero', 'warning');
         return;
     }
-    
-    const menuNames = {
-        0: 'Saludo Tomás',
-        1: 'Disponibilidad',
-        2: 'Precios',
-        3: 'Características',
-        4: 'Extras',
-        5: 'Ubicación',
-        9: 'Alojamientos'
-    };
-    
+
+    const btn = _qrButtons.find(b => b.menu_option === menuOption);
+    const label = btn ? btn.button_label : String(menuOption);
+
     try {
-        showToast(`Enviando respuesta: ${menuNames[menuOption]}...`, 'info');
-        
+        showToast(`Enviando: ${label}…`, 'info');
+
         const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/quick-reply`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ menu_option: menuOption, translate_to: activeTranslateLang || null })
         });
-        
-        if (!response.ok) {
-            throw new Error('Failed to send quick reply');
-        }
-        
-        showToast(`Respuesta "${menuNames[menuOption]}" enviada`, 'success');
-        
-        // Reload conversation to show the sent message
+
+        if (!response.ok) throw new Error('Failed to send quick reply');
+
+        showToast(`"${label}" enviado`, 'success');
         await selectConversation(currentConversation.phone_number);
-        
+
     } catch (error) {
         console.error('Error sending quick reply:', error);
         showToast('Error al enviar respuesta rápida', 'error');

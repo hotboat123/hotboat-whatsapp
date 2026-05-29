@@ -7796,24 +7796,40 @@ async function loadBotResponses(){
     el.innerHTML = '';
     if(!_botResponses.length){ el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Sin respuestas configuradas.</span>'; return; }
     _botResponses.forEach(rs => {
+      const safeKey = rs.response_key.replace(/[^a-z0-9_]/gi,'_');
       const div = document.createElement('div');
-      div.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;display:flex;flex-direction:column;gap:.4rem';
+      const isActive = rs.active !== false;
+      div.style.cssText = `background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;display:flex;flex-direction:column;gap:.45rem;${isActive?'':'opacity:.55'}`;
       div.innerHTML = `
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
           <span style="font-weight:600;font-size:.85rem">${rs.label||rs.response_key}</span>
           <code style="font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.06);padding:.1rem .4rem;border-radius:4px">${rs.response_key}</code>
           <span style="margin-left:auto;font-size:.7rem;color:var(--muted)">${rs.updated_at ? new Date(rs.updated_at).toLocaleDateString('es-CL') : ''}</span>
         </div>
-        <textarea id="br-es-${rs.response_key}" rows="3" placeholder="Español…"
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <label style="font-size:.78rem;color:var(--muted);white-space:nowrap">Índice botón:</label>
+          <input id="br-opt-${safeKey}" type="number" min="0" max="99" placeholder="—"
+            value="${rs.menu_option ?? ''}"
+            style="width:60px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.82rem;outline:none;text-align:center">
+          <label style="font-size:.78rem;color:var(--muted);white-space:nowrap;margin-left:.3rem">Emoji/label:</label>
+          <input id="br-lbl-${safeKey}" type="text" placeholder="🚤 HotBoat"
+            value="${escHtml(rs.button_label||'')}"
+            style="width:130px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.82rem;outline:none">
+          <label style="display:flex;align-items:center;gap:.35rem;margin-left:auto;cursor:pointer;user-select:none">
+            <span style="font-size:.78rem;color:var(--muted)">Activo</span>
+            <input id="br-act-${safeKey}" type="checkbox" ${isActive?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--gold)">
+          </label>
+        </div>
+        <textarea id="br-es-${safeKey}" rows="3" placeholder="Español…"
           style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.8rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_es||'')}</textarea>
         <div style="display:flex;gap:.4rem">
-          <textarea id="br-en-${rs.response_key}" rows="2" placeholder="English…"
+          <textarea id="br-en-${safeKey}" rows="2" placeholder="English…"
             style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_en||'')}</textarea>
-          <textarea id="br-pt-${rs.response_key}" rows="2" placeholder="Português…"
+          <textarea id="br-pt-${safeKey}" rows="2" placeholder="Português…"
             style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_pt||'')}</textarea>
         </div>
         <div style="display:flex;justify-content:flex-end">
-          <button onclick="saveBotResponse('${rs.response_key}')"
+          <button onclick="saveBotResponse('${rs.response_key}','${safeKey}')"
             style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.3rem .8rem;font-size:.8rem;cursor:pointer;font-weight:600">Guardar</button>
         </div>`;
       el.appendChild(div);
@@ -7823,16 +7839,20 @@ async function loadBotResponses(){
   }
 }
 
-function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-async function saveBotResponse(key){
-  const content_es = document.getElementById(`br-es-${key}`)?.value ?? null;
-  const content_en = document.getElementById(`br-en-${key}`)?.value || null;
-  const content_pt = document.getElementById(`br-pt-${key}`)?.value || null;
+async function saveBotResponse(key, safeKey){
+  const content_es = document.getElementById(`br-es-${safeKey}`)?.value || null;
+  const content_en = document.getElementById(`br-en-${safeKey}`)?.value || null;
+  const content_pt = document.getElementById(`br-pt-${safeKey}`)?.value || null;
+  const optVal = document.getElementById(`br-opt-${safeKey}`)?.value;
+  const menu_option = optVal !== '' && optVal !== undefined ? parseInt(optVal) : null;
+  const active = document.getElementById(`br-act-${safeKey}`)?.checked ?? true;
+  const button_label = document.getElementById(`br-lbl-${safeKey}`)?.value || null;
   try {
     const r = await fetch(`/api/admin/bot/responses/${encodeURIComponent(key)}`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({content_es, content_en, content_pt})
+      body: JSON.stringify({content_es, content_en, content_pt, menu_option, active, button_label})
     });
     if(!r.ok) throw new Error(await r.text());
     showToast('✅ Guardado');
