@@ -695,11 +695,13 @@ class PushSubscribeRequest(BaseModel):
 async def push_subscribe(request: PushSubscribeRequest):
     """Register a Web Push subscription."""
     from app.notifications import push_notifier
+    logger.info("📲 Push subscribe request — endpoint: %s...", request.endpoint[:60])
     ok = await push_notifier.register_subscription(
         endpoint=request.endpoint,
         p256dh=request.keys.get("p256dh", ""),
         auth=request.keys.get("auth", ""),
     )
+    logger.info("📲 Push subscribe result: %s", "OK" if ok else "FAILED")
     return {"status": "ok" if ok else "error"}
 
 
@@ -722,13 +724,25 @@ async def get_vapid_public_key():
 async def push_test():
     """Send a test push notification to all subscribed devices."""
     from app.notifications import push_notifier as _pn
-    ok = await _pn.send_notification(
-        title="🔔 Notificación de prueba",
-        body="Si ves esto, las notificaciones funcionan ✅",
-        data={"type": "test"},
-    )
     subs = await _pn._get_subscriptions()
-    return {"sent": ok, "subscriptions": len(subs)}
+    if not subs:
+        return {"sent": False, "subscriptions": 0, "error": "No subscriptions registered"}
+    errors = []
+    sent = 0
+    for sub in subs:
+        try:
+            ok = await asyncio.to_thread(
+                _pn._send_web_push_sync_verbose, sub,
+                {"title": "🔔 Notificación de prueba", "body": "Si ves esto, las notificaciones funcionan ✅"},
+                _pn._private_key,
+            )
+            if ok:
+                sent += 1
+            else:
+                errors.append("send returned False")
+        except Exception as e:
+            errors.append(str(e))
+    return {"sent": sent > 0, "subscriptions": len(subs), "sent_count": sent, "errors": errors}
 
 
 @app.get("/api/push/debug")

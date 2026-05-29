@@ -22,7 +22,7 @@ def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_ke
     try:
         from pywebpush import webpush, WebPushException
     except ImportError:
-        logger.error("pywebpush not installed — cannot send Web Push. Add pywebpush>=2.0.0 to requirements.txt")
+        logger.error("pywebpush not installed — add pywebpush>=1.9.4,<2.0.0 to requirements.txt")
         return False
     try:
         webpush(
@@ -36,6 +36,18 @@ def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_ke
         logger.warning("Web Push send failed (endpoint: %s...): %s",
                        subscription_info.get("endpoint", "")[:40], exc)
         return False
+
+
+def _send_web_push_sync_verbose(subscription_info: dict, payload: dict, vapid_private_key: str) -> bool:
+    """Same as _send_web_push_sync but raises on error (for test endpoint)."""
+    from pywebpush import webpush, WebPushException
+    webpush(
+        subscription_info=subscription_info,
+        data=json.dumps(payload),
+        vapid_private_key=vapid_private_key,
+        vapid_claims=VAPID_CLAIMS,
+    )
+    return True
 
 
 class PushNotifier:
