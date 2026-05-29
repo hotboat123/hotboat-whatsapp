@@ -977,15 +977,19 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         return False
     
     def _get_main_menu_message(self, language: str = "es") -> str:
-        """Return the main menu, preferring DB override over hardcoded translations."""
+        """Return the welcome menu, built dynamically from show_in_menu DB items."""
         try:
-            from app.booking.bot_config_router import get_bot_response
-            db_menu = get_bot_response("main_menu", language)
-            if db_menu:
-                return db_menu
+            from app.booking.bot_config_router import build_main_menu_text
+            menu = build_main_menu_text(language)
+            if menu:
+                return menu
         except Exception:
             pass
+        # Fallback to hardcoded translations
+        return get_text("main_menu", language)
 
+    def _get_main_menu_message_LEGACY(self, language: str = "es") -> str:
+        """Legacy version kept for reference — no longer called."""
         try:
             from app.booking.operator_settings import get_menu_settings
             ms = get_menu_settings()
@@ -996,14 +1000,11 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             show_exp = show_aloj = show_packs = True
 
         if show_exp and show_aloj and show_packs:
-            # All on → standard hardcoded menu (fastest path)
             return get_text("main_menu", language)
 
-        # Build dynamic version (Spanish only; fallback for other langs)
         if language != "es":
             return get_text("main_menu", language)
 
-        # Dynamic Spanish menu — number options shift based on what is active
         lines = [
             "🥬 ¡Ahoy, grumete! ⚓",
             "",

@@ -207,6 +207,19 @@ _EMOJI_NUMS = {
 }
 
 
+_DEFAULT_HEADERS = {
+    "es": "🥬 ¡Ahoy, grumete! ⚓\n\nSoy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥\n\nPuedes preguntarme por:",
+    "en": "🥬 Ahoy, sailor! ⚓\n\nI'm *Popeye the Sailor*, second mate of *HotBoat Chile* 🚤🔥\n\nYou can ask me about:",
+    "pt": "🥬 Ahoy, marujo! ⚓\n\nEu sou *Popeye o Marinheiro*, segundo imediato do *HotBoat Chile* 🚤🔥\n\nVocê pode me perguntar sobre:",
+}
+
+_DEFAULT_FOOTERS = {
+    "es": "Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *7️⃣* 👨‍✈️🌿\n\n¿Listo para zarpar, grumete? ⛵\n\n*¿Qué número eliges?*",
+    "en": "If you'd rather talk to *Captain Tomás*, write *\"Call Tomás\"*, *\"Help\"*, or simply *7️⃣* 👨‍✈️🌿\n\nReady to set sail, sailor? ⛵\n\n*Which number do you choose?*",
+    "pt": "Se preferir falar com o *Capitão Tomás*, escreva *\"Ligar para Tomás\"*, *\"Ajuda\"*, ou simplesmente *7️⃣* 👨‍✈️🌿\n\nPronto para zarpar, marujo? ⛵\n\n*Qual número você escolhe?*",
+}
+
+
 def build_main_menu_text(lang: str = "es") -> Optional[str]:
     """Auto-build the welcome menu from show_in_menu=true items."""
     try:
@@ -215,28 +228,24 @@ def build_main_menu_text(lang: str = "es") -> Optional[str]:
                 cur.execute("""
                     SELECT menu_option, menu_description
                     FROM bot_responses
-                    WHERE show_in_menu = TRUE AND active = TRUE AND menu_option IS NOT NULL
+                    WHERE show_in_menu = TRUE AND active = TRUE
+                      AND menu_option IS NOT NULL AND menu_description IS NOT NULL
                     ORDER BY menu_option
                 """)
                 items = cur.fetchall()
         if not items:
             return None
-        # Header and footer from DB (key "menu_header" / "menu_footer") or fallback
-        header = get_bot_response("menu_header", lang) or (
-            "🥬 ¡Ahoy, grumete! ⚓\n\nSoy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥\n\nPuedes preguntarme por:"
-        )
-        footer = get_bot_response("menu_footer", lang) or (
-            "Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *7️⃣* 👨‍✈️🌿\n\n"
-            "¿Listo para zarpar, grumete? ⛵\n\n*¿Qué número eliges?*"
-        )
-        parts = [header]
+        header = get_bot_response("menu_header", lang) or _DEFAULT_HEADERS.get(lang, _DEFAULT_HEADERS["es"])
+        footer = get_bot_response("menu_footer", lang) or _DEFAULT_FOOTERS.get(lang, _DEFAULT_FOOTERS["es"])
+        lines = [header, ""]
         for (opt, desc) in items:
-            if desc:
-                emoji = _EMOJI_NUMS.get(opt, f"{opt}.")
-                parts.append(f"\n{emoji} *{desc}*")
-        parts.append(f"\n{footer}")
-        return "\n".join(parts)
-    except Exception:
+            emoji = _EMOJI_NUMS.get(opt, f"{opt}.")
+            lines.append(f"{emoji} *{desc}*")
+            lines.append("")
+        lines.append(footer)
+        return "\n".join(lines)
+    except Exception as e:
+        logger.warning("build_main_menu_text failed: %s", e)
         return None
 
 
@@ -317,8 +326,20 @@ _DEFAULT_RESPONSES = {
         "button_label": "👋 Tomás",
         "content_es": "¡Hola {name}! 👋\nSoy Capitán HotBoat 🚤\n¿En qué puedo ayudarte hoy?",
     },
+    "menu_header": {
+        "label": "Encabezado del menú de bienvenida",
+        "content_es": "🥬 ¡Ahoy, grumete! ⚓\n\nSoy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥\n\nPuedes preguntarme por:",
+        "content_en": "🥬 Ahoy, sailor! ⚓\n\nI'm *Popeye the Sailor*, second mate of *HotBoat Chile* 🚤🔥\n\nYou can ask me about:",
+        "content_pt": "🥬 Ahoy, marujo! ⚓\n\nEu sou *Popeye o Marinheiro*, segundo imediato do *HotBoat Chile* 🚤🔥\n\nVocê pode me perguntar sobre:",
+    },
+    "menu_footer": {
+        "label": "Pie del menú de bienvenida",
+        "content_es": "Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *7️⃣* 👨‍✈️🌿\n\n¿Listo para zarpar, grumete? ⛵\n\n*¿Qué número eliges?*",
+        "content_en": "If you'd rather talk to *Captain Tomás*, write *\"Call Tomás\"*, *\"Help\"*, or simply *7️⃣* 👨‍✈️🌿\n\nReady to set sail, sailor? ⛵\n\n*Which number do you choose?*",
+        "content_pt": "Se preferir falar com o *Capitão Tomás*, escreva *\"Ligar para Tomás\"*, *\"Ajuda\"*, ou simplesmente *7️⃣* 👨‍✈️🌿\n\nPronto para zarpar, marujo? ⛵\n\n*Qual número você escolhe?*",
+    },
     "main_menu": {
-        "label": "Mensaje de bienvenida (menú completo)",
+        "label": "Mensaje de bienvenida (menú completo — referencia)",
         "content_es": (
             "🥬 ¡Ahoy, grumete! ⚓\n\n"
             "Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥\n\n"
