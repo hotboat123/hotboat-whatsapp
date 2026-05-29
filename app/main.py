@@ -516,7 +516,13 @@ app.include_router(financial_router)
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Redirect root to booking page"""
+    """Serve chat interface at root for PWA installation."""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
+        return HTMLResponse(content=body)
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/booking", status_code=302)
 
@@ -610,19 +616,6 @@ async def pago_order_proxy(order_id: int):
     except Exception as e:
         logger.warning(f"pago_order_proxy error for order {order_id}: {e}")
         return {}
-
-
-@app.get("/", response_class=HTMLResponse)
-async def root_chat():
-    """Serve chat interface at root so PWA installs at the canonical / URL."""
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    index_path = os.path.join(static_dir, "index.html")
-    if os.path.exists(index_path):
-        with open(index_path, "r", encoding="utf-8") as f:
-            body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
-        return HTMLResponse(content=body)
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/chat", status_code=302)
 
 
 @app.get("/sw.js")
