@@ -81,6 +81,41 @@ else:
     else:
         logger.info(msg)
 
+# ── Session auth ──────────────────────────────────────────────────────────────
+import hmac as _hmac, hashlib as _hashlib, secrets as _secrets, time as _time
+
+_SESSION_SECRET: str = ""
+
+def _get_secret() -> str:
+    global _SESSION_SECRET
+    if not _SESSION_SECRET:
+        _SESSION_SECRET = settings.session_secret or _secrets.token_hex(32)
+    return _SESSION_SECRET
+
+def _make_session_token(username: str) -> str:
+    ts = str(int(_time.time()))
+    payload = f"{username}:{ts}"
+    sig = _hmac.new(_get_secret().encode(), payload.encode(), _hashlib.sha256).hexdigest()
+    return f"{payload}:{sig}"
+
+def _verify_session_token(token: str) -> bool:
+    try:
+        parts = token.rsplit(":", 1)
+        if len(parts) != 2:
+            return False
+        payload, sig = parts
+        expected = _hmac.new(_get_secret().encode(), payload.encode(), _hashlib.sha256).hexdigest()
+        return _hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
+
+def _get_auth_cookie(request: Request) -> str | None:
+    return request.cookies.get("kia_auth")
+
+def _is_authenticated(request: Request) -> bool:
+    token = _get_auth_cookie(request)
+    return bool(token and _verify_session_token(token))
+
 # ── Auto-sync background task ──────────────────────────────────────────────────
 SYNC_INTERVAL_MINUTES = 30
 
@@ -514,17 +549,58 @@ app.include_router(stock_router)
 app.include_router(financial_router)
 
 
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    """Serve chat interface at root for PWA installation."""
+def _serve_chat_html() -> HTMLResponse:
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     index_path = os.path.join(static_dir, "index.html")
-    if os.path.exists(index_path):
-        with open(index_path, "r", encoding="utf-8") as f:
-            body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
-        return HTMLResponse(content=body)
+    with open(index_path, "r", encoding="utf-8") as f:
+        body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
+    return HTMLResponse(content=body)
+
+def _serve_login_html(next_url: str = "/") -> HTMLResponse:
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/booking", status_code=302)
+    return RedirectResponse(url=f"/login?next={next_url}", status_code=302)
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    login_path = os.path.join(static_dir, "login.html")
+    with open(login_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+    next: str = "/"
+
+@app.post("/api/auth/login")
+async def auth_login(req: LoginRequest):
+    if req.username == settings.chat_username and req.password == settings.chat_password:
+        token = _make_session_token(req.username)
+        redirect = req.next if req.next.startswith("/") else "/"
+        response = JSONResponse({"redirect": redirect})
+        response.set_cookie(
+            key="kia_auth",
+            value=token,
+            max_age=60 * 60 * 24 * 30,  # 30 days
+            httponly=True,
+            samesite="lax",
+            secure=settings.is_production,
+        )
+        return response
+    raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+
+@app.get("/logout")
+async def logout():
+    from fastapi.responses import RedirectResponse
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie("kia_auth")
+    return response
+
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    if not _is_authenticated(request):
+        return _serve_login_html("/")
+    return _serve_chat_html()
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_redirect():
@@ -533,38 +609,11 @@ async def admin_redirect():
     return RedirectResponse(url="/admin/reservas", status_code=302)
 
 @app.get("/chat", response_class=HTMLResponse)
-async def chat_ui():
+async def chat_ui(request: Request):
     """Serve Kia-Ai chat interface"""
-    try:
-        static_dir = os.path.join(os.path.dirname(__file__), "static")
-        index_path = os.path.join(static_dir, "index.html")
-        
-        if os.path.exists(index_path):
-            logger.info(f"🖥️ Serving Kia-Ai interface from {index_path}")
-            with open(index_path, 'r', encoding='utf-8') as f:
-                body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
-                return HTMLResponse(content=body)
-        else:
-            logger.warning("⚠️ Kia-Ai interface not found, returning default health response.")
-            environment_status = "🚀 PRODUCTION" if settings.is_production else "🧪 STAGING" if settings.is_staging else "💻 DEVELOPMENT"
-            return {
-                "status": "ok",
-                "service": "HotBoat WhatsApp Bot",
-                "version": "1.0.0",
-                "environment": settings.environment,
-                "environment_status": environment_status,
-                "note": "Kia-Ai interface not found. API is working."
-            }
-    except Exception as e:
-        logger.error(f"Error serving index: {e}")
-        environment_status = "🚀 PRODUCTION" if settings.is_production else "🧪 STAGING" if settings.is_staging else "💻 DEVELOPMENT"
-        return {
-            "status": "ok",
-            "service": "HotBoat WhatsApp Bot",
-            "version": "1.0.0",
-            "environment": settings.environment,
-            "environment_status": environment_status
-        }
+    if not _is_authenticated(request):
+        return _serve_login_html("/chat")
+    return _serve_chat_html()
 
 
 @app.get("/pagar", response_class=HTMLResponse)

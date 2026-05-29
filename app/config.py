@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     # Web Push (PWA notifications) — generate with: openssl ecparam -name prime256v1 -genkey
     vapid_private_key: str = ""
     vapid_public_key: str = ""
+
+    # Chat authentication
+    chat_username: str = "administrador"
+    chat_password: str = "administrador"
+    session_secret: str = ""  # Set in Railway env vars for persistence across restarts
     
     # Server
     port: int = 8000
