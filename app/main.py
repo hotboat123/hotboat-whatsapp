@@ -620,7 +620,8 @@ async def root_redirect():
 
 
 @app.get("/sw.js")
-async def serve_service_worker():    """Serve service worker at root scope for full-app push notification support."""
+async def serve_service_worker():
+    """Serve service worker at root scope for full-app push notification support."""
     from fastapi.responses import FileResponse
     sw_path = os.path.join(os.path.dirname(__file__), "static", "sw.js")
     return FileResponse(sw_path, media_type="application/javascript", headers={
