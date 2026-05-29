@@ -7,6 +7,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from app.config import get_settings
@@ -14,7 +15,16 @@ from app.config import get_settings
 CHILE_TZ = ZoneInfo("America/Santiago")
 logger = logging.getLogger(__name__)
 
-VAPID_CLAIMS = {"sub": "mailto:hotboatnotification@gmail.com"}
+VAPID_SUB = "mailto:hotboatnotification@gmail.com"
+
+
+def _vapid_claims_for(endpoint: str) -> dict:
+    """Build VAPID claims with correct aud for the given push endpoint."""
+    url = urlparse(endpoint)
+    return {
+        "sub": VAPID_SUB,
+        "aud": f"{url.scheme}://{url.netloc}",
+    }
 
 
 def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_key: str) -> bool:
@@ -25,11 +35,12 @@ def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_ke
         logger.error("pywebpush not installed — add pywebpush>=1.9.4,<2.0.0 to requirements.txt")
         return False
     try:
+        claims = _vapid_claims_for(subscription_info["endpoint"])
         webpush(
             subscription_info=subscription_info,
             data=json.dumps(payload),
             vapid_private_key=vapid_private_key,
-            vapid_claims=VAPID_CLAIMS,
+            vapid_claims=claims,
         )
         return True
     except Exception as exc:
@@ -41,11 +52,12 @@ def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_ke
 def _send_web_push_sync_verbose(subscription_info: dict, payload: dict, vapid_private_key: str) -> bool:
     """Same as _send_web_push_sync but raises on error (for test endpoint)."""
     from pywebpush import webpush, WebPushException
+    claims = _vapid_claims_for(subscription_info["endpoint"])
     webpush(
         subscription_info=subscription_info,
         data=json.dumps(payload),
         vapid_private_key=vapid_private_key,
-        vapid_claims=VAPID_CLAIMS,
+        vapid_claims=claims,
     )
     return True
 
