@@ -26,7 +26,7 @@ self.addEventListener('push', (event) => {
         renotify: true,
         data: {
             phone: data.phone || null,
-            url: data.phone ? `/?phone=${data.phone}` : '/',
+            url: data.phone ? `/chat?phone=${data.phone}` : '/chat',
         },
         vibrate: [200, 100, 200],
     };
@@ -37,7 +37,7 @@ self.addEventListener('push', (event) => {
 // Handle notification tap → open/focus app at the right chat
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const targetUrl = event.notification.data?.url || '/';
+    const targetUrl = event.notification.data?.url || '/chat';
     const phone = event.notification.data?.phone;
 
     event.waitUntil(

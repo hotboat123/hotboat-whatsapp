@@ -2,7 +2,7 @@
   "name": "Kia-Ai WhatsApp",
   "short_name": "Kia-Ai",
   "description": "Gestión de mensajes WhatsApp de HotBoat",
-  "start_url": "/",
+  "start_url": "/chat",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#1e293b",
