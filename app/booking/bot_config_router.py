@@ -708,6 +708,16 @@ def seed_defaults():
                         val.get("menu_description"),
                     ))
 
+                # Fix rows that still have menu_description=NULL (never customized):
+                # fill in show_in_menu and menu_description from seed defaults.
+                for key, val in _DEFAULT_RESPONSES.items():
+                    if val.get("show_in_menu") and val.get("menu_description"):
+                        cur.execute("""
+                            UPDATE bot_responses
+                            SET show_in_menu = TRUE, menu_description = %s
+                            WHERE response_key = %s AND menu_description IS NULL
+                        """, (val["menu_description"], key))
+
                 cur.execute("SELECT COUNT(*) FROM bot_keywords")
                 if cur.fetchone()[0] == 0:
                     for kw, rk in _DEFAULT_KEYWORDS.items():
