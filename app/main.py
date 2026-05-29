@@ -720,9 +720,10 @@ async def get_vapid_public_key():
     return {"publicKey": settings.vapid_public_key or ""}
 
 
+@app.get("/api/push/test")
 @app.post("/api/push/test")
 async def push_test():
-    """Send a test push notification to all subscribed devices."""
+    """Send a test push notification — GET or POST for easy browser testing."""
     from app.notifications import push_notifier as _pn
     subs = await _pn._get_subscriptions()
     if not subs:
@@ -731,17 +732,17 @@ async def push_test():
     sent = 0
     for sub in subs:
         try:
-            ok = await asyncio.to_thread(
-                _pn._send_web_push_sync_verbose, sub,
-                {"title": "🔔 Notificación de prueba", "body": "Si ves esto, las notificaciones funcionan ✅"},
-                _pn._private_key,
-            )
+            def _try_send(s=sub):
+                return _pn._send_web_push_sync_verbose(
+                    s,
+                    {"title": "🔔 Notificación de prueba", "body": "Si ves esto, ¡funcionan! ✅", "phone": None},
+                    _pn._private_key,
+                )
+            ok = await asyncio.to_thread(_try_send)
             if ok:
                 sent += 1
-            else:
-                errors.append("send returned False")
         except Exception as e:
-            errors.append(str(e))
+            errors.append({"endpoint": sub.get("endpoint", "")[:50], "error": str(e)})
     return {"sent": sent > 0, "subscriptions": len(subs), "sent_count": sent, "errors": errors}
 
 
