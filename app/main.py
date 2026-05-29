@@ -612,9 +612,15 @@ async def pago_order_proxy(order_id: int):
         return {}
 
 
-@app.get("/")
-async def root_redirect():
-    """Redirect root to chat interface."""
+@app.get("/", response_class=HTMLResponse)
+async def root_chat():
+    """Serve chat interface at root so PWA installs at the canonical / URL."""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
+        return HTMLResponse(content=body)
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/chat", status_code=302)
 
