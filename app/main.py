@@ -1134,17 +1134,17 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             response_text = conv_manager._ask_for_reservation_date(conversation, language)
         elif menu_option == 2:
             # Precios por persona
-            response_text = faq_handler.get_response("precio", language)
+            response_text = _get_bot_response_content("precio", language) or faq_handler.get_response("precio", language)
         elif menu_option == 3:
             # Características del HotBoat
-            response_text = faq_handler.get_response("caracteristicas", language)
+            response_text = _get_bot_response_content("caracteristicas", language) or faq_handler.get_response("caracteristicas", language)
         elif menu_option == 4:
             # Extras y promociones
             conversation["metadata"]["awaiting_extra_selection"] = True
             response_text = faq_handler.get_response("extras", language)
         elif menu_option == 5:
             # Ubicación y reseñas
-            response_text = faq_handler.get_response("ubicación", language)
+            response_text = _get_bot_response_content("ubicación", language) or faq_handler.get_response("ubicación", language)
         elif menu_option == 6:
             # Alojamientos — equivale al flujo menú 6
             from app.utils.media_handler import get_alojamientos_images
