@@ -449,11 +449,57 @@ def _ensure_extras_visibility_table():
         logger.error(f"extras_visibility table init error: {e}")
 
 
+_EXTRAS_SEED = [
+    # (extra_name_lower, display_name, precio_venta, costo, icon, sort_order)
+    ("tabla_4_personas",  "Tabla de Picoteo Grande (4 personas)",     25000,  0, "🍇",  1),
+    ("tabla_2_personas",  "Tabla de Picoteo Pequeña (2 personas)",    20000,  0, "🍇",  2),
+    ("jugo_natural",      "Jugo Natural 1L (piña o naranja)",         10000,  0, "🥤",  3),
+    ("lata_bebida",       "Lata Bebida (Coca-Cola o Fanta)",           2900,  0, "🥤",  4),
+    ("agua_mineral",      "Agua Mineral 1.5L",                         2500,  0, "💧",  5),
+    ("helado",            "Helado Individual",                          3500,  0, "🍦",  6),
+    ("modo_romantico",    "Modo Romántico (pétalos + decoración)",    25000,  0, "🌹",  7),
+    ("velas_led",         "Velas LED Decorativas",                    10000,  0, "🕯️",  8),
+    ("letras_luminosas",  "Letras Luminosas 'Te Amo' / 'Love'",       15000,  0, "✨",  9),
+    ("pack_velas_letras", "Pack Nocturno Completo (velas + letras)",  20000,  0, "🌙", 10),
+    ("video_15_seg",      "Video Personalizado 15s",                  30000,  0, "🎥", 11),
+    ("video_1_min",       "Video Personalizado 60s",                  40000,  0, "🎥", 12),
+    ("transporte",        "Transporte Ida y Vuelta desde Pucón",      50000,  0, "🚐", 13),
+    ("toalla_normal",     "Toalla Normal",                             9000,  0, "🧻", 14),
+    ("toalla_poncho",     "Toalla Poncho",                            10000,  0, "🧻", 15),
+    ("chalas",            "Chalas de Ducha",                          10000,  0, "🩴", 16),
+    ("reserva_flex",      "Reserva FLEX (+10%)",                          0,  0, "🔄", 17),
+]
+
+
+def _seed_extras_visibility():
+    """Populate extras_visibility with the canonical catalog if still empty."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM extras_visibility")
+                if cur.fetchone()[0] > 0:
+                    return  # already seeded
+                for (key, name, price, cost, icon, sort) in _EXTRAS_SEED:
+                    cur.execute("""
+                        INSERT INTO extras_visibility
+                            (extra_name_lower, name, precio_venta, costo, icon,
+                             sort_order, show_in_booking)
+                        VALUES (%s, %s, %s, %s, %s, %s, TRUE)
+                        ON CONFLICT DO NOTHING
+                    """, (key, name, price, cost, icon, sort))
+                conn.commit()
+        logger.info("✅ extras_visibility seeded with %d items", len(_EXTRAS_SEED))
+    except Exception as e:
+        logger.warning("extras_visibility seed failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
     _ensure_web_push_table()
     _ensure_extras_visibility_table()
+    _seed_extras_visibility()
     try:
         from app.bot.cart import CartManager
         CartManager.refresh_prices_from_db()
