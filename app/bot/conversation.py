@@ -977,7 +977,15 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         return False
     
     def _get_main_menu_message(self, language: str = "es") -> str:
-        """Return the main menu, hiding options 6/7/8 if disabled in admin settings."""
+        """Return the main menu, preferring DB override over hardcoded translations."""
+        try:
+            from app.booking.bot_config_router import get_bot_response
+            db_menu = get_bot_response("main_menu", language)
+            if db_menu:
+                return db_menu
+        except Exception:
+            pass
+
         try:
             from app.booking.operator_settings import get_menu_settings
             ms = get_menu_settings()

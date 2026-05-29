@@ -20,6 +20,8 @@ class ResponseUpdate(BaseModel):
     menu_option: Optional[int] = None
     active: Optional[bool] = None
     button_label: Optional[str] = None
+    show_in_menu: Optional[bool] = None
+    menu_description: Optional[str] = None
 
 
 class KeywordCreate(BaseModel):
@@ -40,24 +42,27 @@ def _ensure_tables():
             with conn.cursor() as cur:
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS bot_responses (
-                        response_key TEXT PRIMARY KEY,
-                        label        TEXT NOT NULL DEFAULT '',
-                        content_es   TEXT,
-                        content_en   TEXT,
-                        content_pt   TEXT,
-                        menu_option  INT,
-                        active       BOOLEAN NOT NULL DEFAULT TRUE,
-                        button_label TEXT,
-                        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        response_key     TEXT PRIMARY KEY,
+                        label            TEXT NOT NULL DEFAULT '',
+                        content_es       TEXT,
+                        content_en       TEXT,
+                        content_pt       TEXT,
+                        menu_option      INT,
+                        active           BOOLEAN NOT NULL DEFAULT TRUE,
+                        button_label     TEXT,
+                        show_in_menu     BOOLEAN NOT NULL DEFAULT FALSE,
+                        menu_description TEXT,
+                        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
                 # Add columns that may be missing in existing tables
                 for col_def in [
-                    "menu_option  INT",
-                    "active       BOOLEAN NOT NULL DEFAULT TRUE",
-                    "button_label TEXT",
+                    "menu_option      INT",
+                    "active           BOOLEAN NOT NULL DEFAULT TRUE",
+                    "button_label     TEXT",
+                    "show_in_menu     BOOLEAN NOT NULL DEFAULT FALSE",
+                    "menu_description TEXT",
                 ]:
-                    col_name = col_def.split()[0]
                     try:
                         cur.execute(f"ALTER TABLE bot_responses ADD COLUMN IF NOT EXISTS {col_def}")
                     except Exception:
@@ -86,7 +91,8 @@ async def get_responses():
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT response_key, label, content_es, content_en, content_pt,
-                           menu_option, active, button_label, updated_at
+                           menu_option, active, button_label,
+                           show_in_menu, menu_description, updated_at
                     FROM bot_responses ORDER BY
                         CASE WHEN menu_option IS NULL THEN 9999 ELSE menu_option END,
                         response_key
@@ -102,7 +108,9 @@ async def get_responses():
                 "menu_option": r[5],
                 "active": r[6],
                 "button_label": r[7],
-                "updated_at": r[8].isoformat() if r[8] else None,
+                "show_in_menu": r[8],
+                "menu_description": r[9],
+                "updated_at": r[10].isoformat() if r[10] else None,
             }
             for r in rows
         ]}
@@ -119,22 +127,26 @@ async def update_response(key: str, data: ResponseUpdate):
                 cur.execute("""
                     INSERT INTO bot_responses
                         (response_key, label, content_es, content_en, content_pt,
-                         menu_option, active, button_label)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                         menu_option, active, button_label, show_in_menu, menu_description)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (response_key) DO UPDATE
-                    SET content_es   = COALESCE(EXCLUDED.content_es,   bot_responses.content_es),
-                        content_en   = COALESCE(EXCLUDED.content_en,   bot_responses.content_en),
-                        content_pt   = COALESCE(EXCLUDED.content_pt,   bot_responses.content_pt),
-                        menu_option  = EXCLUDED.menu_option,
-                        active       = EXCLUDED.active,
-                        button_label = EXCLUDED.button_label,
-                        updated_at   = NOW()
+                    SET content_es       = COALESCE(EXCLUDED.content_es,   bot_responses.content_es),
+                        content_en       = COALESCE(EXCLUDED.content_en,   bot_responses.content_en),
+                        content_pt       = COALESCE(EXCLUDED.content_pt,   bot_responses.content_pt),
+                        menu_option      = EXCLUDED.menu_option,
+                        active           = EXCLUDED.active,
+                        button_label     = EXCLUDED.button_label,
+                        show_in_menu     = EXCLUDED.show_in_menu,
+                        menu_description = EXCLUDED.menu_description,
+                        updated_at       = NOW()
                 """, (
                     key, key,
                     data.content_es, data.content_en, data.content_pt,
                     data.menu_option,
                     data.active if data.active is not None else True,
                     data.button_label,
+                    data.show_in_menu if data.show_in_menu is not None else False,
+                    data.menu_description,
                 ))
                 conn.commit()
         return {"status": "ok", "key": key}
@@ -167,6 +179,74 @@ async def get_quick_replies():
         ]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Shared helper (importable by other modules) ───────────────────────────────
+
+def get_bot_response(key: str, lang: str = "es") -> Optional[str]:
+    """Return bot response content from DB for the given key and language, or None."""
+    try:
+        col = {"es": "content_es", "en": "content_en", "pt": "content_pt"}.get(lang, "content_es")
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT {col}, content_es FROM bot_responses WHERE response_key = %s",
+                    (key,)
+                )
+                row = cur.fetchone()
+        if row:
+            return row[0] or row[1]
+    except Exception:
+        pass
+    return None
+
+
+_EMOJI_NUMS = {
+    0: "0️⃣", 1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣",
+    5: "5️⃣", 6: "6️⃣", 7: "7️⃣", 8: "8️⃣", 9: "9️⃣",
+}
+
+
+def build_main_menu_text(lang: str = "es") -> Optional[str]:
+    """Auto-build the welcome menu from show_in_menu=true items."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT menu_option, menu_description
+                    FROM bot_responses
+                    WHERE show_in_menu = TRUE AND active = TRUE AND menu_option IS NOT NULL
+                    ORDER BY menu_option
+                """)
+                items = cur.fetchall()
+        if not items:
+            return None
+        # Header and footer from DB (key "menu_header" / "menu_footer") or fallback
+        header = get_bot_response("menu_header", lang) or (
+            "🥬 ¡Ahoy, grumete! ⚓\n\nSoy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥\n\nPuedes preguntarme por:"
+        )
+        footer = get_bot_response("menu_footer", lang) or (
+            "Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *7️⃣* 👨‍✈️🌿\n\n"
+            "¿Listo para zarpar, grumete? ⛵\n\n*¿Qué número eliges?*"
+        )
+        parts = [header]
+        for (opt, desc) in items:
+            if desc:
+                emoji = _EMOJI_NUMS.get(opt, f"{opt}.")
+                parts.append(f"\n{emoji} *{desc}*")
+        parts.append(f"\n{footer}")
+        return "\n".join(parts)
+    except Exception:
+        return None
+
+
+@bot_config_router.get("/build-menu")
+async def build_menu_preview(lang: str = "es"):
+    """Return the auto-generated welcome menu text (preview, does not save)."""
+    text = build_main_menu_text(lang)
+    if text is None:
+        raise HTTPException(status_code=404, detail="No show_in_menu items found")
+    return {"text": text, "lang": lang}
 
 
 # ── Keywords ──────────────────────────────────────────────────────────────────
@@ -237,15 +317,64 @@ _DEFAULT_RESPONSES = {
         "button_label": "👋 Tomás",
         "content_es": "¡Hola {name}! 👋\nSoy Capitán HotBoat 🚤\n¿En qué puedo ayudarte hoy?",
     },
+    "main_menu": {
+        "label": "Mensaje de bienvenida (menú completo)",
+        "content_es": (
+            "🥬 ¡Ahoy, grumete! ⚓\n\n"
+            "Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥\n\n"
+            "Puedes preguntarme por:\n\n"
+            "1️⃣ *Disponibilidad y horarios HotBoat*\n\n"
+            "2️⃣ *Precios por persona HotBoat*\n\n"
+            "3️⃣ *Características Experiencia HotBoat*\n\n"
+            "4️⃣ *Extras HotBoat (toallas, videos, tablas, etc.)*\n\n"
+            "5️⃣ *Ubicación y Reseñas HotBoat*\n\n"
+            "6️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*\n\n"
+            "Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *7️⃣* 👨‍✈️🌿\n\n"
+            "¿Listo para zarpar, grumete? ⛵\n\n"
+            "*¿Qué número eliges?*"
+        ),
+        "content_en": (
+            "🥬 Ahoy, sailor! ⚓\n\n"
+            "I'm *Popeye the Sailor*, second mate of *HotBoat Chile* 🚤🔥\n\n"
+            "You can ask me about:\n\n"
+            "1️⃣ *HotBoat Availability and schedules*\n\n"
+            "2️⃣ *HotBoat Prices per person*\n\n"
+            "3️⃣ *HotBoat Experience Features*\n\n"
+            "4️⃣ *HotBoat Extras (towels, videos, boards, etc.)*\n\n"
+            "5️⃣ *HotBoat Location and reviews*\n\n"
+            "6️⃣ *Pucón Accommodations (Domes · Cabins · Hostel)*\n\n"
+            "If you'd rather talk to *Captain Tomás*, write *\"Call Tomás\"*, *\"Help\"*, or simply *7️⃣* 👨‍✈️🌿\n\n"
+            "Ready to set sail, sailor? ⛵\n\n"
+            "*Which number do you choose?*"
+        ),
+        "content_pt": (
+            "🥬 Ahoy, marujo! ⚓\n\n"
+            "Eu sou *Popeye o Marinheiro*, segundo imediato do *HotBoat Chile* 🚤🔥\n\n"
+            "Você pode me perguntar sobre:\n\n"
+            "1️⃣ *Disponibilidade e horários HotBoat*\n\n"
+            "2️⃣ *Preços por pessoa HotBoat*\n\n"
+            "3️⃣ *Características Experiência HotBoat*\n\n"
+            "4️⃣ *Extras HotBoat (toalhas, vídeos, tábuas, etc.)*\n\n"
+            "5️⃣ *Localização e avaliações HotBoat*\n\n"
+            "6️⃣ *Hospedagens Pucón (Domos · Cabanas · Hostel)*\n\n"
+            "Se preferir falar com o *Capitão Tomás*, escreva *\"Ligar para Tomás\"*, *\"Ajuda\"*, ou simplesmente *7️⃣* 👨‍✈️🌿\n\n"
+            "Pronto para zarpar, marujo? ⛵\n\n"
+            "*Qual número você escolhe?*"
+        ),
+    },
     "reservar": {
         "label": "Disponibilidad y horarios (opción 1)",
         "menu_option": 1,
         "button_label": "📅 Reservar",
+        "show_in_menu": True,
+        "menu_description": "Disponibilidad y horarios HotBoat",
     },
     "precio": {
         "label": "Precios por persona (opción 2)",
         "menu_option": 2,
         "button_label": "💰 Precio",
+        "show_in_menu": True,
+        "menu_description": "Precios por persona HotBoat",
         "content_es": (
             "💰 *Precios HotBoat:*\n\n"
             "👥 *2 personas*\n• $69.990 x persona\n• Total: *$139.980*\n\n"
@@ -284,6 +413,8 @@ _DEFAULT_RESPONSES = {
         "label": "Características del HotBoat (opción 3)",
         "menu_option": 3,
         "button_label": "🚤 HotBoat",
+        "show_in_menu": True,
+        "menu_description": "Características Experiencia HotBoat",
         "content_es": (
             "Estas son las características de la experiencia HotBoat 🚤🔥:\n\n"
             "⚡ Motor eléctrico (silencioso y sustentable)\n"
@@ -328,11 +459,15 @@ _DEFAULT_RESPONSES = {
         "label": "Extras y promociones (opción 4)",
         "menu_option": 4,
         "button_label": "🎁 Extras",
+        "show_in_menu": True,
+        "menu_description": "Extras HotBoat (toallas, videos, tablas, etc.)",
     },
     "ubicación": {
         "label": "Ubicación y cómo llegar (opción 5)",
         "menu_option": 5,
         "button_label": "📍 Ubicación",
+        "show_in_menu": True,
+        "menu_description": "Ubicación y Reseñas HotBoat",
         "content_es": (
             "📍 *Ubicación HotBoat:*\n\n"
             "📍 Estamos entre Pucón y Curarrehue, en pleno corazón de La Araucanía 🌿\n\n"
@@ -370,6 +505,8 @@ _DEFAULT_RESPONSES = {
         "label": "Solo Alojamientos (opción 9)",
         "menu_option": 9,
         "button_label": "🏠 Alojam.",
+        "show_in_menu": True,
+        "menu_description": "Alojamientos Pucón (Domos · Cabañas · Hostal)",
     },
     "bebestibles": {
         "label": "Bebestibles / bebidas (opción 🍷)",
@@ -548,15 +685,17 @@ def seed_defaults():
                     cur.execute("""
                         INSERT INTO bot_responses
                             (response_key, label, content_es, content_en, content_pt,
-                             menu_option, active, button_label)
-                        VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s)
+                             menu_option, active, button_label, show_in_menu, menu_description)
+                        VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s, %s, %s)
                         ON CONFLICT (response_key) DO UPDATE
-                        SET label        = EXCLUDED.label,
-                            content_es   = COALESCE(bot_responses.content_es, EXCLUDED.content_es),
-                            content_en   = COALESCE(bot_responses.content_en, EXCLUDED.content_en),
-                            content_pt   = COALESCE(bot_responses.content_pt, EXCLUDED.content_pt),
-                            menu_option  = COALESCE(bot_responses.menu_option, EXCLUDED.menu_option),
-                            button_label = COALESCE(bot_responses.button_label, EXCLUDED.button_label)
+                        SET label            = EXCLUDED.label,
+                            content_es       = COALESCE(bot_responses.content_es, EXCLUDED.content_es),
+                            content_en       = COALESCE(bot_responses.content_en, EXCLUDED.content_en),
+                            content_pt       = COALESCE(bot_responses.content_pt, EXCLUDED.content_pt),
+                            menu_option      = COALESCE(bot_responses.menu_option, EXCLUDED.menu_option),
+                            button_label     = COALESCE(bot_responses.button_label, EXCLUDED.button_label),
+                            show_in_menu     = COALESCE(bot_responses.show_in_menu, EXCLUDED.show_in_menu),
+                            menu_description = COALESCE(bot_responses.menu_description, EXCLUDED.menu_description)
                     """, (
                         key,
                         val.get("label", key),
@@ -565,6 +704,8 @@ def seed_defaults():
                         val.get("content_pt"),
                         val.get("menu_option"),
                         val.get("button_label"),
+                        val.get("show_in_menu", False),
+                        val.get("menu_description"),
                     ))
 
                 cur.execute("SELECT COUNT(*) FROM bot_keywords")

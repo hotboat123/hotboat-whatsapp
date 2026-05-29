@@ -1542,8 +1542,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
           <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem">
             <span style="font-weight:600;font-size:.95rem">💬 Mensajes del chatbot</span>
-            <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Usa <code>---</code> en una línea sola para separar en múltiples mensajes de WhatsApp</span>
-            <button onclick="loadBotResponses()" style="margin-left:auto;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
+            <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Usa <code>---</code> en línea sola para separar en múltiples mensajes · <b>Chat</b> = botón admin · <b>Menú</b> = aparece en el menú de bienvenida al cliente</span>
+            <button onclick="rebuildWelcomeMenu()" title="Reconstruir el mensaje de bienvenida automáticamente desde los ítems con Menú activado" style="margin-left:auto;background:rgba(56,189,248,.15);border:1px solid #38bdf8;color:#38bdf8;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">🔄 Reconstruir menú</button>
+            <button onclick="loadBotResponses()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
           </div>
           <div id="bot-responses-list" style="padding:.8rem 1.2rem;display:flex;flex-direction:column;gap:.8rem"></div>
         </div>
@@ -7807,19 +7808,29 @@ async function loadBotResponses(){
           <span style="margin-left:auto;font-size:.7rem;color:var(--muted)">${rs.updated_at ? new Date(rs.updated_at).toLocaleDateString('es-CL') : ''}</span>
         </div>
         <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-          <label style="font-size:.78rem;color:var(--muted);white-space:nowrap">Índice botón:</label>
+          <label style="font-size:.78rem;color:var(--muted);white-space:nowrap">Índice:</label>
           <input id="br-opt-${safeKey}" type="number" min="0" max="99" placeholder="—"
             value="${rs.menu_option ?? ''}"
-            style="width:60px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.82rem;outline:none;text-align:center">
-          <label style="font-size:.78rem;color:var(--muted);white-space:nowrap;margin-left:.3rem">Emoji/label:</label>
+            style="width:55px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.82rem;outline:none;text-align:center">
+          <label style="font-size:.78rem;color:var(--muted);white-space:nowrap">Botón:</label>
           <input id="br-lbl-${safeKey}" type="text" placeholder="🚤 HotBoat"
             value="${escHtml(rs.button_label||'')}"
-            style="width:130px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.82rem;outline:none">
-          <label style="display:flex;align-items:center;gap:.35rem;margin-left:auto;cursor:pointer;user-select:none">
-            <span style="font-size:.78rem;color:var(--muted)">Activo</span>
-            <input id="br-act-${safeKey}" type="checkbox" ${isActive?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:var(--gold)">
+            style="width:115px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.82rem;outline:none">
+          <label style="display:flex;align-items:center;gap:.28rem;cursor:pointer;user-select:none" title="Activo en botones del chat">
+            <input id="br-act-${safeKey}" type="checkbox" ${isActive?'checked':''} style="width:14px;height:14px;cursor:pointer;accent-color:var(--gold)">
+            <span style="font-size:.75rem;color:var(--muted)">Chat</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:.28rem;cursor:pointer;user-select:none" title="Aparece en el menú de bienvenida del chatbot">
+            <input id="br-sim-${safeKey}" type="checkbox" ${rs.show_in_menu?'checked':''} style="width:14px;height:14px;cursor:pointer;accent-color:#38bdf8">
+            <span style="font-size:.75rem;color:var(--muted)">Menú</span>
           </label>
         </div>
+        ${rs.show_in_menu ? `<div style="display:flex;gap:.4rem;align-items:center">
+          <label style="font-size:.76rem;color:var(--muted);white-space:nowrap;min-width:80px">Descripción menú:</label>
+          <input id="br-mdesc-${safeKey}" type="text" placeholder="Texto en la lista de bienvenida…"
+            value="${escHtml(rs.menu_description||'')}"
+            style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .6rem;font-size:.82rem;outline:none">
+        </div>` : `<div id="br-mdesc-wrap-${safeKey}" style="display:none"><input id="br-mdesc-${safeKey}" type="hidden" value="${escHtml(rs.menu_description||'')}"></div>`}
         <textarea id="br-es-${safeKey}" rows="3" placeholder="Español…"
           style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.8rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_es||'')}</textarea>
         <div style="display:flex;gap:.4rem">
@@ -7849,14 +7860,28 @@ async function saveBotResponse(key, safeKey){
   const menu_option = optVal !== '' && optVal !== undefined ? parseInt(optVal) : null;
   const active = document.getElementById(`br-act-${safeKey}`)?.checked ?? true;
   const button_label = document.getElementById(`br-lbl-${safeKey}`)?.value || null;
+  const show_in_menu = document.getElementById(`br-sim-${safeKey}`)?.checked ?? false;
+  const menu_description = document.getElementById(`br-mdesc-${safeKey}`)?.value || null;
   try {
     const r = await fetch(`/api/admin/bot/responses/${encodeURIComponent(key)}`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({content_es, content_en, content_pt, menu_option, active, button_label})
+      body: JSON.stringify({content_es, content_en, content_pt, menu_option, active, button_label, show_in_menu, menu_description})
     });
     if(!r.ok) throw new Error(await r.text());
     showToast('✅ Guardado');
     loadBotResponses();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function rebuildWelcomeMenu(){
+  try {
+    const r = await fetch('/api/admin/bot/build-menu?lang=es');
+    if(!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    // Find the main_menu textarea and fill it
+    const ta = document.getElementById('br-es-main_menu');
+    if(ta){ ta.value = d.text; showToast('✅ Menú reconstruido — guarda para aplicar'); }
+    else { showToast('Abre la tarjeta "Mensaje de bienvenida" primero', true); }
   } catch(e){ showToast('❌ '+e.message, true); }
 }
 
