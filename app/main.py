@@ -730,10 +730,11 @@ async def push_test():
         return {"sent": False, "subscriptions": 0, "error": "No subscriptions registered"}
     errors = []
     sent = 0
+    from app.notifications.push_notifier import _send_web_push_sync_verbose
     for sub in subs:
         try:
             def _try_send(s=sub):
-                return _pn._send_web_push_sync_verbose(
+                return _send_web_push_sync_verbose(
                     s,
                     {"title": "🔔 Notificación de prueba", "body": "Si ves esto, ¡funcionan! ✅", "phone": None},
                     _pn._private_key,
