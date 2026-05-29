@@ -718,6 +718,19 @@ async def get_vapid_public_key():
     return {"publicKey": settings.vapid_public_key or ""}
 
 
+@app.post("/api/push/test")
+async def push_test():
+    """Send a test push notification to all subscribed devices."""
+    from app.notifications import push_notifier as _pn
+    ok = await _pn.send_notification(
+        title="🔔 Notificación de prueba",
+        body="Si ves esto, las notificaciones funcionan ✅",
+        data={"type": "test"},
+    )
+    subs = await _pn._get_subscriptions()
+    return {"sent": ok, "subscriptions": len(subs)}
+
+
 @app.get("/api/push/debug")
 async def push_debug():
     """Diagnose Web Push configuration."""

@@ -44,12 +44,9 @@
             <aside class="sidebar">
                 <div class="sidebar-header">
                     <h2>💬 Conversations</h2>
-                    <button class="btn-refresh" onclick="loadConversations()" title="Refresh">
-                        🔄
-                    </button>
-                    <button class="btn-secondary sidebar-close-button" onclick="showChatView()">
-                        ✕
-                    </button>
+                    <button class="btn-refresh" onclick="loadConversations()" title="Refresh">🔄</button>
+                    <button class="btn-notif" id="btnNotif" onclick="requestPushPermission()" title="Activar notificaciones" style="display:none">🔔</button>
+                    <button class="btn-secondary sidebar-close-button" onclick="showChatView()">✕</button>
                 </div>
                 
                 <div class="search-box">

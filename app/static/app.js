@@ -202,11 +202,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── PWA / Web Push ────────────────────────────────────────────────────────────
 
+let _swRegistration = null;
+
 async function initPWA() {
     if (!('serviceWorker' in navigator)) return;
 
     try {
-        const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        _swRegistration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
         console.log('✅ Service Worker registered');
 
         // Listen for SW → open chat messages
@@ -220,7 +222,6 @@ async function initPWA() {
         const urlParams = new URLSearchParams(window.location.search);
         const phoneParam = urlParams.get('phone');
         if (phoneParam) {
-            // Wait for conversations to load, then select
             const trySelect = setInterval(() => {
                 if (conversations.length > 0) {
                     clearInterval(trySelect);
@@ -230,42 +231,75 @@ async function initPWA() {
             setTimeout(() => clearInterval(trySelect), 5000);
         }
 
-        // Request push permission and subscribe
-        await setupPushSubscription(reg);
+        // Check push state — show bell button if not yet subscribed
+        await _checkPushState();
     } catch (err) {
         console.warn('Service Worker registration failed:', err);
     }
 }
 
-async function setupPushSubscription(reg) {
-    if (!('PushManager' in window)) return;
+async function _checkPushState() {
+    if (!('PushManager' in window) || !_swRegistration) return;
     if (Notification.permission === 'denied') return;
 
     try {
-        // Get VAPID public key from server
         const resp = await fetch('/api/push/vapid-public-key');
         const { publicKey } = await resp.json();
-        if (!publicKey) return;
+        if (!publicKey) { console.warn('No VAPID public key from server'); return; }
 
-        const existing = await reg.pushManager.getSubscription();
+        const existing = await _swRegistration.pushManager.getSubscription();
         if (existing) {
-            // Already subscribed — just make sure server knows
+            // Already subscribed — refresh server record silently
             await savePushSubscription(existing);
+            _updateNotifBtn('active');
+            console.log('✅ Push already subscribed');
+        } else {
+            // Not subscribed — show bell button so user can tap to enable
+            _updateNotifBtn('inactive');
+        }
+    } catch (err) {
+        console.warn('Push state check failed:', err);
+    }
+}
+
+// Called when user taps the 🔔 button
+async function requestPushPermission() {
+    if (!('PushManager' in window) || !_swRegistration) {
+        showToast('Tu navegador no soporta notificaciones push', 'error');
+        return;
+    }
+    try {
+        const resp = await fetch('/api/push/vapid-public-key');
+        const { publicKey } = await resp.json();
+        if (!publicKey) { showToast('Servidor sin VAPID key configurada', 'error'); return; }
+
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            showToast('Permiso de notificaciones denegado', 'error');
             return;
         }
-
-        // Ask permission & subscribe
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') return;
-
-        const subscription = await reg.pushManager.subscribe({
+        const subscription = await _swRegistration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: _urlBase64ToUint8Array(publicKey),
         });
         await savePushSubscription(subscription);
-        console.log('✅ Push notifications subscribed');
+        _updateNotifBtn('active');
+        showToast('✅ Notificaciones activadas', 'success');
+        console.log('✅ Push subscribed:', subscription.endpoint.slice(0, 60));
     } catch (err) {
-        console.warn('Push subscription failed:', err);
+        showToast('Error activando notificaciones: ' + err.message, 'error');
+        console.error('Push subscribe failed:', err);
+    }
+}
+
+function _updateNotifBtn(state) {
+    const btn = document.getElementById('btnNotif');
+    if (!btn) return;
+    if (state === 'active') {
+        btn.style.display = 'none'; // hidden when working fine
+    } else {
+        btn.style.display = '';    // visible when needs action
+        btn.title = 'Tap para activar notificaciones';
     }
 }
 
