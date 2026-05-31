@@ -467,7 +467,7 @@ class ConversationManager:
                         f"Lead phrase in {inferred_language}; sending main menu ({from_number})"
                     )
                     response = self._get_main_menu_message(inferred_language)
-            elif is_first and not metadata.get("language_selected"):
+            elif is_first:
                 inferred_language = self._infer_language_from_free_text(message_text)
                 if inferred_language in LANGUAGES:
                     metadata["language"] = inferred_language
