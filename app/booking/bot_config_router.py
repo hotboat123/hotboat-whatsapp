@@ -22,6 +22,8 @@ class ResponseUpdate(BaseModel):
     button_label: Optional[str] = None
     show_in_menu: Optional[bool] = None
     menu_description: Optional[str] = None
+    menu_description_en: Optional[str] = None
+    menu_description_pt: Optional[str] = None
 
 
 class KeywordCreate(BaseModel):
@@ -57,11 +59,13 @@ def _ensure_tables():
                 """)
                 # Add columns that may be missing in existing tables
                 for col_def in [
-                    "menu_option      INT",
-                    "active           BOOLEAN NOT NULL DEFAULT TRUE",
-                    "button_label     TEXT",
-                    "show_in_menu     BOOLEAN NOT NULL DEFAULT FALSE",
-                    "menu_description TEXT",
+                    "menu_option         INT",
+                    "active              BOOLEAN NOT NULL DEFAULT TRUE",
+                    "button_label        TEXT",
+                    "show_in_menu        BOOLEAN NOT NULL DEFAULT FALSE",
+                    "menu_description    TEXT",
+                    "menu_description_en TEXT",
+                    "menu_description_pt TEXT",
                 ]:
                     try:
                         cur.execute(f"ALTER TABLE bot_responses ADD COLUMN IF NOT EXISTS {col_def}")
@@ -92,7 +96,8 @@ async def get_responses():
                 cur.execute("""
                     SELECT response_key, label, content_es, content_en, content_pt,
                            menu_option, active, button_label,
-                           show_in_menu, menu_description, updated_at
+                           show_in_menu, menu_description, updated_at,
+                           menu_description_en, menu_description_pt
                     FROM bot_responses ORDER BY
                         CASE WHEN menu_option IS NULL THEN 9999 ELSE menu_option END,
                         response_key
@@ -111,6 +116,8 @@ async def get_responses():
                 "show_in_menu": r[8],
                 "menu_description": r[9],
                 "updated_at": r[10].isoformat() if r[10] else None,
+                "menu_description_en": r[11],
+                "menu_description_pt": r[12],
             }
             for r in rows
         ]}
@@ -127,18 +134,21 @@ async def update_response(key: str, data: ResponseUpdate):
                 cur.execute("""
                     INSERT INTO bot_responses
                         (response_key, label, content_es, content_en, content_pt,
-                         menu_option, active, button_label, show_in_menu, menu_description)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         menu_option, active, button_label, show_in_menu,
+                         menu_description, menu_description_en, menu_description_pt)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (response_key) DO UPDATE
-                    SET content_es       = COALESCE(EXCLUDED.content_es,   bot_responses.content_es),
-                        content_en       = COALESCE(EXCLUDED.content_en,   bot_responses.content_en),
-                        content_pt       = COALESCE(EXCLUDED.content_pt,   bot_responses.content_pt),
-                        menu_option      = EXCLUDED.menu_option,
-                        active           = EXCLUDED.active,
-                        button_label     = EXCLUDED.button_label,
-                        show_in_menu     = EXCLUDED.show_in_menu,
-                        menu_description = EXCLUDED.menu_description,
-                        updated_at       = NOW()
+                    SET content_es          = COALESCE(EXCLUDED.content_es,   bot_responses.content_es),
+                        content_en          = COALESCE(EXCLUDED.content_en,   bot_responses.content_en),
+                        content_pt          = COALESCE(EXCLUDED.content_pt,   bot_responses.content_pt),
+                        menu_option         = EXCLUDED.menu_option,
+                        active              = EXCLUDED.active,
+                        button_label        = EXCLUDED.button_label,
+                        show_in_menu        = EXCLUDED.show_in_menu,
+                        menu_description    = EXCLUDED.menu_description,
+                        menu_description_en = EXCLUDED.menu_description_en,
+                        menu_description_pt = EXCLUDED.menu_description_pt,
+                        updated_at          = NOW()
                 """, (
                     key, key,
                     data.content_es, data.content_en, data.content_pt,
@@ -147,6 +157,8 @@ async def update_response(key: str, data: ResponseUpdate):
                     data.button_label,
                     data.show_in_menu if data.show_in_menu is not None else False,
                     data.menu_description,
+                    data.menu_description_en,
+                    data.menu_description_pt,
                 ))
                 conn.commit()
         return {"status": "ok", "key": key}
@@ -226,7 +238,8 @@ def build_main_menu_text(lang: str = "es") -> Optional[str]:
         with _get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT menu_option, menu_description
+                    SELECT menu_option, menu_description,
+                           menu_description_en, menu_description_pt
                     FROM bot_responses
                     WHERE show_in_menu = TRUE AND active = TRUE
                       AND menu_option IS NOT NULL AND menu_description IS NOT NULL
@@ -238,7 +251,13 @@ def build_main_menu_text(lang: str = "es") -> Optional[str]:
         header = get_bot_response("menu_header", lang) or _DEFAULT_HEADERS.get(lang, _DEFAULT_HEADERS["es"])
         footer = get_bot_response("menu_footer", lang) or _DEFAULT_FOOTERS.get(lang, _DEFAULT_FOOTERS["es"])
         lines = [header, ""]
-        for (opt, desc) in items:
+        for (opt, desc_es, desc_en, desc_pt) in items:
+            if lang == "en":
+                desc = desc_en or desc_es
+            elif lang == "pt":
+                desc = desc_pt or desc_es
+            else:
+                desc = desc_es
             emoji = _EMOJI_NUMS.get(opt, f"{opt}.")
             lines.append(f"{emoji} *{desc}*")
             lines.append("")
@@ -392,6 +411,8 @@ _DEFAULT_RESPONSES = {
         "button_label": "📅 Reservar",
         "show_in_menu": True,
         "menu_description": "Disponibilidad y horarios HotBoat",
+        "menu_description_en": "HotBoat Availability and Schedules",
+        "menu_description_pt": "Disponibilidade e horários HotBoat",
         "content_es": (
             "📅 *¿Para qué fecha te gustaría reservar?*\n\n"
             "Escríbeme la fecha, por ejemplo:\n"
@@ -429,6 +450,8 @@ _DEFAULT_RESPONSES = {
         "button_label": "💰 Precio",
         "show_in_menu": True,
         "menu_description": "Precios por persona HotBoat",
+        "menu_description_en": "HotBoat Prices per Person",
+        "menu_description_pt": "Preços por pessoa HotBoat",
         "content_es": (
             "💰 *Precios HotBoat:*\n\n"
             "👥 *2 personas*\n• $69.990 x persona\n• Total: *$139.980*\n\n"
@@ -469,6 +492,8 @@ _DEFAULT_RESPONSES = {
         "button_label": "🚤 HotBoat",
         "show_in_menu": True,
         "menu_description": "Características Experiencia HotBoat",
+        "menu_description_en": "HotBoat Experience Features",
+        "menu_description_pt": "Características Experiência HotBoat",
         "content_es": (
             "Estas son las características de la experiencia HotBoat 🚤🔥:\n\n"
             "⚡ Motor eléctrico (silencioso y sustentable)\n"
@@ -515,6 +540,8 @@ _DEFAULT_RESPONSES = {
         "button_label": "🎁 Extras",
         "show_in_menu": True,
         "menu_description": "Extras HotBoat (toallas, videos, tablas, etc.)",
+        "menu_description_en": "HotBoat Extras (towels, videos, boards, etc.)",
+        "menu_description_pt": "Extras HotBoat (toalhas, vídeos, pranchas, etc.)",
         "content_es": (
             "✨ *Extras HotBoat:*\n\n"
             "¿Quieres agregar algo especial a tu HotBoat?\n\n"
@@ -612,6 +639,8 @@ _DEFAULT_RESPONSES = {
         "button_label": "📍 Ubicación",
         "show_in_menu": True,
         "menu_description": "Ubicación y Reseñas HotBoat",
+        "menu_description_en": "HotBoat Location and Reviews",
+        "menu_description_pt": "Localização e Avaliações HotBoat",
         "content_es": (
             "📍 *Ubicación HotBoat:*\n\n"
             "📍 Estamos entre Pucón y Curarrehue, en pleno corazón de La Araucanía 🌿\n\n"
@@ -651,6 +680,8 @@ _DEFAULT_RESPONSES = {
         "button_label": "🏠 Alojam.",
         "show_in_menu": True,
         "menu_description": "Alojamientos Pucón (Domos · Cabañas · Hostal)",
+        "menu_description_en": "Pucón Accommodations (Domes · Cabins · Hostel)",
+        "menu_description_pt": "Acomodações Pucón (Domos · Cabanas · Hostel)",
     },
     "bebestibles": {
         "label": "Bebestibles / bebidas (opción 🍷)",
@@ -829,17 +860,20 @@ def seed_defaults():
                     cur.execute("""
                         INSERT INTO bot_responses
                             (response_key, label, content_es, content_en, content_pt,
-                             menu_option, active, button_label, show_in_menu, menu_description)
-                        VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s, %s, %s)
+                             menu_option, active, button_label, show_in_menu,
+                             menu_description, menu_description_en, menu_description_pt)
+                        VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s, %s, %s, %s, %s)
                         ON CONFLICT (response_key) DO UPDATE
-                        SET label            = EXCLUDED.label,
-                            content_es       = COALESCE(bot_responses.content_es, EXCLUDED.content_es),
-                            content_en       = COALESCE(bot_responses.content_en, EXCLUDED.content_en),
-                            content_pt       = COALESCE(bot_responses.content_pt, EXCLUDED.content_pt),
-                            menu_option      = COALESCE(bot_responses.menu_option, EXCLUDED.menu_option),
-                            button_label     = COALESCE(bot_responses.button_label, EXCLUDED.button_label),
-                            show_in_menu     = COALESCE(bot_responses.show_in_menu, EXCLUDED.show_in_menu),
-                            menu_description = COALESCE(bot_responses.menu_description, EXCLUDED.menu_description)
+                        SET label               = EXCLUDED.label,
+                            content_es          = COALESCE(bot_responses.content_es, EXCLUDED.content_es),
+                            content_en          = COALESCE(bot_responses.content_en, EXCLUDED.content_en),
+                            content_pt          = COALESCE(bot_responses.content_pt, EXCLUDED.content_pt),
+                            menu_option         = COALESCE(bot_responses.menu_option, EXCLUDED.menu_option),
+                            button_label        = COALESCE(bot_responses.button_label, EXCLUDED.button_label),
+                            show_in_menu        = COALESCE(bot_responses.show_in_menu, EXCLUDED.show_in_menu),
+                            menu_description    = COALESCE(bot_responses.menu_description, EXCLUDED.menu_description),
+                            menu_description_en = COALESCE(bot_responses.menu_description_en, EXCLUDED.menu_description_en),
+                            menu_description_pt = COALESCE(bot_responses.menu_description_pt, EXCLUDED.menu_description_pt)
                     """, (
                         key,
                         val.get("label", key),
@@ -850,6 +884,8 @@ def seed_defaults():
                         val.get("button_label"),
                         val.get("show_in_menu", False),
                         val.get("menu_description"),
+                        val.get("menu_description_en"),
+                        val.get("menu_description_pt"),
                     ))
 
                 # Fix rows that still have menu_description=NULL (never customized):

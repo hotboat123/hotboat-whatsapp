@@ -7825,12 +7825,30 @@ async function loadBotResponses(){
             <span style="font-size:.75rem;color:var(--muted)">Menú</span>
           </label>
         </div>
-        ${rs.show_in_menu ? `<div style="display:flex;gap:.4rem;align-items:center">
-          <label style="font-size:.76rem;color:var(--muted);white-space:nowrap;min-width:80px">Descripción menú:</label>
-          <input id="br-mdesc-${safeKey}" type="text" placeholder="Texto en la lista de bienvenida…"
-            value="${escHtml(rs.menu_description||'')}"
-            style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .6rem;font-size:.82rem;outline:none">
-        </div>` : `<div id="br-mdesc-wrap-${safeKey}" style="display:none"><input id="br-mdesc-${safeKey}" type="hidden" value="${escHtml(rs.menu_description||'')}"></div>`}
+        ${rs.show_in_menu ? `<div style="display:flex;flex-direction:column;gap:.3rem">
+          <div style="display:flex;gap:.4rem;align-items:center">
+            <label style="font-size:.76rem;color:var(--muted);white-space:nowrap;min-width:80px">Desc. menú ES:</label>
+            <input id="br-mdesc-${safeKey}" type="text" placeholder="Texto en la lista de bienvenida…"
+              value="${escHtml(rs.menu_description||'')}"
+              style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .6rem;font-size:.82rem;outline:none">
+          </div>
+          <div style="display:flex;gap:.4rem;align-items:center">
+            <label style="font-size:.76rem;color:var(--muted);white-space:nowrap;min-width:80px">Desc. menú EN:</label>
+            <input id="br-mdesc-en-${safeKey}" type="text" placeholder="Menu item text in English…"
+              value="${escHtml(rs.menu_description_en||'')}"
+              style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .6rem;font-size:.82rem;outline:none">
+          </div>
+          <div style="display:flex;gap:.4rem;align-items:center">
+            <label style="font-size:.76rem;color:var(--muted);white-space:nowrap;min-width:80px">Desc. menú PT:</label>
+            <input id="br-mdesc-pt-${safeKey}" type="text" placeholder="Texto do item de menu em português…"
+              value="${escHtml(rs.menu_description_pt||'')}"
+              style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .6rem;font-size:.82rem;outline:none">
+          </div>
+        </div>` : `<div id="br-mdesc-wrap-${safeKey}" style="display:none">
+          <input id="br-mdesc-${safeKey}" type="hidden" value="${escHtml(rs.menu_description||'')}">
+          <input id="br-mdesc-en-${safeKey}" type="hidden" value="${escHtml(rs.menu_description_en||'')}">
+          <input id="br-mdesc-pt-${safeKey}" type="hidden" value="${escHtml(rs.menu_description_pt||'')}">
+        </div>`}
         <textarea id="br-es-${safeKey}" rows="3" placeholder="Español…"
           style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.8rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_es||'')}</textarea>
         <div style="display:flex;gap:.4rem">
@@ -7862,10 +7880,12 @@ async function saveBotResponse(key, safeKey){
   const button_label = document.getElementById(`br-lbl-${safeKey}`)?.value || null;
   const show_in_menu = document.getElementById(`br-sim-${safeKey}`)?.checked ?? false;
   const menu_description = document.getElementById(`br-mdesc-${safeKey}`)?.value || null;
+  const menu_description_en = document.getElementById(`br-mdesc-en-${safeKey}`)?.value || null;
+  const menu_description_pt = document.getElementById(`br-mdesc-pt-${safeKey}`)?.value || null;
   try {
     const r = await fetch(`/api/admin/bot/responses/${encodeURIComponent(key)}`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({content_es, content_en, content_pt, menu_option, active, button_label, show_in_menu, menu_description})
+      body: JSON.stringify({content_es, content_en, content_pt, menu_option, active, button_label, show_in_menu, menu_description, menu_description_en, menu_description_pt})
     });
     if(!r.ok) throw new Error(await r.text());
     showToast('✅ Guardado');
