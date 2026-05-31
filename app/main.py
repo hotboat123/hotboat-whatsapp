@@ -1998,6 +1998,25 @@ async def upload_and_send_image(
         raise HTTPException(status_code=500, detail=f"Failed to send image: {str(e)}")
 
 
+def _convert_webm_to_ogg(input_path: str, output_path: str) -> bool:
+    """Convert webm audio to ogg/opus using the bundled ffmpeg from imageio-ffmpeg."""
+    try:
+        import subprocess
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        result = subprocess.run(
+            [ffmpeg_exe, "-y", "-i", input_path, "-c:a", "libopus", "-b:a", "64k", output_path],
+            capture_output=True, timeout=30
+        )
+        if result.returncode != 0:
+            logger.warning(f"ffmpeg conversion stderr: {result.stderr.decode(errors='replace')}")
+            return False
+        return True
+    except Exception as e:
+        logger.warning(f"Audio conversion failed: {e}")
+        return False
+
+
 @app.post("/api/upload-and-send-audio")
 async def upload_and_send_audio(
     audio: UploadFile,
@@ -2032,11 +2051,16 @@ async def upload_and_send_audio(
         file_size_mb = len(contents) / (1024 * 1024)
         logger.info(f"📥 Processing audio {audio.filename} ({file_size_mb:.2f} MB) from {to}")
         
-        # Save to temporary file for upload
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.ogg') as temp_file:
+        # Save with the correct extension
+        is_webm = audio.content_type and "webm" in audio.content_type
+        orig_suffix = ".webm" if is_webm else ".ogg"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=orig_suffix) as temp_file:
             temp_file.write(contents)
             temp_path = temp_file.name
-        
+
+        original_temp_path = temp_path
+        upload_path = temp_path
+        converted_path = None
         try:
             # Determine MIME type and extension
             mime_type = "audio/ogg"
@@ -2051,13 +2075,22 @@ async def upload_and_send_audio(
                 elif "wav" in audio.content_type:
                     mime_type = "audio/wav"
                     extension = "wav"
-                elif "webm" in audio.content_type:
-                    mime_type = "audio/ogg"  # WhatsApp prefers OGG
-                    extension = "ogg"
-            
+                elif is_webm:
+                    # Chrome records audio/webm (opus). WhatsApp needs ogg/opus — same codec, different container.
+                    converted_path = original_temp_path.replace(".webm", "_conv.ogg")
+                    if _convert_webm_to_ogg(original_temp_path, converted_path):
+                        upload_path = converted_path
+                        mime_type = "audio/ogg"
+                        extension = "ogg"
+                        logger.info("✅ Converted webm→ogg for WhatsApp delivery")
+                    else:
+                        logger.warning("⚠️ webm→ogg conversion failed, uploading as webm")
+                        mime_type = "audio/webm"
+                        extension = "webm"
+
             # Upload to WhatsApp
             logger.info(f"📤 Uploading audio to WhatsApp (MIME: {mime_type})...")
-            media_id = await whatsapp_client.upload_media(temp_path, mime_type)
+            media_id = await whatsapp_client.upload_media(upload_path, mime_type)
             
             if not media_id:
                 raise HTTPException(status_code=500, detail="Failed to upload audio to WhatsApp")
@@ -2073,7 +2106,7 @@ async def upload_and_send_audio(
             permanent_path = os.path.join(audio_dir, permanent_filename)
             
             # Copy the temporary file to permanent location
-            shutil.copy2(temp_path, permanent_path)
+            shutil.copy2(upload_path, permanent_path)
             logger.info(f"💾 Audio saved locally: {permanent_path}")
             
             # Send audio message
@@ -2116,12 +2149,12 @@ async def upload_and_send_audio(
             }
             
         finally:
-            # Clean up temporary file
-            try:
-                os.unlink(temp_path)
-            except Exception:
-                pass
-        
+            for path in set(filter(None, [original_temp_path, converted_path])):
+                try:
+                    os.unlink(path)
+                except Exception:
+                    pass
+
     except HTTPException:
         raise
     except Exception as e:

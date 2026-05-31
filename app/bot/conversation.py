@@ -19,7 +19,7 @@ from app.bot.translations import (
     LANGUAGES
 )
 from app.config import get_settings
-from app.db.leads import get_or_create_lead, get_conversation_history
+from app.db.leads import get_or_create_lead, get_conversation_history, save_lead_language
 from app.whatsapp.client import WhatsAppClient
 
 try:
@@ -869,12 +869,10 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 logger.warning(f"Error loading history for {phone_number}: {e}")
                 history = []
             
-            # Detect language from history if available, otherwise default to Spanish
-            detected_language = "es"  # Default
-            if history:
-                # If there's history, user already selected language
-                detected_language = "es"  # Could be enhanced to detect from history
-            
+            # Restore language preference from DB; fall back to 'es' for brand-new users
+            pref_lang = lead.get("preferred_language") if lead else None
+            detected_language = pref_lang or "es"
+
             self.conversations[phone_number] = {
                 "phone": phone_number,
                 "name": contact_name,
@@ -885,7 +883,7 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                     "lead_status": lead.get("lead_status") if lead else "unknown",
                     "lead_id": lead.get("id") if lead else None,
                     "language": detected_language,
-                    "language_selected": len(history) > 0  # True if has history
+                    "language_selected": True,
                 },
                 "processed_message_ids": set()
             }
@@ -977,7 +975,10 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         return False
     
     def _get_main_menu_message(self, language: str = "es") -> str:
-        """Return the welcome menu, built dynamically from show_in_menu DB items."""
+        """Return the welcome menu. Tries DB-driven menu first, falls back to static."""
+        _LANG_HINT = "\n\n_🌍 ¿Hablas otro idioma? Escribe *\"inglés\"* o *\"português\"*_"
+
+        # 1. DB-driven menu (show_in_menu toggles, hint already appended inside)
         try:
             from app.booking.bot_config_router import build_main_menu_text
             menu = build_main_menu_text(language)
@@ -985,8 +986,53 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 return menu
         except Exception:
             pass
-        # Fallback to hardcoded translations
-        return get_text("main_menu", language)
+
+        # 2. Static fallback — respect operator show/hide settings
+        try:
+            from app.booking.operator_settings import get_menu_settings
+            ms = get_menu_settings()
+            show_exp   = ms.get("show_experiencias", True)
+            show_aloj  = ms.get("show_alojamientos", True)
+            show_packs = ms.get("show_packs", True)
+        except Exception:
+            show_exp = show_aloj = show_packs = True
+
+        if show_exp and show_aloj and show_packs:
+            text = get_text("main_menu", language)
+            if language == "es":
+                text += _LANG_HINT
+            return text
+
+        if language != "es":
+            return get_text("main_menu", language)
+
+        # Dynamic Spanish menu when some sections are hidden
+        lines = [
+            "🥬 ¡Ahoy, grumete! ⚓", "",
+            "Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤🔥", "",
+            "Puedes preguntarme por:", "",
+            "1️⃣ *Disponibilidad y horarios HotBoat*", "",
+            "2️⃣ *Precios por persona HotBoat*", "",
+            "3️⃣ *Características Experiencia HotBoat*", "",
+            "4️⃣ *Extras HotBoat (toallas, videos, tablas, etc.)*", "",
+            "5️⃣ *Ubicación y Reseñas HotBoat*",
+        ]
+        next_num = 6
+        if show_aloj:
+            lines += ["", f"{next_num}️⃣ *Alojamientos Pucón (Domos · Cabañas · Hostal)*"]
+            next_num += 1
+        if show_exp:
+            lines += ["", f"{next_num}️⃣ *Otras Experiencias Pucón (Rafting, cabalgatas, velerismo)*"]
+            next_num += 1
+        if show_packs:
+            lines += ["", f"{next_num}️⃣ *Packs Completos Pucón (Romántico · Familiar · Amigos · Arma tu Pack)*"]
+            next_num += 1
+        lines += [
+            "",
+            f"Si prefieres hablar con el *Capitán Tomás*, escribe *\"Llamar a Tomás\"*, *\"Ayuda\"*, o simplemente *{next_num}️⃣* 👨‍✈️🌿",
+            "", "¿Listo para zarpar, grumete? ⛵", "", "*¿Qué número eliges?*",
+        ]
+        return "\n".join(lines) + _LANG_HINT
 
     def _get_main_menu_message_LEGACY(self, language: str = "es") -> str:
         """Legacy version kept for reference — no longer called."""
@@ -1187,6 +1233,13 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         metadata = conversation.setdefault("metadata", {})
         metadata["language"] = language_code
         metadata["language_selected"] = True
+        # Persist so the choice survives server restarts
+        phone = conversation.get("phone")
+        if phone:
+            try:
+                save_lead_language(phone, language_code)
+            except Exception:
+                pass
         confirmation = get_text("language_changed", language_code)
         menu = self._get_main_menu_message(language_code)
         return f"{confirmation}\n\n{menu}"

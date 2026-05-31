@@ -28,6 +28,34 @@ def _ad_source_col_exists(cur) -> bool:
     return _ad_col_cached
 
 
+_lang_col_ensured: bool = False
+
+def _ensure_lang_col(cur) -> None:
+    """Add preferred_language column if not present (runs once per process)."""
+    global _lang_col_ensured
+    if _lang_col_ensured:
+        return
+    cur.execute(
+        "ALTER TABLE whatsapp_leads ADD COLUMN IF NOT EXISTS preferred_language TEXT"
+    )
+    _lang_col_ensured = True
+
+
+def save_lead_language(phone_number: str, language: str) -> None:
+    """Persist the user's preferred language to the DB (synchronous)."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                _ensure_lang_col(cur)
+                cur.execute(
+                    "UPDATE whatsapp_leads SET preferred_language = %s, updated_at = NOW() WHERE phone_number = %s",
+                    (language, phone_number),
+                )
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"save_lead_language failed: {e}")
+
+
 async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Dict:
     """
     Get or create a lead in the database
@@ -42,13 +70,15 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                _ensure_lang_col(cur)
                 try:
                     cur.execute("""
                         SELECT
                             id, phone_number, customer_name, lead_status,
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
                             unread_count, last_read_at, priority, ad_source,
-                            ad_platform, ad_media_type, ad_creative_url, ad_ctwa_clid, ad_audience
+                            ad_platform, ad_media_type, ad_creative_url, ad_ctwa_clid, ad_audience,
+                            preferred_language
                         FROM whatsapp_leads
                         WHERE phone_number = %s
                     """, (phone_number,))
@@ -104,6 +134,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "ad_creative_url": row[16] if len(row) > 16 else None,
                         "ad_ctwa_clid": row[17] if len(row) > 17 else None,
                         "ad_audience": row[18] if len(row) > 18 else None,
+                        "preferred_language": row[19] if len(row) > 19 else None,
                     }
                 else:
                     # Create new lead

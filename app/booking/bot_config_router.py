@@ -243,7 +243,10 @@ def build_main_menu_text(lang: str = "es") -> Optional[str]:
             lines.append(f"{emoji} *{desc}*")
             lines.append("")
         lines.append(footer)
-        return "\n".join(lines)
+        text = "\n".join(lines)
+        if lang == "es":
+            text += "\n\n_🌍 ¿Hablas otro idioma? Escribe *\"inglés\"* o *\"português\"*_"
+        return text
     except Exception as e:
         logger.warning("build_main_menu_text failed: %s", e)
         return None
@@ -389,6 +392,36 @@ _DEFAULT_RESPONSES = {
         "button_label": "📅 Reservar",
         "show_in_menu": True,
         "menu_description": "Disponibilidad y horarios HotBoat",
+        "content_es": (
+            "📅 *¿Para qué fecha te gustaría reservar?*\n\n"
+            "Escríbeme la fecha, por ejemplo:\n"
+            "• \"15 de enero\"\n"
+            "• \"martes 23\"\n"
+            "• \"próximo sábado\"\n\n"
+            "¿Qué fecha prefieres, grumete? ⚓\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💡 *Tip:* Escribe *\"menú\"* si quieres volver al menú principal"
+        ),
+        "content_en": (
+            "📅 *What date would you like to book?*\n\n"
+            "Write me the date, for example:\n"
+            "• \"January 15\"\n"
+            "• \"Tuesday 23rd\"\n"
+            "• \"next Saturday\"\n\n"
+            "What date do you prefer, sailor? ⚓\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💡 *Tip:* Write *\"menu\"* if you want to go back to the main menu"
+        ),
+        "content_pt": (
+            "📅 *Para qual data você gostaria de reservar?*\n\n"
+            "Escreva-me a data, por exemplo:\n"
+            "• \"15 de janeiro\"\n"
+            "• \"terça-feira 23\"\n"
+            "• \"próximo sábado\"\n\n"
+            "Que data você prefere, marujo? ⚓\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💡 *Dica:* Escreva *\"menu\"* se quiser voltar ao menu principal"
+        ),
     },
     "precio": {
         "label": "Precios por persona (opción 2)",
@@ -482,6 +515,96 @@ _DEFAULT_RESPONSES = {
         "button_label": "🎁 Extras",
         "show_in_menu": True,
         "menu_description": "Extras HotBoat (toallas, videos, tablas, etc.)",
+        "content_es": (
+            "✨ *Extras HotBoat:*\n\n"
+            "¿Quieres agregar algo especial a tu HotBoat?\n\n"
+            "🍇 *Tablas de Picoteo*\n"
+            "1️⃣ Tabla grande (4 personas) - $25.000\n"
+            "2️⃣ Tabla pequeña (2 personas) - $20.000\n\n"
+            "🥤 *Bebidas y Jugos* (sin alcohol)\n"
+            "3️⃣ Jugo natural 1L (piña o naranja) - $10.000\n"
+            "4️⃣ Lata bebida (Coca-Cola o Fanta) - $2.900\n"
+            "5️⃣ Agua mineral 1,5 L - $2.500\n"
+            "6️⃣ Helado individual (Cookies & Cream 🍪 o Frambuesa 🍫) - $3.500\n\n"
+            "🌹 *Modo Romántico*\n"
+            "7️⃣ Pétalos de rosas y decoración especial - $25.000\n\n"
+            "🌙 *Decoración Nocturna Extra*\n"
+            "8️⃣ Velas LED decorativas - $10.000\n"
+            "9️⃣ Letras luminosas \"Te Amo\" / \"Love\" - $15.000\n"
+            "🔟 Pack completo (velas + letras) - $20.000\n\n"
+            "✨🎥 *Video personalizado*\n"
+            "1️⃣1️⃣ Video 15s - $30.000\n"
+            "1️⃣2️⃣ Video 60s - $40.000\n\n"
+            "🚐 *Transporte*\n"
+            "1️⃣3️⃣ Ida y vuelta desde Pucón - $50.000\n\n"
+            "🧻 *Toallas*\n"
+            "1️⃣4️⃣ Toalla normal - $9.000\n"
+            "1️⃣5️⃣ Toalla poncho - $10.000\n\n"
+            "🩴 *Otros*\n"
+            "1️⃣6️⃣ Chalas de ducha - $10.000\n"
+            "1️⃣7️⃣ Reserva FLEX (+10% - cancela/reprograma cuando quieras)\n\n"
+            "📝 *Escribe el número del extra que deseas agregar* 🚤"
+        ),
+        "content_en": (
+            "✨ *HotBoat Extras:*\n\n"
+            "Want to add something special to your HotBoat?\n\n"
+            "🍇 *Charcuterie Boards*\n"
+            "1️⃣ Large board (4 people) - $25,000 CLP\n"
+            "2️⃣ Small board (2 people) - $20,000 CLP\n\n"
+            "🥤 *Drinks and Juices* (non-alcoholic)\n"
+            "3️⃣ Natural juice 1L (pineapple or orange) - $10,000 CLP\n"
+            "4️⃣ Canned drink (Coca-Cola or Fanta) - $2,900 CLP\n"
+            "5️⃣ Mineral water 1.5 L - $2,500 CLP\n"
+            "6️⃣ Individual ice cream (Cookies & Cream 🍪 or Raspberry 🍫) - $3,500 CLP\n\n"
+            "🌹 *Romantic Mode*\n"
+            "7️⃣ Rose petals and special decoration - $25,000 CLP\n\n"
+            "🌙 *Extra Night Decoration*\n"
+            "8️⃣ Decorative LED candles - $10,000 CLP\n"
+            "9️⃣ Illuminated letters \"Te Amo\" / \"Love\" - $15,000 CLP\n"
+            "🔟 Complete pack (candles + letters) - $20,000 CLP\n\n"
+            "✨🎥 *Personalized video*\n"
+            "1️⃣1️⃣ 15s video - $30,000 CLP\n"
+            "1️⃣2️⃣ 60s video - $40,000 CLP\n\n"
+            "🚐 *Transportation*\n"
+            "1️⃣3️⃣ Round trip from Pucón - $50,000 CLP\n\n"
+            "🧻 *Towels*\n"
+            "1️⃣4️⃣ Regular towel - $9,000 CLP\n"
+            "1️⃣5️⃣ Poncho towel - $10,000 CLP\n\n"
+            "🩴 *Other*\n"
+            "1️⃣6️⃣ Shower flip-flops - $10,000 CLP\n"
+            "1️⃣7️⃣ FLEX Reservation (+10% - cancel/reschedule anytime)\n\n"
+            "📝 *Type the number of the extra you want to add* 🚤"
+        ),
+        "content_pt": (
+            "✨ *Extras HotBoat:*\n\n"
+            "Quer adicionar algo especial ao seu HotBoat?\n\n"
+            "🍇 *Tábuas de Frios*\n"
+            "1️⃣ Tábua grande (4 pessoas) - $25.000 CLP\n"
+            "2️⃣ Tábua pequena (2 pessoas) - $20.000 CLP\n\n"
+            "🥤 *Bebidas e Sucos* (sem álcool)\n"
+            "3️⃣ Suco natural 1L (abacaxi ou laranja) - $10.000 CLP\n"
+            "4️⃣ Lata de bebida (Coca-Cola ou Fanta) - $2.900 CLP\n"
+            "5️⃣ Água mineral 1,5 L - $2.500 CLP\n"
+            "6️⃣ Sorvete individual (Cookies & Cream 🍪 ou Framboesa 🍫) - $3.500 CLP\n\n"
+            "🌹 *Modo Romântico*\n"
+            "7️⃣ Pétalas de rosas e decoração especial - $25.000 CLP\n\n"
+            "🌙 *Decoração Noturna Extra*\n"
+            "8️⃣ Velas LED decorativas - $10.000 CLP\n"
+            "9️⃣ Letras iluminadas \"Te Amo\" / \"Love\" - $15.000 CLP\n"
+            "🔟 Pacote completo (velas + letras) - $20.000 CLP\n\n"
+            "✨🎥 *Vídeo personalizado*\n"
+            "1️⃣1️⃣ Vídeo 15s - $30.000 CLP\n"
+            "1️⃣2️⃣ Vídeo 60s - $40.000 CLP\n\n"
+            "🚐 *Transporte*\n"
+            "1️⃣3️⃣ Ida e volta desde Pucón - $50.000 CLP\n\n"
+            "🧻 *Toalhas*\n"
+            "1️⃣4️⃣ Toalha normal - $9.000 CLP\n"
+            "1️⃣5️⃣ Toalha poncho - $10.000 CLP\n\n"
+            "🩴 *Outros*\n"
+            "1️⃣6️⃣ Chinelos de banho - $10.000 CLP\n"
+            "1️⃣7️⃣ Reserva FLEX (+10% - cancele/reagende quando quiser)\n\n"
+            "📝 *Digite o número do extra que deseja adicionar* 🚤"
+        ),
     },
     "ubicación": {
         "label": "Ubicación y cómo llegar (opción 5)",
