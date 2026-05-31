@@ -1628,7 +1628,91 @@ Obrigado por escolher HotBoat! 🚤🌊"""
         "en": "⏳ Processing...",
         "pt": "⏳ Processando..."
     },
-    
+
+    "date_invalid": {
+        "es": "Necesito la fecha exacta para continuar ⚓\n\nPor ejemplo:\n• *14 de noviembre*\n• *viernes*\n• *mañana*\n\n¿Qué día prefieres?",
+        "en": "I need the exact date to continue ⚓\n\nFor example:\n• *November 14*\n• *Friday*\n• *tomorrow*\n\nWhich day do you prefer?",
+        "pt": "Preciso da data exata para continuar ⚓\n\nPor exemplo:\n• *14 de novembro*\n• *sexta-feira*\n• *amanhã*\n\nQual dia você prefere?"
+    },
+
+    "date_no_availability": {
+        "es": "❌ *No tenemos horarios disponibles el {date}*.\n\n¿Te gustaría intentar con otra fecha?",
+        "en": "❌ *We have no available schedules on {date}*.\n\nWould you like to try another date?",
+        "pt": "❌ *Não temos horários disponíveis em {date}*.\n\nGostaria de tentar outra data?"
+    },
+
+    "date_has_availability": {
+        "es": "✅ *El {date} tenemos cupos disponibles.*\n\n⏰ Horarios: {times}\n\n¿Qué horario prefieres? (ej: 15:00)",
+        "en": "✅ *We have availability on {date}.*\n\n⏰ Times: {times}\n\nWhich time do you prefer? (e.g. 15:00)",
+        "pt": "✅ *Temos vagas disponíveis em {date}.*\n\n⏰ Horários: {times}\n\nQual horário você prefere? (ex: 15:00)"
+    },
+
+    "time_not_recognized": {
+        "es": "No reconocí el horario ⚓\n\nRecuerda elegir uno de estos:\n{times_list}\n\nEscribe por ejemplo: 15:00",
+        "en": "I didn't recognize that time ⚓\n\nRemember to choose one of these:\n{times_list}\n\nWrite for example: 15:00",
+        "pt": "Não reconheci o horário ⚓\n\nLembre-se de escolher um destes:\n{times_list}\n\nEscreva por exemplo: 15:00"
+    },
+
+    "time_not_available": {
+        "es": "Ese horario no está disponible para {date} ⚓\n\nHorarios disponibles:\n{times_list}\n\n¿Cuál prefieres?",
+        "en": "That time is not available for {date} ⚓\n\nAvailable times:\n{times_list}\n\nWhich one do you prefer?",
+        "pt": "Esse horário não está disponível para {date} ⚓\n\nHorários disponíveis:\n{times_list}\n\nQual você prefere?"
+    },
+
+    "time_confirmed_ask_party": {
+        "es": "⏰ ¡Listo! El {date} a las {time}.\n\n¿Para cuántas personas será la navegación? (2 a 7 personas)",
+        "en": "⏰ Great! On {date} at {time}.\n\nHow many people will be on the cruise? (2 to 7 people)",
+        "pt": "⏰ Ótimo! Em {date} às {time}.\n\nPara quantas pessoas será a navegação? (2 a 7 pessoas)"
+    },
+
+    "time_too_soon": {
+        "es": "Necesitamos al menos 4 horas de anticipación. ¿Puedes elegir un horario más adelante?",
+        "en": "We need at least 4 hours in advance. Can you choose a later time?",
+        "pt": "Precisamos de pelo menos 4 horas de antecedência. Pode escolher um horário mais tarde?"
+    },
+
+    "time_invalid_format": {
+        "es": "No logré validar ese horario. ¿Podrías escribirlo en formato HH:MM? (ej: 15:00)",
+        "en": "I couldn't validate that time. Could you write it in HH:MM format? (e.g. 15:00)",
+        "pt": "Não consegui validar esse horário. Poderia escrevê-lo no formato HH:MM? (ex: 15:00)"
+    },
+
+    "date_lost": {
+        "es": "Perdí la fecha seleccionada. Empecemos de nuevo, ¿para qué día te gustaría reservar?",
+        "en": "I lost the selected date. Let's start over — which day would you like to book?",
+        "pt": "Perdi a data selecionada. Vamos recomeçar — para qual dia você gostaria de reservar?"
+    },
+
+    "party_size_no_number": {
+        "es": "Por favor indica el número de personas (entre 2 y 7) 🚤",
+        "en": "Please indicate the number of people (between 2 and 7) 🚤",
+        "pt": "Por favor, indique o número de pessoas (entre 2 e 7) 🚤"
+    },
+
+    "reservation_pending_not_found": {
+        "es": "Lo siento, no encontré la reserva pendiente. Por favor, inicia el proceso de nuevo.",
+        "en": "Sorry, I couldn't find the pending reservation. Please start the process again.",
+        "pt": "Desculpe, não encontrei a reserva pendente. Por favor, inicie o processo novamente."
+    },
+
+    "reservation_processing_error": {
+        "es": "Hubo un error procesando tu reserva. Por favor, intenta de nuevo.",
+        "en": "There was an error processing your reservation. Please try again.",
+        "pt": "Houve um erro ao processar sua reserva. Por favor, tente novamente."
+    },
+
+    "cart_added_flex": {
+        "es": "✅ *Reserva agregada al carrito*\n\n{cart_message}\n\n💡 *Hemos incluido la Reserva FLEX* que te permite cancelar o reprogramar cuando quieras (+10% del costo de pasajeros)\n\n📋 *¿Qué deseas hacer ahora?*\n\n• Escribe 1-17 para agregar más extras\n• 1️⃣8️⃣ Ver menú de extras completo\n• 1️⃣9️⃣ Menú principal\n• 2️⃣0️⃣ Proceder con el pago\n• Escribe *quitar flex* para remover la Reserva FLEX\n• Escribe *vaciar* para vaciar el carrito\n\n¿Qué opción eliges, grumete?",
+        "en": "✅ *Reservation added to cart*\n\n{cart_message}\n\n💡 *We've included the FLEX Reservation* which lets you cancel or reschedule anytime (+10% of passenger cost)\n\n📋 *What would you like to do now?*\n\n• Write 1-17 to add more extras\n• 1️⃣8️⃣ Full extras menu\n• 1️⃣9️⃣ Main menu\n• 2️⃣0️⃣ Proceed to payment\n• Write *remove flex* to remove the FLEX Reservation\n• Write *clear* to empty the cart\n\nWhich option do you choose, sailor?",
+        "pt": "✅ *Reserva adicionada ao carrinho*\n\n{cart_message}\n\n💡 *Incluímos a Reserva FLEX* que permite cancelar ou reagendar quando quiser (+10% do custo dos passageiros)\n\n📋 *O que deseja fazer agora?*\n\n• Escreva 1-17 para adicionar mais extras\n• 1️⃣8️⃣ Menu completo de extras\n• 1️⃣9️⃣ Menu principal\n• 2️⃣0️⃣ Prosseguir com o pagamento\n• Escreva *remover flex* para remover a Reserva FLEX\n• Escreva *esvaziar* para esvaziar o carrinho\n\nQual opção você escolhe, marujo?"
+    },
+
+    "cart_added": {
+        "es": "✅ *Reserva agregada al carrito*\n\n{cart_message}\n\n📋 *¿Qué deseas hacer ahora?*\n\n• Escribe 1-17 para agregar más extras\n• 1️⃣8️⃣ Ver menú de extras completo\n• 1️⃣9️⃣ Menú principal\n• 2️⃣0️⃣ Proceder con el pago\n• Escribe *vaciar* para vaciar el carrito\n\n¿Qué opción eliges, grumete?",
+        "en": "✅ *Reservation added to cart*\n\n{cart_message}\n\n📋 *What would you like to do now?*\n\n• Write 1-17 to add more extras\n• 1️⃣8️⃣ Full extras menu\n• 1️⃣9️⃣ Main menu\n• 2️⃣0️⃣ Proceed to payment\n• Write *clear* to empty the cart\n\nWhich option do you choose, sailor?",
+        "pt": "✅ *Reserva adicionada ao carrinho*\n\n{cart_message}\n\n📋 *O que deseja fazer agora?*\n\n• Escreva 1-17 para adicionar mais extras\n• 1️⃣8️⃣ Menu completo de extras\n• 1️⃣9️⃣ Menu principal\n• 2️⃣0️⃣ Prosseguir com o pagamento\n• Escreva *esvaziar* para esvaziar o carrinho\n\nQual opção você escolhe, marujo?"
+    },
+
     # ========== EXPERIENCES FLOW ==========
     
     "experiences_menu": {

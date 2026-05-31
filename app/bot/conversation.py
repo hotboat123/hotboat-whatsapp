@@ -736,7 +736,7 @@ O elige:
                 response = self._ask_for_reservation_date(conversation)
             
             # Check cart commands (before FAQ)
-            elif cart_response := await self._handle_cart_command(message_text, from_number, contact_name):
+            elif cart_response := await self._handle_cart_command(message_text, from_number, contact_name, language=metadata.get("language", "es")):
                 logger.info("Cart command processed")
                 response = cart_response
             # Check if user is requesting help or Capitán Tomás directly
@@ -760,7 +760,7 @@ O elige:
                 try:
                     await self._add_reservation_with_flex(from_number, contact_name, reservation_item)
                     cart = await self.cart_manager.get_cart(from_number)
-                    response = self._format_cart_with_flex_options(cart)
+                    response = self._format_cart_with_flex_options(cart, language)
                 except Exception as cart_error:
                     logger.error(f"Error adding to cart: {cart_error}")
                     import traceback
@@ -1450,7 +1450,7 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         
         return any(keyword in message_lower for keyword in keywords)
     
-    async def _handle_cart_command(self, message: str, phone_number: str, contact_name: str) -> Optional[str]:
+    async def _handle_cart_command(self, message: str, phone_number: str, contact_name: str, language: str = "es") -> Optional[str]:
         """
         Handle cart-related commands
         
@@ -1670,8 +1670,8 @@ Escribe el número que prefieras 🚤"""
                 return self._cart_needs_reservation_message(conversation)
             
             # Show cart with options (don't auto-confirm)
-            return self._format_cart_with_flex_options(cart)
-        
+            return self._format_cart_with_flex_options(cart, language)
+
         # Add reservation (if user specifies date and time after checking availability)
         # This will be handled when user confirms a specific slot
         if self._is_reservation_confirm(message_lower):
@@ -1680,7 +1680,7 @@ Escribe el número que prefieras 🚤"""
             if reservation_item:
                 await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
                 cart = await self.cart_manager.get_cart(phone_number)
-                return self._format_cart_with_flex_options(cart)
+                return self._format_cart_with_flex_options(cart, language)
         
         return None
     
@@ -1707,47 +1707,75 @@ Escribe el número que prefieras 🚤"""
         else:
             logger.info(f"Reserva FLEX ya existe en el carrito de {phone_number}, no se agrega duplicado")
     
-    def _format_cart_with_flex_options(self, cart: list) -> str:
-        """
-        Formatea el carrito con opciones específicas cuando incluye Reserva FLEX por defecto
-        """
-        cart_message = self.cart_manager.format_cart_message(cart)
-        
-        # Verificar si hay Reserva FLEX en el carrito
+    def _format_cart_with_flex_options(self, cart: list, language: str = "es") -> str:
+        """Format cart with post-add action options."""
+        cart_message = self.cart_manager.format_cart_message(cart, language)
         has_flex = any(item.name == "Reserva FLEX (+10%)" for item in cart)
-        
-        if has_flex:
-            return f"""✅ *Reserva agregada al carrito*
+        key = "cart_added_flex" if has_flex else "cart_added"
+        return get_text(key, language).format(cart_message=cart_message)
 
-{cart_message}
-
-💡 *Hemos incluido la Reserva FLEX* que te permite cancelar o reprogramar cuando quieras (+10% del costo de pasajeros)
-
-📋 *¿Qué deseas hacer ahora?*
-
-• Escribe 1-17 para agregar más extras
-• 1️⃣8️⃣ Ver menú de extras completo
-• 1️⃣9️⃣ Menú principal
-• 2️⃣0️⃣ Proceder con el pago
-• Escribe *quitar flex* para remover la Reserva FLEX
-• Escribe *vaciar* para vaciar el carrito
-
-¿Qué opción eliges, grumete?"""
+    async def _build_cart_confirmation(self, cart: list, contact_name: str, phone_number: str, language: str = "es") -> str:
+        """Build a reservation confirmation message from cart contents."""
+        _L = {
+            "es": {"header": "✅ *Solicitud de Reserva Recibida*", "details": "📅 *Detalles de tu Solicitud:*",
+                   "date": "Fecha", "time": "Horario", "people": "Personas",
+                   "extras": "✨ *Extras solicitados:*", "total": "💰 *Total estimado: ${total:,}*",
+                   "pay_link": "💳 *Paga tu reserva aquí:*",
+                   "captain": "📞 *El Capitán Tomás se comunicará contigo pronto para coordinar el pago* 👨‍✈️",
+                   "info": "Por mientras, envíanos tu *email* y *nombre completo* por favor 📝",
+                   "thanks": "¡Gracias por elegir HotBoat! 🚤🌊"},
+            "en": {"header": "✅ *Reservation Request Received*", "details": "📅 *Booking Details:*",
+                   "date": "Date", "time": "Time", "people": "People",
+                   "extras": "✨ *Requested extras:*", "total": "💰 *Estimated total: ${total:,}*",
+                   "pay_link": "💳 *Pay for your reservation here:*",
+                   "captain": "📞 *Captain Tomás will contact you soon to coordinate payment* \U0001f468‍✈️",
+                   "info": "In the meantime, please send us your *email* and *full name* 📝",
+                   "thanks": "Thanks for choosing HotBoat! 🚤🌊"},
+            "pt": {"header": "✅ *Solicitação de Reserva Recebida*", "details": "📅 *Detalhes da sua Solicitação:*",
+                   "date": "Data", "time": "Horário", "people": "Pessoas",
+                   "extras": "✨ *Extras solicitados:*", "total": "💰 *Total estimado: ${total:,}*",
+                   "pay_link": "💳 *Pague sua reserva aqui:*",
+                   "captain": "📞 *O Capitão Tomás entrará em contato em breve para coordenar o pagamento* \U0001f468‍✈️",
+                   "info": "Enquanto isso, envie-nos seu *email* e *nome completo* por favor 📝",
+                   "thanks": "Obrigado por escolher HotBoat! 🚤🌊"},
+        }
+        lb = _L.get(language) or _L["es"]
+        total = self.cart_manager.calculate_total(cart)
+        reservation = next((item for item in cart if item.item_type == "reservation"), None)
+        msg = lb["header"] + "\n\n"
+        msg += lb["details"] + "\n"
+        if reservation:
+            msg += f"   {lb['date']}: {reservation.metadata.get('date')}\n"
+            msg += f"   {lb['time']}: {reservation.metadata.get('time')}\n"
+            msg += f"   {lb['people']}: {reservation.quantity}\n\n"
+        extras = [item for item in cart if item.item_type == "extra"]
+        if extras:
+            msg += lb["extras"] + "\n"
+            for item in extras:
+                msg += f"   • {item.name}\n"
+            msg += "\n"
+        msg += lb["total"].format(total=total) + "\n\n"
+        payment_url = None
+        try:
+            from app.payment.woocommerce import create_order
+            fecha_res = reservation.metadata.get('date') if reservation else None
+            order = await create_order(
+                reservation_id=0, nombre=contact_name, telefono=phone_number, email=None,
+                monto_reserva=total, monto_extras=0, fecha=fecha_res,
+                num_personas=reservation.quantity if reservation else None,
+            )
+            payment_url = order.get("payment_url")
+        except Exception as _pe:
+            logger.warning(f"WooCommerce payment link skip: {_pe}")
+        if payment_url:
+            msg += f"{lb['pay_link']}\n{payment_url}\n\n"
+            msg += lb["thanks"]
         else:
-            return f"""✅ *Reserva agregada al carrito*
+            msg += lb["captain"] + "\n\n"
+            msg += lb["info"] + "\n\n"
+            msg += lb["thanks"]
+        return msg
 
-{cart_message}
-
-📋 *¿Qué deseas hacer ahora?*
-
-• Escribe 1-17 para agregar más extras
-• 1️⃣8️⃣ Ver menú de extras completo
-• 1️⃣9️⃣ Menú principal
-• 2️⃣0️⃣ Proceder con el pago
-• Escribe *vaciar* para vaciar el carrito
-
-¿Qué opción eliges, grumete?"""
-    
     async def _is_cart_option_selection(self, message: str, phone_number: str, conversation: dict = None) -> bool:
         """
         Check if user is selecting a cart option (1-4 when Reserva FLEX present, 1-3 otherwise)
@@ -2041,14 +2069,15 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             # Add to cart with Reserva FLEX
             await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
             cart = await self.cart_manager.get_cart(phone_number)
-            
-            return self._format_cart_with_flex_options(cart)
-            
+            language = conversation.get("metadata", {}).get("language", "es")
+            return self._format_cart_with_flex_options(cart, language)
+
         except Exception as e:
             logger.error(f"Error handling reservation confirmation: {e}")
             import traceback
             traceback.print_exc()
-            return "Hubo un error procesando tu reserva. Por favor, intenta especificar la fecha, hora y número de personas nuevamente. Por ejemplo: 'El martes a las 16 para 3 personas' 🚤"
+            language = conversation.get("metadata", {}).get("language", "es")
+            return get_text("reservation_processing_error", language)
     
     async def _try_parse_date_time_only(self, message: str, conversation: dict = None) -> Optional[dict]:
         """
@@ -2341,67 +2370,28 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
     ) -> str:
         """Handle user's response when we are waiting for the reservation date."""
         metadata = conversation.setdefault("metadata", {})
+        language = metadata.get("language", "es")
         message_clean = message.strip()
         message_lower = message_clean.lower()
-        
+
         # Allow global shortcuts while in this state
         if message_clean in ["19"] or message_lower in ["menu", "menú", "principal"]:
             self._reset_reservation_flow(conversation)
-            language = conversation.get("metadata", {}).get("language", "es")
             return self._get_main_menu_message(language)
         if message_clean == "18":
             return self.faq_handler.get_response("extras", language)
         if message_clean == "20":
             cart = await self.cart_manager.get_cart(phone_number)
             if not cart:
-                return "🛒 Tu carrito está vacío, grumete ⚓\n\n¿Qué te gustaría agregar? 🚤"
+                return get_text("cart_empty", language)
             has_reservation = any(item.item_type == "reservation" for item in cart)
             if has_reservation:
-                total = self.cart_manager.calculate_total(cart)
-                reservation = next((item for item in cart if item.item_type == "reservation"), None)
-                confirm_message = "✅ *Solicitud de Reserva Recibida*\n\n"
-                confirm_message += f"📅 *Detalles de tu Solicitud:*\n"
-                confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
-                confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
-                confirm_message += f"   Personas: {reservation.quantity}\n\n"
-                extras = [item for item in cart if item.item_type == "extra"]
-                if extras:
-                    confirm_message += "✨ *Extras solicitados:*\n"
-                    for item in extras:
-                        confirm_message += f"   • {item.name}\n"
-                    confirm_message += "\n"
-                confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
-                # Try to generate WooCommerce payment link
-                payment_url = None
-                try:
-                    from app.payment.woocommerce import create_order
-                    fecha_res = reservation.metadata.get('date') if reservation else None
-                    order = await create_order(
-                        reservation_id=0,
-                        nombre=contact_name,
-                        telefono=phone_number,
-                        email=None,
-                        monto_reserva=total,
-                        monto_extras=0,
-                        fecha=fecha_res,
-                        num_personas=reservation.quantity if reservation else None,
-                    )
-                    payment_url = order.get("payment_url")
-                except Exception as _pe:
-                    logger.warning(f"WooCommerce payment link skip: {_pe}")
-
-                if payment_url:
-                    confirm_message += f"💳 *Paga tu reserva aquí:*\n{payment_url}\n\n"
-                    confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
-                else:
-                    confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para coordinar el pago* 👨‍✈️\n\n"
-                    confirm_message += "Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
-                    confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
+                confirm_message = await self._build_cart_confirmation(cart, contact_name, phone_number, language)
                 await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
                 await self.cart_manager.clear_cart(phone_number)
                 self._reset_reservation_flow(conversation)
                 return confirm_message
-            return f"{self.cart_manager.format_cart_message(cart)}\n\n{self._cart_needs_reservation_message(conversation)}"
+            return f"{self.cart_manager.format_cart_message(cart, language)}\n\n{self._cart_needs_reservation_message(conversation)}"
 
         # If user sends a STANDALONE menu digit (1-8), escape the date flow and act as menu.
         # Strict exact-match only: "4" → menu option 4, but "4 de abril" / "4o" → keep as date.
@@ -2454,15 +2444,8 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
 
         parsed_date = self._parse_reservation_date(message_lower)
         if not parsed_date:
-            return """Necesito la fecha exacta para continuar ⚓
+            return get_text("date_invalid", language)
 
-Por ejemplo:
-• *14 de noviembre*
-• *viernes*
-• *mañana*
-
-¿Qué día prefieres?"""
-        
         # Check if date is within next 3 days and auto-assign priority
         from datetime import datetime
         from zoneinfo import ZoneInfo
@@ -2471,17 +2454,15 @@ Por ejemplo:
         days_until = (parsed_date["date_obj"] - now).days
         if 0 <= days_until <= 3:
             await self._auto_set_priority_high(phone_number, f"Reserva próximos 3 días ({days_until} días)")
-        
+
         available_slots = await self.availability_checker.get_slots_for_date(parsed_date["date_obj"])
         available_times = sorted({slot['time'] for slot in available_slots})
-        
+
         if not available_times:
             metadata["awaiting_reservation_date"] = True
             metadata["available_times_for_date"] = []
-            return f"""❌ *No tenemos horarios disponibles el {parsed_date['display']}*.
+            return get_text("date_no_availability", language).format(date=parsed_date['display'])
 
-¿Te gustaría intentar con otra fecha?"""
-        
         metadata["pending_reservation"] = {
             "date": parsed_date["display"],
             "time": None,
@@ -2491,13 +2472,11 @@ Por ejemplo:
         metadata["awaiting_reservation_date"] = False
         metadata["awaiting_reservation_time"] = True
         metadata["awaiting_date_time_selection"] = True
-        
+
         times_message = self._format_available_times(available_times)
-        return f"""✅ *El {parsed_date['display']} tenemos cupos disponibles.*
-
-⏰ Horarios: {times_message}
-
-¿Qué horario prefieres? (ej: 15:00)"""
+        return get_text("date_has_availability", language).format(
+            date=parsed_date['display'], times=times_message
+        )
 
     async def _handle_reservation_time_response(
         self,
@@ -2521,56 +2500,35 @@ Por ejemplo:
         if message_clean == "20":
             cart = await self.cart_manager.get_cart(phone_number)
             if not cart:
-                return "🛒 Tu carrito está vacío, grumete ⚓\n\n¿Qué te gustaría agregar? 🚤"
+                return get_text("cart_empty", language)
             has_reservation = any(item.item_type == "reservation" for item in cart)
             if has_reservation:
-                total = self.cart_manager.calculate_total(cart)
-                reservation = next((item for item in cart if item.item_type == "reservation"), None)
-                confirm_message = "✅ *Solicitud de Reserva Recibida*\n\n"
-                confirm_message += f"📅 *Detalles de tu Solicitud:*\n"
-                confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
-                confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
-                confirm_message += f"   Personas: {reservation.quantity}\n\n"
-                extras = [item for item in cart if item.item_type == "extra"]
-                if extras:
-                    confirm_message += "✨ *Extras solicitados:*\n"
-                    for item in extras:
-                        confirm_message += f"   • {item.name}\n"
-                    confirm_message += "\n"
-                confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
-                confirm_message += "📞 *El Capitán Tomás se comunicará contigo pronto para confirmar y coordinar el pago* 👨‍✈️\n\n"
-                confirm_message += "Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
-                confirm_message += "¡Gracias por elegir HotBoat! 🚤🌊"
+                confirm_message = await self._build_cart_confirmation(cart, contact_name, phone_number, language)
                 await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
                 await self.cart_manager.clear_cart(phone_number)
                 self._reset_reservation_flow(conversation)
                 conversation["metadata"]["awaiting_party_size"] = False
                 return confirm_message
-            return f"{self.cart_manager.format_cart_message(cart)}\n\n{self._cart_needs_reservation_message(conversation)}"
-        
+            return f"{self.cart_manager.format_cart_message(cart, language)}\n\n{self._cart_needs_reservation_message(conversation)}"
+
         pending = metadata.get("pending_reservation")
         if not pending or not pending.get("date_obj_iso"):
             self._reset_reservation_flow(conversation)
-            return "Perdí la fecha seleccionada. Empecemos de nuevo, ¿para qué día te gustaría reservar?"
-        
+            return get_text("date_lost", language)
+
         available_times = metadata.get("available_times_for_date", [])
         normalized_time = self._normalize_time_input(message_lower)
         if not normalized_time:
-            return f"""No reconocí el horario ⚓
+            return get_text("time_not_recognized", language).format(
+                times_list=self._format_available_times(available_times, bullet_list=True)
+            )
 
-Recuerda elegir uno de estos:
-{self._format_available_times(available_times, bullet_list=True)}
-
-Escribe por ejemplo: 15:00"""
-        
         if available_times and normalized_time not in available_times:
-            return f"""Ese horario no está disponible para {pending.get('date')} ⚓
+            return get_text("time_not_available", language).format(
+                date=pending.get('date'),
+                times_list=self._format_available_times(available_times, bullet_list=True)
+            )
 
-Horarios disponibles:
-{self._format_available_times(available_times, bullet_list=True)}
-
-¿Cuál prefieres?"""
-        
         try:
             date_obj = datetime.fromisoformat(pending["date_obj_iso"])
             hour, minute = map(int, normalized_time.split(":"))
@@ -2578,20 +2536,20 @@ Horarios disponibles:
             now = datetime.now(CHILE_TZ)
             hours_ahead = (reservation_datetime - now).total_seconds() / 3600
             if hours_ahead < 4:
-                return "Necesitamos al menos 4 horas de anticipación. ¿Puedes elegir un horario más adelante?"
+                return get_text("time_too_soon", language)
         except Exception as exc:
             logger.warning(f"Error validating reservation datetime: {exc}")
-            return "No logré validar ese horario. ¿Podrías escribirlo en formato HH:MM? (ej: 15:00)"
-        
+            return get_text("time_invalid_format", language)
+
         pending["time"] = normalized_time
         metadata["pending_reservation"] = pending
         metadata["awaiting_reservation_time"] = False
         metadata["awaiting_party_size"] = True
         metadata["awaiting_date_time_selection"] = False
-        
-        return f"""⏰ ¡Listo! El {pending.get('date')} a las {normalized_time}.
 
-¿Para cuántas personas será la navegación? (2 a 7 personas)"""
+        return get_text("time_confirmed_ask_party", language).format(
+            date=pending.get('date'), time=normalized_time
+        )
 
     def _parse_reservation_date(self, message_lower: str) -> Optional[Dict[str, object]]:
         """Parse reservation date from user input."""
@@ -2992,54 +2950,45 @@ Cliente: {customer_name} ({customer_phone})"""
     
     async def _handle_party_size_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Handle user's response with party size after selecting date/time"""
+        language = conversation.get("metadata", {}).get("language", "es")
         try:
-            # Extract number from message
             import re
             numbers = re.findall(r'\d+', message)
-            
+
             if not numbers:
-                return "Por favor indica el número de personas (entre 2 y 7) 🚤"
-            
+                return get_text("party_size_no_number", language)
+
             party_size = int(numbers[0])
-            
+
             if party_size < 2 or party_size > 7:
-                return "El HotBoat tiene capacidad para 2 a 7 personas. ¿Cuántas personas son? 🚤"
-            
-            # Get the pending reservation from conversation
+                return get_text("invalid_party_size", language)
+
             pending = conversation.get("metadata", {}).get("pending_reservation")
-            
+
             if not pending:
-                return "Lo siento, no encontré la reserva pendiente. Por favor, inicia el proceso de nuevo."
-            
-            # Validate minimum 4 hours advance (this should already be validated, but double-check)
-            # The pending reservation should already have been validated in _try_parse_date_time_only
-            # But we add this as a safeguard
-            
-            # Create reservation item
+                return get_text("reservation_pending_not_found", language)
+
             reservation_item = self.cart_manager.create_reservation_item(
                 date=pending['date'],
                 time=pending['time'],
                 capacity=party_size
             )
-            
-            # Add to cart with Reserva FLEX
+
             await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
             cart = await self.cart_manager.get_cart(phone_number)
-            
-            # Clear the pending state
+
             self._reset_reservation_flow(conversation)
             conversation["metadata"]["awaiting_party_size"] = False
-            
-            return self._format_cart_with_flex_options(cart)
-            
+
+            return self._format_cart_with_flex_options(cart, language)
+
         except Exception as e:
             logger.error(f"Error handling party size response: {e}")
             import traceback
             traceback.print_exc()
-            # Clear the pending state
             self._reset_reservation_flow(conversation)
             conversation["metadata"]["awaiting_party_size"] = False
-            return "Hubo un error procesando tu reserva. Por favor, intenta de nuevo."
+            return get_text("reservation_processing_error", language)
     
     async def _handle_ice_cream_flavor_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
         """Handle user's response with ice cream flavor choice"""

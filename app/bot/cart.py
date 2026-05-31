@@ -15,6 +15,60 @@ CHILE_TZ = ZoneInfo("America/Santiago")
 
 logger = logging.getLogger(__name__)
 
+_CART_LABELS = {
+    "es": {
+        "title": "🛒 *Tu Carrito HotBoat*",
+        "empty": "🛒 Tu carrito está vacío, grumete ⚓\n\nEscribe *agregar* seguido del extra o servicio que quieras.",
+        "reservation": "📅 *Reserva HotBoat*",
+        "date": "Fecha",
+        "time": "Horario",
+        "people": "Personas",
+        "price": "Precio",
+        "subtotal": "Subtotal",
+        "checkin": "Check-in",
+        "checkout": "Check-out",
+        "guests": "Huéspedes",
+        "nights": "Noches",
+        "flex_subtotal": "(Se aplica al subtotal)",
+        "flex_percent": "(10% del costo de pasajeros)",
+        "total": "💰 *Total: ${total:,}*",
+    },
+    "en": {
+        "title": "🛒 *Your HotBoat Cart*",
+        "empty": "🛒 Your cart is empty, sailor ⚓\n\nWrite *add* followed by the extra or service you want.",
+        "reservation": "📅 *HotBoat Reservation*",
+        "date": "Date",
+        "time": "Time",
+        "people": "People",
+        "price": "Price",
+        "subtotal": "Subtotal",
+        "checkin": "Check-in",
+        "checkout": "Check-out",
+        "guests": "Guests",
+        "nights": "Nights",
+        "flex_subtotal": "(Applied to subtotal)",
+        "flex_percent": "(10% of passenger cost)",
+        "total": "💰 *Total: ${total:,}*",
+    },
+    "pt": {
+        "title": "🛒 *Seu Carrinho HotBoat*",
+        "empty": "🛒 Seu carrinho está vazio, marujo ⚓\n\nEscreva *adicionar* seguido do extra ou serviço que quiser.",
+        "reservation": "📅 *Reserva HotBoat*",
+        "date": "Data",
+        "time": "Horário",
+        "people": "Pessoas",
+        "price": "Preço",
+        "subtotal": "Subtotal",
+        "checkin": "Check-in",
+        "checkout": "Check-out",
+        "guests": "Hóspedes",
+        "nights": "Noites",
+        "flex_subtotal": "(Aplicado ao subtotal)",
+        "flex_percent": "(10% do custo dos passageiros)",
+        "total": "💰 *Total: ${total:,}*",
+    },
+}
+
 
 @dataclass
 class CartItem:
@@ -357,94 +411,90 @@ class CartManager:
             logger.warning(f"Error calculating nights from {checkin} to {checkout}: {e}")
             return 1  # Default to 1 night if parsing fails
     
-    def format_cart_message(self, items: List[CartItem]) -> str:
+    def format_cart_message(self, items: List[CartItem], language: str = "es") -> str:
         """Format cart as a readable message"""
+        lb = _CART_LABELS.get(language) or _CART_LABELS["es"]
+
         if not items:
-            return "🛒 Tu carrito está vacío, grumete ⚓\n\nEscribe *agregar* seguido del extra o servicio que quieras."
-        
-        message = "🛒 *Tu Carrito HotBoat*\n\n"
-        
+            return lb["empty"]
+
+        message = lb["title"] + "\n\n"
+
         total = 0
         reservation = None
-        
+
         for i, item in enumerate(items):
             if item.item_type == "reservation":
                 reservation = item
                 price = item.price * item.quantity
-                message += f"📅 *Reserva HotBoat*\n"
-                message += f"   Fecha: {item.metadata.get('date', 'N/A')}\n"
-                message += f"   Horario: {item.metadata.get('time', 'N/A')}\n"
-                message += f"   Personas: {item.quantity}\n"
-                message += f"   Precio: ${price:,}\n\n"
+                message += f"{lb['reservation']}\n"
+                message += f"   {lb['date']}: {item.metadata.get('date', 'N/A')}\n"
+                message += f"   {lb['time']}: {item.metadata.get('time', 'N/A')}\n"
+                message += f"   {lb['people']}: {item.quantity}\n"
+                message += f"   {lb['price']}: ${price:,}\n\n"
                 total += price
             elif item.item_type == "experience":
                 price = item.price * item.quantity
                 exp_type = item.metadata.get('experience_type', '')
                 icon = "🚣" if exp_type == "rafting" else "🐴" if exp_type == "horseback" else "⛵"
-                
+
                 message += f"{icon} *{item.name}*\n"
                 if item.quantity > 1 and exp_type != "navigation":
-                    message += f"   {item.quantity} personas x ${item.price:,}\n"
-                    message += f"   Subtotal: ${price:,}\n\n"
+                    message += f"   {item.quantity} x ${item.price:,}\n"
+                    message += f"   {lb['subtotal']}: ${price:,}\n\n"
                 else:
-                    message += f"   Precio: ${price:,}\n\n"
+                    message += f"   {lb['price']}: ${price:,}\n\n"
                 total += price
             elif item.item_type == "accommodation":
-                # Calculate nights
                 checkin = item.metadata.get('checkin_date', '')
                 checkout = item.metadata.get('checkout_date', '')
                 nights = self._calculate_nights(checkin, checkout) if checkin and checkout else 1
                 guests = item.metadata.get('guests', 1)
-                
-                # Check if it's Hostal (price is per person per night)
+
                 is_hostal = "Hostal" in item.name
-                
+
                 if is_hostal:
-                    # Hostal: price per person per night
                     price = item.price * guests * nights
                     message += f"🏠 *{item.name}*\n"
-                    message += f"   Check-in: {checkin}\n"
-                    message += f"   Check-out: {checkout}\n"
-                    message += f"   Huéspedes: {guests}\n"
-                    message += f"   Noches: {nights}\n"
-                    message += f"   ${item.price:,} x {guests} personas x {nights} noches\n"
-                    message += f"   Precio: ${price:,}\n\n"
+                    message += f"   {lb['checkin']}: {checkin}\n"
+                    message += f"   {lb['checkout']}: {checkout}\n"
+                    message += f"   {lb['guests']}: {guests}\n"
+                    message += f"   {lb['nights']}: {nights}\n"
+                    message += f"   ${item.price:,} x {guests} x {nights}\n"
+                    message += f"   {lb['price']}: ${price:,}\n\n"
                 else:
-                    # Domos/Cabañas: price per night (not per person)
                     price = item.price * nights
                     message += f"🏠 *{item.name}*\n"
-                    message += f"   Check-in: {checkin}\n"
-                    message += f"   Check-out: {checkout}\n"
-                    message += f"   Huéspedes: {guests}\n"
-                    message += f"   Noches: {nights}\n"
-                    message += f"   ${item.price:,} x {nights} noches\n"
-                    message += f"   Precio: ${price:,}\n\n"
-                
+                    message += f"   {lb['checkin']}: {checkin}\n"
+                    message += f"   {lb['checkout']}: {checkout}\n"
+                    message += f"   {lb['guests']}: {guests}\n"
+                    message += f"   {lb['nights']}: {nights}\n"
+                    message += f"   ${item.price:,} x {nights}\n"
+                    message += f"   {lb['price']}: ${price:,}\n\n"
+
                 total += price
             elif item.item_type == "extra":
                 price = item.price * item.quantity
                 if item.name == "Reserva FLEX (+10%)":
-                    # FLEX will be calculated at the end
                     message += f"🔒 {item.name}\n"
-                    message += f"   (Se aplica al subtotal)\n\n"
+                    message += f"   {lb['flex_subtotal']}\n\n"
                 else:
                     message += f"{i}. {item.name}\n"
                     message += f"   ${price:,} ({item.quantity}x ${item.price:,})\n\n"
                     total += price
-        
-        # Calculate FLEX if present (10% of ONLY reservation cost, not extras)
+
         if any(item.name == "Reserva FLEX (+10%)" for item in items):
             reservation_cost = sum(i.price * i.quantity for i in items if i.item_type == "reservation")
             flex_amount = int(reservation_cost * 0.1)
             total += flex_amount
             message = message.replace(
-                "🔒 Reserva FLEX (+10%)\n   (Se aplica al subtotal)\n\n",
-                f"🔒 Reserva FLEX (+10%)\n   ${flex_amount:,}\n   (10% del costo de pasajeros)\n\n"
+                f"🔒 Reserva FLEX (+10%)\n   {lb['flex_subtotal']}\n\n",
+                f"🔒 Reserva FLEX (+10%)\n   ${flex_amount:,}\n   {lb['flex_percent']}\n\n"
             )
-        
-        message += f"━━━━━━━━━━━━━━━━\n"
-        message += f"💰 *Total: ${total:,}*"
-        
+
+        message += "━━━━━━━━━━━━━━━━\n"
+        message += lb["total"].format(total=total)
+
         return message
     
     def parse_extra_from_message(self, message: str) -> Optional[CartItem]:
