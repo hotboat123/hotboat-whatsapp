@@ -1148,8 +1148,8 @@ async def get_forecast_table(
                     gross, costo = float(gross), float(costo)
                     pagos = pagos_raw if isinstance(pagos_raw, list) else json.loads(pagos_raw or "[]")
                     commission = sum(
-                        float(p.get("amount", 0)) - _net_amount(
-                            float(p.get("amount", 0)), p.get("method", "otro"), commissions)
+                        (float(p.get("amount") or 0)) - _net_amount(
+                            float(p.get("amount") or 0), p.get("method", "otro"), commissions)
                         for p in pagos
                     )
                     net = gross - commission
