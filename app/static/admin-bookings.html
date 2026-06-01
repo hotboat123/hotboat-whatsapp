@@ -1538,6 +1538,23 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <button onclick="loadForecast(_fcView)" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↻</button>
           </div>
         </div>
+        <!-- Date range bar -->
+        <div style="padding:.55rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;background:var(--card)">
+          <span style="font-size:.72rem;color:var(--muted);font-weight:500;white-space:nowrap">Rango:</span>
+          <input type="date" id="fc-date-from"
+            style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .45rem;font-size:.75rem;outline:none"
+            onchange="fcApplyRange()">
+          <span style="color:var(--muted);font-size:.75rem">→</span>
+          <input type="date" id="fc-date-to"
+            style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .45rem;font-size:.75rem;outline:none"
+            onchange="fcApplyRange()">
+          <div style="display:flex;gap:.25rem;margin-left:.2rem">
+            <button onclick="fcSetPreset(3)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">3m</button>
+            <button onclick="fcSetPreset(6)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">6m</button>
+            <button onclick="fcSetPreset(9)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">9m</button>
+            <button onclick="fcSetPreset(14)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">1a</button>
+          </div>
+        </div>
         <div id="fin-fc-content" style="padding:1rem"></div>
       </div>
     </div>
@@ -7945,6 +7962,7 @@ async function saveFinStructure(){
 // ── Forecast ──────────────────────────────────────────────────
 const _FC_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 let _fcView = 'monthly';
+let _fcDateFrom = null, _fcDateTo = null;
 
 function fmtClpK(n){
   const v = Math.abs(Math.round(Number(n)||0));
@@ -7967,9 +7985,14 @@ async function loadForecast(view){
   _fcView = view;
   const el = document.getElementById('fin-fc-content');
   el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:.5rem">Cargando…</div>';
-  const params = view === 'weekly'
-    ? 'view=weekly&weeks_back=4&weeks_ahead=8'
-    : 'view=monthly&months_back=3&months_ahead=9';
+  let params;
+  if(_fcDateFrom && _fcDateTo){
+    params = `view=${view}&date_from=${_fcDateFrom}&date_to=${_fcDateTo}`;
+  } else if(view === 'weekly'){
+    params = 'view=weekly&weeks_back=4&weeks_ahead=34';
+  } else {
+    params = 'view=monthly&months_back=3&months_ahead=9';
+  }
   try {
     const r = await fetch(`/api/admin/financial/forecast-table?${params}`, {headers:{'x-admin-key':KEY}});
     if(!r.ok) throw new Error(await r.text());
@@ -7979,6 +8002,25 @@ async function loadForecast(view){
   } catch(e){
     el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar: '+e.message+'</div>';
   }
+}
+
+function fcApplyRange(){
+  _fcDateFrom = document.getElementById('fc-date-from').value || null;
+  _fcDateTo   = document.getElementById('fc-date-to').value || null;
+  loadForecast(_fcView);
+}
+
+function fcSetPreset(months){
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const toMonth = new Date(now.getFullYear(), now.getMonth() + months - 1, 1);
+  const lastDay = new Date(toMonth.getFullYear(), toMonth.getMonth() + 1, 0);
+  const fmt = d => d.toISOString().split('T')[0];
+  _fcDateFrom = fmt(from);
+  _fcDateTo   = fmt(lastDay);
+  document.getElementById('fc-date-from').value = _fcDateFrom;
+  document.getElementById('fc-date-to').value   = _fcDateTo;
+  loadForecast(_fcView);
 }
 
 // Generic inline-edit cell helper
@@ -8053,7 +8095,7 @@ function renderForecast(data, view){
     } else {
       const bv = m.manual_income;
       const isOverride = m.manual_is_override;
-      const hint = isWeekly && !isOverride ? `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">del mensual</span>` : '';
+      const hint = isWeekly && !isOverride && bv ? `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">del mensual</span>` : '';
       budgetHtml = `<span id="${budgetSpanId}"
         onclick="fcEditBudget('${m.month}','${m.month_key}',${bv||0},${isWeekly})"
         style="cursor:pointer;display:inline-block;min-width:80px;text-align:right;padding:.18rem .45rem;
