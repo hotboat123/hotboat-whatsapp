@@ -1537,7 +1537,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div><!-- /section-financial -->
 
     <!-- ═══════════════════════════ SIMULATOR TAB ═══════════════════════════ -->
-    <div id="section-simulator" class="section" style="display:none">
+    <div id="section-simulator" class="section">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
         <h2 style="margin:0;font-size:1.1rem;font-weight:700">🎯 Simulador Financiero</h2>
         <div style="display:flex;gap:.5rem;align-items:center">
@@ -1991,17 +1991,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         } catch(e){ showToast('❌ '+e.message, true); }
       }
 
-      // Auto-load on tab open
-      document.addEventListener('DOMContentLoaded', ()=>{
-        const origShow = window.showSection;
-        window.showSection = function(id){
-          origShow(id);
-          if(id === 'simulator' && !document.getElementById('sim-forecast-body').children.length){
-            simLoadActuals().catch(()=>simCalc());
-          }
-        };
-        simCalc();
-      });
+      document.addEventListener('DOMContentLoaded', ()=>{ simCalc(); });
       </script>
 
     </div><!-- /section-simulator -->
@@ -2202,6 +2192,7 @@ function showSection(name){
   if(name==='packs-admin') loadPacksAdmin();
   if(name==='cal-extras') loadCalExtras();
   if(name==='financial') initFinancialSection();
+  if(name==='simulator'){ simLoadActuals().catch(()=>simCalc()); }
   if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); }
   if(name==='logs') initLogsSection();
   else clearInterval(_logAutoRefresh);
