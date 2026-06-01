@@ -1104,6 +1104,122 @@ async def upsert_budget(year: int, month: int, body: BudgetIn,
     return {"year": year, "month": month, **body.dict()}
 
 
+# ── Forecast table (actuals + pipeline + manual + suggested) ─────────────────
+
+@financial_router.get("/api/admin/financial/forecast-table")
+async def get_forecast_table(
+    months_back: int = Query(3),
+    months_ahead: int = Query(9),
+    x_admin_key: str = Header(""),
+):
+    """Rolling view: actuals for past months, pipeline for future, plus manual budget and suggested."""
+    today = date.today()
+    cy, cm = today.year, today.month
+
+    def _madd(y: int, m: int, delta: int) -> tuple:
+        t = y * 12 + m - 1 + delta
+        return t // 12, t % 12 + 1
+
+    months_range = [_madd(cy, cm, i) for i in range(-months_back, months_ahead + 1)]
+    # Go 2 years back for YoY suggestion context
+    hist_y, hist_m = _madd(cy, cm, -24)
+    d_from = date(hist_y, hist_m, 1)
+    end_y, end_m = months_range[-1]
+    nxt_y, nxt_m = _madd(end_y, end_m, 1)
+    d_to = date(nxt_y, nxt_m, 1) - timedelta(days=1)
+
+    commissions = _get_commissions()
+
+    by_month: Dict[tuple, Dict] = {}
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT fecha::text, COALESCE(ingreso_total,0), COALESCE(costo_operativo_total,0),
+                       COALESCE(pagos,'[]'::jsonb)
+                FROM all_appointments
+                WHERE fecha BETWEEN %s AND %s AND status = ANY(%s)
+                ORDER BY fecha
+            """, (d_from, d_to, list(CONFIRMED_STATUSES)))
+            for row in cur.fetchall():
+                fecha_str, gross, costo, pagos_raw = row
+                if not fecha_str:
+                    continue
+                dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
+                key = (dobj.year, dobj.month)
+                gross, costo = float(gross), float(costo)
+                pagos = pagos_raw if isinstance(pagos_raw, list) else json.loads(pagos_raw or "[]")
+                commission = sum(
+                    float(p.get("amount", 0)) - _net_amount(float(p.get("amount", 0)),
+                                                             p.get("method", "otro"), commissions)
+                    for p in pagos
+                )
+                net = gross - commission
+                if key not in by_month:
+                    by_month[key] = {"income": 0, "result": 0, "bookings": 0}
+                by_month[key]["income"]   += int(net)
+                by_month[key]["result"]   += int(net - costo)
+                by_month[key]["bookings"] += 1
+
+    # Batch-load budgets
+    budgets: Dict[tuple, Dict] = {}
+    if months_range:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                ph = ",".join(["(%s,%s)"] * len(months_range))
+                params = [v for ym in months_range for v in ym]
+                cur.execute(
+                    f"SELECT year, month, income_budget, costs_budget, marketing_budget "
+                    f"FROM financial_budget WHERE (year,month) IN ({ph})", params
+                )
+                for r in cur.fetchall():
+                    budgets[(r[0], r[1])] = {
+                        "income_budget":   float(r[2] or 0),
+                        "costs_budget":    float(r[3] or 0),
+                        "marketing_budget": float(r[4] or 0),
+                    }
+
+    def _suggested(y: int, m: int):
+        yoy_key = (y - 1, m)
+        if yoy_key < (cy, cm) and by_month.get(yoy_key, {}).get("income", 0) > 0:
+            t_this = sum(by_month.get(_madd(cy, cm, -i - 1), {}).get("income", 0) for i in range(3)
+                         if _madd(cy, cm, -i - 1) < (cy, cm))
+            t_last = sum(by_month.get(_madd(cy, cm, -i - 13), {}).get("income", 0) for i in range(3)
+                         if _madd(cy, cm, -i - 13) < (cy, cm))
+            trend = max(0.5, min(2.0, t_this / t_last)) if t_last > 0 else 1.0
+            return int(by_month[yoy_key]["income"] * trend), "año anterior"
+        trailing = [
+            by_month[_madd(y, m, -i - 1)]["income"]
+            for i in range(3)
+            if _madd(y, m, -i - 1) < (cy, cm) and _madd(y, m, -i - 1) in by_month
+        ]
+        if trailing:
+            return int(sum(trailing) / len(trailing)), "promedio 3m"
+        return None, None
+
+    result = []
+    for y, m in months_range:
+        key = (y, m)
+        is_past    = key < (cy, cm)
+        is_current = key == (cy, cm)
+        data   = by_month.get(key)
+        budget = budgets.get(key, {"income_budget": 0, "costs_budget": 0, "marketing_budget": 0})
+        sug_val, sug_src = _suggested(y, m) if not is_past else (None, None)
+        result.append({
+            "month":            f"{y:04d}-{m:02d}",
+            "is_past":          is_past,
+            "is_current":       is_current,
+            "actual_income":    data["income"]   if data else None,
+            "actual_result":    data["result"]   if data else None,
+            "actual_bookings":  data["bookings"] if data else None,
+            "manual_income":    int(budget["income_budget"])    if budget["income_budget"]    else None,
+            "manual_costs":     int(budget["costs_budget"])     if budget["costs_budget"]     else None,
+            "manual_marketing": int(budget["marketing_budget"]) if budget["marketing_budget"] else None,
+            "suggested_income": sug_val,
+            "suggested_source": sug_src,
+        })
+    return {"data": result}
+
+
 # ── P&L structure (fixed daily + experience whitelist) ───────────────────────
 
 @financial_router.get("/api/admin/financial/structure")

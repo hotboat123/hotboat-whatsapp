@@ -7351,25 +7351,20 @@ function exportFinancialTableCsv(){
       return;
     }
     const headers = [
-      'mes', 'n_reservas', 'confirmadas', 'pendientes', 'ingreso_bruto', 'ingreso_neto', 'costo',
-      'resultado_forecast', 'presupuesto_ingreso', 'presupuesto_costos', 'presupuesto_marketing', 'vs_presupuesto_ingreso',
+      'mes', 'tipo', 'reservas', 'real_ingresos', 'real_resultado',
+      'forecast_manual', 'sugerido', 'fuente_sugerido',
     ];
     const rows = [headers];
     _finLastForecast.forEach(m => {
-      const b = m.budget || {};
+      const tipo = m.is_past ? 'pasado' : m.is_current ? 'actual' : 'futuro';
       rows.push([
-        m.month || '',
-        finCsvNum(m.n_reservas),
-        finCsvNum(m.confirmed),
-        finCsvNum(m.pending),
-        finCsvNum(m.gross),
-        finCsvNum(m.net_income),
-        finCsvNum(m.costo),
-        finCsvNum(m.resultado_forecast),
-        finCsvNum(b.income_budget),
-        finCsvNum(b.costs_budget),
-        finCsvNum(b.marketing_budget),
-        finCsvNum(m.vs_budget),
+        m.month || '', tipo,
+        finCsvNum(m.actual_bookings),
+        finCsvNum(m.actual_income),
+        finCsvNum(m.actual_result),
+        finCsvNum(m.manual_income),
+        finCsvNum(m.suggested_income),
+        m.suggested_source || '',
       ]);
     });
     finDownloadCsv(`hotboat-forecast_${from}_${to}.csv`, rows);
@@ -7940,60 +7935,158 @@ async function saveFinStructure(){
 }
 
 // ── Forecast ──────────────────────────────────────────────────
+const _FC_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function fmtClpK(n){
+  const v = Math.abs(Math.round(Number(n)||0));
+  if(v >= 1000000) return '$'+(v/1000000).toFixed(1).replace('.0','')+'M';
+  if(v >= 1000)    return '$'+(v/1000).toFixed(0)+'K';
+  return '$'+v.toLocaleString('es-CL');
+}
+
 async function loadForecast(){
   const el = document.getElementById('fin-fc-content');
   el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:.5rem">Cargando…</div>';
   try {
-    const r = await fetch('/api/admin/financial/forecast?months_ahead=3');
+    const r = await fetch('/api/admin/financial/forecast-table?months_back=3&months_ahead=9',
+                          {headers:{'x-admin-key':KEY}});
+    if(!r.ok) throw new Error(await r.text());
     const d = await r.json();
     _finLastForecast = d.data || [];
     renderForecast(_finLastForecast);
   } catch(e){
-    el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar</div>';
+    el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar: '+e.message+'</div>';
   }
 }
 
 function renderForecast(data){
   const el = document.getElementById('fin-fc-content');
-  if(!data||!data.length){
-    el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Sin reservas futuras</div>'; return;
+  if(!data||!data.length){ el.innerHTML='<div style="color:var(--muted);font-size:.82rem">Sin datos</div>'; return; }
+
+  let rows = '';
+  for(const m of data){
+    const [yr, mo] = m.month.split('-');
+    const label = _FC_MONTHS[parseInt(mo)-1]+' '+yr;
+    const isPast = m.is_past, isCurrent = m.is_current, isFuture = !isPast && !isCurrent;
+    const rowBg  = isCurrent ? 'rgba(250,204,21,.06)' : isPast ? 'rgba(255,255,255,.015)' : '';
+
+    // Mes
+    const mesLabel = label + (isCurrent ? ' <span style="font-size:.62rem;color:var(--gold);font-weight:700">HOY</span>'
+                              : isPast  ? ' <span style="font-size:.62rem;color:var(--muted)">✓</span>' : '');
+    // Real / Pipeline (same column, different label)
+    let realHtml = '—';
+    if(m.actual_income !== null){
+      const col = isPast ? 'var(--green)' : 'var(--gold)';
+      realHtml = `<span style="font-weight:600;color:${col}">${fmtClp(m.actual_income)}</span>`;
+      if(isCurrent) realHtml += `<br><span style="font-size:.63rem;color:var(--muted)">parcial</span>`;
+      if(m.actual_bookings) realHtml += `<br><span style="font-size:.63rem;color:var(--muted)">${m.actual_bookings} res.</span>`;
+    }
+    // Resultado (past/current only)
+    let resHtml = '—';
+    if(!isFuture && m.actual_result !== null){
+      resHtml = `<span style="color:${colorNum(m.actual_result)};font-weight:600">${fmtClp(m.actual_result)}</span>`;
+    }
+    // Forecast manual — editable for current+future, comparison for past
+    let manualHtml = '';
+    if(isPast){
+      if(m.manual_income){
+        const delta = m.actual_income !== null ? m.actual_income - m.manual_income : null;
+        manualHtml = `<span style="color:var(--text)">${fmtClp(m.manual_income)}</span>`;
+        if(delta !== null) manualHtml += `<br><span style="font-size:.63rem;color:${delta>=0?'var(--green)':'var(--red)'}">${delta>=0?'+':''}${fmtClpK(delta)}</span>`;
+      } else {
+        manualHtml = `<span style="color:var(--muted);font-size:.75rem">—</span>`;
+      }
+    } else {
+      const mv = m.manual_income || '';
+      manualHtml = `<span id="fc-m-${m.month}" onclick="fcEditManual('${m.month}',${mv||0})"
+        style="cursor:pointer;display:inline-block;min-width:85px;text-align:right;padding:.18rem .45rem;
+               border-radius:5px;border:1px dashed ${mv?'var(--border)':'rgba(255,255,255,.12)'};
+               color:${mv?'var(--text)':'var(--muted)'};font-size:${mv?'.82rem':'.73rem'}"
+        title="Click para editar">${mv ? fmtClp(mv) : '+ añadir'}</span>`;
+    }
+    // Sugerido
+    let sugHtml = '—';
+    if(m.suggested_income){
+      sugHtml = `<span style="color:var(--muted)">${fmtClp(m.suggested_income)}</span>`;
+      if(m.suggested_source) sugHtml += `<br><span style="font-size:.62rem;color:var(--muted);opacity:.7">${m.suggested_source}</span>`;
+      if(!isPast && !m.manual_income){
+        sugHtml += `<br><button onclick="fcUseSuggested('${m.month}',${m.suggested_income})"
+          style="font-size:.63rem;background:none;border:none;color:var(--gold);cursor:pointer;padding:0;margin-top:.1rem">usar ↑</button>`;
+      }
+    }
+    // Δ forecast vs sugerido (future) or vs real (past if manual set)
+    let deltaHtml = '—';
+    if(!isPast && m.manual_income && m.suggested_income){
+      const d2 = m.manual_income - m.suggested_income;
+      deltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}</span>`;
+    }
+
+    rows += `<tr style="background:${rowBg};border-bottom:1px solid var(--border)">
+      <td style="padding:.45rem .7rem;font-weight:${isCurrent?700:500}">${mesLabel}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${realHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${resHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${manualHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${sugHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${deltaHtml}</td>
+    </tr>`;
   }
-  const MONTH_NAMES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  el.innerHTML = data.map(m=>{
-    const mo = parseInt(m.month.split('-')[1]);
-    const yr = m.month.split('-')[0];
-    const b = m.budget || {};
-    const incomeBudget = b.income_budget || 0;
-    const vs = m.vs_budget;
-    const vsColor = vs >= 0 ? 'var(--green)' : 'var(--red)';
-    const vsPct = incomeBudget ? Math.round(vs/incomeBudget*100) : null;
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:.8rem">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.8rem">
-        <div>
-          <div style="font-weight:600">${MONTH_NAMES[mo]} ${yr}</div>
-          <div style="color:var(--muted);font-size:.75rem">${m.n_reservas} reservas · ${m.confirmed} confirmadas · ${m.pending} pendientes</div>
-        </div>
-        <button onclick="openBudgetModal('${yr}','${mo}')" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.28rem .6rem;font-size:.75rem;cursor:pointer">
-          📋 Editar budget
-        </button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;font-size:.8rem">
-        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
-          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Ingreso Forecast</div>
-          <div style="font-weight:600;color:var(--gold)">${fmtClp(m.net_income)}</div>
-          ${incomeBudget ? `<div style="font-size:.7rem;color:${vsColor};margin-top:.15rem">${vs>=0?'+':''}${fmtClp(vs)} vs budget ${vsPct!==null?'('+vsPct+'%)':''}</div>` : ''}
-        </div>
-        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
-          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Budget Ingreso</div>
-          <div style="font-weight:600">${incomeBudget ? fmtClp(incomeBudget) : '<span style="color:var(--muted)">—</span>'}</div>
-        </div>
-        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
-          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Resultado Forecast</div>
-          <div style="font-weight:600;color:${colorNum(m.resultado_forecast)}">${fmtClp(m.resultado_forecast)}</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+
+  el.innerHTML = `<div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+      <thead><tr style="background:var(--card);color:var(--muted);font-size:.67rem;text-transform:uppercase;letter-spacing:.04em">
+        <th style="padding:.5rem .7rem;text-align:left">Mes</th>
+        <th style="padding:.5rem .5rem;text-align:right" title="Ingresos reales (pasado) o pipeline confirmado (futuro)">Real / Pipeline</th>
+        <th style="padding:.5rem .5rem;text-align:right">Resultado</th>
+        <th style="padding:.5rem .5rem;text-align:right">Forecast manual</th>
+        <th style="padding:.5rem .5rem;text-align:right">Sugerido</th>
+        <th style="padding:.5rem .5rem;text-align:right">Δ</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+async function fcEditManual(monthStr, currentVal){
+  const span = document.getElementById('fc-m-'+monthStr);
+  if(!span) return;
+  const [yr, mo] = monthStr.split('-');
+  const input = document.createElement('input');
+  input.type = 'number'; input.value = currentVal || ''; input.placeholder = '0'; input.min = '0';
+  input.style.cssText = 'width:105px;background:var(--card);border:1px solid var(--gold);color:var(--text);border-radius:5px;padding:.18rem .4rem;font-size:.8rem;text-align:right;outline:none';
+  const save = async ()=>{
+    const val = parseInt(input.value) || 0;
+    try {
+      const row = (_finLastForecast||[]).find(r=>r.month===monthStr);
+      // Preserve existing costs/marketing if set
+      const existing = row || {};
+      await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`,{
+        method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
+        body: JSON.stringify({income_budget:val, costs_budget:existing.manual_costs||0,
+                              marketing_budget:existing.manual_marketing||0, notes:''})
+      });
+      if(row) row.manual_income = val || null;
+      renderForecast(_finLastForecast);
+      showToast('✅ Guardado');
+    } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast); }
+  };
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape') renderForecast(_finLastForecast); });
+  span.replaceWith(input); input.focus(); input.select();
+}
+
+async function fcUseSuggested(monthStr, sugVal){
+  const row = (_finLastForecast||[]).find(r=>r.month===monthStr);
+  if(!row) return;
+  row.manual_income = sugVal;
+  renderForecast(_finLastForecast);
+  const [yr, mo] = monthStr.split('-');
+  try {
+    await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`,{
+      method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
+      body: JSON.stringify({income_budget:sugVal, costs_budget:row.manual_costs||0,
+                            marketing_budget:row.manual_marketing||0, notes:''})
+    });
+    showToast('✅ Sugerido aplicado');
+  } catch(e){ showToast('❌ '+e.message, true); }
 }
 
 // ── Commissions modal ─────────────────────────────────────────
