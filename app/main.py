@@ -1998,14 +1998,18 @@ async def upload_and_send_image(
         raise HTTPException(status_code=500, detail=f"Failed to send image: {str(e)}")
 
 
-def _convert_webm_to_ogg(input_path: str, output_path: str) -> bool:
-    """Convert webm audio to ogg/opus using the bundled ffmpeg from imageio-ffmpeg."""
+def _convert_to_whatsapp_audio(input_path: str, output_path: str) -> bool:
+    """Convert any browser audio (webm/mp4/etc) to AAC/M4A for WhatsApp delivery.
+    AAC in MP4 container is universally supported by WhatsApp on all devices.
+    """
     try:
         import subprocess
         import imageio_ffmpeg
         ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
         result = subprocess.run(
-            [ffmpeg_exe, "-y", "-i", input_path, "-c:a", "libopus", "-b:a", "64k", output_path],
+            [ffmpeg_exe, "-y", "-i", input_path,
+             "-c:a", "aac", "-b:a", "64k", "-ac", "1",
+             "-movflags", "+faststart", output_path],
             capture_output=True, timeout=30
         )
         if result.returncode != 0:
@@ -2049,11 +2053,23 @@ async def upload_and_send_audio(
         # Read file contents
         contents = await audio.read()
         file_size_mb = len(contents) / (1024 * 1024)
-        logger.info(f"📥 Processing audio {audio.filename} ({file_size_mb:.2f} MB) from {to}")
-        
-        # Save with the correct extension
-        is_webm = audio.content_type and "webm" in audio.content_type
-        orig_suffix = ".webm" if is_webm else ".ogg"
+        ct = audio.content_type or ""
+        logger.info(f"📥 Processing audio {audio.filename!r} type={ct!r} ({file_size_mb:.2f} MB) → {to}")
+
+        # Detect original format from content-type
+        if "webm" in ct:
+            orig_suffix = ".webm"
+        elif "mp4" in ct or "m4a" in ct:
+            orig_suffix = ".mp4"
+        elif "mpeg" in ct or "mp3" in ct:
+            orig_suffix = ".mp3"
+        elif "wav" in ct:
+            orig_suffix = ".wav"
+        elif "amr" in ct:
+            orig_suffix = ".amr"
+        else:
+            orig_suffix = ".bin"
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=orig_suffix) as temp_file:
             temp_file.write(contents)
             temp_path = temp_file.name
@@ -2062,34 +2078,29 @@ async def upload_and_send_audio(
         upload_path = temp_path
         converted_path = None
         try:
-            # Determine MIME type and extension
-            mime_type = "audio/ogg"
-            extension = "ogg"
-            if audio.content_type:
-                if "mp3" in audio.content_type or "mpeg" in audio.content_type:
-                    mime_type = "audio/mpeg"
-                    extension = "mp3"
-                elif "mp4" in audio.content_type or "m4a" in audio.content_type:
+            # Always convert to AAC/M4A — the most universally supported
+            # format for WhatsApp audio across all devices and API versions.
+            # AMR is kept as-is (WhatsApp native voice format, no conversion needed).
+            if "amr" in ct:
+                mime_type = "audio/amr"
+                extension = "amr"
+            else:
+                converted_path = temp_path + "_wa.m4a"
+                if _convert_to_whatsapp_audio(original_temp_path, converted_path):
+                    upload_path = converted_path
                     mime_type = "audio/mp4"
                     extension = "m4a"
-                elif "wav" in audio.content_type:
-                    mime_type = "audio/wav"
-                    extension = "wav"
-                elif is_webm:
-                    # Chrome records audio/webm (opus). WhatsApp needs ogg/opus — same codec, different container.
-                    converted_path = original_temp_path.replace(".webm", "_conv.ogg")
-                    if _convert_webm_to_ogg(original_temp_path, converted_path):
-                        upload_path = converted_path
-                        mime_type = "audio/ogg"
-                        extension = "ogg"
-                        logger.info("✅ Converted webm→ogg for WhatsApp delivery")
-                    else:
-                        logger.warning("⚠️ webm→ogg conversion failed, uploading as webm")
-                        mime_type = "audio/webm"
-                        extension = "webm"
+                    logger.info(f"✅ Converted {orig_suffix}→m4a/aac for WhatsApp delivery")
+                else:
+                    # Fallback: send original and hope WhatsApp transcodes it
+                    logger.warning(f"⚠️ Conversion failed — uploading original {orig_suffix} as-is")
+                    mime_type = "audio/mp4" if "mp4" in ct or "m4a" in ct else (
+                        "audio/mpeg" if "mpeg" in ct or "mp3" in ct else "audio/ogg"
+                    )
+                    extension = orig_suffix.lstrip(".")
 
             # Upload to WhatsApp
-            logger.info(f"📤 Uploading audio to WhatsApp (MIME: {mime_type})...")
+            logger.info(f"📤 Uploading audio to WhatsApp (MIME: {mime_type}, size: {os.path.getsize(upload_path)} bytes)...")
             media_id = await whatsapp_client.upload_media(upload_path, mime_type)
             
             if not media_id:
@@ -2114,8 +2125,15 @@ async def upload_and_send_audio(
                 to=to,
                 media_id=media_id
             )
-            
+
+            # Surface any application-level errors WhatsApp may embed in a 200 response
+            if "error" in result:
+                err = result["error"]
+                logger.error(f"❌ WhatsApp send error: code={err.get('code')} msg={err.get('message')}")
+                raise HTTPException(status_code=502, detail=f"WhatsApp error: {err.get('message')}")
+
             message_id = result.get('messages', [{}])[0].get('id', '')
+            logger.info(f"✅ WhatsApp audio queued, message_id={message_id!r}")
             
             # Get lead info
             lead = None
