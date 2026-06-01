@@ -7955,12 +7955,10 @@ function fmtClpK(n){
 
 function setFcView(v){
   _fcView = v;
-  document.getElementById('fc-view-monthly').style.cssText =
-    v==='monthly' ? 'background:var(--gold);color:#000;border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;font-weight:600;cursor:pointer'
-                  : 'background:transparent;color:var(--muted);border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;cursor:pointer';
-  document.getElementById('fc-view-weekly').style.cssText =
-    v==='weekly'  ? 'background:var(--gold);color:#000;border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;font-weight:600;cursor:pointer'
-                  : 'background:transparent;color:var(--muted);border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;cursor:pointer';
+  const onCSS  = 'background:var(--gold);color:#000;border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;font-weight:600;cursor:pointer';
+  const offCSS = 'background:transparent;color:var(--muted);border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;cursor:pointer';
+  document.getElementById('fc-view-monthly').style.cssText = v==='monthly' ? onCSS : offCSS;
+  document.getElementById('fc-view-weekly').style.cssText  = v==='weekly'  ? onCSS : offCSS;
   loadForecast(v);
 }
 
@@ -7981,6 +7979,32 @@ async function loadForecast(view){
   } catch(e){
     el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar: '+e.message+'</div>';
   }
+}
+
+// Generic inline-edit cell helper
+function _fcInlineEdit(spanId, currentVal, onSave){
+  const span = document.getElementById(spanId);
+  if(!span) return false;
+  const input = document.createElement('input');
+  input.type='number'; input.value=currentVal||''; input.placeholder='0'; input.min='0';
+  input.style.cssText='width:105px;background:var(--card);border:1px solid var(--gold);color:var(--text);border-radius:5px;padding:.18rem .4rem;font-size:.8rem;text-align:right;outline:none';
+  let saved=false;
+  const doSave=async()=>{ if(saved)return; saved=true; await onSave(parseInt(input.value)||0); };
+  input.addEventListener('blur', doSave);
+  input.addEventListener('keydown', e=>{
+    if(e.key==='Enter') input.blur();
+    if(e.key==='Escape'){ saved=true; renderForecast(_finLastForecast,_fcView); }
+  });
+  span.replaceWith(input); input.focus(); input.select();
+  return true;
+}
+
+// Save to /api/admin/financial/plan-entry
+async function _fcSavePlan(type, key, amount){
+  await fetch('/api/admin/financial/plan-entry',{
+    method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
+    body: JSON.stringify({type, key, amount})
+  });
 }
 
 function renderForecast(data, view){
@@ -8014,10 +8038,11 @@ function renderForecast(data, view){
       if(m.actual_bookings) realHtml += `<br><span style="font-size:.63rem;color:var(--muted)">${m.actual_bookings} res.</span>`;
     }
 
-    // Budget (editable in monthly, read-only in weekly)
+    // ── Budget column (editable per week OR per month) ──────────────────────
     let budgetHtml = '';
-    const budgetEditKey = isWeekly ? m.month_key : m.month;  // monthly key for saving
+    const budgetSpanId = `fc-b-${m.month}`;
     if(isPast){
+      // Past: show value + delta vs real
       if(m.manual_income){
         const delta = m.actual_income !== null ? m.actual_income - m.manual_income : null;
         budgetHtml = `<span style="color:var(--text)">${fmtClp(m.manual_income)}</span>`;
@@ -8025,47 +8050,60 @@ function renderForecast(data, view){
       } else {
         budgetHtml = `<span style="color:var(--muted);font-size:.75rem">—</span>`;
       }
-    } else if(isWeekly){
-      // Weekly: show derived value, click opens monthly edit
-      const mv = m.manual_income;
-      budgetHtml = mv
-        ? `<span onclick="fcEditManual('${budgetEditKey}',${mv},true)" title="Budget mensual distribuido — click para editar mes"
-             style="cursor:pointer;color:var(--text)">${fmtClp(mv)}</span>
-           <br><span style="font-size:.6rem;color:var(--muted)">mensual÷sem</span>`
-        : `<span onclick="fcEditManual('${budgetEditKey}',0,true)" title="Click para definir budget mensual"
-             style="cursor:pointer;color:var(--muted);font-size:.73rem">+ añadir</span>`;
     } else {
-      const mv = m.manual_income || '';
-      budgetHtml = `<span id="fc-m-${m.month}" onclick="fcEditManual('${m.month}',${mv||0},false)"
-        style="cursor:pointer;display:inline-block;min-width:85px;text-align:right;padding:.18rem .45rem;
-               border-radius:5px;border:1px dashed ${mv?'var(--border)':'rgba(255,255,255,.12)'};
-               color:${mv?'var(--text)':'var(--muted)'};font-size:${mv?'.82rem':'.73rem'}"
-        title="Click para editar">${mv ? fmtClp(mv) : '+ añadir'}</span>`;
+      const bv = m.manual_income;
+      const isOverride = m.manual_is_override;
+      const hint = isWeekly && !isOverride ? `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">del mensual</span>` : '';
+      budgetHtml = `<span id="${budgetSpanId}"
+        onclick="fcEditBudget('${m.month}','${m.month_key}',${bv||0},${isWeekly})"
+        style="cursor:pointer;display:inline-block;min-width:80px;text-align:right;padding:.18rem .45rem;
+               border-radius:5px;border:1px dashed ${bv?'var(--border)':'rgba(255,255,255,.12)'};
+               color:${bv?'var(--text)':'var(--muted)'};font-size:${bv?'.82rem':'.73rem'}"
+        title="Click para editar budget">${bv ? fmtClp(bv) : '+ añadir'}</span>${hint}`;
     }
 
-    // Sugerido
-    let sugHtml = '—';
-    if(m.suggested_income){
-      sugHtml = `<span style="color:var(--muted)">${fmtClp(m.suggested_income)}</span>`;
-      if(m.suggested_source) sugHtml += `<br><span style="font-size:.62rem;color:var(--muted);opacity:.7">${m.suggested_source}</span>`;
-      if(!isPast && !m.manual_income && !isWeekly){
-        sugHtml += `<br><button onclick="fcUseSuggested('${m.month}',${m.suggested_income})"
-          style="font-size:.63rem;background:none;border:none;color:var(--gold);cursor:pointer;padding:0;margin-top:.1rem">usar ↑</button>`;
+    // ── Forecast column (manual value, suggested shown below) ────────────────
+    let forecastHtml = '';
+    const fcSpanId = `fc-f-${m.month}`;
+    const fcType = isWeekly ? 'week_forecast' : 'month_forecast';
+    const fcKey  = m.month;  // week key or month key
+    if(isPast){
+      // Past: show forecast if set, compare to real
+      if(m.forecast_income){
+        const delta = m.actual_income !== null ? m.actual_income - m.forecast_income : null;
+        forecastHtml = `<span style="color:var(--text)">${fmtClp(m.forecast_income)}</span>`;
+        if(delta !== null) forecastHtml += `<br><span style="font-size:.63rem;color:${delta>=0?'var(--green)':'var(--red)'}">${delta>=0?'+':''}${fmtClpK(delta)}</span>`;
+      } else {
+        forecastHtml = `<span style="color:var(--muted);font-size:.75rem">—</span>`;
       }
+    } else {
+      const fv = m.forecast_income;
+      const sv = m.suggested_income;
+      const sugLabel = sv ? `<span style="font-size:.62rem;color:var(--muted);opacity:.75">sugerido: ${fmtClpK(sv)}${m.suggested_source?' ('+m.suggested_source+')':''}</span>` : '';
+      forecastHtml = `<span id="${fcSpanId}"
+        onclick="fcEditForecast('${fcKey}','${fcType}',${fv||0})"
+        style="cursor:pointer;display:inline-block;min-width:80px;text-align:right;padding:.18rem .45rem;
+               border-radius:5px;border:1px dashed ${fv?'var(--border)':'rgba(255,255,255,.12)'};
+               color:${fv?'var(--text)':'var(--muted)'};font-size:${fv?'.82rem':'.73rem'}"
+        title="Click para editar forecast">${fv ? fmtClp(fv) : '+ añadir'}</span>
+        ${sugLabel ? `<br>${sugLabel}` : ''}`;
     }
 
-    // Δ budget vs sugerido
+    // Δ: past = Real vs Forecast; future = Forecast vs Budget
     let deltaHtml = '—';
-    if(!isPast && m.manual_income && m.suggested_income){
-      const d2 = m.manual_income - m.suggested_income;
-      deltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}</span>`;
+    if(isPast && m.forecast_income && m.actual_income !== null){
+      const d2 = m.actual_income - m.forecast_income;
+      deltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">real vs fc</span></span>`;
+    } else if(!isPast && m.forecast_income && m.manual_income){
+      const d2 = m.forecast_income - m.manual_income;
+      deltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">fc vs budget</span></span>`;
     }
 
     rows += `<tr style="background:${rowBg};border-bottom:1px solid var(--border)">
       <td style="padding:.45rem .7rem;font-weight:${isCurrent?700:500}">${periodLabel}${badge}</td>
       <td style="padding:.45rem .5rem;text-align:right">${realHtml}</td>
       <td style="padding:.45rem .5rem;text-align:right">${budgetHtml}</td>
-      <td style="padding:.45rem .5rem;text-align:right">${sugHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${forecastHtml}</td>
       <td style="padding:.45rem .5rem;text-align:right">${deltaHtml}</td>
     </tr>`;
   }
@@ -8076,8 +8114,8 @@ function renderForecast(data, view){
       <thead><tr style="background:var(--card);color:var(--muted);font-size:.67rem;text-transform:uppercase;letter-spacing:.04em">
         <th style="padding:.5rem .7rem;text-align:left">${periodHeader}</th>
         <th style="padding:.5rem .5rem;text-align:right">Real</th>
-        <th style="padding:.5rem .5rem;text-align:right">Budget${isWeekly?' <span style="opacity:.6;font-size:.6rem">(mensual)</span>':''}</th>
-        <th style="padding:.5rem .5rem;text-align:right">Sugerido</th>
+        <th style="padding:.5rem .5rem;text-align:right">Budget</th>
+        <th style="padding:.5rem .5rem;text-align:right">Forecast</th>
         <th style="padding:.5rem .5rem;text-align:right">Δ</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -8085,76 +8123,43 @@ function renderForecast(data, view){
   </div>`;
 }
 
-async function fcEditManual(monthKey, currentVal, isFromWeekly){
-  // monthKey is always YYYY-MM (monthly key)
-  const [yr, mo] = monthKey.split('-');
-  const spanId = 'fc-m-' + monthKey;
-  const span = document.getElementById(spanId);
-
-  const input = document.createElement('input');
-  input.type = 'number'; input.value = currentVal || ''; input.placeholder = '0'; input.min = '0';
-  input.style.cssText = 'width:105px;background:var(--card);border:1px solid var(--gold);color:var(--text);border-radius:5px;padding:.18rem .4rem;font-size:.8rem;text-align:right;outline:none';
-
-  const save = async ()=>{
-    const val = parseInt(input.value) || 0;
+// Edit budget: weekly uses plan-entry (week_budget), monthly uses financial_budget table
+async function fcEditBudget(weekOrMonthKey, monthKey, currentVal, isWeekly){
+  const spanId = `fc-b-${weekOrMonthKey}`;
+  _fcInlineEdit(spanId, currentVal, async (val)=>{
     try {
-      const row = (_finLastForecast||[]).find(r=>(r.month_key||r.month)===monthKey);
-      await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`,{
-        method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
-        body: JSON.stringify({income_budget:val, costs_budget:(row&&row.manual_costs)||0,
-                              marketing_budget:(row&&row.manual_marketing)||0, notes:''})
-      });
-      // Update all rows sharing same month_key (multiple weeks same month)
-      (_finLastForecast||[]).forEach(r=>{
-        if((r.month_key||r.month)===monthKey) r.manual_income = val || null;
-      });
-      renderForecast(_finLastForecast, _fcView);
-      showToast('✅ Budget guardado');
-    } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast, _fcView); }
-  };
-
-  if(span){
-    input.addEventListener('blur', save);
-    input.addEventListener('keydown', e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape') renderForecast(_finLastForecast, _fcView); });
-    span.replaceWith(input);
-  } else {
-    // Weekly mode: no span to replace, use a toast-style inline prompt approach
-    const result = window.prompt(`Budget mensual para ${yr}-${mo} (CLP):`, currentVal||'');
-    if(result !== null){
-      const val = parseInt(result) || 0;
-      const row = (_finLastForecast||[]).find(r=>(r.month_key||r.month)===monthKey);
-      try {
+      if(isWeekly){
+        await _fcSavePlan('week_budget', weekOrMonthKey, val);
+        const row = (_finLastForecast||[]).find(r=>r.month===weekOrMonthKey);
+        if(row){ row.manual_income = val||null; row.manual_is_override = true; }
+      } else {
+        const [yr, mo] = monthKey.split('-');
+        const row = (_finLastForecast||[]).find(r=>r.month===weekOrMonthKey);
         await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`,{
           method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
           body: JSON.stringify({income_budget:val, costs_budget:(row&&row.manual_costs)||0,
                                 marketing_budget:(row&&row.manual_marketing)||0, notes:''})
         });
-        (_finLastForecast||[]).forEach(r=>{
-          if((r.month_key||r.month)===monthKey) r.manual_income = val || null;
-        });
-        renderForecast(_finLastForecast, _fcView);
-        showToast('✅ Budget guardado');
-      } catch(e){ showToast('❌ '+e.message, true); }
-    }
-    return;
-  }
-  input.focus(); input.select();
+        if(row) row.manual_income = val||null;
+      }
+      renderForecast(_finLastForecast, _fcView);
+      showToast('✅ Budget guardado');
+    } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast, _fcView); }
+  });
 }
 
-async function fcUseSuggested(monthStr, sugVal){
-  const row = (_finLastForecast||[]).find(r=>r.month===monthStr);
-  if(!row) return;
-  row.manual_income = sugVal;
-  renderForecast(_finLastForecast, _fcView);
-  const [yr, mo] = monthStr.split('-');
-  try {
-    await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`,{
-      method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
-      body: JSON.stringify({income_budget:sugVal, costs_budget:row.manual_costs||0,
-                            marketing_budget:row.manual_marketing||0, notes:''})
-    });
-    showToast('✅ Sugerido aplicado');
-  } catch(e){ showToast('❌ '+e.message, true); }
+// Edit forecast: always uses plan-entry
+async function fcEditForecast(key, type, currentVal){
+  const spanId = `fc-f-${key}`;
+  _fcInlineEdit(spanId, currentVal, async (val)=>{
+    try {
+      await _fcSavePlan(type, key, val);
+      const row = (_finLastForecast||[]).find(r=>r.month===key);
+      if(row) row.forecast_income = val||null;
+      renderForecast(_finLastForecast, _fcView);
+      showToast('✅ Forecast guardado');
+    } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast, _fcView); }
+  });
 }
 
 // ── Commissions modal ─────────────────────────────────────────
