@@ -1,6 +1,7 @@
 """Financial module: P&L dashboard and Cash Flow statement."""
 import json
 import logging
+import calendar as _cal
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -1106,17 +1107,143 @@ async def upsert_budget(year: int, month: int, body: BudgetIn,
 
 # ── Forecast table (actuals + pipeline + manual + suggested) ─────────────────
 
+def _calc_net(gross: float, pagos_raw, commissions: Dict) -> float:
+    pagos = pagos_raw if isinstance(pagos_raw, list) else json.loads(pagos_raw or "[]")
+    commission = sum(
+        (float(p.get("amount") or 0)) - _net_amount(
+            float(p.get("amount") or 0), p.get("method", "otro"), commissions)
+        for p in pagos
+    )
+    return gross - commission
+
+
 @financial_router.get("/api/admin/financial/forecast-table")
 async def get_forecast_table(
     months_back: int = Query(3),
     months_ahead: int = Query(9),
+    view: str = Query("monthly"),
+    weeks_back: int = Query(4),
+    weeks_ahead: int = Query(8),
     x_admin_key: str = Header(""),
 ):
-    """Rolling view: actuals for past months, pipeline for future, plus manual budget and suggested."""
+    """Rolling view: actuals + budget + suggested. Supports monthly and weekly views."""
     try:
         today = date.today()
         cy, cm = today.year, today.month
+        commissions = _get_commissions()
 
+        # ── WEEKLY VIEW ───────────────────────────────────────────────────────
+        if view == "weekly":
+            mon0 = today - timedelta(days=today.weekday())  # Monday of current week
+            weeks_list = []
+            for i in range(-weeks_back, weeks_ahead + 1):
+                ws = mon0 + timedelta(weeks=i)
+                we = ws + timedelta(days=6)
+                iso = ws.isocalendar()
+                weeks_list.append({
+                    "key": f"{iso.year}-W{iso.week:02d}",
+                    "ws": ws, "we": we,
+                    "iso_year": iso.year, "iso_week": iso.week,
+                    "is_past": we < today,
+                    "is_current": ws <= today <= we,
+                })
+
+            d_from_w = weeks_list[0]["ws"] - timedelta(weeks=104)  # 2 years for YoY
+            d_to_w   = weeks_list[-1]["we"]
+
+            by_week: Dict = {}
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT COALESCE(fecha::text,''), COALESCE(ingreso_total,0),
+                               COALESCE(pagos,'[]'::jsonb)
+                        FROM all_appointments
+                        WHERE fecha BETWEEN %s AND %s AND status = ANY(%s)
+                        ORDER BY fecha
+                    """, (d_from_w, d_to_w, list(CONFIRMED_STATUSES)))
+                    for fecha_str, gross, pagos_raw in cur.fetchall():
+                        if not fecha_str:
+                            continue
+                        dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
+                        iso = dobj.isocalendar()
+                        wk = f"{iso.year}-W{iso.week:02d}"
+                        net = _calc_net(float(gross), pagos_raw, commissions)
+                        if wk not in by_week:
+                            by_week[wk] = {"income": 0, "bookings": 0}
+                        by_week[wk]["income"]   += int(net)
+                        by_week[wk]["bookings"] += 1
+
+            # Load monthly budgets for all months touched
+            months_needed = set()
+            for w in weeks_list:
+                months_needed.add((w["ws"].year, w["ws"].month))
+            month_budgets = {m: _get_budget(m[0], m[1]) for m in months_needed}
+
+            def _week_budget(ws):
+                y, m = ws.year, ws.month
+                b = month_budgets.get((y, m), {})
+                inc = b.get("income_budget", 0)
+                if not inc:
+                    return None
+                _, days = _cal.monthrange(y, m)
+                return int(inc / (days / 7.0))
+
+            def _week_suggested(iso_year, iso_week, is_past):
+                if is_past:
+                    return None, None
+                yoy = f"{iso_year - 1}-W{iso_week:02d}"
+                if by_week.get(yoy, {}).get("income", 0) > 0:
+                    t_this = sum(by_week.get(
+                        f"{(mon0 - timedelta(weeks=i+1)).isocalendar().year}"
+                        f"-W{(mon0 - timedelta(weeks=i+1)).isocalendar().week:02d}", {}).get("income", 0)
+                        for i in range(4))
+                    t_last = sum(by_week.get(
+                        f"{(mon0 - timedelta(weeks=i+53)).isocalendar().year}"
+                        f"-W{(mon0 - timedelta(weeks=i+53)).isocalendar().week:02d}", {}).get("income", 0)
+                        for i in range(4))
+                    trend = max(0.5, min(2.0, t_this / t_last)) if t_last > 0 else 1.0
+                    return int(by_week[yoy]["income"] * trend), "sem. ant."
+                trailing = [
+                    by_week[f"{(mon0 - timedelta(weeks=i+1)).isocalendar().year}"
+                            f"-W{(mon0 - timedelta(weeks=i+1)).isocalendar().week:02d}"]["income"]
+                    for i in range(3)
+                    if f"{(mon0 - timedelta(weeks=i+1)).isocalendar().year}"
+                       f"-W{(mon0 - timedelta(weeks=i+1)).isocalendar().week:02d}" in by_week
+                ]
+                if trailing:
+                    return int(sum(trailing) / len(trailing)), "prom. 3sem"
+                return None, None
+
+            _MES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]
+            result = []
+            for w in weeks_list:
+                ws, we = w["ws"], w["we"]
+                if ws.month == we.month:
+                    lbl = f"{ws.day}–{we.day} {_MES[ws.month-1]}"
+                else:
+                    lbl = f"{ws.day} {_MES[ws.month-1]} – {we.day} {_MES[we.month-1]}"
+                data = by_week.get(w["key"])
+                bval = _week_budget(ws)
+                sug_val, sug_src = _week_suggested(w["iso_year"], w["iso_week"], w["is_past"])
+                result.append({
+                    "month":            w["key"],
+                    "week_label":       lbl,
+                    "month_key":        f"{ws.year:04d}-{ws.month:02d}",
+                    "is_past":          w["is_past"],
+                    "is_current":       w["is_current"],
+                    "actual_income":    data["income"]   if data else None,
+                    "actual_bookings":  data["bookings"] if data else None,
+                    "actual_result":    None,
+                    "manual_income":    bval,
+                    "manual_costs":     None,
+                    "manual_marketing": None,
+                    "suggested_income": sug_val,
+                    "suggested_source": sug_src,
+                    "is_weekly":        True,
+                })
+            return {"data": result, "view": "weekly"}
+
+        # ── MONTHLY VIEW ──────────────────────────────────────────────────────
         def _madd(y: int, m: int, delta: int):
             t = y * 12 + m - 1 + delta
             return (t // 12, t % 12 + 1)
@@ -1127,8 +1254,6 @@ async def get_forecast_table(
         end_y, end_m = months_range[-1]
         nxt_y, nxt_m = _madd(end_y, end_m, 1)
         d_to = date(nxt_y, nxt_m, 1) - timedelta(days=1)
-
-        commissions = _get_commissions()
 
         by_month: Dict = {}
         with get_connection() as conn:
@@ -1146,20 +1271,13 @@ async def get_forecast_table(
                     dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
                     key = (dobj.year, dobj.month)
                     gross, costo = float(gross), float(costo)
-                    pagos = pagos_raw if isinstance(pagos_raw, list) else json.loads(pagos_raw or "[]")
-                    commission = sum(
-                        (float(p.get("amount") or 0)) - _net_amount(
-                            float(p.get("amount") or 0), p.get("method", "otro"), commissions)
-                        for p in pagos
-                    )
-                    net = gross - commission
+                    net = _calc_net(gross, pagos_raw, commissions)
                     if key not in by_month:
                         by_month[key] = {"income": 0, "result": 0, "bookings": 0}
                     by_month[key]["income"]   += int(net)
                     by_month[key]["result"]   += int(net - costo)
                     by_month[key]["bookings"] += 1
 
-        # Load budgets individually (safe, reuses proven _get_budget)
         budgets: Dict = {ym: _get_budget(ym[0], ym[1]) for ym in months_range}
 
         def _suggested(y: int, m: int):
@@ -1194,6 +1312,8 @@ async def get_forecast_table(
             sug_val, sug_src = _suggested(y, m) if not is_past else (None, None)
             result.append({
                 "month":            f"{y:04d}-{m:02d}",
+                "week_label":       None,
+                "month_key":        f"{y:04d}-{m:02d}",
                 "is_past":          is_past,
                 "is_current":       is_current,
                 "actual_income":    data["income"]   if data else None,
@@ -1204,8 +1324,9 @@ async def get_forecast_table(
                 "manual_marketing": int(budget["marketing_budget"]) if budget["marketing_budget"] else None,
                 "suggested_income": sug_val,
                 "suggested_source": sug_src,
+                "is_weekly":        False,
             })
-        return {"data": result}
+        return {"data": result, "view": "monthly"}
     except Exception:
         logger.exception("forecast-table error")
         raise
