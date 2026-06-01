@@ -1133,6 +1133,7 @@ async def put_financial_structure(request: Request, x_admin_key: str = Header(""
     return merged
 
 
+
 # ── Commission settings ───────────────────────────────────────────────────────
 
 @financial_router.get("/api/admin/financial/commissions")
@@ -1144,4 +1145,65 @@ async def get_commissions_endpoint(x_admin_key: str = Header("")):
 async def update_commissions(request: Request, x_admin_key: str = Header("")):
     body = await request.json()
     set_setting("financial_commissions", json.dumps(body))
+    return body
+
+
+# ── Simulator: save/load scenario + fetch actuals ────────────────────────────
+
+_SIM_DEFAULTS = {
+    "precio_por_persona": 45000,
+    "personas_promedio": 4,
+    "reservas_por_mes": 30,
+    "extras_promedio_por_reserva": 15000,
+    "costo_operativo_por_reserva": 18000,
+    "costos_fijos_mensuales": 651000,   # 21,700/day × 30
+    "mantenimiento_seguros": 150000,
+    "otros_fijos": 0,
+    "remuneracion_capitan": 800000,
+    "remuneracion_personal": 0,
+    "remuneracion_admin": 0,
+    "marketing_mensual": 200000,
+    "dias_operativos": 30,
+}
+
+
+@financial_router.get("/api/admin/financial/simulator")
+async def get_simulator(x_admin_key: str = Header("")):
+    """Return saved simulator scenario + last-90-day actuals for seeding defaults."""
+    saved_raw = get_setting("financial_simulator")
+    scenario = json.loads(saved_raw) if saved_raw else {}
+    merged = {**_SIM_DEFAULTS, **scenario}
+
+    # Pull actuals from last 90 days
+    today = date.today()
+    d_from = today - timedelta(days=89)
+    actuals: Dict[str, Any] = {}
+    try:
+        bookings = _get_bookings_range(d_from, today)
+        if bookings:
+            days_in_range = max((today - d_from).days, 1)
+            months_in_range = days_in_range / 30
+            total_rev = sum(float(b.get("ingreso_total") or 0) for b in bookings)
+            total_people = sum(int(b.get("num_personas") or b.get("num_adultos") or 0) for b in bookings)
+            n = len(bookings)
+            actuals = {
+                "reservas_reales_mes": round(n / max(months_in_range, 1), 1),
+                "ingreso_total_real": round(total_rev / max(months_in_range, 1)),
+                "ingreso_por_reserva_real": round(total_rev / n) if n else 0,
+                "personas_promedio_real": round(total_people / n, 1) if n else 0,
+                "n_bookings": n,
+                "period_days": days_in_range,
+            }
+    except Exception as e:
+        logger.warning(f"sim actuals query failed: {e}")
+
+    return {"scenario": merged, "actuals": actuals}
+
+
+@financial_router.put("/api/admin/financial/simulator")
+async def save_simulator(request: Request, x_admin_key: str = Header("")):
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "JSON object expected")
+    set_setting("financial_simulator", json.dumps(body))
     return body

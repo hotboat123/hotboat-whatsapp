@@ -386,6 +386,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('financial')" id="nav-financial">
       <span class="ni">💰</span> Finanzas
     </div>
+    <div class="nav-item" onclick="showSection('simulator')" id="nav-simulator">
+      <span class="ni">🎯</span> Simulador
+    </div>
     <div class="nav-item" onclick="showSection('logs')" id="nav-logs">
       <span class="ni">🔍</span> Logs
     </div>
@@ -1532,6 +1535,476 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div>
 
     </div><!-- /section-financial -->
+
+    <!-- ═══════════════════════════ SIMULATOR TAB ═══════════════════════════ -->
+    <div id="section-simulator" class="section" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+        <h2 style="margin:0;font-size:1.1rem;font-weight:700">🎯 Simulador Financiero</h2>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <button onclick="simLoadActuals()" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↺ Cargar reales</button>
+          <button onclick="simSave()" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer">💾 Guardar escenario</button>
+        </div>
+      </div>
+
+      <!-- actuals banner -->
+      <div id="sim-actuals-banner" style="display:none;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.25);border-radius:8px;padding:.5rem .9rem;font-size:.78rem;color:var(--muted);margin-bottom:.9rem"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+
+        <!-- ── LEFT: inputs ── -->
+        <div style="display:flex;flex-direction:column;gap:.7rem">
+
+          <!-- Ingresos -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:var(--gold);margin-bottom:.65rem;letter-spacing:.03em">📈 INGRESOS</div>
+            <div class="sim-row">
+              <label>Precio por persona</label>
+              <div class="sim-input-wrap">
+                <span class="sim-prefix">$</span>
+                <input type="number" id="sim-precio" value="45000" step="1000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Personas promedio por reserva</label>
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <input type="range" id="sim-personas-slider" min="2" max="7" step="0.5" value="4"
+                  oninput="document.getElementById('sim-personas').value=this.value;simCalc()"
+                  style="flex:1;accent-color:var(--gold)">
+                <input type="number" id="sim-personas" value="4" min="2" max="7" step="0.5"
+                  oninput="document.getElementById('sim-personas-slider').value=this.value;simCalc()"
+                  style="width:52px;text-align:center">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Reservas por mes</label>
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <input type="range" id="sim-reservas-slider" min="0" max="120" step="1" value="30"
+                  oninput="document.getElementById('sim-reservas').value=this.value;simCalc()"
+                  style="flex:1;accent-color:var(--gold)">
+                <input type="number" id="sim-reservas" value="30" min="0" max="120"
+                  oninput="document.getElementById('sim-reservas-slider').value=this.value;simCalc()"
+                  style="width:52px;text-align:center">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Extras promedio por reserva</label>
+              <div class="sim-input-wrap">
+                <span class="sim-prefix">$</span>
+                <input type="number" id="sim-extras" value="15000" step="1000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+          </div>
+
+          <!-- Costos por reserva -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:#f87171;margin-bottom:.65rem;letter-spacing:.03em">⛽ COSTOS POR RESERVA</div>
+            <div class="sim-row">
+              <label>Costo operativo por salida</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-costo-res" value="18000" step="500" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Combustible adicional</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-combustible" value="0" step="500" min="0" oninput="simCalc()">
+              </div>
+            </div>
+          </div>
+
+          <!-- Costos fijos -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:#f87171;margin-bottom:.65rem;letter-spacing:.03em">🏢 COSTOS FIJOS MENSUALES</div>
+            <div class="sim-row">
+              <label>Estructura operativa (arriendo, servicios…)</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-fijos" value="651000" step="10000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Mantenimiento y seguros</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-mantenim" value="150000" step="10000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Otros fijos</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-otros-fijos" value="0" step="10000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+          </div>
+
+          <!-- Remuneraciones -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:#f87171;margin-bottom:.65rem;letter-spacing:.03em">👥 REMUNERACIONES</div>
+            <div class="sim-row">
+              <label>Capitán</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-capitan" value="800000" step="50000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Personal adicional</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-personal" value="0" step="50000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Administración</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-admin-rem" value="0" step="50000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+          </div>
+
+          <!-- Marketing -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:#a78bfa;margin-bottom:.65rem;letter-spacing:.03em">📢 MARKETING</div>
+            <div class="sim-row">
+              <label>Inversión mensual</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-mkt" value="200000" step="10000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Reservas atribuibles al marketing</label>
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <input type="range" id="sim-mkt-pct-slider" min="0" max="100" step="5" value="40"
+                  oninput="document.getElementById('sim-mkt-pct').value=this.value;simCalc()"
+                  style="flex:1;accent-color:#a78bfa">
+                <input type="number" id="sim-mkt-pct" value="40" min="0" max="100"
+                  oninput="document.getElementById('sim-mkt-pct-slider').value=this.value;simCalc()"
+                  style="width:48px;text-align:center">
+                <span style="font-size:.78rem;color:var(--muted)">%</span>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /left -->
+
+        <!-- ── RIGHT: results ── -->
+        <div style="display:flex;flex-direction:column;gap:.7rem">
+
+          <!-- P&L card -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:var(--muted);margin-bottom:.65rem;letter-spacing:.03em">📊 ESTADO DE RESULTADOS — MENSUAL</div>
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem" id="sim-pnl-table">
+              <tr class="sim-tr-section"><td colspan="2">INGRESOS</td></tr>
+              <tr><td class="sim-td-label">Ingresos base (reservas)</td><td class="sim-td-val" id="sr-base">—</td></tr>
+              <tr><td class="sim-td-label">Ingresos extras</td><td class="sim-td-val" id="sr-extras">—</td></tr>
+              <tr class="sim-tr-total"><td>INGRESOS BRUTOS</td><td id="sr-gross">—</td></tr>
+              <tr class="sim-tr-section"><td colspan="2">COSTOS VARIABLES</td></tr>
+              <tr><td class="sim-td-label">Costos operativos (×reservas)</td><td class="sim-td-val sim-neg" id="sr-cvar">—</td></tr>
+              <tr class="sim-tr-subtotal"><td>Margen de contribución</td><td id="sr-contrib">—</td></tr>
+              <tr class="sim-tr-section"><td colspan="2">COSTOS FIJOS</td></tr>
+              <tr><td class="sim-td-label">Estructura operativa + otros</td><td class="sim-td-val sim-neg" id="sr-cfijo">—</td></tr>
+              <tr><td class="sim-td-label">Remuneraciones</td><td class="sim-td-val sim-neg" id="sr-remu">—</td></tr>
+              <tr><td class="sim-td-label">Marketing</td><td class="sim-td-val sim-neg" id="sr-mkt">—</td></tr>
+              <tr class="sim-tr-total sim-result" id="sim-ebitda-row"><td>RESULTADO NETO</td><td id="sr-ebitda">—</td></tr>
+            </table>
+          </div>
+
+          <!-- KPI chips -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Margen neto</div>
+              <div class="sim-kpi-val" id="kpi-margen">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Break-even (reservas)</div>
+              <div class="sim-kpi-val" id="kpi-be">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Ingreso por reserva</div>
+              <div class="sim-kpi-val" id="kpi-ipr">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">ROI Marketing</div>
+              <div class="sim-kpi-val" id="kpi-roi">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Costo total por reserva</div>
+              <div class="sim-kpi-val" id="kpi-ctpr">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Ingresos anuales (est.)</div>
+              <div class="sim-kpi-val" id="kpi-anual">—</div>
+            </div>
+          </div>
+
+          <!-- Break-even progress bar -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:var(--muted);margin-bottom:.5rem">📍 Break-even vs Objetivo de reservas</div>
+            <div style="background:var(--bg);border-radius:6px;overflow:hidden;height:18px;position:relative">
+              <div id="sim-be-bar" style="height:100%;background:linear-gradient(90deg,#34d399,#facc15);border-radius:6px;transition:width .3s;width:0%"></div>
+              <div id="sim-be-bar-over" style="position:absolute;inset:0;height:100%;background:linear-gradient(90deg,#f87171,#ef4444);border-radius:6px;transition:width .3s;display:none;width:0%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin-top:.3rem">
+              <span>0</span>
+              <span id="sim-be-label">—</span>
+              <span id="sim-reservas-label">—</span>
+            </div>
+          </div>
+
+          <!-- 12-month forecast -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:var(--muted);margin-bottom:.65rem;letter-spacing:.03em">📅 PROYECCIÓN ANUAL (ESTACIONALIDAD ESTIMADA)</div>
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:.75rem" id="sim-forecast-table">
+                <thead>
+                  <tr style="color:var(--muted);border-bottom:1px solid var(--border)">
+                    <th style="text-align:left;padding:.3rem .4rem">Mes</th>
+                    <th style="text-align:right;padding:.3rem .4rem">Factor</th>
+                    <th style="text-align:right;padding:.3rem .4rem">Reservas</th>
+                    <th style="text-align:right;padding:.3rem .4rem">Ingresos</th>
+                    <th style="text-align:right;padding:.3rem .4rem">Resultado</th>
+                  </tr>
+                </thead>
+                <tbody id="sim-forecast-body"></tbody>
+                <tfoot id="sim-forecast-foot"></tfoot>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- /right -->
+      </div><!-- /grid -->
+
+      <style>
+        .sim-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.45rem;font-size:.82rem}
+        .sim-row label{color:var(--text);flex:1;min-width:0}
+        .sim-input-wrap{display:flex;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:7px;overflow:hidden;width:130px;flex-shrink:0}
+        .sim-prefix{padding:0 .4rem;color:var(--muted);font-size:.8rem;user-select:none}
+        .sim-input-wrap input{border:none;background:transparent;color:var(--text);width:100%;padding:.28rem .4rem .28rem 0;font-size:.82rem;outline:none;min-width:0}
+        .sim-td-label{padding:.3rem .35rem;color:var(--muted)}
+        .sim-td-val{text-align:right;padding:.3rem .35rem;font-variant-numeric:tabular-nums}
+        .sim-neg{color:#f87171}
+        .sim-tr-section td{font-size:.7rem;font-weight:700;letter-spacing:.05em;color:var(--muted);padding:.45rem .35rem .18rem;border-top:1px solid var(--border)}
+        .sim-tr-subtotal td{font-weight:600;border-top:1px solid var(--border);padding:.3rem .35rem}
+        .sim-tr-total td{font-weight:700;border-top:2px solid var(--border);padding:.35rem .35rem;font-size:.85rem}
+        .sim-result td:last-child{font-size:.92rem}
+        .sim-kpi-card{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:.6rem .75rem}
+        .sim-kpi-label{font-size:.7rem;color:var(--muted);margin-bottom:.2rem}
+        .sim-kpi-val{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums}
+        #sim-forecast-body tr:nth-child(even){background:rgba(255,255,255,.02)}
+        #sim-forecast-body td{padding:.28rem .4rem}
+        #sim-forecast-body td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+        #sim-forecast-foot td{padding:.35rem .4rem;font-weight:700;border-top:2px solid var(--border)}
+        #sim-forecast-foot td:not(:first-child){text-align:right}
+      </style>
+
+      <script>
+      // ── Seasonality factors (Jan=1 … Dec=12) ─────────────────────────────
+      const SIM_SEASON = [0.55,0.6,0.7,0.85,0.9,1.0,1.15,1.2,1.0,0.9,0.95,0.85];
+      const SIM_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+      function simV(id){ return parseFloat(document.getElementById(id)?.value) || 0; }
+      function simFmt(n){ return '$' + Math.round(n).toLocaleString('es-CL'); }
+      function simFmtK(n){
+        if(Math.abs(n)>=1e6) return '$' + (n/1e6).toFixed(1).replace('.',',')+'M';
+        if(Math.abs(n)>=1e3) return '$' + Math.round(n/1000)+'k';
+        return '$' + Math.round(n).toLocaleString('es-CL');
+      }
+      function simColor(n){ return n >= 0 ? 'var(--green,#34d399)' : '#f87171'; }
+
+      function simCalc(){
+        const precio   = simV('sim-precio');
+        const personas = simV('sim-personas');
+        const reservas = simV('sim-reservas');
+        const extras   = simV('sim-extras');
+        const cVar     = simV('sim-costo-res') + simV('sim-combustible');
+        const cFijo    = simV('sim-fijos') + simV('sim-mantenim') + simV('sim-otros-fijos');
+        const remuner  = simV('sim-capitan') + simV('sim-personal') + simV('sim-admin-rem');
+        const mkt      = simV('sim-mkt');
+        const mktPct   = simV('sim-mkt-pct') / 100;
+
+        const ingresoBase  = precio * personas * reservas;
+        const ingresoExtra = extras * reservas;
+        const ingresoGross = ingresoBase + ingresoExtra;
+        const costoVar     = cVar * reservas;
+        const contrib      = ingresoGross - costoVar;
+        const totalFijo    = cFijo + remuner + mkt;
+        const ebitda       = contrib - totalFijo;
+        const margenPct    = ingresoGross > 0 ? (ebitda / ingresoGross * 100) : 0;
+        const ingrPerRes   = reservas > 0 ? ingresoGross / reservas : 0;
+        const costoPerRes  = reservas > 0 ? (costoVar + totalFijo) / reservas : 0;
+        const ingrMktRes   = precio * personas * (reservas * mktPct) + extras * (reservas * mktPct);
+        const roi          = mkt > 0 ? (ingrMktRes / mkt * 100) : 0;
+
+        // break-even: reservas needed to cover all fixed costs
+        const margPorRes = ingrPerRes - cVar;
+        const be = margPorRes > 0 ? Math.ceil(totalFijo / margPorRes) : null;
+
+        // ── P&L table ─────────────────────────────────────────────────────
+        document.getElementById('sr-base').textContent   = simFmt(ingresoBase);
+        document.getElementById('sr-extras').textContent = simFmt(ingresoExtra);
+        document.getElementById('sr-gross').textContent  = simFmt(ingresoGross);
+        document.getElementById('sr-cvar').textContent   = '−' + simFmt(costoVar);
+        document.getElementById('sr-contrib').textContent= simFmt(contrib);
+        document.getElementById('sr-cfijo').textContent  = '−' + simFmt(cFijo);
+        document.getElementById('sr-remu').textContent   = '−' + simFmt(remuner);
+        document.getElementById('sr-mkt').textContent    = '−' + simFmt(mkt);
+
+        const eEl = document.getElementById('sr-ebitda');
+        eEl.textContent = (ebitda >= 0 ? '' : '−') + simFmt(Math.abs(ebitda));
+        eEl.style.color = simColor(ebitda);
+        document.getElementById('sim-ebitda-row').style.background =
+          ebitda >= 0 ? 'rgba(52,211,153,.07)' : 'rgba(248,113,113,.07)';
+
+        // ── KPIs ──────────────────────────────────────────────────────────
+        const km = document.getElementById('kpi-margen');
+        km.textContent = margenPct.toFixed(1) + '%';
+        km.style.color = simColor(margenPct);
+
+        document.getElementById('kpi-be').textContent   = be !== null ? be + ' res.' : '∞';
+        document.getElementById('kpi-ipr').textContent  = simFmtK(ingrPerRes);
+        document.getElementById('kpi-ctpr').textContent = simFmtK(costoPerRes);
+        document.getElementById('kpi-roi').textContent  = roi > 0 ? roi.toFixed(0) + '%' : '—';
+
+        // Annual estimate using seasonality
+        const annualIncome = SIM_SEASON.reduce((s,f)=>s + ingresoGross*f, 0);
+        document.getElementById('kpi-anual').textContent = simFmtK(annualIncome);
+
+        // ── Break-even progress bar ────────────────────────────────────────
+        document.getElementById('sim-be-label').textContent = be !== null ? 'Break-even: '+be : '—';
+        document.getElementById('sim-reservas-label').textContent = 'Objetivo: '+Math.round(reservas);
+        const bar = document.getElementById('sim-be-bar');
+        const barOver = document.getElementById('sim-be-bar-over');
+        if(be !== null && reservas > 0){
+          if(reservas >= be){
+            const pct = Math.min(be / reservas * 100, 100);
+            bar.style.display = ''; bar.style.width = pct + '%';
+            barOver.style.display = 'none';
+          } else {
+            bar.style.display = ''; bar.style.width = '100%';
+            barOver.style.display = ''; barOver.style.width = '100%';
+          }
+        } else {
+          bar.style.width = '0%'; barOver.style.display = 'none';
+        }
+
+        // ── 12-month forecast ─────────────────────────────────────────────
+        const now = new Date();
+        const startMonth = now.getMonth(); // 0-based
+        let totRev = 0, totRes = 0, totEbitda = 0;
+        const tbody = document.getElementById('sim-forecast-body');
+        tbody.innerHTML = '';
+        for(let i = 0; i < 12; i++){
+          const mi = (startMonth + i) % 12;
+          const yr = now.getFullYear() + Math.floor((startMonth + i) / 12);
+          const f = SIM_SEASON[mi];
+          const r = Math.round(reservas * f);
+          const rev = ingresoGross * f;
+          const varC = cVar * r;
+          const net = rev - varC - totalFijo;
+          totRev += rev; totRes += r; totEbitda += net;
+          const tr = document.createElement('tr');
+          const isCurrentMonth = (i === 0);
+          if(isCurrentMonth) tr.style.fontWeight = '600';
+          tr.innerHTML = `<td>${SIM_MONTHS[mi]} ${yr}</td>` +
+            `<td style="color:var(--muted)">${(f*100).toFixed(0)}%</td>` +
+            `<td>${r}</td>` +
+            `<td>${simFmtK(rev)}</td>` +
+            `<td style="color:${simColor(net)}">${net>=0?'':'-'}${simFmtK(Math.abs(net))}</td>`;
+          tbody.appendChild(tr);
+        }
+        const tfoot = document.getElementById('sim-forecast-foot');
+        tfoot.innerHTML = `<tr><td>TOTAL 12m</td><td></td><td>${totRes}</td>` +
+          `<td>${simFmtK(totRev)}</td>` +
+          `<td style="color:${simColor(totEbitda)}">${totEbitda>=0?'':'-'}${simFmtK(Math.abs(totEbitda))}</td></tr>`;
+      }
+
+      async function simLoadActuals(){
+        try {
+          const r = await fetch('/api/admin/financial/simulator', {headers:{'x-admin-key': adminKey||''}});
+          if(!r.ok) throw new Error(await r.text());
+          const d = await r.json();
+          const sc = d.scenario || {};
+          const ac = d.actuals || {};
+
+          // Fill scenario inputs
+          const map = {
+            'sim-precio': sc.precio_por_persona,
+            'sim-personas': sc.personas_promedio,
+            'sim-reservas': sc.reservas_por_mes,
+            'sim-extras': sc.extras_promedio_por_reserva,
+            'sim-costo-res': sc.costo_operativo_por_reserva,
+            'sim-fijos': sc.costos_fijos_mensuales,
+            'sim-mantenim': sc.mantenimiento_seguros,
+            'sim-otros-fijos': sc.otros_fijos,
+            'sim-capitan': sc.remuneracion_capitan,
+            'sim-personal': sc.remuneracion_personal,
+            'sim-admin-rem': sc.remuneracion_admin,
+            'sim-mkt': sc.marketing_mensual,
+          };
+          for(const [id, val] of Object.entries(map)){
+            if(val != null){
+              const el = document.getElementById(id);
+              if(el){ el.value = val; }
+            }
+          }
+          // Sync sliders
+          ['sim-personas','sim-reservas'].forEach(id=>{
+            const sl = document.getElementById(id+'-slider');
+            const inp = document.getElementById(id);
+            if(sl && inp) sl.value = inp.value;
+          });
+
+          // Show actuals banner
+          if(ac.n_bookings){
+            const banner = document.getElementById('sim-actuals-banner');
+            banner.style.display = '';
+            banner.innerHTML = `ℹ️ Reales últimos ${ac.period_days} días — ` +
+              `<strong>${ac.reservas_reales_mes}</strong> reservas/mes | ` +
+              `<strong>$${Math.round(ac.ingreso_por_reserva_real).toLocaleString('es-CL')}</strong>/reserva | ` +
+              `<strong>${ac.personas_promedio_real}</strong> personas prom.`;
+            // Optionally pre-fill with actuals if significantly different
+          }
+
+          simCalc();
+          showToast('✅ Escenario cargado');
+        } catch(e){ showToast('❌ '+e.message, true); }
+      }
+
+      async function simSave(){
+        const body = {
+          precio_por_persona: simV('sim-precio'),
+          personas_promedio: simV('sim-personas'),
+          reservas_por_mes: simV('sim-reservas'),
+          extras_promedio_por_reserva: simV('sim-extras'),
+          costo_operativo_por_reserva: simV('sim-costo-res') + simV('sim-combustible'),
+          costos_fijos_mensuales: simV('sim-fijos'),
+          mantenimiento_seguros: simV('sim-mantenim'),
+          otros_fijos: simV('sim-otros-fijos'),
+          remuneracion_capitan: simV('sim-capitan'),
+          remuneracion_personal: simV('sim-personal'),
+          remuneracion_admin: simV('sim-admin-rem'),
+          marketing_mensual: simV('sim-mkt'),
+        };
+        try {
+          const r = await fetch('/api/admin/financial/simulator', {
+            method:'PUT', headers:{'Content-Type':'application/json','x-admin-key': adminKey||''},
+            body: JSON.stringify(body)
+          });
+          if(!r.ok) throw new Error(await r.text());
+          showToast('💾 Escenario guardado');
+        } catch(e){ showToast('❌ '+e.message, true); }
+      }
+
+      // Auto-load on tab open
+      document.addEventListener('DOMContentLoaded', ()=>{
+        const origShow = window.showSection;
+        window.showSection = function(id){
+          origShow(id);
+          if(id === 'simulator' && !document.getElementById('sim-forecast-body').children.length){
+            simLoadActuals().catch(()=>simCalc());
+          }
+        };
+        simCalc();
+      });
+      </script>
+
+    </div><!-- /section-simulator -->
 
     <!-- ══ LOGS SECTION ══════════════════════════════════════════════════════ -->
     <!-- ── Chatbot Admin ─────────────────────────────────────────── -->
