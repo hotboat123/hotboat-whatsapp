@@ -531,8 +531,14 @@ async function loadMoreConversations() {
 
 // Select Conversation
 async function selectConversation(phoneNumber) {
+    // Track which phone was last requested to abort stale responses
+    selectConversation._pendingPhone = phoneNumber;
     try {
         const data = await fetchConversationData(phoneNumber, { limit: MESSAGES_PAGE_SIZE });
+
+        // Abort if the user selected a different conversation while this was loading
+        if (selectConversation._pendingPhone !== phoneNumber) return;
+
         currentConversation = {
             phone_number: phoneNumber,
             customer_name: data.lead?.customer_name || phoneNumber,
@@ -572,22 +578,29 @@ async function selectConversation(phoneNumber) {
 // Refresh Current Conversation (auto-refresh)
 async function refreshCurrentConversation() {
     if (!currentConversation) return;
-    
+
+    // Capture phone before the async call to detect mid-flight conversation changes
+    const targetPhone = currentConversation.phone_number;
+
     try {
         const existingCount = currentConversation.messages?.length || 0;
         const limit = Math.min(
             Math.max(existingCount, MESSAGES_PAGE_SIZE),
             MAX_REFRESH_LIMIT
         );
-        
-        const data = await fetchConversationData(currentConversation.phone_number, { limit });
+
+        const data = await fetchConversationData(targetPhone, { limit });
+
+        // Discard if the user switched to a different conversation while fetching
+        if (!currentConversation || currentConversation.phone_number !== targetPhone) return;
+
         const normalized = normalizeMessages(data.messages);
         const mergedMessages = mergeMessageLists(currentConversation.messages || [], normalized);
-        
+
         const hadChanges = mergedMessages.length !== (currentConversation.messages || []).length ||
             (mergedMessages.length && currentConversation.messages?.length &&
                 mergedMessages[mergedMessages.length - 1]?.id !== currentConversation.messages[currentConversation.messages.length - 1]?.id);
-        
+
         currentConversation.messages = mergedMessages;
         currentConversation.hasMore = Boolean(data.has_more) || Boolean(currentConversation.hasMore);
         
@@ -619,6 +632,7 @@ async function loadOlderMessages() {
     }
 
     isLoadingOlderMessages = true;
+    const targetPhone = currentConversation.phone_number;
     const loadButton = document.getElementById('loadOlderButton');
     if (loadButton) {
         loadButton.disabled = true;
@@ -627,10 +641,13 @@ async function loadOlderMessages() {
 
     try {
         const beforeCursor = currentConversation.nextCursor;
-        const data = await fetchConversationData(currentConversation.phone_number, {
+        const data = await fetchConversationData(targetPhone, {
             limit: MESSAGES_PAGE_SIZE,
             before: beforeCursor
         });
+
+        // Discard if conversation changed while loading
+        if (!currentConversation || currentConversation.phone_number !== targetPhone) return;
 
         const olderMessages = normalizeMessages(data.messages);
         currentConversation.messages = mergeMessageLists(currentConversation.messages || [], olderMessages);
