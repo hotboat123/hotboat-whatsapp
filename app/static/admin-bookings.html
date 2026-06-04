@@ -2156,6 +2156,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const cVar         = simV('sim-costo-res') + simV('sim-combustible');
         const cFijo        = simV('sim-fijos') + simV('sim-mantenim') + simV('sim-otros-fijos');
         const numTrab      = parseInt(document.getElementById('sim-num-trab').value) || 1;
+        const mkt          = simV('sim-mkt');
+        const mktPct       = simV('sim-mkt-pct') / 100;
         const bonoCalidadCheck  = document.getElementById('sim-bono-calidad-check').checked;
         const bonoCalidadMonto  = simV('sim-bono-calidad-monto');
 
@@ -2181,9 +2183,29 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                         name: document.getElementById(`sim-w${w}-name`)?.value || `Trab. ${w}` });
         }
         const bonoCalTotal = bonoCalidadCheck ? bonoCalidadMonto * trabConBonoCal : 0;
-        const extrasResActual = bonoResTotal; // kept for KPI card logic
         const bonoActual        = bonoResTotal + bonoCalTotal;
         const remuner           = remuBase + bonoActual;
+
+        // ── Per-worker monthly total summary ──────────────────────────────
+        for(const wd of _wData){
+          const formEl = document.getElementById(`sim-worker-form-${wd.w}`);
+          if(!formEl) continue;
+          let totalEl = document.getElementById(`sim-w${wd.w}-total`);
+          if(!totalEl){
+            totalEl = document.createElement('div');
+            totalEl.id = `sim-w${wd.w}-total`;
+            totalEl.style.cssText = 'margin-top:.45rem;padding:.3rem .45rem;background:rgba(250,204,21,.06);border:1px solid rgba(250,204,21,.2);border-radius:6px;font-size:.78rem;line-height:1.65';
+            formEl.appendChild(totalEl);
+          }
+          const bonoCalW = (bonoCalidadCheck && wd.bonoCalOn) ? bonoCalidadMonto : 0;
+          const totalW   = wd.sueldo + wd.bonoResW + bonoCalW;
+          const parts = [];
+          parts.push(`<span style="color:var(--muted)">Sueldo:</span> <b>${simFmt(wd.sueldo)}</b>`);
+          if(wd.bonoResW > 0) parts.push(`<span style="color:#fbbf24">+ Bono res.:</span> <b>${simFmt(wd.bonoResW)}</b>`);
+          if(bonoCalW > 0)    parts.push(`<span style="color:#fbbf24">+ Bono cal.:</span> <b>${simFmt(bonoCalW)}</b>`);
+          totalEl.innerHTML = parts.join(' &nbsp;') +
+            `<div style="margin-top:.18rem;font-weight:700;color:var(--text)">Total: ${simFmt(totalW)}</div>`;
+        }
 
         const ingresoBase  = precio * personas * reservas;
         const ingresoExtra = extras * reservas;
