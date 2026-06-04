@@ -866,9 +866,9 @@ body {
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    font-size: 1.2rem;
+    width: 28px;
+    height: 28px;
+    font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
@@ -885,6 +885,33 @@ body {
 
 .btn-attachment:active {
     transform: scale(0.95);
+}
+
+.btn-collapse-input {
+    background: var(--bg-light);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.btn-collapse-input:hover {
+    background: var(--bg-medium);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+.message-input-area.collapsed #messageForm {
+    display: none;
+}
+.message-input-area.collapsed {
+    padding: 0.25rem 0.9rem;
 }
 
 .btn-microphone.recording {
@@ -1161,6 +1188,14 @@ audio::-webkit-media-controls-volume-slider {
 }
 
 /* Priority Section in Message Input */
+.priority-translate-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.4rem;
+}
+
 .priority-section {
     display: flex;
     align-items: center;
@@ -1243,7 +1278,7 @@ audio::-webkit-media-controls-volume-slider {
 /* Quick Reply Section */
 .quick-reply-section {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.4rem;
 }
 
@@ -1251,10 +1286,19 @@ audio::-webkit-media-controls-volume-slider {
     font-size: 0.5rem;
     color: var(--text-secondary);
     white-space: nowrap;
+    padding-top: 0.3rem;
+}
+
+.quick-reply-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    flex: 1;
 }
 
 .quick-reply-buttons {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.2rem;
 }
 
@@ -1282,3 +1326,76 @@ audio::-webkit-media-controls-volume-slider {
     transform: translateY(0);
     box-shadow: 0 1px 3px rgba(33, 150, 243, 0.3);
 }
+
+.translate-section {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.translate-buttons {
+    display: flex;
+    gap: 0.2rem;
+}
+
+.translate-btn {
+    padding: 0.2rem 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-light);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+    opacity: 0.5;
+}
+
+.translate-btn:hover {
+    opacity: 0.85;
+    border-color: #a78bfa;
+}
+
+.translate-btn.active {
+    opacity: 1;
+    border-color: #a78bfa;
+    background: rgba(167, 139, 250, 0.15);
+    box-shadow: 0 0 0 1px #a78bfa44;
+}
+
+/* Priority filter row */
+.priority-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px 6px;
+    flex-wrap: nowrap;
+}
+
+.pf-btn {
+    padding: 2px 7px;
+    font-size: 0.65rem;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.pf-btn:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-primary);
+}
+
+.pf-btn.active {
+    color: #fff;
+    border-color: transparent;
+}
+
+.pf-btn:first-of-type.active {
+    background: var(--text-secondary);
+}
+
+.pf-1.active { background: #dc3545; border-color: #dc3545; }
+.pf-2.active { background: #c48c00; border-color: #c48c00; }
+.pf-3.active { background: #28a745; border-color: #28a745; }

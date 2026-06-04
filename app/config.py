@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     meta_pixel_id: str = ""
     # Meta Marketing API token for ad name lookup (optional — falls back to whatsapp_api_token)
     meta_marketing_token: str = ""
+    # Facebook Page ID linked to the WhatsApp Business Account (required for Conversions API)
+    meta_page_id: str = ""
     
     # Automations
     automation_phone_numbers: str = ""  # Comma-separated phone numbers for automation notifications
@@ -63,6 +65,15 @@ class Settings(BaseSettings):
     email_password: str = ""
     email_use_tls: str = ""
     email_use_ssl: str = ""
+
+    # Web Push (PWA notifications) — generate with: openssl ecparam -name prime256v1 -genkey
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+
+    # Chat authentication
+    chat_username: str = "administrador"
+    chat_password: str = "administrador"
+    session_secret: str = ""  # Set in Railway env vars for persistence across restarts
     
     # Server
     port: int = 8000

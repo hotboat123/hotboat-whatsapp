@@ -14,6 +14,11 @@ from pydantic import BaseModel
 
 from app.db.connection import get_connection
 
+from app.booking.extras_calendar_sync import (
+    sync_aloj_addons_from_appointment_cursor,
+    update_synced_aloj_calendar_status,
+)
+
 logger = logging.getLogger(__name__)
 admin_router = APIRouter()
 CHILE_TZ = ZoneInfo("America/Santiago")
@@ -59,6 +64,7 @@ from app.booking.operator_settings import (
     get_setting, set_setting, is_urgency_mode,
     get_operating_hours, set_operating_hours,
     get_urgency_days, set_urgency_day, remove_urgency_day,
+    normalize_urgency_entity,
 )
 
 
@@ -170,7 +176,8 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
                     if r.get(k): r[k] = r[k].isoformat()
                 if r.get("hora"): r["hora"] = str(r["hora"])
                 for k in ("ingreso_reserva", "ingreso_extras", "ingreso_total",
-                          "costo_operativo_fijo", "costo_operativo_variable", "costo_operativo_total"):
+                          "costo_operativo_fijo", "costo_operativo_variable", "costo_operativo_total",
+                          "coupon_discount"):
                     if r.get(k) is not None: r[k] = float(r[k])
                 # Ensure every reservation has a usable booking_ref for T&C firma links.
                 # hotboat_web bookings: source_id IS the booking_ref (HB-xxxx).
@@ -225,6 +232,7 @@ class UpdateReservaRequest(BaseModel):
     flex_amount: Optional[float] = None
     coupon_code: Optional[str] = None
     coupon_discount: Optional[float] = None
+    coupon_extra_benefit: Optional[str] = None
 
 
 @admin_router.put("/api/admin/reservas/{rid}")
@@ -232,12 +240,18 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
     _check_auth(x_admin_key)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     # coupon fields are nullable — include them if explicitly sent in the request
-    if 'coupon_code' in body.model_fields_set or 'coupon_discount' in body.model_fields_set:
+    if (
+        'coupon_code' in body.model_fields_set
+        or 'coupon_discount' in body.model_fields_set
+        or 'coupon_extra_benefit' in body.model_fields_set
+    ):
         _ensure_coupons_table()
     if 'coupon_code' in body.model_fields_set:
         updates['coupon_code'] = body.coupon_code
     if 'coupon_discount' in body.model_fields_set:
         updates['coupon_discount'] = body.coupon_discount or 0
+    if 'coupon_extra_benefit' in body.model_fields_set:
+        updates['coupon_extra_benefit'] = body.coupon_extra_benefit
     # has_flex is a boolean that can be False — include if explicitly sent
     if 'has_flex' in body.model_fields_set:
         updates['has_flex'] = body.has_flex
@@ -265,27 +279,44 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                     params
                 )
 
-                # Cascade status to source tables
+                # Cascade status to legacy Sheets source only (canonical is all_appointments).
                 if "status" in updates:
                     cur.execute(f"SELECT source, source_id FROM {TABLE} WHERE id=%s", (rid,))
                     row = cur.fetchone()
                     if row:
                         src, src_id = row
-                        if src == "booknetic" and src_id:
-                            cur.execute(
-                                "UPDATE booknetic_appointments SET status=%s, updated_at=NOW() WHERE id=%s",
-                                (updates["status"], src_id)
-                            )
-                        elif src == "hotboat_web" and src_id:
-                            cur.execute(
-                                "UPDATE hotboat_appointments SET status=%s, updated_at=NOW() WHERE booking_ref=%s",
-                                (updates["status"], src_id)
-                            )
-                        elif src == "sheets" and src_id:
+                        if src == "sheets" and src_id:
                             cur.execute(
                                 "UPDATE reservas_con_extras SET status=%s, updated_at=NOW() WHERE id=%s",
                                 (updates["status"], int(src_id))
                             )
+
+                # Calendario Extras: alojamiento añadido/editado en panel (no viene de accommodation-create)
+                if "extras_json" in updates or "status" in updates:
+                    cur.execute(
+                        f"SELECT source, source_id, nombre_cliente, telefono, num_personas, fecha, extras_json, status "
+                        f"FROM {TABLE} WHERE id=%s",
+                        (rid,),
+                    )
+                    sync_row = cur.fetchone()
+                    if sync_row:
+                        src, src_id_row, nombre, tel, npers, fecha_v, ej, cur_status = sync_row
+                        # Calendario extras: cualquier source; sync interno evita duplicar HB+HA
+                        if "extras_json" in updates:
+                            sync_aloj_addons_from_appointment_cursor(
+                                cur,
+                                appointment_id=rid,
+                                source=src or "",
+                                source_id=(str(src_id_row) if src_id_row is not None else None),
+                                extras_json=ej,
+                                nombre_cliente=nombre or "",
+                                telefono=tel,
+                                num_personas=npers,
+                                fecha=fecha_v,
+                                status=cur_status,
+                            )
+                        elif "status" in updates:
+                            update_synced_aloj_calendar_status(cur, rid, cur_status)
 
                 conn.commit()
 
@@ -388,6 +419,18 @@ async def create_reserva(x_admin_key: str = Header(""), request: Request = None)
             except Exception as em_err:
                 logger.warning(f"Manual booking confirmation email failed: {em_err}")
 
+        # Report Purchase conversion to Meta for CTWA leads
+        try:
+            phone = (body.get("telefono") or "").strip()
+            total = float(body.get("ingreso_total") or body.get("ingreso_reserva") or 0)
+            status = body.get("status") or "confirmed"
+            if phone and total > 0 and status == "confirmed":
+                import asyncio
+                from app.meta.conversions import fire_purchase_from_booking
+                asyncio.create_task(fire_purchase_from_booking(phone, total))
+        except Exception as capi_err:
+            logger.warning(f"Meta CAPI Purchase (manual) failed: {capi_err}")
+
         return {"ok": True, "id": new_id}
     except HTTPException:
         raise
@@ -410,23 +453,6 @@ async def delete_reserva(rid: int, x_admin_key: str = Header("")):
                     raise HTTPException(status_code=404, detail="Not found")
                 nombre_cliente, fecha, hora, source, source_id = row
                 cur.execute(f"DELETE FROM {TABLE} WHERE id=%s", (rid,))
-                # Cancel the matching hotboat_appointments entry so it doesn't
-                # re-appear via sync and doesn't block availability.
-                if source == "hotboat_web":
-                    if source_id:
-                        cur.execute(
-                            "UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW() WHERE booking_ref=%s",
-                            (source_id,)
-                        )
-                    elif fecha and hora:
-                        # Fallback: no source_id stored — match by date/time/customer
-                        cur.execute(
-                            """UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW()
-                               WHERE booking_date=%s AND booking_time=%s::time
-                                 AND (customer_name=%s OR %s IS NULL)
-                                 AND status NOT IN ('cancelled','rejected','cancelada')""",
-                            (fecha, hora, nombre_cliente, nombre_cliente)
-                        )
                 conn.commit()
         return {"ok": True, "deleted": rid}
     except HTTPException:
@@ -471,24 +497,12 @@ async def fix_blocked_slot(
     fecha: str = Query(...),
     hora: str = Query(...),
 ):
-    """Force-cancel any active booking at the given date/time in both hotboat_appointments
-    and all_appointments so the slot shows as available."""
+    """Force-cancel any active booking at the given date/time in all_appointments."""
     _check_auth(x_admin_key)
     try:
         updated = []
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Cancel in hotboat_appointments
-                cur.execute(
-                    """UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW()
-                       WHERE booking_date=%s::date AND booking_time=%s::time
-                         AND status NOT IN ('cancelled','rejected','cancelada')
-                       RETURNING booking_ref, customer_name""",
-                    (fecha, hora)
-                )
-                for r in cur.fetchall():
-                    updated.append({"table": "hotboat_appointments", "ref": r[0], "customer": r[1]})
-
                 # Cancel in all_appointments
                 cur.execute(
                     """UPDATE all_appointments SET status='cancelled', updated_at=NOW()
@@ -512,7 +526,6 @@ async def fix_blocked_slot(
         return {"ok": True, "updated": updated, "slot_should_now_be_free": f"{fecha} {hora}"}
     except Exception as e:
         logger.error(f"fix_blocked_slot error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -744,19 +757,24 @@ async def delete_vacation(fecha: str, x_admin_key: str = Header("")):
 async def list_urgency_days(
     desde: Optional[str] = Query(None),
     hasta: Optional[str] = Query(None),
+    entity_type: str = Query("hotboat"),
+    entity_slug: str = Query("", description="Product slug alojamiento / experiencia / pack; vacío = HotBoat global"),
     x_admin_key: str = Header(""),
 ):
     _check_auth(x_admin_key)
     from datetime import date as _date
     fd = _date.fromisoformat(desde) if desde else None
     td = _date.fromisoformat(hasta) if hasta else None
-    return {"urgency_days": get_urgency_days(fd, td)}
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    return {"urgency_days": get_urgency_days(fd, td, entity_type=et, entity_slug=slug)}
 
 
 class UrgencyDayRequest(BaseModel):
     date: str
     enabled: bool = True
     reason: Optional[str] = ""
+    entity_type: str = "hotboat"
+    entity_slug: str = ""
 
 
 @admin_router.post("/api/admin/urgency-days")
@@ -764,7 +782,8 @@ async def add_urgency_day_route(body: UrgencyDayRequest, x_admin_key: str = Head
     _check_auth(x_admin_key)
     from datetime import date as _date
     d = _date.fromisoformat(body.date)
-    ok = set_urgency_day(d, body.enabled, body.reason or "")
+    et, slug = normalize_urgency_entity(body.entity_type, body.entity_slug)
+    ok = set_urgency_day(d, body.enabled, body.reason or "", entity_type=et, entity_slug=slug)
     if not ok:
         raise HTTPException(status_code=500, detail="Error setting urgency day")
     # Invalidate cached availability so day override applies immediately.
@@ -777,11 +796,17 @@ async def add_urgency_day_route(body: UrgencyDayRequest, x_admin_key: str = Head
 
 
 @admin_router.delete("/api/admin/urgency-days/{fecha}")
-async def delete_urgency_day_route(fecha: str, x_admin_key: str = Header("")):
+async def delete_urgency_day_route(
+    fecha: str,
+    entity_type: str = Query("hotboat"),
+    entity_slug: str = Query("", description="Product slug; vacío = HotBoat global"),
+    x_admin_key: str = Header(""),
+):
     _check_auth(x_admin_key)
     from datetime import date as _date
     d = _date.fromisoformat(fecha)
-    ok = remove_urgency_day(d)
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    ok = remove_urgency_day(d, entity_type=et, entity_slug=slug)
     # Invalidate cached availability so day override removal applies immediately.
     try:
         from app.booking import router as _booking_router
@@ -857,8 +882,8 @@ async def availability_debug(
     fecha: str = Query(None, description="Specific date YYYY-MM-DD to inspect raw DB rows"),
     days: int = Query(7, ge=1, le=14),
 ):
-    """Diagnostic: shows operating hours, booked slots seen by the checker,
-    and (when fecha= is given) raw rows from all three tables for that date."""
+    """Diagnostic: operating hours, booked slots seen by the checker,
+    and (when fecha= is given) raw ``all_appointments`` rows for that date."""
     _check_auth(x_admin_key)
     from datetime import datetime, timedelta, date as _date
     from zoneinfo import ZoneInfo
@@ -903,36 +928,15 @@ async def availability_debug(
         "period": {"from": str(start.date()), "to": str(end.date())},
     }
 
-    # When a specific date is requested, dump raw rows from all three tables
     if fecha:
-        raw = {"booknetic_appointments": [], "hotboat_appointments": [], "all_appointments": []}
+        raw: dict = {"all_appointments": []}
         try:
             fd = _date.fromisoformat(fecha)
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id, starts_at, service_name, customer_name, status FROM booknetic_appointments"
-                        " WHERE starts_at::date = %s OR starts_at::date = %s ORDER BY starts_at",
-                        (fecha, fecha)
-                    )
-                    for r in cur.fetchall():
-                        raw["booknetic_appointments"].append({
-                            "id": r[0], "starts_at": str(r[1]), "service": r[2],
-                            "customer": r[3], "status": r[4],
-                        })
-                    cur.execute(
-                        "SELECT booking_ref, booking_date, booking_time, customer_name, status"
-                        " FROM hotboat_appointments WHERE booking_date = %s ORDER BY booking_time",
-                        (fecha,)
-                    )
-                    for r in cur.fetchall():
-                        raw["hotboat_appointments"].append({
-                            "ref": r[0], "date": str(r[1]), "time": str(r[2]),
-                            "customer": r[3], "status": r[4],
-                        })
-                    cur.execute(
                         "SELECT id, source, source_id, fecha, hora, nombre_cliente, status"
-                        " FROM all_appointments WHERE fecha = %s ORDER BY hora",
+                        " FROM all_appointments WHERE fecha = %s ORDER BY hora, source",
                         (fecha,)
                     )
                     for r in cur.fetchall():
@@ -1152,6 +1156,44 @@ async def resend_real_confirmation(booking_ref: str, x_admin_key: str = Header("
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@admin_router.post("/api/admin/reservas/{rid}/send-confirmation")
+async def send_confirmation_for_reserva(rid: int, x_admin_key: str = Header("")):
+    """Send (or resend) the booking_confirmed email for any reservation, regardless of source."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT nombre_cliente, email, extras_json, ingreso_extras FROM {TABLE} WHERE id=%s",
+                    (rid,),
+                )
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Reserva {rid} no encontrada")
+        nombre, email, raw_extras, ingreso_extras = row
+        email = (email or "").strip()
+        if not email:
+            raise HTTPException(status_code=422, detail="La reserva no tiene email del cliente")
+        from app.booking.booking_email import send_confirmation_admin_force
+        result = send_confirmation_admin_force(rid)
+        return {
+            "ok": True,
+            "rid": rid,
+            "email": email,
+            "customer": nombre,
+            "result": result,
+            "_debug": {
+                "extras_json_raw": raw_extras,
+                "ingreso_extras": float(ingreso_extras or 0),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"send_confirmation {rid}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @admin_router.post("/api/admin/pre-booking-notif/test")
 async def test_pre_booking_notif(x_admin_key: str = Header("")):
     """Send a test pre-booking notification using a fake booking (for visual preview)."""
@@ -1282,7 +1324,7 @@ async def get_email_booking_legacy(x_admin_key: str = Header("")):
 
 # ── Incremental sync ──────────────────────────────────────────────────────────
 # Syncs reservas_con_extras → all_appointments (full upsert)
-# Then pulls NEW records from booknetic + hotboat into all_appointments
+# Then pulls legacy hotboat_appointments rows into all_appointments (Booknetic is ingested elsewhere).
 
 @admin_router.post("/api/admin/sync")
 async def sync_tables(x_admin_key: str = Header("")):
@@ -1311,7 +1353,6 @@ async def sync_tables(x_admin_key: str = Header("")):
 
                 inserted_reservas = 0
                 updated_reservas = 0
-                inserted_book = 0
                 inserted_hb = 0
                 updated_status = 0
 
@@ -1433,56 +1474,7 @@ async def sync_tables(x_admin_key: str = Header("")):
                 """)
                 dedup_deleted += cur.rowcount
 
-                # Sync booknetic — do not use MAX(reservas_con_extras.fecha) as lower bound (it is often
-                # a future date and would skip all earlier appointments, e.g. April when June exists in DB)
-                cur.execute("""
-                    SELECT id, customer_name, customer_email, starts_at, status, raw, created_at
-                    FROM booknetic_appointments
-                    WHERE starts_at IS NOT NULL
-                      AND starts_at::date >= (CURRENT_DATE - INTERVAL '3 years')
-                      AND starts_at::date <= (CURRENT_DATE + INTERVAL '3 years')
-                """)
-                for row in cur.fetchall():
-                    bid, nombre, email, starts_at, status, raw, created = row
-                    raw = raw or {}
-                    sid = str(bid)
-                    # Already synced as booknetic, OR reservas_con_extras already created a sheets row with this appointment_id
-                    cur.execute(
-                        f"""SELECT id, source, status FROM {TABLE}
-                            WHERE (source = 'booknetic' AND source_id = %s)
-                               OR (appointment_id IS NOT NULL AND TRIM(appointment_id::text) = %s)
-                            LIMIT 1""",
-                        (sid, sid),
-                    )
-                    existing = cur.fetchone()
-                    if existing:
-                        ex_id, ex_src, ex_st = existing[0], existing[1], existing[2]
-                        if ex_src == "booknetic":
-                            if status and status != ex_st:
-                                cur.execute(f"UPDATE {TABLE} SET status=%s, updated_at=NOW() WHERE id=%s",
-                                            (status, ex_id))
-                                updated_status += 1
-                        # sheets (or other) row already represents this Booknetic ID — do not insert a 2nd row
-                        continue
-                    # Insert new
-                    phone = normalize_phone(raw.get("customer_phone_number"))
-                    service = raw.get("service") or ""
-                    ingreso = parse_clp(raw.get("payment"))
-                    hora = starts_at.time() if starts_at else None
-                    fecha = starts_at.date() if starts_at else None
-                    m = re.search(r"(\d+)\s*people", service, re.I)
-                    num_p = m.group(1) if m else None
-                    cur.execute(f"""
-                        INSERT INTO {TABLE}
-                        (source, source_id, appointment_id, fecha, hora, nombre_cliente, email, telefono,
-                         servicio, num_personas, ingreso_reserva, ingreso_total,
-                         costo_operativo_fijo, costo_operativo_total, status, extras_json, created_at, updated_at)
-                        VALUES ('booknetic',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18000,18000,%s,'{{}}', %s,NOW())
-                    """, (str(bid), str(bid), fecha, hora, nombre, email, phone,
-                          service, num_p, ingreso, ingreso, status, created))
-                    inserted_book += 1
-
-                # Sync hotboat_appointments (no reservas MAX fecha cutoff — see booknetic comment above)
+                # Sync hotboat_appointments (no reservas MAX fecha cutoff)
                 cur.execute("""
                     SELECT booking_ref, customer_name, customer_email, customer_phone,
                            booking_date, booking_time, num_people,
@@ -1525,7 +1517,7 @@ async def sync_tables(x_admin_key: str = Header("")):
             "reservas_con_extras_inserted": inserted_reservas,
             "reservas_con_extras_updated": updated_reservas,
             "duplicates_removed": dedup_deleted,
-            "inserted_booknetic": inserted_book,
+            "inserted_booknetic": 0,
             "inserted_hotboat": inserted_hb,
             "status_updated": updated_status,
         }
@@ -1563,6 +1555,10 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                     "precio_venta INTEGER",
                     "costo INTEGER",
                     "icon TEXT",
+                    "name_en TEXT",
+                    "name_pt TEXT",
+                    "description_en TEXT",
+                    "description_pt TEXT",
                 ]:
                     cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
                 conn.commit()
@@ -1575,13 +1571,18 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                            COALESCE(description, '') AS description,
                            COALESCE(precio_venta, 0) AS price,
                            COALESCE(costo, 0)        AS cost,
-                           COALESCE(icon, '')        AS icon
+                           COALESCE(icon, '')        AS icon,
+                           COALESCE(name_en, '')       AS name_en,
+                           COALESCE(name_pt, '')       AS name_pt,
+                           COALESCE(description_en, '') AS description_en,
+                           COALESCE(description_pt, '') AS description_pt
                     FROM extras_visibility
                     ORDER BY sort_order, extra_name_lower
                 """)
                 extras = []
                 for (name_lower, name, show_in_booking, sort_order,
-                     description, price, cost, icon) in cur.fetchall():
+                     description, price, cost, icon,
+                     name_en, name_pt, description_en, description_pt) in cur.fetchall():
                     display_name = name or name_lower
                     extras.append({
                         "id": name_lower,
@@ -1591,6 +1592,10 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                         "cost": cost,
                         "icon": icon,
                         "description": description,
+                        "name_en": name_en or "",
+                        "name_pt": name_pt or "",
+                        "description_en": description_en or "",
+                        "description_pt": description_pt or "",
                         "show_in_booking": bool(show_in_booking),
                         "sort_order": int(sort_order),
                     })
@@ -1610,6 +1615,10 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         cost = int(body.get("cost") or 0)
         icon = body.get("icon", "").strip()
         description = body.get("description", "").strip()
+        name_en = body.get("name_en", "").strip()
+        name_pt = body.get("name_pt", "").strip()
+        description_en = body.get("description_en", "").strip()
+        description_pt = body.get("description_pt", "").strip()
         show_in_booking = bool(body.get("show_in_booking", True))
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
@@ -1623,17 +1632,22 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                         SET extra_name_lower = %s, name = %s,
                             show_in_booking = %s, description = %s,
                             precio_venta = %s, costo = %s, icon = %s,
+                            name_en = %s, name_pt = %s,
+                            description_en = %s, description_pt = %s,
                             updated_at = NOW()
                         WHERE extra_name_lower = %s
                     """, (new_name_lower, name, show_in_booking,
                           description or None, price or None, cost or None, icon or None,
+                          name_en or None, name_pt or None,
+                          description_en or None, description_pt or None,
                           extra_id))
                     if cur.rowcount == 0:
                         # Row didn't exist under old key — upsert under new key
                         cur.execute("""
                             INSERT INTO extras_visibility
-                                (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon, updated_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                                (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
+                                 name_en, name_pt, description_en, description_pt, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                             ON CONFLICT (extra_name_lower) DO UPDATE
                                 SET name = EXCLUDED.name,
                                     show_in_booking = EXCLUDED.show_in_booking,
@@ -1641,14 +1655,21 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                                     precio_venta = EXCLUDED.precio_venta,
                                     costo = EXCLUDED.costo,
                                     icon = EXCLUDED.icon,
+                                    name_en = EXCLUDED.name_en,
+                                    name_pt = EXCLUDED.name_pt,
+                                    description_en = EXCLUDED.description_en,
+                                    description_pt = EXCLUDED.description_pt,
                                     updated_at = NOW()
                         """, (new_name_lower, name, show_in_booking,
-                              description or None, price or None, cost or None, icon or None))
+                              description or None, price or None, cost or None, icon or None,
+                              name_en or None, name_pt or None,
+                              description_en or None, description_pt or None))
                 else:
                     cur.execute("""
                         INSERT INTO extras_visibility
-                            (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                            (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
+                             name_en, name_pt, description_en, description_pt, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                         ON CONFLICT (extra_name_lower) DO UPDATE
                             SET name = EXCLUDED.name,
                                 show_in_booking = EXCLUDED.show_in_booking,
@@ -1656,9 +1677,15 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                                 precio_venta = EXCLUDED.precio_venta,
                                 costo = EXCLUDED.costo,
                                 icon = EXCLUDED.icon,
+                                name_en = EXCLUDED.name_en,
+                                name_pt = EXCLUDED.name_pt,
+                                description_en = EXCLUDED.description_en,
+                                description_pt = EXCLUDED.description_pt,
                                 updated_at = NOW()
                     """, (new_name_lower, name, show_in_booking,
-                          description or None, price or None, cost or None, icon or None))
+                          description or None, price or None, cost or None, icon or None,
+                          name_en or None, name_pt or None,
+                          description_en or None, description_pt or None))
                 conn.commit()
         return {"ok": True}
     except HTTPException:
@@ -1679,6 +1706,10 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
         description = body.get("description", "").strip()
+        name_en = body.get("name_en", "").strip()
+        name_pt = body.get("name_pt", "").strip()
+        description_en = body.get("description_en", "").strip()
+        description_pt = body.get("description_pt", "").strip()
         show_in_booking = bool(body.get("show_in_booking", True))
         name_lower = name.lower()
         with get_connection() as conn:
@@ -1686,17 +1717,24 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
                 cur.execute("""
                     INSERT INTO extras_visibility
                         (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
+                         name_en, name_pt, description_en, description_pt,
                          sort_order, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, '', 999, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, '', %s, %s, %s, %s, 999, NOW())
                     ON CONFLICT (extra_name_lower) DO UPDATE
                         SET name = EXCLUDED.name,
                             show_in_booking = EXCLUDED.show_in_booking,
                             description = EXCLUDED.description,
                             precio_venta = EXCLUDED.precio_venta,
                             costo = EXCLUDED.costo,
+                            name_en = EXCLUDED.name_en,
+                            name_pt = EXCLUDED.name_pt,
+                            description_en = EXCLUDED.description_en,
+                            description_pt = EXCLUDED.description_pt,
                             updated_at = NOW()
                 """, (name_lower, name, show_in_booking,
-                      description or None, price or None, cost or None))
+                      description or None, price or None, cost or None,
+                      name_en or None, name_pt or None,
+                      description_en or None, description_pt or None))
                 conn.commit()
         return {"ok": True, "id": name_lower, "key": _slugify_extra(name)}
     except HTTPException:
@@ -1741,6 +1779,101 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
     except Exception as e:
         logger.error(f"Error deleting extra {extra_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.post("/api/admin/precios-extras/{extra_id:path}/auto-translate")
+async def auto_translate_precio_extra(extra_id: str, x_admin_key: str = Header("")):
+    """Fill name_en, name_pt, description_en, description_pt from Spanish name + description (Groq)."""
+    _check_auth(x_admin_key)
+    try:
+        from app.booking.extras_translate import translate_extra_fields
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for col_def in [
+                    "name_en TEXT",
+                    "name_pt TEXT",
+                    "description_en TEXT",
+                    "description_pt TEXT",
+                ]:
+                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
+                conn.commit()
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COALESCE(name, extra_name_lower), COALESCE(description, '') "
+                    "FROM extras_visibility WHERE extra_name_lower = %s",
+                    (extra_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Extra not found")
+                name_es, desc_es = row[0], row[1]
+
+        out = translate_extra_fields(str(name_es), str(desc_es or ""))
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE extras_visibility SET
+                        name_en = %s, name_pt = %s,
+                        description_en = %s, description_pt = %s,
+                        updated_at = NOW()
+                    WHERE extra_name_lower = %s
+                    """,
+                    (
+                        out["name_en"],
+                        out["name_pt"],
+                        out["description_en"] or None,
+                        out["description_pt"] or None,
+                        extra_id,
+                    ),
+                )
+                conn.commit()
+        return {"ok": True, **out}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"auto_translate_precio_extra {extra_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+class CatalogI18nTranslateBody(BaseModel):
+    name_es: str
+    description_es: str = ""
+    group_es: str = ""
+
+
+@admin_router.post("/api/admin/auto-translate-catalog-i18n")
+async def auto_translate_catalog_i18n(
+    body: CatalogI18nTranslateBody, x_admin_key: str = Header("")
+):
+    """Suggest EN / PT strings for catalog modals from Spanish fields (Groq). Does not persist."""
+    _check_auth(x_admin_key)
+    try:
+        from app.booking.extras_translate import translate_catalog_i18n_fields
+
+        out = translate_catalog_i18n_fields(
+            body.name_es,
+            body.description_es,
+            group_es=body.group_es or "",
+        )
+        return {"ok": True, **out}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        logger.error("auto_translate_catalog_i18n: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ── WooCommerce: send payment link ────────────────────────────────────────────
@@ -1828,6 +1961,31 @@ async def send_payment_link(rid: int, x_admin_key: str = Header("")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@admin_router.post("/api/admin/reservas/{rid}/send-followup-email")
+async def send_followup_email_manual(rid: int, x_admin_key: str = Header("")):
+    """Send TripAdvisor / satisfaction follow-up email to the customer (manual trigger)."""
+    _check_auth(x_admin_key)
+    try:
+        from app.booking.booking_email import send_manual_followup_email
+
+        result = await asyncio.to_thread(send_manual_followup_email, rid)
+        if result.get("sent"):
+            return {"ok": True, "sent": True, "reason": result.get("reason", "ok")}
+        reason = str(result.get("reason") or "unknown")
+        if reason == "not_found":
+            raise HTTPException(status_code=404, detail="Reserva no encontrada")
+        if reason == "no_customer_email":
+            raise HTTPException(status_code=400, detail="La reserva no tiene email del cliente")
+        if reason == "no_resend_key":
+            raise HTTPException(status_code=503, detail="Resend no configurado (API key)")
+        raise HTTPException(status_code=400, detail=reason[:500])
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending follow-up email for {rid}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── WooCommerce: receive payment webhook ──────────────────────────────────────
 
 @admin_router.post("/api/woo-webhook")
@@ -1907,86 +2065,128 @@ async def woo_webhook(request: Request):
                     )
                     conn.commit()
 
-        # ── 2. Update hotboat_appointments (web booking flow) ────────────────
+        # ── 2. Confirm web booking (all_appointments; legacy hotboat-only rows still supported)
         if booking_ref_wc:
             try:
                 with get_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
-                            "SELECT id, customer_name, customer_phone, customer_email, "
-                            "booking_date, booking_time, num_people, subtotal, extras_total, "
-                            "total_price, has_flex, flex_amount, extras, notes "
-                            "FROM hotboat_appointments WHERE booking_ref=%s",
-                            (booking_ref_wc,)
+                            f"SELECT id, COALESCE(pagos,'[]'::jsonb), created_at::date::text FROM {TABLE} "
+                            f"WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
+                            (booking_ref_wc,),
                         )
-                        ha_row = cur.fetchone()
-                        if ha_row:
-                            (ha_id, ha_name, ha_phone, ha_email,
-                             ha_date, ha_time, ha_people, ha_sub,
-                             ha_ext, ha_total, ha_flex, ha_flex_amt,
-                             ha_extras_json, ha_notes) = ha_row
-
+                        all_row = cur.fetchone()
+                        if all_row:
+                            all_id, pagos_raw2, created_at_str2 = all_row
+                            pagos2 = _add_pago(
+                                list(pagos_raw2) if pagos_raw2 else [],
+                                total,
+                                "transbank",
+                                created_at_str2 or "",
+                            )
                             cur.execute(
-                                "UPDATE hotboat_appointments "
-                                "SET status='confirmed', payment_order_id=%s, payment_status=%s, "
-                                "paid_at=NOW(), updated_at=NOW() WHERE booking_ref=%s",
-                                (str(wc_id), status, booking_ref_wc)
+                                f"UPDATE {TABLE} SET status='confirmed', payment_order_id=%s, payment_status=%s, "
+                                f"paid_at=NOW(), pagos=%s, updated_at=NOW() WHERE id=%s",
+                                (str(wc_id), status, PgJson(pagos2), all_id),
                             )
                             conn.commit()
-
-                            # Sync confirmed booking into all_appointments
-                            from app.booking.router import _sync_hotboat_to_all
-                            import json as _json
-                            booking_data = {
-                                "customer_name":  ha_name,
-                                "customer_phone": ha_phone,
-                                "customer_email": ha_email,
-                                "booking_date":   str(ha_date),
-                                "booking_time":   str(ha_time)[:5],
-                                "num_people":     ha_people,
-                                "subtotal":       float(ha_sub or 0),
-                                "extras_total":   float(ha_ext or 0),
-                                "total_price":    float(ha_total or 0),
-                                "has_flex":       ha_flex,
-                                "flex_amount":    float(ha_flex_amt or 0),
-                                "extras":         _json.loads(ha_extras_json) if isinstance(ha_extras_json, str) else (ha_extras_json or []),
-                                "notes":          ha_notes,
-                            }
-                            _sync_hotboat_to_all(booking_ref_wc, booking_data, "confirmed")
-
-                            # Register payment in all_appointments.pagos
-                            with get_connection() as conn2:
-                                with conn2.cursor() as cur2:
-                                    cur2.execute(
-                                        f"SELECT id, COALESCE(pagos,'[]'::jsonb), created_at::date::text FROM {TABLE} "
-                                        f"WHERE source='hotboat_web' AND source_id=%s",
-                                        (booking_ref_wc,)
-                                    )
-                                    all_row = cur2.fetchone()
-                                    if all_row:
-                                        all_id, pagos_raw2, created_at_str2 = all_row
-                                        pagos2 = _add_pago(
-                                            list(pagos_raw2) if pagos_raw2 else [],
-                                            total, "transbank",
-                                            created_at_str2 or ""
-                                        )
-                                        cur2.execute(
-                                            f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
-                                            (PgJson(pagos2), status, all_id)
-                                        )
-                                        conn2.commit()
-
-                            logger.info(f"WC webhook: hotboat_appointments {booking_ref_wc} confirmed + synced")
+                            logger.info("WC webhook: all_appointments %s confirmed", booking_ref_wc)
                             try:
                                 from app.booking.booking_email import (
                                     try_send_booking_confirmation_after_payment,
                                 )
+
                                 em = try_send_booking_confirmation_after_payment(booking_ref_wc)
                                 logger.info("WC webhook: confirmation email %s", em)
                             except Exception as em_err:
                                 logger.warning("WC webhook: confirmation email error: %s", em_err)
+                        else:
+                            cur.execute(
+                                "SELECT id, customer_name, customer_phone, customer_email, "
+                                "booking_date, booking_time, num_people, subtotal, extras_total, "
+                                "total_price, has_flex, flex_amount, extras, notes "
+                                "FROM hotboat_appointments WHERE booking_ref=%s",
+                                (booking_ref_wc,),
+                            )
+                            ha_row = cur.fetchone()
+                            if ha_row:
+                                (
+                                    _ha_id,
+                                    ha_name,
+                                    ha_phone,
+                                    ha_email,
+                                    ha_date,
+                                    ha_time,
+                                    ha_people,
+                                    ha_sub,
+                                    ha_ext,
+                                    ha_total,
+                                    ha_flex,
+                                    ha_flex_amt,
+                                    ha_extras_json,
+                                    ha_notes,
+                                ) = ha_row
+                                cur.execute(
+                                    "UPDATE hotboat_appointments "
+                                    "SET status='confirmed', payment_order_id=%s, payment_status=%s, "
+                                    "paid_at=NOW(), updated_at=NOW() WHERE booking_ref=%s",
+                                    (str(wc_id), status, booking_ref_wc),
+                                )
+                                conn.commit()
+                                from app.booking.router import _sync_hotboat_to_all
+                                import json as _json
+
+                                booking_data = {
+                                    "customer_name": ha_name,
+                                    "customer_phone": ha_phone,
+                                    "customer_email": ha_email,
+                                    "booking_date": str(ha_date),
+                                    "booking_time": str(ha_time)[:5],
+                                    "num_people": ha_people,
+                                    "subtotal": float(ha_sub or 0),
+                                    "extras_total": float(ha_ext or 0),
+                                    "total_price": float(ha_total or 0),
+                                    "has_flex": ha_flex,
+                                    "flex_amount": float(ha_flex_amt or 0),
+                                    "extras": _json.loads(ha_extras_json)
+                                    if isinstance(ha_extras_json, str)
+                                    else (ha_extras_json or []),
+                                    "notes": ha_notes,
+                                }
+                                _sync_hotboat_to_all(booking_ref_wc, booking_data, "confirmed")
+                                with get_connection() as conn2:
+                                    with conn2.cursor() as cur2:
+                                        cur2.execute(
+                                            f"SELECT id, COALESCE(pagos,'[]'::jsonb), created_at::date::text FROM {TABLE} "
+                                            f"WHERE source='hotboat_web' AND source_id=%s",
+                                            (booking_ref_wc,),
+                                        )
+                                        ar2 = cur2.fetchone()
+                                        if ar2:
+                                            aid2, pr2, c2 = ar2
+                                            pg2 = _add_pago(
+                                                list(pr2) if pr2 else [],
+                                                total,
+                                                "transbank",
+                                                c2 or "",
+                                            )
+                                            cur2.execute(
+                                                f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
+                                                (PgJson(pg2), status, aid2),
+                                            )
+                                            conn2.commit()
+                                logger.info("WC webhook: legacy hotboat %s confirmed + synced to all_appointments", booking_ref_wc)
+                                try:
+                                    from app.booking.booking_email import (
+                                        try_send_booking_confirmation_after_payment,
+                                    )
+
+                                    em = try_send_booking_confirmation_after_payment(booking_ref_wc)
+                                    logger.info("WC webhook: confirmation email %s", em)
+                                except Exception as em_err:
+                                    logger.warning("WC webhook: confirmation email error: %s", em_err)
             except Exception as he:
-                logger.error(f"WC webhook: error updating hotboat_appointments {booking_ref_wc}: {he}")
+                logger.error(f"WC webhook: error confirming web booking {booking_ref_wc}: {he}")
 
         # ── 3. Update accommodation_bookings ─────────────────────────────────
         aloj_ref_wc = meta_map.get("accommodation_booking_ref", "") or (
@@ -2013,17 +2213,44 @@ async def woo_webhook(request: Request):
                             (combined_hb_ref, ab_cname, ab_cphone, ab_cemail,
                              ab_aloj_name, ab_checkin, ab_checkout,
                              ab_total, ab_deposit) = ab_row
+                            try:
+                                cur.execute(
+                                    "UPDATE extras_bookings SET status=%s, total_price=%s, deposit_paid=%s "
+                                    "WHERE booking_ref=%s AND item_type=%s",
+                                    (
+                                        "confirmado",
+                                        int(ab_total or 0),
+                                        int(ab_deposit or 0),
+                                        aloj_ref_wc,
+                                        "alojamiento",
+                                    ),
+                                )
+                                conn.commit()
+                            except Exception as ee:
+                                logger.warning(
+                                    "WC webhook: extras_bookings mirror update failed for %s: %s",
+                                    aloj_ref_wc,
+                                    ee,
+                                )
                             # If combined with HotBoat, confirm that booking too
                             if combined_hb_ref:
                                 cur.execute(
-                                    "UPDATE hotboat_appointments"
+                                    f"UPDATE {TABLE}"
                                     " SET status='confirmed', payment_order_id=%s, payment_status=%s,"
                                     "     paid_at=NOW(), updated_at=NOW()"
-                                    " WHERE booking_ref=%s",
-                                    (str(wc_id), status, combined_hb_ref)
+                                    " WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
+                                    (str(wc_id), status, combined_hb_ref),
                                 )
+                                if cur.rowcount == 0:
+                                    cur.execute(
+                                        "UPDATE hotboat_appointments"
+                                        " SET status='confirmed', payment_order_id=%s, payment_status=%s,"
+                                        "     paid_at=NOW(), updated_at=NOW()"
+                                        " WHERE booking_ref=%s",
+                                        (str(wc_id), status, combined_hb_ref),
+                                    )
                                 conn.commit()
-                                logger.info("WC webhook: combined hotboat_appointments %s confirmed", combined_hb_ref)
+                                logger.info("WC webhook: combined HotBoat booking %s confirmed", combined_hb_ref)
                             nights_ab = (ab_checkout - ab_checkin).days if ab_checkin and ab_checkout else 0
                             # WhatsApp notification to admin
                             try:
@@ -2070,6 +2297,59 @@ async def woo_webhook(request: Request):
             except Exception as ae:
                 logger.error("WC webhook: error updating accommodation_bookings %s: %s", aloj_ref_wc, ae)
 
+        # ── 3b. Update experience/pack extras_bookings ─────────────────────
+        exp_ref_wc = meta_map.get("experience_booking_ref", "") or ""
+        pack_ref_wc = meta_map.get("pack_booking_ref", "") or ""
+        if exp_ref_wc or pack_ref_wc:
+            try:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        if exp_ref_wc:
+                            cur.execute(
+                                "SELECT total_price, deposit_paid FROM extras_bookings "
+                                "WHERE booking_ref=%s AND item_type=%s LIMIT 1",
+                                (exp_ref_wc, "experience"),
+                            )
+                            row = cur.fetchone()
+                            if row:
+                                total_price, deposit_paid = row
+                                cur.execute(
+                                    "UPDATE extras_bookings SET status=%s, total_price=%s, deposit_paid=%s "
+                                    "WHERE booking_ref=%s AND item_type=%s",
+                                    (
+                                        "confirmado",
+                                        int(total_price or 0),
+                                        int(deposit_paid or 0),
+                                        exp_ref_wc,
+                                        "experience",
+                                    ),
+                                )
+
+                        if pack_ref_wc:
+                            cur.execute(
+                                "SELECT total_price, deposit_paid FROM extras_bookings "
+                                "WHERE booking_ref=%s AND item_type=%s LIMIT 1",
+                                (pack_ref_wc, "pack"),
+                            )
+                            row = cur.fetchone()
+                            if row:
+                                total_price, deposit_paid = row
+                                cur.execute(
+                                    "UPDATE extras_bookings SET status=%s, total_price=%s, deposit_paid=%s "
+                                    "WHERE booking_ref=%s AND item_type=%s",
+                                    (
+                                        "confirmado",
+                                        int(total_price or 0),
+                                        int(deposit_paid or 0),
+                                        pack_ref_wc,
+                                        "pack",
+                                    ),
+                                )
+
+                        conn.commit()
+            except Exception as ep:
+                logger.error("WC webhook: error updating exp/pack extras_bookings: %s", ep)
+
         logger.info(f"WC webhook: order {wc_id} processed → status={status}, amount={total}")
         return {"ok": True, "reservation_id": res_id, "booking_ref": booking_ref_wc, "status": status}
 
@@ -2090,14 +2370,37 @@ def _exp_row(r, cols):
     return row
 
 
+def _ensure_experiences_admin_columns(cur) -> None:
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS name_en TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS name_pt TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_en TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_pt TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+
+
+def _ensure_packs_admin_columns(cur) -> None:
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS name_en TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS name_pt TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_en TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_pt TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
+    cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+
+
 @admin_router.get("/api/admin/experiencias")
 async def admin_list_experiencias(x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_experiences_admin_columns(cur)
             cur.execute(
-                "SELECT id,slug,name,icon,description,price_per_person,cost_per_person,"
-                "image_path,is_active,display_order FROM experiences ORDER BY display_order,id"
+                "SELECT id,slug,name,icon,description,"
+                "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
+                "price_per_person,cost_per_person,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "is_active,display_order FROM experiences ORDER BY display_order,id"
             )
             cols = [d.name for d in cur.description]
             return {"experiences": [_exp_row(r, cols) for r in cur.fetchall()]}
@@ -2108,9 +2411,15 @@ class ExperienceBody(BaseModel):
     name: str
     icon: str = "🚣"
     description: str = ""
+    name_en: str = ""
+    name_pt: str = ""
+    description_en: str = ""
+    description_pt: str = ""
+    admin_whatsapp: str = ""
     price_per_person: int = 0
     cost_per_person: int = 0
     image_path: Optional[str] = None
+    extra_images: List[str] = []
     is_active: bool = True
     display_order: int = 0
 
@@ -2120,12 +2429,15 @@ async def admin_create_experiencia(body: ExperienceBody, x_admin_key: str = Head
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_experiences_admin_columns(cur)
             cur.execute(
-                "INSERT INTO experiences (slug,name,icon,description,price_per_person,cost_per_person,image_path,is_active,display_order)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-                (body.slug, body.name, body.icon, body.description,
+                "INSERT INTO experiences (slug,name,icon,description,name_en,name_pt,description_en,description_pt,"
+                "admin_whatsapp,price_per_person,cost_per_person,image_path,extra_images,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
+                (body.slug, body.name, body.icon, body.description, body.name_en, body.name_pt,
+                 body.description_en, body.description_pt, body.admin_whatsapp,
                  body.price_per_person, body.cost_per_person,
-                 body.image_path, body.is_active, body.display_order),
+                 body.image_path, json.dumps(body.extra_images), body.is_active, body.display_order),
             )
             new_id = cur.fetchone()[0]
             conn.commit()
@@ -2137,13 +2449,16 @@ async def admin_update_experiencia(exp_id: int, body: ExperienceBody, x_admin_ke
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_experiences_admin_columns(cur)
             cur.execute(
                 "UPDATE experiences SET slug=%s,name=%s,icon=%s,description=%s,"
-                "price_per_person=%s,cost_per_person=%s,image_path=%s,is_active=%s,"
+                "name_en=%s,name_pt=%s,description_en=%s,description_pt=%s,admin_whatsapp=%s,"
+                "price_per_person=%s,cost_per_person=%s,image_path=%s,extra_images=%s::jsonb,is_active=%s,"
                 "display_order=%s,updated_at=NOW() WHERE id=%s",
                 (body.slug, body.name, body.icon, body.description,
+                 body.name_en, body.name_pt, body.description_en, body.description_pt, body.admin_whatsapp,
                  body.price_per_person, body.cost_per_person,
-                 body.image_path, body.is_active, body.display_order, exp_id),
+                 body.image_path, json.dumps(body.extra_images), body.is_active, body.display_order, exp_id),
             )
             conn.commit()
     return {"ok": True}
@@ -2162,16 +2477,32 @@ async def admin_delete_experiencia(exp_id: int, x_admin_key: str = Header(...)):
 @admin_router.post("/api/admin/experiencias/{exp_id}/image")
 async def admin_upload_exp_image(exp_id: int, file: UploadFile = File(...), x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
+    import time as _time
     ext = os.path.splitext(file.filename or "img.jpg")[1].lower() or ".jpg"
-    dest_dir = os.path.join(MEDIA_ROOT, "images", "experiencias", f"exp_{exp_id}")
-    os.makedirs(dest_dir, exist_ok=True)
-    dest = os.path.join(dest_dir, f"main{ext}")
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    rel = f"/media/images/experiencias/exp_{exp_id}/main{ext}"
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "images", "experiencias", f"exp_{exp_id}")
+    os.makedirs(static_dir, exist_ok=True)
+    ts = int(_time.time())
+    filename = f"img_{ts}{ext}"
+    dest = os.path.join(static_dir, filename)
+    with open(dest, "wb") as fh:
+        shutil.copyfileobj(file.file, fh)
+    rel = f"/static/images/experiencias/exp_{exp_id}/{filename}"
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("UPDATE experiences SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, exp_id))
+            _ensure_experiences_admin_columns(cur)
+            cur.execute("SELECT image_path, COALESCE(extra_images,'[]'::jsonb) FROM experiences WHERE id=%s", (exp_id,))
+            row = cur.fetchone()
+            if row:
+                existing_main = row[0]
+                existing_extra = list(row[1]) if row[1] else []
+                if not existing_main:
+                    cur.execute("UPDATE experiences SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, exp_id))
+                else:
+                    existing_extra.append(rel)
+                    cur.execute(
+                        "UPDATE experiences SET extra_images=%s::jsonb,updated_at=NOW() WHERE id=%s",
+                        (json.dumps(existing_extra), exp_id),
+                    )
             conn.commit()
     return {"ok": True, "image_path": rel}
 
@@ -2341,9 +2672,14 @@ async def admin_list_packs(x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_packs_admin_columns(cur)
             cur.execute(
-                "SELECT id,slug,name,icon,description,personas,price_from,cost_from,"
-                "image_path,includes,is_active,display_order FROM packs ORDER BY display_order,id"
+                "SELECT id,slug,name,icon,description,"
+                "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
+                "personas,price_from,cost_from,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "includes,is_active,display_order FROM packs ORDER BY display_order,id"
             )
             cols = [d.name for d in cur.description]
             rows = []
@@ -2360,10 +2696,16 @@ class PackBody(BaseModel):
     name: str
     icon: str = "🎁"
     description: str = ""
+    name_en: str = ""
+    name_pt: str = ""
+    description_en: str = ""
+    description_pt: str = ""
+    admin_whatsapp: str = ""
     personas: str = "2 personas"
     price_from: int = 0
     cost_from: int = 0
     image_path: Optional[str] = None
+    extra_images: List[str] = []
     includes: List[str] = []
     is_active: bool = True
     display_order: int = 0
@@ -2374,11 +2716,16 @@ async def admin_create_pack(body: PackBody, x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_packs_admin_columns(cur)
             cur.execute(
-                "INSERT INTO packs (slug,name,icon,description,personas,price_from,cost_from,image_path,includes,is_active,display_order)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
-                (body.slug, body.name, body.icon, body.description, body.personas,
+                "INSERT INTO packs (slug,name,icon,description,name_en,name_pt,description_en,description_pt,"
+                "admin_whatsapp,personas,price_from,cost_from,image_path,extra_images,includes,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s) RETURNING id",
+                (body.slug, body.name, body.icon, body.description,
+                 body.name_en, body.name_pt, body.description_en, body.description_pt, body.admin_whatsapp,
+                 body.personas,
                  body.price_from, body.cost_from, body.image_path,
+                 json.dumps(body.extra_images, ensure_ascii=False),
                  json.dumps(body.includes, ensure_ascii=False),
                  body.is_active, body.display_order),
             )
@@ -2392,12 +2739,17 @@ async def admin_update_pack(pack_id: int, body: PackBody, x_admin_key: str = Hea
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            _ensure_packs_admin_columns(cur)
             cur.execute(
-                "UPDATE packs SET slug=%s,name=%s,icon=%s,description=%s,personas=%s,"
-                "price_from=%s,cost_from=%s,image_path=%s,includes=%s::jsonb,"
+                "UPDATE packs SET slug=%s,name=%s,icon=%s,description=%s,"
+                "name_en=%s,name_pt=%s,description_en=%s,description_pt=%s,admin_whatsapp=%s,"
+                "personas=%s,price_from=%s,cost_from=%s,image_path=%s,extra_images=%s::jsonb,includes=%s::jsonb,"
                 "is_active=%s,display_order=%s,updated_at=NOW() WHERE id=%s",
-                (body.slug, body.name, body.icon, body.description, body.personas,
+                (body.slug, body.name, body.icon, body.description,
+                 body.name_en, body.name_pt, body.description_en, body.description_pt, body.admin_whatsapp,
+                 body.personas,
                  body.price_from, body.cost_from, body.image_path,
+                 json.dumps(body.extra_images, ensure_ascii=False),
                  json.dumps(body.includes, ensure_ascii=False),
                  body.is_active, body.display_order, pack_id),
             )
@@ -2418,16 +2770,32 @@ async def admin_delete_pack(pack_id: int, x_admin_key: str = Header(...)):
 @admin_router.post("/api/admin/packs/{pack_id}/image")
 async def admin_upload_pack_image(pack_id: int, file: UploadFile = File(...), x_admin_key: str = Header(...)):
     _check_auth(x_admin_key)
+    import time as _time
     ext = os.path.splitext(file.filename or "img.jpg")[1].lower() or ".jpg"
-    dest_dir = os.path.join(MEDIA_ROOT, "images", "packs", f"pack_{pack_id}")
-    os.makedirs(dest_dir, exist_ok=True)
-    dest = os.path.join(dest_dir, f"main{ext}")
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    rel = f"/media/images/packs/pack_{pack_id}/main{ext}"
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "images", "packs", f"pack_{pack_id}")
+    os.makedirs(static_dir, exist_ok=True)
+    ts = int(_time.time())
+    filename = f"img_{ts}{ext}"
+    dest = os.path.join(static_dir, filename)
+    with open(dest, "wb") as fh:
+        shutil.copyfileobj(file.file, fh)
+    rel = f"/static/images/packs/pack_{pack_id}/{filename}"
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("UPDATE packs SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, pack_id))
+            _ensure_packs_admin_columns(cur)
+            cur.execute("SELECT image_path, COALESCE(extra_images,'[]'::jsonb) FROM packs WHERE id=%s", (pack_id,))
+            row = cur.fetchone()
+            if row:
+                existing_main = row[0]
+                existing_extra = list(row[1]) if row[1] else []
+                if not existing_main:
+                    cur.execute("UPDATE packs SET image_path=%s,updated_at=NOW() WHERE id=%s", (rel, pack_id))
+                else:
+                    existing_extra.append(rel)
+                    cur.execute(
+                        "UPDATE packs SET extra_images=%s::jsonb,updated_at=NOW() WHERE id=%s",
+                        (json.dumps(existing_extra), pack_id),
+                    )
             conn.commit()
     return {"ok": True, "image_path": rel}
 
@@ -2651,6 +3019,8 @@ def _ensure_coupons_table():
                     ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0;
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS coupon_extra_benefit TEXT DEFAULT NULL;
             """)
             conn.commit()
 
@@ -2896,3 +3266,270 @@ async def migrate_ad_sources_endpoint(x_admin_key: str = Header("")):
     from app.db.leads import migrate_ad_sources
     result = await migrate_ad_sources()
     return result
+
+
+@admin_router.post("/api/admin/test-meta-capi")
+async def test_meta_capi(x_admin_key: str = Header("")):
+    """
+    Test Meta Conversions API credentials with a website Purchase event.
+    WhatsApp (business_messaging) events require a real ctwa_clid from an actual
+    ad click — they cannot be tested with dummy data.
+    """
+    _check_auth(x_admin_key)
+    import hashlib, time
+    import httpx
+    from app.config import get_settings
+    cfg = get_settings()
+
+    pixel_id = cfg.meta_pixel_id
+    token = cfg.meta_marketing_token or cfg.whatsapp_api_token
+    page_id = cfg.meta_page_id
+
+    results = {
+        "pixel_id": pixel_id or "⚠️ no configurado",
+        "page_id": page_id or "⚠️ no configurado (META_PAGE_ID)",
+        "token_set": bool(token),
+    }
+
+    if not pixel_id or not token:
+        results["resultado"] = "⚠️ Faltan META_PIXEL_ID o token — configurar en Railway"
+        return results
+
+    # Test with a website Purchase event (no ctwa_clid required)
+    # This validates pixel_id + token without needing a real CTWA click
+    ph = hashlib.sha256("56900000000".encode()).hexdigest()
+    payload = {
+        "data": [{
+            "event_name": "Purchase",
+            "event_time": int(time.time()),
+            "action_source": "website",
+            "event_source_url": "https://hotboatchile.com/test",
+            "user_data": {"ph": [ph]},
+            "custom_data": {"value": 1, "currency": "CLP"},
+        }],
+        "access_token": token,
+    }
+    try:
+        url = f"https://graph.facebook.com/v18.0/{pixel_id}/events"
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.post(url, json=payload)
+        if resp.status_code == 200:
+            results["credenciales"] = "✅ pixel_id + token válidos"
+        else:
+            results["credenciales"] = f"❌ {resp.status_code}: {resp.text}"
+    except Exception as e:
+        results["credenciales"] = f"❌ excepción: {e}"
+
+    results["nota"] = (
+        "Los eventos LeadSubmitted y Purchase de WhatsApp se disparan automáticamente "
+        "cuando alguien hace clic en un anuncio CTWA y escribe por WhatsApp / completa una reserva. "
+        "No se pueden simular porque Meta valida que el ctwa_clid sea real."
+    )
+    return results
+
+
+@admin_router.post("/api/admin/test-notif-email")
+async def test_notif_email(
+    x_admin_key: str = Header(""),
+    target_date: Optional[str] = Query(None, description="YYYY-MM-DD — the day whose reservations to include (default: yesterday)"),
+    weekly: bool = Query(False, description="Also send weekly summary for the week containing target_date"),
+):
+    """Manually trigger the daily/weekly notification email for testing."""
+    _check_auth(x_admin_key)
+    import asyncio
+    from datetime import date, timedelta
+    from app.booking.booking_email import send_yesterday_summary_email, send_weekly_summary_email, _NOTIF_TO, _build_booking_card_html, _fmt_clp_local, _get_from_addr
+    from app.booking.booking_email import send_booking_html, get_settings
+    from app.db.connection import get_connection
+
+    out: dict = {}
+
+    # Resolve the target date (the day whose reservations we want to show)
+    if target_date:
+        target = date.fromisoformat(target_date)
+    else:
+        target = date.today() - timedelta(days=1)
+
+    # Build and send daily summary for target date
+    s = get_settings()
+    api_key = (getattr(s, "resend_api_key", "") or "").strip()
+    if not api_key:
+        return {"error": "no_resend_key"}
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT nombre_cliente, email, telefono, fecha, hora, num_personas,
+                          ingreso_total, status, extras_json, observaciones,
+                          ciudad_origen, como_supieron, quien_atendio,
+                          COALESCE(pagos,'[]'::jsonb),
+                          COALESCE(flex_amount,0)
+                   FROM all_appointments
+                   WHERE fecha = %s
+                     AND status NOT IN ('cancelled','rejected')
+                   ORDER BY hora ASC NULLS LAST""",
+                (target,),
+            )
+            cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
+                    "ingreso_total","status","extras_json","observaciones",
+                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount"]
+            bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    target_str = target.strftime("%d/%m/%Y")
+    weekday_name = target.strftime("%A")
+    weekday_es = {"Monday":"Lunes","Tuesday":"Martes","Wednesday":"Miércoles",
+                  "Thursday":"Jueves","Friday":"Viernes","Saturday":"Sábado","Sunday":"Domingo"}.get(weekday_name, weekday_name)
+
+    if bookings:
+        cards = "".join(_build_booking_card_html(b) for b in bookings)
+        total_rev = sum(float(b.get("ingreso_total") or 0) for b in bookings)
+        total_pax = sum(int(b.get("num_personas") or 0) for b in bookings)
+        n_alerts = sum(1 for b in bookings if not b.get("ciudad_origen") or not b.get("como_supieron"))
+        stats = f"""
+        <div style="display:flex;gap:12px;margin:0 0 16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Reservas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{len(bookings)}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Personas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{total_pax}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Ingresos</div>
+            <div style="color:#10b981;font-size:20px;font-weight:800;">{_fmt_clp_local(total_rev)}</div>
+          </div>
+          {f'<div style="flex:1;min-width:100px;background:#7f1d1d;border-radius:10px;padding:12px 16px;text-align:center;"><div style="color:#fca5a5;font-size:11px;text-transform:uppercase;letter-spacing:1px;">⚠️ Alertas</div><div style="color:#fef2f2;font-size:22px;font-weight:800;">{n_alerts}</div></div>' if n_alerts else ""}
+        </div>"""
+        body_content = stats + cards
+    else:
+        body_content = f'<p style="color:#94a3b8;text-align:center;padding:32px 0;font-size:15px;">📭 Sin reservas el {target_str}</p>'
+
+    html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>{weekday_es} {target_str}</title></head>
+<body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<table width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
+<tr><td align="center" style="padding:28px 16px 40px;">
+<table width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;">
+  <tr><td style="background:#131c2e;border-radius:16px;overflow:hidden;padding:28px;">
+    <h1 style="margin:0 0 4px;color:#f8fafc;font-size:20px;font-weight:800;">
+      🚤 {weekday_es} {target_str}
+    </h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:13px;">Reservas del día · HotBoat <em>(test manual)</em></p>
+    {body_content}
+    <p style="margin:24px 0 0;color:#475569;font-size:11px;text-align:center;">
+      Enviado manualmente para prueba
+    </p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+
+    subject = f"🚤 [TEST] {weekday_es} {target_str} — {len(bookings)} reserva{'s' if len(bookings)!=1 else ''}"
+    from_addr = _get_from_addr(s)
+    try:
+        result = send_booking_html(to=_NOTIF_TO, subject=subject, html=html, from_address=from_addr, api_key=api_key)
+        out["daily"] = {"sent": True, "count": len(bookings), "date": str(target), "resend_id": result.get("id") if isinstance(result, dict) else str(result)}
+    except Exception as e:
+        out["daily"] = {"sent": False, "error": str(e)}
+
+    if weekly:
+        result_weekly = await asyncio.to_thread(send_weekly_summary_email)
+        out["weekly"] = result_weekly
+
+    return out
+
+
+@admin_router.get("/api/admin/debug-extras")
+async def debug_extras(
+    x_admin_key: str = Header(""),
+    nombre: Optional[str] = Query(None, description="Nombre del cliente (búsqueda parcial)"),
+    rid: Optional[int] = Query(None, description="ID de la reserva"),
+):
+    """Inspect raw extras_json for a booking and show how _parse_extras interprets it."""
+    _check_auth(x_admin_key)
+    from app.booking.signatures_email import _parse_extras
+
+    where = []
+    params = []
+    if rid:
+        where.append("id = %s")
+        params.append(rid)
+    elif nombre:
+        where.append("nombre_cliente ILIKE %s")
+        params.append(f"%{nombre}%")
+    else:
+        return {"error": "Provide nombre or rid"}
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""SELECT id, nombre_cliente, fecha, hora, extras_json, ingreso_extras, status
+                    FROM all_appointments
+                    WHERE {' AND '.join(where)}
+                    ORDER BY fecha DESC LIMIT 5""",
+                params,
+            )
+            cols = ["id","nombre_cliente","fecha","hora","extras_json","ingreso_extras","status"]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    result = []
+    for row in rows:
+        raw = row["extras_json"]
+        parsed = _parse_extras(raw)
+        result.append({
+            "id": row["id"],
+            "nombre": row["nombre_cliente"],
+            "fecha": str(row["fecha"]),
+            "hora": str(row["hora"] or ""),
+            "status": row["status"],
+            "ingreso_extras": row["ingreso_extras"],
+            "extras_json_raw": raw,
+            "extras_json_type": type(raw).__name__,
+            "parsed_extras": parsed,
+            "parsed_count": len(parsed),
+        })
+    return result
+
+
+@admin_router.post("/api/admin/test-prebooking-notif/{rid}")
+async def test_prebooking_notif(rid: int, x_admin_key: str = Header("")):
+    """Resend the 1-hour pre-booking notification for a specific booking (for testing)."""
+    _check_auth(x_admin_key)
+    import asyncio
+    from app.booking.signatures_email import send_pre_booking_notification
+    from app.booking.db import count_previous_bookings
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id,
+                       CASE WHEN COALESCE(source,'')='hotboat_web' AND COALESCE(TRIM(source_id),'')!=''
+                            THEN TRIM(source_id) ELSE 'MANUAL-'||id::text END AS booking_ref,
+                       nombre_cliente, telefono, email, fecha, hora,
+                       NULLIF(num_personas,'')::integer,
+                       ingreso_total, status,
+                       COALESCE(source,'manual'),
+                       COALESCE(customer_language,'es'),
+                       extras_json,
+                       COALESCE(ingreso_extras,0),
+                       observaciones
+                FROM all_appointments WHERE id = %s
+            """, (rid,))
+            row = cur.fetchone()
+
+    if not row:
+        return {"error": f"Booking {rid} not found"}
+
+    cols = ["id","booking_ref","customer_name","customer_phone","customer_email",
+            "booking_date","booking_time","num_people","total_price","status",
+            "source","customer_language","extras","extras_total","notes"]
+    booking = dict(zip(cols, row))
+    for k in ("booking_date","booking_time"):
+        if booking.get(k):
+            booking[k] = str(booking[k])
+
+    phone = booking.get("customer_phone","")
+    prev = await asyncio.to_thread(count_previous_bookings, phone, rid)
+    await asyncio.to_thread(send_pre_booking_notification, booking, prev)
+    return {"ok": True, "rid": rid, "nombre": booking["customer_name"], "extras_parsed": len(__import__('app.booking.signatures_email', fromlist=['_parse_extras'])._parse_extras(booking["extras"]))}

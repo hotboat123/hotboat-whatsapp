@@ -169,17 +169,74 @@ def send_booking_signature_summary(booking_ref: str, booking: dict, signatures: 
 
 
 def _parse_extras(raw: object) -> list:
-    """Parse extras JSON (list of {name, price, quantity}) safely."""
+    """Parse extras_json in all known formats → list of {name, price, quantity}."""
     import json as _json
     if not raw:
         return []
+
+    # Deserialize if still a string
+    if isinstance(raw, str):
+        try:
+            raw = _json.loads(raw)
+        except Exception:
+            return []
+
+    # Format 1: [{name, price, quantity}, ...]  (web bookings)
     if isinstance(raw, list):
-        return raw
-    try:
-        parsed = _json.loads(str(raw))
-        return parsed if isinstance(parsed, list) else []
-    except Exception:
-        return []
+        # envelope: [{extras:[...], price_per_person:N}]
+        if raw and isinstance(raw[0], dict) and "extras" in raw[0]:
+            inner = raw[0]["extras"]
+            if isinstance(inner, list):
+                raw = inner
+        return [e for e in raw if isinstance(e, dict)]
+
+    # Format 2: {extras: [...], price_per_person: N}  (envelope dict)
+    if isinstance(raw, dict) and "extras" in raw:
+        inner = raw["extras"]
+        if isinstance(inner, list):
+            raw = inner
+            return [e for e in raw if isinstance(e, dict)]
+
+    # Format 3: {key: qty_int}  or  {key: {qty, unit_price, name}}  (manual bookings)
+    if isinstance(raw, dict):
+        # Load extras_visibility catalog for name/price resolution
+        catalog = {}
+        try:
+            from app.db.connection import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT extra_name_lower,
+                               COALESCE(name, extra_name_lower),
+                               COALESCE(precio_venta, 0)
+                        FROM extras_visibility
+                    """)
+                    for key, name, price in cur.fetchall():
+                        catalog[key.lower()] = {"name": name, "price": price}
+        except Exception:
+            pass
+
+        result = []
+        for key, val in raw.items():
+            if isinstance(val, (int, float)):
+                qty = int(val)
+                unit_price = 0.0
+                stored_name = ""
+            elif isinstance(val, dict):
+                qty = int(val.get("qty") or val.get("nights") or val.get("cantidad") or 1)
+                unit_price = float(val.get("unit_price") or 0)
+                stored_name = str(val.get("name") or "").strip()
+            else:
+                continue
+            if qty <= 0:
+                continue
+            cat = catalog.get(key.lower(), {})
+            name = stored_name or cat.get("name") or key.replace("_", " ").title()
+            price = unit_price or cat.get("price") or 0
+            result.append({"name": name, "price": price, "quantity": qty})
+        return result
+
+    return []
 
 
 def send_pre_booking_notification(booking: dict, prev_bookings: int = 0) -> None:

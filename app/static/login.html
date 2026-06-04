@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kia-Ai — Iniciar sesión</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 2.5rem 2rem;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .logo h1 { font-size: 1.6rem; font-weight: 700; }
+        .logo p { font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem; }
+        .field { margin-bottom: 1.2rem; }
+        label { display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.4rem; }
+        input {
+            width: 100%;
+            padding: 0.65rem 0.9rem;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input:focus { border-color: #6366f1; }
+        .btn {
+            width: 100%;
+            padding: 0.7rem;
+            background: #6366f1;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+            margin-top: 0.4rem;
+        }
+        .btn:hover { background: #4f46e5; }
+        .error {
+            background: rgba(239,68,68,0.15);
+            border: 1px solid rgba(239,68,68,0.4);
+            color: #fca5a5;
+            border-radius: 8px;
+            padding: 0.6rem 0.9rem;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        .error.visible { display: block; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">
+            <h1>🤖 Kia-Ai</h1>
+            <p>WhatsApp Management Interface</p>
+        </div>
+        <div class="error" id="errorMsg">Usuario o contraseña incorrectos</div>
+        <form id="loginForm">
+            <div class="field">
+                <label>Usuario</label>
+                <input type="text" id="username" name="username" autocomplete="username" autofocus>
+            </div>
+            <div class="field">
+                <label>Contraseña</label>
+                <input type="password" id="password" name="password" autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn">Entrar</button>
+        </form>
+    </div>
+    <script>
+        // Check for error query param
+        if (new URLSearchParams(window.location.search).get('error')) {
+            document.getElementById('errorMsg').classList.add('visible');
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const next = new URLSearchParams(window.location.search).get('next') || '/';
+
+            const resp = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, next }),
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                window.location.href = data.redirect || '/';
+            } else {
+                document.getElementById('errorMsg').classList.add('visible');
+            }
+        });
+    </script>
+</body>
+</html>

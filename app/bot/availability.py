@@ -5,7 +5,7 @@ import logging
 import re
 from datetime import datetime, timedelta, time
 from typing import Optional, List, Dict, Tuple
-import pytz
+from zoneinfo import ZoneInfo
 
 from app.db.queries import get_booked_slots, check_slot_availability
 from app.availability.availability_config import (
@@ -15,8 +15,8 @@ from app.availability.availability_config import (
 
 logger = logging.getLogger(__name__)
 
-# Timezone for Chile
-CHILE_TZ = pytz.timezone('America/Santiago')
+# Timezone for Chile (same as app.db.queries — use ZoneInfo for booked-slot overlap)
+CHILE_TZ = ZoneInfo("America/Santiago")
 
 # Spanish month names
 SPANISH_MONTHS = {
@@ -77,11 +77,11 @@ class AvailabilityChecker:
             """Create a tz-aware date for the requested year, rolling to next year only if the day is before today (ignore time)."""
             try:
                 parsed_date_naive = datetime(current_year, month, day, 0, 0, 0)
-                parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                parsed_date = parsed_date_naive.replace(tzinfo=CHILE_TZ)
                 # Only move to next year if the whole calendar day is in the past, not just the time.
                 if parsed_date.date() < now.date():
                     parsed_date_naive = datetime(current_year + 1, month, day, 0, 0, 0)
-                    parsed_date = CHILE_TZ.localize(parsed_date_naive)
+                    parsed_date = parsed_date_naive.replace(tzinfo=CHILE_TZ)
                 return parsed_date
             except ValueError:
                 return None
@@ -165,8 +165,7 @@ class AvailabilityChecker:
         hours = override_hours if override_hours is not None else self.config.operating_hours
         for hour in hours:
             dt_naive = datetime.combine(date_obj, time(hour, 0))
-            slot = CHILE_TZ.localize(dt_naive)
-            slots.append(slot)
+            slots.append(dt_naive.replace(tzinfo=CHILE_TZ))
         return slots
     
     async def get_available_slots(
@@ -218,59 +217,35 @@ class AvailabilityChecker:
                         'date': dt.date()
                     })
             
-            # Load vacation days and settings once
+            # Load vacation days + operating hours (urgency is handled separately in the
+            # web booking endpoint as a "ghost calendar" overlay; it must NOT affect
+            # real availability generation here).
+            vacation_dates: set = set()
+            db_operating_hours = None
             try:
                 from app.booking.operator_settings import (
-                    get_vacation_days, is_urgency_mode, apply_urgency_filter,
-                    get_operating_hours_as_ints, get_urgency_days,
+                    get_vacation_days,
+                    get_operating_hours_as_ints,
                 )
-                vacation_dates = {
-                    v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
-                }
-                global_urgency = is_urgency_mode()
-                db_operating_hours = get_operating_hours_as_ints()
-                # Build per-day urgency override map: {date_str: bool}
-                urgency_day_overrides = {
-                    v["date"]: v["enabled"]
-                    for v in get_urgency_days(start_date.date(), end_date.date())
-                }
-            except Exception as se:
-                logger.warning(f"Could not load operator settings: {se}")
-                vacation_dates = set()
-                global_urgency = False
-                db_operating_hours = None
-                urgency_day_overrides = {}
+            except Exception as ie:
+                logger.error("operator_settings import failed: %s", ie, exc_info=True)
+            else:
+                try:
+                    vacation_dates = {
+                        v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
+                    }
+                except Exception as e:
+                    logger.warning("get_vacation_days failed (continuing): %s", e, exc_info=True)
+                try:
+                    db_operating_hours = get_operating_hours_as_ints()
+                except Exception as e:
+                    logger.warning("get_operating_hours_as_ints failed (continuing): %s", e, exc_info=True)
 
-            # Determine effective urgency for each day (override wins over global)
-            def _day_urgency(date_str: str) -> bool:
-                if date_str in urgency_day_overrides:
-                    return urgency_day_overrides[date_str]
-                return global_urgency
+            # If settings failed to load, fall back to static config (hour ints)
+            if db_operating_hours is None:
+                db_operating_hours = list(self.config.operating_hours)
 
-            # Pre-compute urgency hour expansion for days that need it
-            any_urgency = global_urgency or any(v for v in urgency_day_overrides.values())
-            booked_times_by_day: dict = {}
-            hours_urgency_expanded: list = db_operating_hours  # fallback
-            if any_urgency and db_operating_hours:
-                from app.booking.operator_settings import get_urgency_config
-                _gap = int(get_urgency_config().get("gap_hours", 3))
-                _min_h = max(8,  min(db_operating_hours) - _gap)
-                _max_h = min(22, max(db_operating_hours) + _gap)
-                hours_urgency_expanded = list(range(_min_h, _max_h + 1))
-                # Track booked times per day (only needed for urgency filtering)
-                for slot in booked_slots:
-                    if slot.get("starts_at"):
-                        try:
-                            dt = slot["starts_at"]
-                            if isinstance(dt, str):
-                                dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
-                            dk = str(dt.date())
-                            t = dt.strftime("%H:%M")
-                            booked_times_by_day.setdefault(dk, []).append(t)
-                        except Exception:
-                            pass
-
-            # Group raw available slots by date (before urgency filter)
+            # Group raw available slots by date
             by_date: dict = {}
             current_date = start_date.date()
             end_date_only = end_date.date()
@@ -281,9 +256,9 @@ class AvailabilityChecker:
                     current_date += timedelta(days=1)
                     continue
 
-                # Use expanded hour range only for days with urgency active
-                dk_str = str(current_date)
-                hours_to_generate = hours_urgency_expanded if _day_urgency(dk_str) else db_operating_hours
+                hours_to_generate = db_operating_hours
+                if not hours_to_generate:
+                    hours_to_generate = list(self.config.operating_hours)
 
                 date_slots = self._generate_time_slots_for_date(
                     datetime.combine(current_date, time(0, 0)),
@@ -301,7 +276,7 @@ class AvailabilityChecker:
                     slot_end_with_buffer = slot_end + timedelta(hours=self.config.buffer_hours)
                     
                     # Check if slot overlaps with any booked appointment (in-memory, fast)
-                    # get_booked_slots already loaded both booknetic + hotboat_appointments,
+                    # get_booked_slots already loaded booked rows from all_appointments,
                     # so no need for a second per-slot DB query (check_slot_availability).
                     overlaps = False
                     for booked_range in booked_ranges:
@@ -324,16 +299,6 @@ class AvailabilityChecker:
                         by_date.setdefault(dk, []).append(slot_info)
                 
                 current_date += timedelta(days=1)
-
-            # Apply urgency filter per day (global or per-day override)
-            if any_urgency:
-                for dk, day_slots in by_date.items():
-                    if not _day_urgency(dk):
-                        continue
-                    times = [s["time"] for s in day_slots]
-                    booked = booked_times_by_day.get(dk, [])
-                    allowed = set(apply_urgency_filter(times, booked))
-                    by_date[dk] = [s for s in day_slots if s["time"] in allowed]
 
             # Flatten back to list
             available_slots = [s for day_slots in by_date.values() for s in day_slots]
@@ -559,11 +524,3 @@ class AvailabilityChecker:
             import traceback
             traceback.print_exc()
             return "Disculpa, tuve un problema consultando la disponibilidad. Te responderé en un momento. Gracias por tu paciencia 🙏"
-
-
-
-
-
-
-
-

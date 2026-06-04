@@ -15,6 +15,7 @@ from app.booking.content_router import content_router
 from app.booking.signatures_router import signatures_router
 from app.booking.stock_router import stock_router
 from app.booking.financial_router import financial_router
+from app.booking.bot_config_router import bot_config_router, _ensure_tables as _ensure_bot_tables, seed_defaults as seed_bot_defaults
 from app.meta_pixel import apply_meta_pixel_placeholder, is_meta_pixel_enabled
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
@@ -81,6 +82,41 @@ else:
     else:
         logger.info(msg)
 
+# ── Session auth ──────────────────────────────────────────────────────────────
+import hmac as _hmac, hashlib as _hashlib, secrets as _secrets, time as _time
+
+_SESSION_SECRET: str = ""
+
+def _get_secret() -> str:
+    global _SESSION_SECRET
+    if not _SESSION_SECRET:
+        _SESSION_SECRET = settings.session_secret or _secrets.token_hex(32)
+    return _SESSION_SECRET
+
+def _make_session_token(username: str) -> str:
+    ts = str(int(_time.time()))
+    payload = f"{username}:{ts}"
+    sig = _hmac.new(_get_secret().encode(), payload.encode(), _hashlib.sha256).hexdigest()
+    return f"{payload}:{sig}"
+
+def _verify_session_token(token: str) -> bool:
+    try:
+        parts = token.rsplit(":", 1)
+        if len(parts) != 2:
+            return False
+        payload, sig = parts
+        expected = _hmac.new(_get_secret().encode(), payload.encode(), _hashlib.sha256).hexdigest()
+        return _hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
+
+def _get_auth_cookie(request: Request) -> str | None:
+    return request.cookies.get("kia_auth")
+
+def _is_authenticated(request: Request) -> bool:
+    token = _get_auth_cookie(request)
+    return bool(token and _verify_session_token(token))
+
 # ── Auto-sync background task ──────────────────────────────────────────────────
 SYNC_INTERVAL_MINUTES = 30
 
@@ -106,7 +142,6 @@ async def _run_auto_sync():
 
             inserted_reservas = 0
             updated_reservas = 0
-            inserted_hb = 0
             status_updated = 0
 
             with get_connection() as conn:
@@ -206,53 +241,18 @@ async def _run_auto_sync():
                     """)
                     dedup_deleted = cur.rowcount
 
-                    # Sync hotboat_web — exclude cancelled/rejected so deleted bookings stay deleted
-                    cur.execute("""
-                        SELECT booking_ref, customer_name, customer_email, customer_phone,
-                               booking_date, booking_time, num_people,
-                               subtotal, extras_total, total_price, extras, status,
-                               payment_id, payment_status, notes, created_at
-                        FROM hotboat_appointments
-                        WHERE booking_date IS NOT NULL
-                          AND booking_date >= (CURRENT_DATE - INTERVAL '3 years')
-                          AND booking_date <= (CURRENT_DATE + INTERVAL '3 years')
-                          AND status NOT IN ('solicitud', 'cancelled', 'rejected', 'cancelada', 'rechazada')
-                    """)
-                    for row in cur.fetchall():
-                        (ref, nombre, email, phone, fecha, hora, num_p,
-                         sub, ext, total, extras, status, pay_id, pay_st, notes, created) = row
-                        cur.execute(f"SELECT id, status FROM {TABLE} WHERE source='hotboat_web' AND source_id=%s", (ref,))
-                        existing = cur.fetchone()
-                        if existing:
-                            if status and status != existing[1]:
-                                cur.execute(f"UPDATE {TABLE} SET status=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
-                                            (status, pay_st, existing[0]))
-                                status_updated += 1
-                        else:
-                            cur.execute(f"""
-                                INSERT INTO {TABLE}
-                                (source,source_id,fecha,hora,nombre_cliente,email,telefono,
-                                 servicio,num_personas,ingreso_reserva,ingreso_extras,ingreso_total,
-                                 status,extras_json,observaciones,payment_id,payment_status,created_at)
-                                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-                                ON CONFLICT DO NOTHING
-                            """, (ref, fecha, hora, nombre, email, normalize_phone(phone),
-                                  f"HotBoat Web ({num_p}p)", str(num_p),
-                                  float(sub or 0), float(ext or 0), float(total or 0),
-                                  status, PgJson(extras or {}), notes, pay_id, pay_st))
-                            inserted_hb += 1
-
                     conn.commit()
 
-            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), +{inserted_hb} web, {status_updated} estados")
+            logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), {status_updated} estados")
 
             # Clean up stale pending_payment web bookings (older than 45 min)
             try:
                 with get_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-                            DELETE FROM hotboat_appointments
-                            WHERE status = 'pending_payment'
+                            DELETE FROM all_appointments
+                            WHERE source = 'hotboat_web'
+                              AND status = 'pending_payment'
                               AND created_at < NOW() - INTERVAL '45 minutes'
                         """)
                         deleted = cur.rowcount
@@ -364,6 +364,57 @@ async def _run_pre_booking_notif_scheduler():
         await asyncio.sleep(POLL_SECONDS)
 
 
+async def _run_yesterday_weekly_scheduler():
+    """Every morning at 09:00 Santiago: send yesterday's bookings summary.
+    On Mondays also send the weekly summary."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    SEND_HOUR = 9  # 09:00 Santiago
+
+    while True:
+        now = datetime.now(CHILE_TZ)
+        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_secs = (target - now).total_seconds()
+        logger.info("📬 Yesterday/weekly notif scheduled in %.0f min (at %s Santiago)", wait_secs / 60, target.strftime("%H:%M %d/%m"))
+        await asyncio.sleep(wait_secs)
+        try:
+            from app.booking.booking_email import send_yesterday_summary_email, send_weekly_summary_email
+            today = datetime.now(CHILE_TZ)
+            result_daily = await asyncio.to_thread(send_yesterday_summary_email)
+            logger.info("📬 Yesterday summary: %s", result_daily)
+            if today.weekday() == 0:  # Monday
+                result_weekly = await asyncio.to_thread(send_weekly_summary_email)
+                logger.info("📆 Weekly summary: %s", result_weekly)
+        except Exception as _e:
+            logger.error("Yesterday/weekly summary scheduler error: %s", _e)
+        await asyncio.sleep(60)
+
+
+def _ensure_web_push_table():
+    """Create web_push_subscriptions table if it doesn't exist."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+                        id           SERIAL PRIMARY KEY,
+                        endpoint     TEXT UNIQUE NOT NULL,
+                        p256dh       TEXT NOT NULL,
+                        auth         TEXT NOT NULL,
+                        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                conn.commit()
+        logger.info("✅ web_push_subscriptions table ready")
+    except Exception as e:
+        logger.warning(f"web_push_subscriptions table setup failed: {e}")
+
+
 def _ensure_extras_visibility_table():
     """Create extras_visibility table if it doesn't exist (survives Sheets re-sync)."""
     try:
@@ -398,10 +449,57 @@ def _ensure_extras_visibility_table():
         logger.error(f"extras_visibility table init error: {e}")
 
 
+_EXTRAS_SEED = [
+    # (extra_name_lower, display_name, precio_venta, costo, icon, sort_order)
+    ("tabla_4_personas",  "Tabla de Picoteo Grande (4 personas)",     25000,  0, "🍇",  1),
+    ("tabla_2_personas",  "Tabla de Picoteo Pequeña (2 personas)",    20000,  0, "🍇",  2),
+    ("jugo_natural",      "Jugo Natural 1L (piña o naranja)",         10000,  0, "🥤",  3),
+    ("lata_bebida",       "Lata Bebida (Coca-Cola o Fanta)",           2900,  0, "🥤",  4),
+    ("agua_mineral",      "Agua Mineral 1.5L",                         2500,  0, "💧",  5),
+    ("helado",            "Helado Individual",                          3500,  0, "🍦",  6),
+    ("modo_romantico",    "Modo Romántico (pétalos + decoración)",    25000,  0, "🌹",  7),
+    ("velas_led",         "Velas LED Decorativas",                    10000,  0, "🕯️",  8),
+    ("letras_luminosas",  "Letras Luminosas 'Te Amo' / 'Love'",       15000,  0, "✨",  9),
+    ("pack_velas_letras", "Pack Nocturno Completo (velas + letras)",  20000,  0, "🌙", 10),
+    ("video_15_seg",      "Video Personalizado 15s",                  30000,  0, "🎥", 11),
+    ("video_1_min",       "Video Personalizado 60s",                  40000,  0, "🎥", 12),
+    ("transporte",        "Transporte Ida y Vuelta desde Pucón",      50000,  0, "🚐", 13),
+    ("toalla_normal",     "Toalla Normal",                             9000,  0, "🧻", 14),
+    ("toalla_poncho",     "Toalla Poncho",                            10000,  0, "🧻", 15),
+    ("chalas",            "Chalas de Ducha",                          10000,  0, "🩴", 16),
+    ("reserva_flex",      "Reserva FLEX (+10%)",                          0,  0, "🔄", 17),
+]
+
+
+def _seed_extras_visibility():
+    """Populate extras_visibility with the canonical catalog if still empty."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM extras_visibility")
+                if cur.fetchone()[0] > 0:
+                    return  # already seeded
+                for (key, name, price, cost, icon, sort) in _EXTRAS_SEED:
+                    cur.execute("""
+                        INSERT INTO extras_visibility
+                            (extra_name_lower, name, precio_venta, costo, icon,
+                             sort_order, show_in_booking)
+                        VALUES (%s, %s, %s, %s, %s, %s, TRUE)
+                        ON CONFLICT DO NOTHING
+                    """, (key, name, price, cost, icon, sort))
+                conn.commit()
+        logger.info("✅ extras_visibility seeded with %d items", len(_EXTRAS_SEED))
+    except Exception as e:
+        logger.warning("extras_visibility seed failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
+    _ensure_web_push_table()
     _ensure_extras_visibility_table()
+    _seed_extras_visibility()
     try:
         from app.bot.cart import CartManager
         CartManager.refresh_prices_from_db()
@@ -430,6 +528,11 @@ async def lifespan(app: FastAPI):
         ensure_signatures_table()
     except Exception as _e:
         logger.warning(f"ensure_signatures_table skipped: {_e}")
+    try:
+        _ensure_bot_tables()
+        seed_bot_defaults()
+    except Exception as _e:
+        logger.warning(f"bot config setup skipped: {_e}")
 
     sync_task       = asyncio.create_task(_run_auto_sync())
     email_task      = asyncio.create_task(_run_email_sweeps_scheduler())
@@ -437,14 +540,16 @@ async def lifespan(app: FastAPI):
     daily_task      = asyncio.create_task(_run_daily_summary_scheduler())
     sig_task        = asyncio.create_task(_run_signature_summary_scheduler())
     prebooking_task = asyncio.create_task(_run_pre_booking_notif_scheduler())
+    notif_task      = asyncio.create_task(_run_yesterday_weekly_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
     logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
     logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
     logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
     logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
     logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
+    logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
     yield
-    for task in (sync_task, email_task, pending_task, daily_task, sig_task, prebooking_task):
+    for task in (sync_task, email_task, pending_task, daily_task, sig_task, prebooking_task, notif_task):
         task.cancel()
         try:
             await task
@@ -494,13 +599,61 @@ app.include_router(content_router)
 app.include_router(signatures_router)
 app.include_router(stock_router)
 app.include_router(financial_router)
+app.include_router(bot_config_router)
 
+
+def _serve_chat_html() -> HTMLResponse:
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    index_path = os.path.join(static_dir, "index.html")
+    with open(index_path, "r", encoding="utf-8") as f:
+        body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
+    return HTMLResponse(content=body)
+
+def _serve_login_html(next_url: str = "/") -> HTMLResponse:
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=f"/login?next={next_url}", status_code=302)
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    login_path = os.path.join(static_dir, "login.html")
+    with open(login_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+    next: str = "/"
+
+@app.post("/api/auth/login")
+async def auth_login(req: LoginRequest):
+    if req.username == settings.chat_username and req.password == settings.chat_password:
+        token = _make_session_token(req.username)
+        redirect = req.next if req.next.startswith("/") else "/"
+        response = JSONResponse({"redirect": redirect})
+        response.set_cookie(
+            key="kia_auth",
+            value=token,
+            max_age=60 * 60 * 24 * 30,  # 30 days
+            httponly=True,
+            samesite="lax",
+            secure=settings.is_production,
+        )
+        return response
+    raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+
+@app.get("/logout")
+async def logout():
+    from fastapi.responses import RedirectResponse
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie("kia_auth")
+    return response
 
 @app.get("/", response_class=HTMLResponse)
-async def root():
-    """Redirect root to booking page"""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/booking", status_code=302)
+async def root(request: Request):
+    if not _is_authenticated(request):
+        return _serve_login_html("/")
+    return _serve_chat_html()
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_redirect():
@@ -509,38 +662,11 @@ async def admin_redirect():
     return RedirectResponse(url="/admin/reservas", status_code=302)
 
 @app.get("/chat", response_class=HTMLResponse)
-async def chat_ui():
+async def chat_ui(request: Request):
     """Serve Kia-Ai chat interface"""
-    try:
-        static_dir = os.path.join(os.path.dirname(__file__), "static")
-        index_path = os.path.join(static_dir, "index.html")
-        
-        if os.path.exists(index_path):
-            logger.info(f"🖥️ Serving Kia-Ai interface from {index_path}")
-            with open(index_path, 'r', encoding='utf-8') as f:
-                body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
-                return HTMLResponse(content=body)
-        else:
-            logger.warning("⚠️ Kia-Ai interface not found, returning default health response.")
-            environment_status = "🚀 PRODUCTION" if settings.is_production else "🧪 STAGING" if settings.is_staging else "💻 DEVELOPMENT"
-            return {
-                "status": "ok",
-                "service": "HotBoat WhatsApp Bot",
-                "version": "1.0.0",
-                "environment": settings.environment,
-                "environment_status": environment_status,
-                "note": "Kia-Ai interface not found. API is working."
-            }
-    except Exception as e:
-        logger.error(f"Error serving index: {e}")
-        environment_status = "🚀 PRODUCTION" if settings.is_production else "🧪 STAGING" if settings.is_staging else "💻 DEVELOPMENT"
-        return {
-            "status": "ok",
-            "service": "HotBoat WhatsApp Bot",
-            "version": "1.0.0",
-            "environment": settings.environment,
-            "environment_status": environment_status
-        }
+    if not _is_authenticated(request):
+        return _serve_login_html("/chat")
+    return _serve_chat_html()
 
 
 @app.get("/pagar", response_class=HTMLResponse)
@@ -592,6 +718,119 @@ async def pago_order_proxy(order_id: int):
     except Exception as e:
         logger.warning(f"pago_order_proxy error for order {order_id}: {e}")
         return {}
+
+
+@app.get("/sw.js")
+async def serve_service_worker():
+    """Serve service worker at root scope for full-app push notification support."""
+    from fastapi.responses import FileResponse
+    sw_path = os.path.join(os.path.dirname(__file__), "static", "sw.js")
+    return FileResponse(sw_path, media_type="application/javascript", headers={
+        "Service-Worker-Allowed": "/",
+        "Cache-Control": "no-cache",
+    })
+
+
+@app.get("/manifest.json")
+async def serve_manifest():
+    """Serve PWA manifest at root."""
+    from fastapi.responses import FileResponse
+    manifest_path = os.path.join(os.path.dirname(__file__), "static", "manifest.json")
+    return FileResponse(manifest_path, media_type="application/manifest+json")
+
+
+class PushSubscribeRequest(BaseModel):
+    endpoint: str
+    keys: dict  # { p256dh: str, auth: str }
+
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(request: PushSubscribeRequest):
+    """Register a Web Push subscription."""
+    from app.notifications import push_notifier
+    logger.info("📲 Push subscribe request — endpoint: %s...", request.endpoint[:60])
+    ok = await push_notifier.register_subscription(
+        endpoint=request.endpoint,
+        p256dh=request.keys.get("p256dh", ""),
+        auth=request.keys.get("auth", ""),
+    )
+    logger.info("📲 Push subscribe result: %s", "OK" if ok else "FAILED")
+    return {"status": "ok" if ok else "error"}
+
+
+@app.delete("/api/push/subscribe")
+async def push_unsubscribe(request: Request):
+    """Remove a Web Push subscription."""
+    from app.notifications import push_notifier
+    data = await request.json()
+    ok = await push_notifier.unregister_subscription(data.get("endpoint", ""))
+    return {"status": "ok" if ok else "error"}
+
+
+@app.get("/api/push/vapid-public-key")
+async def get_vapid_public_key():
+    """Return the VAPID public key so the frontend can subscribe."""
+    return {"publicKey": settings.vapid_public_key or ""}
+
+
+@app.get("/api/push/test")
+@app.post("/api/push/test")
+async def push_test():
+    """Send a test push notification — GET or POST for easy browser testing."""
+    from app.notifications import push_notifier as _pn
+    subs = await _pn._get_subscriptions()
+    if not subs:
+        return {"sent": False, "subscriptions": 0, "error": "No subscriptions registered"}
+    errors = []
+    sent = 0
+    from app.notifications.push_notifier import _send_web_push_sync_verbose
+    for sub in subs:
+        try:
+            def _try_send(s=sub):
+                return _send_web_push_sync_verbose(
+                    s,
+                    {"title": "🔔 Notificación de prueba", "body": "Si ves esto, ¡funcionan! ✅", "phone": None},
+                    _pn._private_key,
+                )
+            ok = await asyncio.to_thread(_try_send)
+            if ok:
+                sent += 1
+        except Exception as e:
+            errors.append({"endpoint": sub.get("endpoint", "")[:50], "error": str(e)})
+    return {"sent": sent > 0, "subscriptions": len(subs), "sent_count": sent, "errors": errors}
+
+
+@app.get("/api/push/debug")
+async def push_debug():
+    """Diagnose Web Push configuration."""
+    # Check pywebpush
+    try:
+        import pywebpush  # noqa
+        pw_ok = True
+        pw_version = getattr(pywebpush, "__version__", "installed")
+    except ImportError as e:
+        pw_ok = False
+        pw_version = str(e)
+
+    # Check subscriptions
+    try:
+        from app.notifications import push_notifier as _pn
+        subs = await _pn._get_subscriptions()
+        sub_count = len(subs)
+        sub_sample = subs[0]["endpoint"][:60] + "..." if subs else None
+    except Exception as e:
+        sub_count = -1
+        sub_sample = str(e)
+
+    return {
+        "vapid_private_key_set": bool(settings.vapid_private_key),
+        "vapid_public_key_set": bool(settings.vapid_public_key),
+        "pywebpush_installed": pw_ok,
+        "pywebpush_version": pw_version,
+        "subscriptions_count": sub_count,
+        "subscription_endpoint_sample": sub_sample,
+        "notifier_enabled": bool(settings.vapid_private_key),
+    }
 
 
 @app.get("/health")
@@ -839,8 +1078,49 @@ async def update_conversation_priority(phone_number: str, update: PriorityUpdate
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _get_bot_response_content(response_key: str, lang: str = "es") -> Optional[str]:
+    """Return bot response content from DB for the given key and language, or None if not set."""
+    try:
+        from app.db.connection import get_connection
+        col = {"es": "content_es", "en": "content_en", "pt": "content_pt"}.get(lang, "content_es")
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT {col}, content_es FROM bot_responses WHERE response_key = %s", (response_key,))
+                row = cur.fetchone()
+        if row:
+            return row[0] or row[1]  # fallback to es if requested lang is empty
+    except Exception:
+        pass
+    return None
+
+
 class QuickReplyRequest(BaseModel):
-    menu_option: int  # 1-5 for menu options
+    menu_option: int
+    translate_to: Optional[str] = None  # "en", "pt", "fr" or None
+
+
+def _translate_text(text: str, target_lang: str) -> str:
+    """Translate text using Groq LLM (synchronous helper for quick-reply flow)."""
+    lang_names = {"en": "English", "pt": "Portuguese (Brazilian)", "fr": "French", "es": "Spanish"}
+    lang_name = lang_names.get(target_lang)
+    if not lang_name:
+        return text
+    try:
+        from openai import OpenAI as _OAI
+        client = _OAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1")
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": f"You are a translator. Translate the user's message to {lang_name}. Return ONLY the translated text, no explanations, no quotes."},
+                {"role": "user", "content": text},
+            ],
+            max_tokens=1024,
+            temperature=0.1,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        logger.warning(f"Translation error (falling back to original): {e}")
+        return text
 
 
 @app.post("/api/conversations/{phone_number}/quick-reply")
@@ -861,14 +1141,24 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         # Get or create conversation with the correct customer name
         conversation = await conv_manager.get_conversation(phone_number, customer_name)
         language = conversation.get("metadata", {}).get("language", "es")
-        
+
         # Determine response based on menu option
         response_text = ""
         menu_option = request.menu_option
+        tgt_lang = (request.translate_to or "").strip().lower() or None
+
+        async def _send(msg: str) -> None:
+            """Translate (if requested) then send a WhatsApp text message."""
+            out = await asyncio.to_thread(_translate_text, msg, tgt_lang) if tgt_lang else msg
+            await whatsapp_client.send_text_message(to=phone_number, message=out)
+            await save_conversation(phone_number=phone_number, customer_name=customer_name,
+                                    message_text="", response_text=out,
+                                    message_type="text", direction="outgoing")
+            conversation["messages"].append({"role": "assistant", "content": out,
+                                             "timestamp": datetime.now(CHILE_TZ).isoformat()})
 
         if menu_option == 0:
             # Saludo de Tomás — secuencia de 4 mensajes con pequeño delay entre cada uno
-            import asyncio
             first_name = customer_name.split()[0] if customer_name else customer_name
             sequence = [
                 f"Hola {first_name}! 👋",
@@ -879,47 +1169,30 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             for i, msg in enumerate(sequence):
                 if i > 0:
                     await asyncio.sleep(1.5)
-                await whatsapp_client.send_text_message(to=phone_number, message=msg)
-                await save_conversation(
-                    phone_number=phone_number,
-                    customer_name=customer_name,
-                    message_text="",
-                    response_text=msg,
-                    message_type="text",
-                    direction="outgoing"
-                )
-                conversation["messages"].append({
-                    "role": "assistant",
-                    "content": msg,
-                    "timestamp": datetime.now(CHILE_TZ).isoformat()
-                })
+                await _send(msg)
             conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
-            return {
-                "status": "success",
-                "phone_number": phone_number,
-                "menu_option": menu_option,
-                "message_sent": f"Secuencia de {len(sequence)} mensajes enviada",
-                "whatsapp_response": {}
-            }
+            return {"status": "success", "phone_number": phone_number,
+                    "menu_option": menu_option,
+                    "message_sent": f"Secuencia de {len(sequence)} mensajes enviada",
+                    "whatsapp_response": {}}
         elif menu_option == 1:
             # Disponibilidad y horarios
             response_text = conv_manager._ask_for_reservation_date(conversation, language)
         elif menu_option == 2:
             # Precios por persona
-            response_text = faq_handler.get_response("precio", language)
+            response_text = _get_bot_response_content("precio", language) or faq_handler.get_response("precio", language)
         elif menu_option == 3:
             # Características del HotBoat
-            response_text = faq_handler.get_response("caracteristicas", language)
+            response_text = _get_bot_response_content("caracteristicas", language) or faq_handler.get_response("caracteristicas", language)
         elif menu_option == 4:
             # Extras y promociones
             conversation["metadata"]["awaiting_extra_selection"] = True
             response_text = faq_handler.get_response("extras", language)
         elif menu_option == 5:
             # Ubicación y reseñas
-            response_text = faq_handler.get_response("ubicación", language)
+            response_text = _get_bot_response_content("ubicación", language) or faq_handler.get_response("ubicación", language)
         elif menu_option == 6:
             # Alojamientos — equivale al flujo menú 6
-            import asyncio
             from app.utils.media_handler import get_alojamientos_images
             text_intro = get_text("accommodations_only_intro", language)
             await whatsapp_client.send_text_message(to=phone_number, message=text_intro)
@@ -960,7 +1233,7 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             }
         elif menu_option == 8:
             # Packs Completos — equivale al flujo menú 7 → 1
-            import asyncio, os
+            import os
             from app.utils.media_handler import PACKS_IMAGES_DIR
             pack_text = get_text("complete_packages_menu", language)
             resumen_path = os.path.join(PACKS_IMAGES_DIR, "resumen-packs.jpg")
@@ -1004,86 +1277,80 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 "message_sent": "Packs Completos: imagen + texto enviados",
                 "whatsapp_response": {}
             }
-        elif menu_option == 9:
-            # Solo alojamientos — equivale al flujo menú 7 → 2
-            import asyncio
-            from app.utils.media_handler import get_alojamientos_images
-            text_intro = get_text("accommodations_only_intro", language)
-            # Send text intro
-            await whatsapp_client.send_text_message(to=phone_number, message=text_intro)
-            await save_conversation(
-                phone_number=phone_number,
-                customer_name=customer_name,
-                message_text="",
-                response_text=text_intro,
-                message_type="text",
-                direction="outgoing"
+        elif menu_option == 10:
+            # Bebestibles — opciones para celebrar (solo adultos)
+            response_text = _get_bot_response_content("bebestibles", language) or (
+                "🍷 *Opciones para celebrar* (solo adultos)\n\n"
+                "$6.000 → Cerveza artesanal 330ml\n"
+                "$15.000 → Vino reserva\n"
+                "$26.000 → Champaña Riccadonna\n"
+                "$20.000 → Pack de 4 cervezas artesanales"
             )
-            conversation["messages"].append({
-                "role": "assistant",
-                "content": text_intro,
-                "timestamp": datetime.now(CHILE_TZ).isoformat()
-            })
-            # Send accommodation images
-            image_paths = get_alojamientos_images()
-            for idx, image_path in enumerate(image_paths, 1):
-                try:
-                    media_id_img = await whatsapp_client.upload_media(image_path, mime_type="image/jpeg")
-                    if media_id_img:
-                        caption = "📄 Información completa de alojamientos" if idx == 1 else None
-                        await whatsapp_client.send_image_message(
-                            to=phone_number,
-                            media_id=media_id_img,
-                            caption=caption
-                        )
-                        await asyncio.sleep(0.5)
-                except Exception as img_err:
-                    logger.warning(f"Could not send alojamiento image {idx}: {img_err}")
-            # Set accommodation_flow so the bot continues the flow when user replies
-            conversation["metadata"]["accommodation_flow"] = {
-                "step": "choosing_property",
-                "property": None,
-                "room_type": None,
-                "guests": None,
-                "checkin_date": None,
-                "checkout_date": None,
-            }
-            # Clear any conflicting flows
-            for key in ("awaiting_packages_submenu", "experience_flow", "complete_packages_flow", "build_package_flow"):
-                conversation["metadata"].pop(key, None)
+        elif menu_option == 9:
+            # Solo alojamientos — link directo a página de reservas
+            response_text = (
+                "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n"
+                "👉 https://whatsapp.hotboat.cl/booking\n\n"
+                "¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
+            )
+        elif menu_option == 11:
+            # Traer comida o pedir aquí
+            _db_comida = _get_bot_response_content("comida", language)
+            sequence = [p.strip() for p in _db_comida.split("\n---\n")] if _db_comida else [
+                "Pueden traer lo que quieran para comer o tomar 🍕🥗",
+                "o pueden pedir aquí 🙂",
+            ]
+            for i, msg in enumerate(sequence):
+                if i > 0:
+                    await asyncio.sleep(1.5)
+                await _send(msg)
             conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
-            return {
-                "status": "success",
-                "phone_number": phone_number,
-                "menu_option": menu_option,
-                "message_sent": f"Alojamientos: texto + {len(image_paths)} imágenes enviadas",
-                "whatsapp_response": {}
-            }
+            return {"status": "success", "phone_number": phone_number,
+                    "menu_option": menu_option, "message_sent": f"{len(sequence)} mensajes enviados",
+                    "whatsapp_response": {}}
+        elif menu_option == 12:
+            # Lluvia
+            _db_lluvia = _get_bot_response_content("lluvia", language)
+            sequence = [p.strip() for p in _db_lluvia.split("\n---\n")] if _db_lluvia else [
+                "Con lluvia la experiencia es aún mejor ☔🔥",
+                "¡El HotBoat es una tina de agua caliente! La lluvia se siente increíble desde adentro 🌧️🛁",
+                "Te pasamos sombreros para que no te llegue el agua en la cara todo el tiempo 🎩😄",
+            ]
+            for i, msg in enumerate(sequence):
+                if i > 0:
+                    await asyncio.sleep(1.5)
+                await _send(msg)
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {"status": "success", "phone_number": phone_number,
+                    "menu_option": menu_option, "message_sent": f"{len(sequence)} mensajes enviados",
+                    "whatsapp_response": {}}
+        elif menu_option == 13:
+            # Niños
+            _db_ninos = _get_bot_response_content("niños", language)
+            sequence = [p.strip() for p in _db_ninos.split("\n---\n")] if _db_ninos else [
+                "Sí!, los niños lo pasan increíble 🎉",
+                "Pagan desde los 6 años, a los menores no los consideres en el número de personas de la reserva 👍",
+            ]
+            for i, msg in enumerate(sequence):
+                if i > 0:
+                    await asyncio.sleep(1.5)
+                await _send(msg)
+            conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+            return {"status": "success", "phone_number": phone_number,
+                    "menu_option": menu_option, "message_sent": f"{len(sequence)} mensajes enviados",
+                    "whatsapp_response": {}}
         else:
-            raise HTTPException(status_code=400, detail="Invalid menu option (must be 0-9)")
+            raise HTTPException(status_code=400, detail="Invalid menu option")
         
-        # Send message via WhatsApp
-        result = await whatsapp_client.send_text_message(
-            to=phone_number,
-            message=response_text
-        )
-        
-        # Save to database
-        await save_conversation(
-            phone_number=phone_number,
-            customer_name=customer_name,
-            message_text="",  # No incoming message, this is an outgoing response
-            response_text=response_text,
-            message_type="text",
-            direction="outgoing"
-        )
-        
-        # Add to conversation history (in-memory)
-        conversation["messages"].append({
-            "role": "assistant",
-            "content": response_text,
-            "timestamp": datetime.now(CHILE_TZ).isoformat()
-        })
+        # Translate if requested, then send
+        if tgt_lang:
+            response_text = await asyncio.to_thread(_translate_text, response_text, tgt_lang)
+        result = await whatsapp_client.send_text_message(to=phone_number, message=response_text)
+        await save_conversation(phone_number=phone_number, customer_name=customer_name,
+                                message_text="", response_text=response_text,
+                                message_type="text", direction="outgoing")
+        conversation["messages"].append({"role": "assistant", "content": response_text,
+                                         "timestamp": datetime.now(CHILE_TZ).isoformat()})
         
         # Update last interaction
         conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
@@ -1426,6 +1693,27 @@ async def get_conversation_detail(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class TranslateRequest(BaseModel):
+    text: str
+    target_lang: str  # "en", "pt", "fr"
+
+
+@app.post("/api/translate")
+async def translate_message(request: TranslateRequest):
+    """Translate text using Groq LLM."""
+    lang_names = {
+        "en": "English",
+        "pt": "Portuguese (Brazilian)",
+        "fr": "French",
+        "es": "Spanish",
+    }
+    lang_name = lang_names.get(request.target_lang)
+    if not lang_name:
+        raise HTTPException(status_code=400, detail="target_lang must be en, pt, fr or es")
+    translated = await asyncio.to_thread(_translate_text, request.text, request.target_lang)
+    return {"translated": translated, "target_lang": request.target_lang}
+
+
 class SendMessageRequest(BaseModel):
     to: str  # Phone number with country code (no +)
     message: Optional[str] = None
@@ -1710,6 +1998,29 @@ async def upload_and_send_image(
         raise HTTPException(status_code=500, detail=f"Failed to send image: {str(e)}")
 
 
+def _convert_to_whatsapp_audio(input_path: str, output_path: str) -> bool:
+    """Convert any browser audio (webm/mp4/etc) to AAC/M4A for WhatsApp delivery.
+    AAC in MP4 container is universally supported by WhatsApp on all devices.
+    """
+    try:
+        import subprocess
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        result = subprocess.run(
+            [ffmpeg_exe, "-y", "-i", input_path,
+             "-c:a", "aac", "-b:a", "64k", "-ac", "1",
+             "-movflags", "+faststart", output_path],
+            capture_output=True, timeout=30
+        )
+        if result.returncode != 0:
+            logger.warning(f"ffmpeg conversion stderr: {result.stderr.decode(errors='replace')}")
+            return False
+        return True
+    except Exception as e:
+        logger.warning(f"Audio conversion failed: {e}")
+        return False
+
+
 @app.post("/api/upload-and-send-audio")
 async def upload_and_send_audio(
     audio: UploadFile,
@@ -1742,34 +2053,55 @@ async def upload_and_send_audio(
         # Read file contents
         contents = await audio.read()
         file_size_mb = len(contents) / (1024 * 1024)
-        logger.info(f"📥 Processing audio {audio.filename} ({file_size_mb:.2f} MB) from {to}")
-        
-        # Save to temporary file for upload
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.ogg') as temp_file:
+        ct = audio.content_type or ""
+        logger.info(f"📥 Processing audio {audio.filename!r} type={ct!r} ({file_size_mb:.2f} MB) → {to}")
+
+        # Detect original format from content-type
+        if "webm" in ct:
+            orig_suffix = ".webm"
+        elif "mp4" in ct or "m4a" in ct:
+            orig_suffix = ".mp4"
+        elif "mpeg" in ct or "mp3" in ct:
+            orig_suffix = ".mp3"
+        elif "wav" in ct:
+            orig_suffix = ".wav"
+        elif "amr" in ct:
+            orig_suffix = ".amr"
+        else:
+            orig_suffix = ".bin"
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=orig_suffix) as temp_file:
             temp_file.write(contents)
             temp_path = temp_file.name
-        
+
+        original_temp_path = temp_path
+        upload_path = temp_path
+        converted_path = None
         try:
-            # Determine MIME type and extension
-            mime_type = "audio/ogg"
-            extension = "ogg"
-            if audio.content_type:
-                if "mp3" in audio.content_type or "mpeg" in audio.content_type:
-                    mime_type = "audio/mpeg"
-                    extension = "mp3"
-                elif "mp4" in audio.content_type or "m4a" in audio.content_type:
+            # Always convert to AAC/M4A — the most universally supported
+            # format for WhatsApp audio across all devices and API versions.
+            # AMR is kept as-is (WhatsApp native voice format, no conversion needed).
+            if "amr" in ct:
+                mime_type = "audio/amr"
+                extension = "amr"
+            else:
+                converted_path = temp_path + "_wa.m4a"
+                if _convert_to_whatsapp_audio(original_temp_path, converted_path):
+                    upload_path = converted_path
                     mime_type = "audio/mp4"
                     extension = "m4a"
-                elif "wav" in audio.content_type:
-                    mime_type = "audio/wav"
-                    extension = "wav"
-                elif "webm" in audio.content_type:
-                    mime_type = "audio/ogg"  # WhatsApp prefers OGG
-                    extension = "ogg"
-            
+                    logger.info(f"✅ Converted {orig_suffix}→m4a/aac for WhatsApp delivery")
+                else:
+                    # Fallback: send original and hope WhatsApp transcodes it
+                    logger.warning(f"⚠️ Conversion failed — uploading original {orig_suffix} as-is")
+                    mime_type = "audio/mp4" if "mp4" in ct or "m4a" in ct else (
+                        "audio/mpeg" if "mpeg" in ct or "mp3" in ct else "audio/ogg"
+                    )
+                    extension = orig_suffix.lstrip(".")
+
             # Upload to WhatsApp
-            logger.info(f"📤 Uploading audio to WhatsApp (MIME: {mime_type})...")
-            media_id = await whatsapp_client.upload_media(temp_path, mime_type)
+            logger.info(f"📤 Uploading audio to WhatsApp (MIME: {mime_type}, size: {os.path.getsize(upload_path)} bytes)...")
+            media_id = await whatsapp_client.upload_media(upload_path, mime_type)
             
             if not media_id:
                 raise HTTPException(status_code=500, detail="Failed to upload audio to WhatsApp")
@@ -1785,7 +2117,7 @@ async def upload_and_send_audio(
             permanent_path = os.path.join(audio_dir, permanent_filename)
             
             # Copy the temporary file to permanent location
-            shutil.copy2(temp_path, permanent_path)
+            shutil.copy2(upload_path, permanent_path)
             logger.info(f"💾 Audio saved locally: {permanent_path}")
             
             # Send audio message
@@ -1793,8 +2125,15 @@ async def upload_and_send_audio(
                 to=to,
                 media_id=media_id
             )
-            
+
+            # Surface any application-level errors WhatsApp may embed in a 200 response
+            if "error" in result:
+                err = result["error"]
+                logger.error(f"❌ WhatsApp send error: code={err.get('code')} msg={err.get('message')}")
+                raise HTTPException(status_code=502, detail=f"WhatsApp error: {err.get('message')}")
+
             message_id = result.get('messages', [{}])[0].get('id', '')
+            logger.info(f"✅ WhatsApp audio queued, message_id={message_id!r}")
             
             # Get lead info
             lead = None
@@ -1828,12 +2167,12 @@ async def upload_and_send_audio(
             }
             
         finally:
-            # Clean up temporary file
-            try:
-                os.unlink(temp_path)
-            except Exception:
-                pass
-        
+            for path in set(filter(None, [original_temp_path, converted_path])):
+                try:
+                    os.unlink(path)
+                except Exception:
+                    pass
+
     except HTTPException:
         raise
     except Exception as e:

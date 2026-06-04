@@ -230,7 +230,9 @@ def _reconcile_three(inc: float, a: float, e: float, x: float) -> Tuple[float, f
         return a, e, x + rem
     if parsed > TOL:
         return a + rem * a / parsed, e + rem * e / parsed, x + rem * x / parsed
-    return rem / 3, rem / 3, rem / 3
+    # If extras_json has no classifiable lines, default the remaining income to "extra".
+    # This avoids creating phantom alojamiento/experiencia income on empty days.
+    return 0.0, 0.0, rem
 
 
 def split_booking_financials(
@@ -309,6 +311,17 @@ def split_booking_financials(
     }
 
 
+def booking_discount_total_clp(booking: Dict[str, Any]) -> float:
+    """Sum manual descuentos rows + coupon_discount (same CLP basis as admin UI)."""
+    total = float(booking.get("coupon_discount") or 0)
+    for item in booking.get("descuentos") or []:
+        if isinstance(item, dict):
+            total += float(item.get("amount") or 0)
+        elif isinstance(item, (int, float)):
+            total += float(item)
+    return max(0.0, total)
+
+
 def iso_dates_inclusive(d0: date, d1: date) -> List[str]:
     out: List[str] = []
     d = d0
@@ -332,6 +345,7 @@ def new_empty_day(fecha: str) -> Dict[str, Any]:
         "ingreso_aloj": 0,
         "ingreso_exp": 0,
         "ingreso_extra": 0,
+        "total_descuentos": 0,
         "cv_aloj": 0,
         "cv_exp": 0,
         "cv_extra": 0,
@@ -348,6 +362,10 @@ def merge_day_breakdown(dst: Dict[str, Any], split: Dict[str, int]) -> None:
     dst["cv_aloj"] = dst.get("cv_aloj", 0) + split["cv_aloj"]
     dst["cv_exp"] = dst.get("cv_exp", 0) + split["cv_exp"]
     dst["cv_extra"] = dst.get("cv_extra", 0) + split["cv_extra"]
+
+
+def merge_day_discount(dst: Dict[str, Any], discount_applied: int) -> None:
+    dst["total_descuentos"] = dst.get("total_descuentos", 0) + int(discount_applied)
 
 
 def apply_structural_to_days(
@@ -383,6 +401,7 @@ def aggregate_breakdown_into_week_month(
         "ingreso_aloj",
         "ingreso_exp",
         "ingreso_extra",
+        "total_descuentos",
         "cv_aloj",
         "cv_exp",
         "cv_extra",

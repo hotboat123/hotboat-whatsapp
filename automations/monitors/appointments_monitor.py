@@ -14,37 +14,39 @@ class AppointmentsMonitor(BaseMonitor):
     """Monitorea cambios en las reservas"""
     
     async def check(self) -> Dict[str, Any]:
-        """
-        Obtiene el estado actual de las reservas de Booknetic
-        """
-        # Obtener todas las reservas activas (próximas y recientes)
-        # Usando la tabla de Booknetic
+        """Obtiene el estado actual de las reservas desde ``all_appointments``."""
+        # Reservas activas desde la tabla canónica ``all_appointments``
         query = """
-            SELECT 
-                id,
-                customer_name,
-                customer_email,
-                customer_phone,
-                service_name,
-                starts_at,
-                duration,
+            SELECT
+                id::text AS id,
+                nombre_cliente AS customer_name,
+                COALESCE(email, '') AS customer_email,
+                COALESCE(telefono, '') AS customer_phone,
+                COALESCE(servicio, '') AS service_name,
+                (fecha + hora) AT TIME ZONE 'America/Santiago' AS starts_at,
+                120 AS duration,
                 status,
-                price,
-                paid_amount,
+                COALESCE(ingreso_total, 0)::float AS price,
+                CASE
+                    WHEN payment_status = 'approved' OR status = 'confirmed'
+                    THEN COALESCE(ingreso_total, 0)::float
+                    ELSE 0::float
+                END AS paid_amount,
                 created_at,
-                note,
-                custom_fields
-            FROM booknetic_appointments
-            WHERE starts_at >= CURRENT_TIMESTAMP - INTERVAL '1 day'
-                AND (status IS NULL OR status NOT IN ('cancelled', 'rejected'))
-            ORDER BY starts_at
+                COALESCE(observaciones, '') AS note,
+                extras_json AS custom_fields
+            FROM all_appointments
+            WHERE hora IS NOT NULL
+              AND (fecha + hora) AT TIME ZONE 'America/Santiago'
+                  >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+              AND (status IS NULL OR status NOT IN ('cancelled', 'rejected', 'cancelada'))
+            ORDER BY fecha, hora
         """
-        
+
         try:
             appointments = await execute_query(query)
         except Exception as e:
-            logger.warning(f"⚠️ Error al consultar booknetic_appointments: {e}")
-            logger.info("💡 Verifica que la tabla booknetic_appointments tenga los campos correctos")
+            logger.warning(f"⚠️ Error al consultar all_appointments (monitor): {e}")
             return {}
         
         # Crear un diccionario indexado por ID para fácil comparación
@@ -150,7 +152,14 @@ class AppointmentsMonitor(BaseMonitor):
         # Construir mensaje
         price = appointment.get('price', 0)
         paid_amount = appointment.get('paid_amount', 0)
-        
+        pendiente_line = (
+            f"⚠️ *Pendiente:* ${price - paid_amount:,.0f} CLP"
+            if price > paid_amount else "✅ *Pagado completamente*"
+        )
+        note_line = ""
+        if appointment.get("note"):
+            note_line = "\n📝 *Notas:* " + str(appointment.get("note"))
+
         message = f"""🎉 *NUEVA RESERVA HOTBOAT*
 
 👤 *Cliente:* {appointment.get('customer_name', 'N/A')}
@@ -165,9 +174,9 @@ class AppointmentsMonitor(BaseMonitor):
 
 💰 *Precio total:* ${price:,.0f} CLP
 💳 *Monto pagado:* ${paid_amount:,.0f} CLP
-{f"⚠️ *Pendiente:* ${price - paid_amount:,.0f} CLP" if price > paid_amount else "✅ *Pagado completamente*"}
+{pendiente_line}
 {extras_info}
-{f"\n📝 *Notas:* {appointment.get('note')}" if appointment.get('note') else ""}
+{note_line}
 
 🔗 *ID Reserva:* #{appointment.get('id')}
         """.strip()

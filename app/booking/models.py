@@ -23,8 +23,16 @@ class CreateBookingRequest(BaseModel):
     has_flex: bool = False
     notes: Optional[str] = None
     source: str = "web"
+    coupon_code: Optional[str] = None
+    coupon_discount: Optional[float] = None  # CLP off (base HotBoat + FLEX, same as web summary)
+    coupon_extra_benefit: Optional[str] = None  # e.g. benefit text from coupons.extra_description
     test_price: Optional[int] = None  # Override total for testing (e.g. 100 CLP)
     skip_payment: bool = False         # Create booking in DB but skip WooCommerce order
+    utm_source: Optional[str] = ""
+    utm_medium: Optional[str] = ""
+    utm_campaign: Optional[str] = ""
+    utm_content: Optional[str] = ""
+    parametro_url: Optional[str] = ""
 
 
 class BookingResponse(BaseModel):

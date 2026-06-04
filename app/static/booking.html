@@ -83,6 +83,14 @@ body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min
 }
 .time-btn:hover,.time-btn.selected{background:var(--coral);border-color:var(--coral);color:#fff}
 .counter{display:flex;align-items:center;gap:1rem;justify-content:center;margin:.5rem 0}
+/* Addon / pack / solicitud aloj — cuenta personas integrada al tema oscuro */
+.counter.counter-addon{
+  gap:.85rem;margin:.35rem auto .15rem;
+  padding:.55rem .85rem;max-width:280px;
+  background:rgba(13,32,64,.65);border:1px solid var(--border);border-radius:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+}
+.counter-addon .counter-val{min-width:2.5rem;text-align:center;font-variant-numeric:tabular-nums}
 .counter-btn{
   width:40px;height:40px;border-radius:50%;background:var(--deep);border:1.5px solid var(--border);
   color:var(--text);font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
@@ -129,6 +137,11 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem;font-
 .flatpickr-day.selected,.flatpickr-day.selected:hover{background:var(--coral)!important;border-color:var(--coral)!important}
 .flatpickr-day.inRange{background:rgba(255,92,53,.15)!important;border-color:transparent!important}
 .flatpickr-day.startRange,.flatpickr-day.endRange{background:var(--coral)!important;border-color:var(--coral)!important}
+#hb-pay-datos-overlay{
+  position:fixed;inset:0;z-index:10000;background:rgba(10,22,40,.92);
+  display:flex;align-items:center;justify-content:center;padding:1rem;
+}
+#hb-pay-datos-overlay .hb-pay-inner{margin:0}
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -200,6 +213,8 @@ const S = {
   couponPercent: 0,
   depositAmount: 0,       // overridden for combined aloj+HotBoat payments
 };
+let _isSubmittingBooking = false;
+let _payingExperienceCart = false;
 
 // ── i18n ──────────────────────────────────────────────────────────────────────
 const I18N = {
@@ -273,6 +288,7 @@ const I18N = {
     alojSendErr: 'Error al enviar. Intenta de nuevo.',
     alojYourBooking: '🛒 Tu reserva',
     alojDepositNow: '💳 Abono ahora (50%)',
+    payNowLabel: '💳 Pago ahora',
     alojBalanceArrival: (bal) => `Saldo ${bal} al llegar`,
     alojYourData: '👤 Tus datos',
     alojEmailOpt: 'Email (opcional)',
@@ -284,6 +300,53 @@ const I18N = {
     alojPayErr: 'Error al procesar. Intenta de nuevo.',
     alojConnErr: 'Error de conexión.',
     alojPayLodgingShort: '💳 Pagar solo alojamiento',
+    extrasListTitle: '🎁 Extras disponibles',
+    extrasListNote: 'Los extras se agregan al momento de reservar',
+    bookWithExtras: 'Reservar con extras 🚤',
+    addonDaysLabel: (d) => `${d} día${d!==1?'s':''} seleccionado${d!==1?'s':''}`,
+    addonSelectPeople: 'Cuántas personas',
+    addonPayExperienceOnly: (dep) => `💳 Pagar solo experiencia → ${dep}`,
+    addonPayPackOnly: (dep) => `💳 Pagar solo pack → ${dep}`,
+    addonPayShortExp: '💳 Pagar solo experiencia',
+    addonPayShortPack: '💳 Pagar solo pack',
+    addonBalanceActivity: (bal) => `Saldo ${bal} al coordinar la actividad`,
+    addonHighSeasonTitle: 'Alta temporada — Coordinamos por email',
+    addonHighSeasonBody: 'Para confirmar, escribe a',
+    addonNeedDates: 'Selecciona fechas de inicio y término',
+    addonNeedDateExp: 'Selecciona la fecha de la actividad',
+    addonExpPickDateTitle: '📅 Fecha',
+    addonExpDateLbl: 'Fecha de la actividad',
+    addonInvalidDates: 'La fecha de término debe ser igual o posterior al inicio',
+    addonPriceHint: '/ persona · día',
+    addonPackRefNote: 'Referencia según temporada y versión del pack',
+    combinedSubtitleExpHb: (expDep, hbDep, combTot) =>
+      `Experiencia ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    combinedSubtitlePackHb: (pkDep, hbDep, combTot) =>
+      `Pack ${pkDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    combinedSubtitleExpCartHb: (n, expDep, hbDep, combTot) =>
+      `${n} ítem(es): abonos ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    expCartTitle: '🛒 Carrito HotBoat',
+    expCartMenu: (n) => `🛒 Carrito HotBoat (${n})`,
+    expCartEmpty: 'Vacío. Agrega experiencias (“Otras experiencias”) o packs (“Packs completos”).',
+    expCartAdd: 'Solo agregar al carrito',
+    expCartGoHb: 'Elegir fecha HotBoat',
+    expCartRm: 'Quitar',
+    expCartToast: 'Agregado al carrito',
+    expCartPayHb: '💳 Pagar carrito + HotBoat',
+    cartHbSubtitle: '🚤 Tu reserva HotBoat',
+    payDatosHint: 'Nombre y WhatsApp para generar el link de pago (solo esta compra). Si combinas con HotBoat, también los pediremos una vez al final.',
+    payDatosContinue: 'Continuar al pago',
+    expCartPayOnly: '💳 Pagar',
+    expCartPaymentTitle: '💳 Pagar carrito HotBoat',
+    expCartPaymentSub: (n) => `${n} ítem(es)`,
+    expCartGrandTotal: 'Total carrito',
+    expCartPayFootnote:
+      'El saldo restante de cada experiencia o pack se coordina al confirmar la actividad.',
+    expCartSecureLine: 'Pago seguro · Débito, crédito, Webpay y más',
+    expCartCreatedNoPayment: 'Reserva creada. Te contactamos por WhatsApp para coordinar el pago.',
+    expCartSaldoRow: 'Saldo pendiente',
+    expCartDepositLbl: 'Abono ahora (50%)',
+    expCartPayNowLbl: 'Pago ahora',
   },
   en: {
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
@@ -347,6 +410,7 @@ const I18N = {
     alojSendErr: 'Could not send. Try again.',
     alojYourBooking: '🛒 Your booking',
     alojDepositNow: '💳 Deposit now (50%)',
+    payNowLabel: '💳 Pay now',
     alojBalanceArrival: (bal) => `Balance ${bal} on arrival`,
     alojYourData: '👤 Your details',
     alojEmailOpt: 'Email (optional)',
@@ -358,6 +422,53 @@ const I18N = {
     alojPayErr: 'Could not process. Try again.',
     alojConnErr: 'Connection error.',
     alojPayLodgingShort: '💳 Pay lodging only',
+    extrasListTitle: '🎁 Available add-ons',
+    extrasListNote: 'Add-ons are selected when you book',
+    bookWithExtras: 'Book with add-ons 🚤',
+    addonDaysLabel: (d) => `${d} day${d!==1?'s':''} selected`,
+    addonSelectPeople: 'How many people',
+    addonPayExperienceOnly: (dep) => `💳 Pay experience only → ${dep}`,
+    addonPayPackOnly: (dep) => `💳 Pay package only → ${dep}`,
+    addonPayShortExp: '💳 Pay experience only',
+    addonPayShortPack: '💳 Pay package only',
+    addonBalanceActivity: (bal) => `Balance ${bal} when we confirm the activity`,
+    addonHighSeasonTitle: 'Peak season — We’ll coordinate by email',
+    addonHighSeasonBody: 'To confirm, write to',
+    addonNeedDates: 'Select start and end dates',
+    addonNeedDateExp: 'Pick the activity date',
+    addonExpPickDateTitle: '📅 Date',
+    addonExpDateLbl: 'Activity date',
+    addonInvalidDates: 'End date must be on or after the start date',
+    addonPriceHint: '/ person · day',
+    addonPackRefNote: 'Indicative — varies by season and package version',
+    combinedSubtitleExpHb: (expDep, hbDep, combTot) =>
+      `Experience ${expDep} + HotBoat ${hbDep} · Combined ${combTot}`,
+    combinedSubtitlePackHb: (pkDep, hbDep, combTot) =>
+      `Package ${pkDep} + HotBoat ${hbDep} · Combined ${combTot}`,
+    combinedSubtitleExpCartHb: (n, expDep, hbDep, combTot) =>
+      `${n} item(s): deposits ${expDep} + HotBoat ${hbDep} · Combined ${combTot}`,
+    expCartTitle: '🛒 HotBoat cart',
+    expCartMenu: (n) => `🛒 HotBoat cart (${n})`,
+    expCartEmpty: 'Empty. Add experiences (“Other experiences”) or packages (“Full packages”).',
+    expCartAdd: 'Add to cart only',
+    expCartGoHb: 'Pick HotBoat date',
+    expCartRm: 'Remove',
+    expCartToast: 'Added to cart',
+    expCartPayHb: '💳 Pay cart + HotBoat',
+    cartHbSubtitle: '🚤 Your HotBoat booking',
+    payDatosHint: 'We need your name and WhatsApp to create the payment link (this purchase only). If you add a HotBoat booking, we’ll ask once at checkout.',
+    payDatosContinue: 'Continue to payment',
+    expCartPayOnly: '💳 Pay',
+    expCartPaymentTitle: '💳 Pay HotBoat cart',
+    expCartPaymentSub: (n) => `${n} item(s)`,
+    expCartGrandTotal: 'Cart total',
+    expCartPayFootnote:
+      'The remaining balance for each experience or package is coordinated when you confirm the activity.',
+    expCartSecureLine: 'Secure checkout · Debit, credit, Webpay and more',
+    expCartCreatedNoPayment: 'Booking saved. We will reach out on WhatsApp to coordinate payment.',
+    expCartSaldoRow: 'Remaining balance',
+    expCartDepositLbl: 'Deposit now (50%)',
+    expCartPayNowLbl: 'Pay now',
   },
   pt: {
     days: ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],
@@ -421,6 +532,7 @@ const I18N = {
     alojSendErr: 'Erro ao enviar. Tente novamente.',
     alojYourBooking: '🛒 Sua reserva',
     alojDepositNow: '💳 Sinal agora (50%)',
+    payNowLabel: '💳 Pagar agora',
     alojBalanceArrival: (bal) => `Saldo ${bal} na chegada`,
     alojYourData: '👤 Seus dados',
     alojEmailOpt: 'E-mail (opcional)',
@@ -432,10 +544,103 @@ const I18N = {
     alojPayErr: 'Erro ao processar. Tente novamente.',
     alojConnErr: 'Erro de conexão.',
     alojPayLodgingShort: '💳 Pagar só hospedagem',
+    extrasListTitle: '🎁 Extras disponíveis',
+    extrasListNote: 'Os extras são escolhidos no momento da reserva',
+    bookWithExtras: 'Reservar com extras 🚤',
+    addonDaysLabel: (d) => `${d} dia${d!==1?'s':''} selecionado${d!==1?'s':''}`,
+    addonSelectPeople: 'Quantas pessoas',
+    addonPayExperienceOnly: (dep) => `💳 Pagar só a experiência → ${dep}`,
+    addonPayPackOnly: (dep) => `💳 Pagar só o pacote → ${dep}`,
+    addonPayShortExp: '💳 Pagar só a experiência',
+    addonPayShortPack: '💳 Pagar só o pacote',
+    addonBalanceActivity: (bal) => `Saldo ${bal} ao confirmar a atividade`,
+    addonHighSeasonTitle: 'Alta temporada — Coordenamos por e-mail',
+    addonHighSeasonBody: 'Para confirmar, escreva para',
+    addonNeedDates: 'Selecione as datas de início e fim',
+    addonNeedDateExp: 'Escolha a data da atividade',
+    addonExpPickDateTitle: '📅 Data',
+    addonExpDateLbl: 'Data da atividade',
+    addonInvalidDates: 'A data de fim deve ser igual ou após o início',
+    addonPriceHint: '/ pessoa · dia',
+    addonPackRefNote: 'Valor de referência conforme temporada e versão',
+    combinedSubtitleExpHb: (expDep, hbDep, combTot) =>
+      `Experiência ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    combinedSubtitlePackHb: (pkDep, hbDep, combTot) =>
+      `Pacote ${pkDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    combinedSubtitleExpCartHb: (n, expDep, hbDep, combTot) =>
+      `${n} item(ns): sinais ${expDep} + HotBoat ${hbDep} · Total combinado ${combTot}`,
+    expCartTitle: '🛒 Carrinho HotBoat',
+    expCartMenu: (n) => `🛒 Carrinho HotBoat (${n})`,
+    expCartEmpty: 'Vazio. Adicione experiências (“Outras experiências”) ou pacotes (“Pacotes completos”).',
+    expCartAdd: 'Só adicionar ao carrinho',
+    expCartGoHb: 'Escolher data HotBoat',
+    expCartRm: 'Remover',
+    expCartToast: 'Adicionado ao carrinho',
+    expCartPayHb: '💳 Pagar carrinho + HotBoat',
+    cartHbSubtitle: '🚤 Sua reserva HotBoat',
+    payDatosHint: 'Nome e WhatsApp para gerar o link de pagamento (só esta compra). Se combinar com HotBoat, pediremos uma vez no final.',
+    payDatosContinue: 'Ir para o pagamento',
+    expCartPayOnly: '💳 Pagar',
+    expCartPaymentTitle: '💳 Pagar carrinho HotBoat',
+    expCartPaymentSub: (n) => `${n} item(ns)`,
+    expCartGrandTotal: 'Total do carrinho',
+    expCartPayFootnote:
+      'O saldo restante de cada experiência ou pacote é combinado ao confirmar a atividade.',
+    expCartSecureLine: 'Pagamento seguro · Débito, crédito, Webpay e mais',
+    expCartCreatedNoPayment: 'Reserva criada. Entraremos em contato pelo WhatsApp para o pagamento.',
+    expCartSaldoRow: 'Saldo pendente',
+    expCartDepositLbl: 'Sinal agora (50%)',
+    expCartPayNowLbl: 'Pagar agora',
   },
 };
 let LANG = localStorage.getItem('hb_lang') || 'es';
 function t(key, ...args){ const v = I18N[LANG][key]; return typeof v === 'function' ? v(...args) : (v || I18N.es[key] || key); }
+function _customerBasicsOk(){
+  return !!(String(S.customerName||'').trim() && String(S.customerPhone||'').trim());
+}
+/** Solo para “pagar solo” experiencia/pack/aloj: si no hay datos en S, pide una vez en overlay. */
+function _ensureCustomerOneOffThen(run){
+  const invoke = ()=>{
+    const out = run();
+    if(out && typeof out.then === 'function'){
+      out.catch(ex=>{ console.error(ex); showToast((ex.message||'')||t('alojConnErr')); });
+    }
+  };
+  if(_customerBasicsOk()){ invoke(); return; }
+  document.getElementById('hb-pay-datos-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'hb-pay-datos-overlay';
+  ov.setAttribute('role','dialog');
+  ov.setAttribute('aria-modal','true');
+  ov.innerHTML = `
+    <div class="card hb-pay-inner" style="max-width:420px;width:100%">
+      <div class="card-title" style="font-size:1.25rem">${t('alojYourData')}</div>
+      <p style="color:var(--muted);font-size:.82rem;margin-bottom:.75rem;line-height:1.45">${t('payDatosHint')}</p>
+      <div class="form-group"><label>${t('labelName')} *</label>
+        <input type="text" id="hb-od-name" autocomplete="name" placeholder="${t('labelName')}"></div>
+      <div class="form-group"><label>${t('labelPhone')} *</label>
+        <input type="tel" id="hb-od-phone" autocomplete="tel" placeholder="+56 9 xxxx xxxx"></div>
+      <div class="form-group"><label>${t('alojEmailOpt')}</label>
+        <input type="email" id="hb-od-email" autocomplete="email" placeholder="tu@email.com"></div>
+      <button class="btn" type="button" id="hb-od-go">${t('payDatosContinue')}</button>
+      <button class="btn btn-secondary" type="button" id="hb-od-x" style="margin-top:.5rem">${t('back')}</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const clean = ()=>{ ov.remove(); };
+  $('hb-od-x').onclick = clean;
+  $('hb-od-go').onclick = ()=>{
+    const n = $('hb-od-name').value.trim();
+    const p = $('hb-od-phone').value.trim();
+    const e = ($('hb-od-email')?.value||'').trim();
+    if(!n){ showToast(t('alojEnterName')); return; }
+    if(!p){ showToast(t('alojEnterPhone')); return; }
+    S.customerName = n;
+    S.customerPhone = p;
+    S.customerEmail = e || '';
+    clean();
+    invoke();
+  };
+}
 function _moneyLocale(){ return LANG==='en'?'en-US':LANG==='pt'?'pt-BR':'es-CL'; }
 function _alojMoney(n){ return '$'+Number(n).toLocaleString(_moneyLocale()); }
 function _alojPickLang(raw){
@@ -477,7 +682,14 @@ function rebuildAlojamientosFromDyn(){
     });
   });
 }
-function setLang(l){ LANG = l; localStorage.setItem('hb_lang', l); document.documentElement.lang = l; renderLangSwitcher(); rebuildAlojamientosFromDyn(); renderMenu(); }
+async function setLang(l){
+  LANG = l;
+  localStorage.setItem('hb_lang', l);
+  document.documentElement.lang = l;
+  await Promise.all([fetchExtrasCatalog(), loadDynamicContent()]);
+  renderLangSwitcher();
+  renderMenu();
+}
 function renderLangSwitcher(){
   const el = document.getElementById('lang-switcher');
   if(!el) return;
@@ -495,6 +707,17 @@ const DAYS = new Proxy([], { get: (_, i) => typeof i==='number'||/^\d+$/.test(i)
 const MONTHS = new Proxy([], { get: (_, i) => typeof i==='number'||/^\d+$/.test(i) ? getMonths()[+i] : getMonths()[i] });
 
 let EXTRAS_CATALOG = [];  // loaded from /api/content/extras
+
+async function fetchExtrasCatalog(){
+  const ex = await fetch('/api/content/extras?lang='+encodeURIComponent(LANG)).then(r=>r.json());
+  EXTRAS_CATALOG = (ex.extras || []).map(e=>({
+    id: e.key || e.id,
+    name: e.name,
+    price: e.price,
+    icon: e.icon || '⭐',
+    description: e.description || '',
+  }));
+}
 
 function showToast(msg, ms=3000){
   const t = $('toast');
@@ -523,7 +746,7 @@ function toggleMedia(btnId, containerId, src, isImg){
   btn.textContent = isImg ? '🙈 Ocultar foto' : '🙈 Ocultar';
 }
 
-// Helper to build a media block (img + optional pdf link)
+// Helper for optional expandable image / PDF elsewhere (packs etc.)
 function mediaBlock(id, imgSrc, pdfSrc){
   const imgBtn = imgSrc ? `
     <button id="mb-btn-${id}" class="media-toggle" onclick="toggleMedia('mb-btn-${id}','mb-box-${id}','${imgSrc}',true)">📸 Ver foto</button>
@@ -546,11 +769,29 @@ const _isReturning = (()=>{
 })();
 
 const _urlParams = new URLSearchParams(window.location.search);
-const _utmSource   = _urlParams.get('utm_source')   || '';
-const _utmMedium   = _urlParams.get('utm_medium')   || '';
-const _utmCampaign = _urlParams.get('utm_campaign') || '';
-const _utmContent  = _urlParams.get('utm_content')  || '';
-const _fbclid      = _urlParams.get('fbclid')       || '';
+/** Reads query key case-insensitively; trims and caps length. */
+function _queryParam(names, maxLen){
+  const cap = typeof maxLen==='number'?maxLen:500;
+  for(const n of names){
+    let v=( _urlParams.get(n)||'' ).trim();
+    if(!v){
+      const nl=n.toLowerCase();
+      for(const [k,val] of _urlParams.entries()){
+        if(k.toLowerCase()===nl){ v=(val||'').trim(); break; }
+      }
+    }
+    if(v) return v.substring(0,cap);
+  }
+  return '';
+}
+const _landingAttribution = Object.freeze({
+  utm_source:   _queryParam(['utm_source'],100),
+  utm_medium:   _queryParam(['utm_medium'],100),
+  utm_campaign: _queryParam(['utm_campaign'],200),
+  utm_content:  _queryParam(['utm_content'],200),
+  parametro_url: _queryParam(['parametro_url','PARAMETRO_URL','parametro'],240),
+  fbclid:       _queryParam(['fbclid'],120),
+});
 
 function _trackEvent(event, date){
   try{
@@ -560,11 +801,7 @@ function _trackEvent(event, date){
       referrer: document.referrer?document.referrer.substring(0,200):'',
       session_id: _sessionId,
       is_returning: _isReturning,
-      utm_source: _utmSource,
-      utm_medium: _utmMedium,
-      utm_campaign: _utmCampaign,
-      utm_content: _utmContent,
-      fbclid: _fbclid,
+      ..._landingAttribution,
     });
     fetch('/api/booking/track',{method:'POST',headers:{'Content-Type':'application/json'},body:payload}).catch(()=>{});
   }catch(e){}
@@ -573,21 +810,14 @@ function _trackEvent(event, date){
 async function loadPricesAndAvail(){
   _trackEvent('page_visit');
   try{
-    const [pr, av, ex] = await Promise.all([
+    const [pr, av] = await Promise.all([
       fetch('/api/booking/prices').then(r=>r.json()),
       fetch('/api/booking/availability?days=90').then(r=>r.json()),
-      fetch('/api/content/extras').then(r=>r.json()),
     ]);
     S.prices = pr.prices || {};
     S.availability = av.availability || {};
     S.fakeBooked = av.fake_booked_slots || {};
-    EXTRAS_CATALOG = (ex.extras || []).map(e=>({
-      id: e.key || e.id,
-      name: e.name,
-      price: e.price,
-      icon: e.icon || '⭐',
-      description: e.description || '',
-    }));
+    await fetchExtrasCatalog();
   }catch(e){ showToast('Error cargando disponibilidad'); }
 }
 
@@ -649,7 +879,195 @@ function renderMenu(){
         <span class="desc">${t('menuArmaDesc')}</span>
       </button>`:''}
     </div>
+    ${_experienceCart.length?`<button type="button" class="btn" style="width:100%;margin-top:.75rem;font-size:.92rem" onclick="renderExperienceCartScreen()">${t('expCartMenu', _experienceCart.length)}</button>`:''}
   </div>`;
+}
+
+function renderExperienceCartScreen(){
+  _trackEvent('view_exp_cart');
+  if(!_experienceCart.length){
+    mc.innerHTML = `
+    <div class="card"><p style="color:var(--muted)">${t('expCartEmpty')}</p></div>
+    <button class="btn btn-secondary" onclick="renderMenu()">${t('backToMenu')}</button>`;
+    return;
+  }
+  let sum = 0;
+  // Carrito sin HotBoat en el mismo checkout: cobro completo al pagar desde aquí.
+  const lines = _experienceCart.map(li=>{
+    const days = _addonDaysFromRange(li.start_date, li.end_date);
+    const isPack = li.kind==='pack' || !!li.pack_slug;
+    const pp = isPack ? Number(li.unit_price_per_person)||0 : Number(li.price_per_person)||0;
+    const tot = pp * (Math.max(1, Number(li.num_people)||1)) * days;
+    sum += tot;
+    const de = li.end_date || li.start_date;
+    const title = isPack ? (li.pack_name||'') : (li.experience_name||'');
+    const ic = isPack ? '📦' : '🎫';
+    const dateLine = !isPack && !li.end_date
+      ? `📅 ${_fmtDate(li.start_date)} · ${t('addonDaysLabel', days)}`
+      : `📅 ${_fmtDate(li.start_date)} → ${_fmtDate(de)} · ${t('addonDaysLabel', days)}`;
+    return `
+    <div class="card" style="margin-bottom:.6rem;padding:1rem;border-color:var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+        <div>
+          <div style="font-weight:700;color:var(--coral)">${ic} ${title}</div>
+          <div style="font-size:.82rem;color:var(--muted);margin-top:.25rem">
+            ${dateLine}
+          </div>
+          <div style="font-size:.85rem;margin-top:.35rem">
+            ${_alojMoney(pp)}/pers · ${li.num_people} · <strong>${_alojMoney(tot)}</strong>
+          </div>
+        </div>
+        <button type="button" onclick="removeExperienceCartLine('${li.cart_id}');renderExperienceCartScreen();"
+          style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.25rem .5rem;font-size:.75rem;cursor:pointer">${t('expCartRm')}</button>
+      </div>
+    </div>`;
+  }).join('');
+  mc.innerHTML = `
+  <div class="card">
+    <div class="card-title">${t('expCartTitle')}</div>
+    ${lines}
+    <div class="summary-row total"><span>${t('labelTotal')}</span><span>${_alojMoney(sum)}</span></div>
+    <p style="color:var(--gold);font-size:.85rem;margin-top:.35rem">${t('payNowLabel')}: ${_alojMoney(sum)}</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="font-size:1.05rem">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
+    <div class="form-group"><label>${t('labelName')} *</label>
+      <input type="text" id="ec-name" placeholder="${t('labelName')}" value="${S.customerName||''}"></div>
+    <div class="form-group"><label>${t('labelPhone')} *</label>
+      <input type="tel" id="ec-phone" placeholder="+56 9 xxxx xxxx" value="${S.customerPhone||''}"></div>
+    <div class="form-group"><label>${t('alojEmailOpt')}</label>
+      <input type="email" id="ec-email" placeholder="tu@email.com" value="${S.customerEmail||''}"></div>
+  </div>
+  <button class="btn" onclick="_submitExperienceCartPayOnly()">${t('expCartPayOnly')}</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="goReservar()">${t('expCartGoHb')}</button>
+  <button class="btn btn-secondary" style="margin-top:.35rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
+}
+
+function _cartItemsPayloadFromLines(){
+  return _experienceCart.map(li=>{
+    const isPack = li.kind==='pack' || !!li.pack_slug;
+    if(isPack){
+      return {
+        item_type:'pack',
+        pack_slug: li.pack_slug,
+        pack_name: li.pack_name,
+        start_date: li.start_date,
+        end_date: li.end_date || null,
+        num_people: Math.max(1, Number(li.num_people)||1),
+        unit_price_per_person: Number(li.unit_price_per_person)||0,
+        notes: (li.notes||'').trim()||null,
+      };
+    }
+    return {
+      item_type:'experience',
+      experience_slug: li.experience_slug,
+      experience_name: li.experience_name,
+      start_date: li.start_date,
+      end_date: li.end_date || null,
+      num_people: Math.max(1, Number(li.num_people)||1),
+      price_per_person: Number(li.price_per_person)||0,
+      notes: (li.notes||'').trim()||null,
+    };
+  });
+}
+
+async function _submitExperienceCartPayOnly(){
+  if(_payingExperienceCart || !_experienceCart.length) return;
+  const name = ($('ec-name')?.value||'').trim();
+  const phone = ($('ec-phone')?.value||'').trim();
+  const email = ($('ec-email')?.value||'').trim();
+  if(!name){ showToast(t('alojEnterName')); return; }
+  if(!phone){ showToast(t('alojEnterPhone')); return; }
+  S.customerName = name;
+  S.customerPhone = phone;
+  S.customerEmail = email;
+  _payingExperienceCart = true;
+  const items = _cartItemsPayloadFromLines();
+  mc.innerHTML = `<div class="card" style="text-align:center;padding:1.5rem">
+    <div style="font-size:2rem;margin-bottom:.6rem">⏳</div>
+    <p style="color:var(--muted)">${t('alojProcessing')}</p>
+  </div>`;
+  try{
+    const er = await fetch('/api/booking/experience-cart-create',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        items,
+        customer_name: S.customerName,
+        customer_phone: S.customerPhone,
+        customer_email: S.customerEmail||null,
+        hotboat_booking_ref: null,
+      }),
+    });
+    const edata = await er.json();
+    if(!er.ok) throw new Error(edata.detail || 'Error');
+    const expSumTotal = Number(edata.total_price)||0;
+    _experienceCart = [];
+    _expCartPersist();
+    S.bookingRef = edata.primary_ref || (edata.booking_refs && edata.booking_refs[0]) || '';
+    S.paymentUrl = edata.payment_url || '';
+    S.totalPrice = expSumTotal;
+    // Backend antiguo sin pay_now_amount: solo carrito (sin HB) debe cobrar total.
+    S.depositAmount = Number(edata.pay_now_amount ?? expSumTotal);
+    if(!edata.payment_url && edata.requires_email){
+      const refs = (edata.booking_refs||[]).join(', ');
+      mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+        <div style="font-size:3rem;margin-bottom:1rem">📧</div>
+        <div class="card-title">${t('addonHighSeasonTitle')}</div>
+        <p style="color:var(--muted);margin-top:.6rem">
+          ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+        </p>
+        <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Refs: <strong>${refs||S.bookingRef}</strong></p>
+        <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">${t('backToMenu')}</button>
+      </div>`;
+      return;
+    }
+    _trackEvent('cart_only_payment_ready', S.bookingRef);
+    renderExperienceCartPaymentScreen(items.length);
+  }catch(ex){
+    showToast((ex.message||'') || t('alojPayErr'));
+    renderExperienceCartScreen();
+  }finally{
+    _payingExperienceCart = false;
+  }
+}
+
+function renderExperienceCartPaymentScreen(itemCount){
+  const deposit = S.depositAmount > 0 ? S.depositAmount : S.totalPrice;
+  S.depositAmount = 0;
+  const resto = Math.max(0, S.totalPrice - deposit);
+  const isFullNow = deposit >= S.totalPrice;
+  const payLabel = isFullNow ? t('expCartPayNowLbl') : t('expCartDepositLbl');
+  const sub = t('expCartPaymentSub', itemCount);
+  mc.innerHTML = `
+  ${stepsHtml('pago')}
+  <div class="card" style="text-align:center">
+    <div style="font-size:1.05rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--gold);margin-bottom:.3rem">${t('expCartPaymentTitle')}</div>
+    <p style="color:var(--muted);margin-bottom:.5rem;font-size:.85rem">${sub}</p>
+    <p style="color:var(--muted);margin-bottom:.8rem;font-size:.85rem">Ref: <strong>${S.bookingRef}</strong></p>
+    <div style="background:var(--bg);border-radius:12px;padding:1rem;margin:.75rem 0">
+      <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem">${payLabel}</div>
+      <div style="font-size:2rem;font-weight:800;color:var(--gold)">$${deposit.toLocaleString('es-CL')}</div>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.75rem 1rem;margin:.5rem 0;display:flex;justify-content:space-between;align-items:center;font-size:.85rem">
+      <span style="color:var(--muted)">${t('expCartGrandTotal')}</span>
+      <span style="font-weight:700">$${S.totalPrice.toLocaleString('es-CL')}</span>
+    </div>
+    ${!isFullNow ? `<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.75rem 1rem;margin:.5rem 0;display:flex;justify-content:space-between;align-items:center;font-size:.85rem">
+      <span style="color:var(--muted)">${t('expCartSaldoRow')}</span>
+      <span style="font-weight:700">$${resto.toLocaleString('es-CL')}</span>
+    </div>` : ''}
+    ${!isFullNow ? `<div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.7rem 1rem;margin:.75rem 0;font-size:.8rem;color:var(--muted);text-align:left">
+      ${t('expCartPayFootnote')}
+    </div>` : ''}
+    ${S.paymentUrl ? `
+      <a href="${S.paymentUrl}" class="btn" style="text-decoration:none;margin-top:.5rem;font-size:1rem;padding:.9rem">
+        ${t('expCartPayOnly')} $${deposit.toLocaleString('es-CL')}
+      </a>
+      <p style="color:var(--muted);font-size:.78rem;margin-top:.7rem">${t('expCartSecureLine')}</p>` : `
+      <div class="info-box">${t('expCartCreatedNoPayment')}</div>`}
+  </div>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
 }
 
 function showPrices(){
@@ -723,9 +1141,9 @@ let DYN_ALOJAMIENTOS = [];
 async function loadDynamicContent(){
   try{
     const [er, pr, ar, ms] = await Promise.all([
-      fetch('/api/content/experiencias').then(r=>r.json()),
-      fetch('/api/content/packs').then(r=>r.json()),
-      fetch('/api/content/alojamientos').then(r=>r.json()),
+      fetch(`/api/content/experiencias?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
+      fetch(`/api/content/packs?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
+      fetch(`/api/content/alojamientos?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
       fetch('/api/content/menu-settings').then(r=>r.json()).catch(()=>({})),
     ]);
     if(ms && typeof ms === 'object') S.menuSettings = {...S.menuSettings, ...ms};
@@ -745,9 +1163,9 @@ async function loadDynamicContent(){
     if(DYN_PACKS.length){
       PACKS.length=0;
       DYN_PACKS.forEach(p=>{
-        PACKS.push({id:p.slug,icon:p.icon,name:p.name,personas:p.personas,desc:p.description,
+        PACKS.push({id:p.slug,slug:p.slug,icon:p.icon,name:p.name,personas:p.personas,desc:p.description,
           includes:p.includes||[],desde:'Desde $'+Number(p.price_from).toLocaleString('es-CL'),
-          image:p.image_path});
+          price_from:Number(p.price_from||0), image:p.image_path});
       });
     }
   }catch(e){ console.warn('Dynamic content load failed:', e); }
@@ -756,9 +1174,9 @@ async function loadDynamicContent(){
 function showExperiencias(){
   _trackEvent('view_experiencias');
   const list = DYN_EXPERIENCIAS.length ? DYN_EXPERIENCIAS : [
-    {slug:'rafting',icon:'🚣',name:'Rafting',description:'Rio Trancura · Bajo o Alto',price_per_person:30000,image_path:'/media/images/experiencias/rafting/Rafting.jpg'},
-    {slug:'cabalgata',icon:'🐴',name:'Cabalgata',description:'Parque Ojos del Caburguá',price_per_person:50000,image_path:'/media/images/experiencias/cabalgata/CAbalgatas.jpg'},
-    {slug:'velerismo',icon:'⛵',name:'Navegacion a Vela',description:'Lago Villarrica',price_per_person:50000,image_path:'/media/images/experiencias/velerismo/Velerismo.jpg'},
+    {slug:'rafting',icon:'🚣',name:'Rafting',description:(LANG==='en'?'Trancura River · Low or High':LANG==='pt'?'Rio Trancura · Baixo ou Alto':'Rio Trancura · Bajo o Alto'),price_per_person:30000,image_path:'/media/images/experiencias/rafting/Rafting.jpg'},
+    {slug:'cabalgata',icon:'🐴',name:(LANG==='en'?'Horseback Riding':LANG==='pt'?'Cavalgada':'Cabalgata'),description:(LANG==='en'?'Ojos del Caburguá Park':'Parque Ojos del Caburguá'),price_per_person:50000,image_path:'/media/images/experiencias/cabalgata/CAbalgatas.jpg'},
+    {slug:'velerismo',icon:'⛵',name:(LANG==='en'?'Sailing':LANG==='pt'?'Vela':'Navegacion a Vela'),description:(LANG==='en'?'Villarrica Lake':'Lago Villarrica'),price_per_person:50000,image_path:'/media/images/experiencias/velerismo/Velerismo.jpg'},
   ];
   const btns = list.map(e=>`
     <button class="menu-btn" onclick="showExperienciaDetail('${e.slug}')" style="flex-direction:row;align-items:center;gap:.75rem">
@@ -777,20 +1195,372 @@ function showExperiencias(){
 }
 
 function showExperienciaDetail(slug){
-  const list = DYN_EXPERIENCIAS.length ? DYN_EXPERIENCIAS : [];
+  _trackEvent('view_experiencia_detail', slug);
+  const list = DYN_EXPERIENCIAS.length ? DYN_EXPERIENCIAS : [
+    {slug:'rafting',icon:'🚣',name:'Rafting',description:(LANG==='en'?'Trancura River · Low or High':LANG==='pt'?'Rio Trancura · Baixo ou Alto':'Rio Trancura · Bajo o Alto'),price_per_person:30000,image_path:'/media/images/experiencias/rafting/Rafting.jpg'},
+    {slug:'cabalgata',icon:'🐴',name:(LANG==='en'?'Horseback Riding':LANG==='pt'?'Cavalgada':'Cabalgata'),description:(LANG==='en'?'Ojos del Caburguá Park':'Parque Ojos del Caburguá'),price_per_person:50000,image_path:'/media/images/experiencias/cabalgata/CAbalgatas.jpg'},
+    {slug:'velerismo',icon:'⛵',name:(LANG==='en'?'Sailing':LANG==='pt'?'Vela':'Navegacion a Vela'),description:(LANG==='en'?'Villarrica Lake':'Lago Villarrica'),price_per_person:50000,image_path:'/media/images/experiencias/velerismo/Velerismo.jpg'},
+  ];
   const e = list.find(x=>x.slug===slug);
   if(!e){ showExperiencias(); return; }
-  const img = e.image_path ? mediaBlock(slug, e.image_path, '/media/documents/experiencias.pdf') : '';
+  const pricePerPerson = Math.round(Number(e.price_per_person||0));
+  if(!pricePerPerson){
+    showToast(t('alojPayErr'));
+    showExperiencias();
+    return;
+  }
+  _destroyAddonPickers();
+  _addonPackState = null;
+  _addonExpState = {e, slug, name: e.name, pricePerPerson, checkIn:null};
+  const expImgs = _expImagesList(e);
+  const gid = `gal-exp-${String(slug).replace(/[^a-z0-9_-]/gi, '')}`;
+  const imgHtml = _galBuild(gid, expImgs, e.icon || '🎫');
   mc.innerHTML = `
   <div class="card">
-    <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${e.icon}</div>
+    ${imgHtml}
     <div class="card-title">${e.name}</div>
-    <p style="color:var(--muted);margin-bottom:.8rem">${e.description||''}</p>
-    ${e.price_per_person ? `<div class="price-tag"><div class="price-big">$${Number(e.price_per_person).toLocaleString('es-CL')}</div><div class="price-sub">/persona</div></div>` : ''}
-    ${img}
+    <div class="price-tag"><div class="price-big">${_alojMoney(pricePerPerson)}</div>
+      <div class="price-sub">${t('addonPriceHint')}</div></div>
+    <p style="color:var(--muted);font-size:.85rem;margin-top:.8rem;line-height:1.5">${e.description||''}</p>
   </div>
-  <button class="btn" onclick="showExtrasDateForm('${slug}','${e.name}','experience')">Solicitar ${e.name}</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">Volver</button>`;
+  <div class="card">
+    <div class="card-title" style="font-size:1rem;margin-bottom:.6rem">${t('addonExpPickDateTitle')}</div>
+    <div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">${t('addonExpDateLbl')}</div>
+      <input type="text" id="addon-exp-in" readonly placeholder="${t('alojPhArrival')}"
+        style="width:100%;background:var(--deep);border:1px solid var(--border);
+               color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
+    </div>
+    <div class="form-group" style="margin-top:.75rem;margin-bottom:.3rem">
+      <label style="display:block;margin-bottom:.45rem">${t('addonSelectPeople')}</label>
+      <div class="counter counter-addon">
+        <button type="button" class="counter-btn" onclick="_addonExpPick(-1)">−</button>
+        <div class="counter-val" id="addon-exp-people-display">2</div>
+        <button type="button" class="counter-btn" onclick="_addonExpPick(1)">+</button>
+      </div>
+      <input type="hidden" id="addon-exp-people" value="2" data-min="1" data-max="99">
+      <p style="font-size:.72rem;color:var(--muted);text-align:center;margin-top:.4rem">1–99 ${t('personsLabel')}</p>
+    </div>
+  </div>
+  <div id="addon-booking-result"></div>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showExperiencias()">${t('alojMoreOptions')}</button>`;
+  _initAddonExpFlatpickr();
+}
+
+function _initAddonExpFlatpickr(){
+  const st = _addonExpState;
+  if(!st) return;
+  const fpCfg = {
+    minDate:'today', dateFormat:'Y-m-d',
+    altInput:true, altFormat:'d/m/Y',
+    locale: _fpLocaleObj(), disableMobile:true,
+  };
+  _addonFpIn = flatpickr('#addon-exp-in', {
+    ...fpCfg,
+    onChange(sel){
+      if(!sel.length) return;
+      st.checkIn = flatpickr.formatDate(sel[0],'Y-m-d');
+      const el=document.getElementById('addon-booking-result'); if(el) el.innerHTML='';
+      _onAddonExpDatesSelected();
+    },
+  });
+}
+
+function _onAddonExpPeopleChange(){
+  if(!_addonExpState?.checkIn) return;
+  _onAddonExpDatesSelected();
+}
+
+function _onAddonExpDatesSelected(){
+  const st=_addonExpState;
+  if(!st||!st.checkIn) return;
+  _renderAddonExpAvailable();
+}
+
+function _renderAddonExpAvailable(){
+  const st=_addonExpState;
+  if(!st||!st.checkIn) return;
+  const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
+  const days=1;
+  const unit=st.pricePerPerson;
+  const total=unit*people*days;
+  const payNow=total;
+  const result=document.getElementById('addon-booking-result');
+  if(!result) return;
+  result.innerHTML = `
+  <div class="card">
+    <div class="card-title" style="font-size:1rem">${t('alojYourBooking')}</div>
+    <div class="summary-row">
+      <span>📅 ${_fmtDate(st.checkIn)}</span>
+      <span style="opacity:.85">${t('addonDaysLabel', days)}</span>
+    </div>
+    <div class="summary-row">
+      <span>${_alojMoney(unit)}/pers. × ${people}</span>
+      <span><strong>${_alojMoney(total)}</strong></span>
+    </div>
+    <div class="summary-row" style="color:var(--gold)">
+      <span>${t('payNowLabel')}</span>
+      <span><strong>${_alojMoney(payNow)}</strong></span>
+    </div>
+    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(total-payNow))}</div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="font-size:1rem">${t('alojMsgExtra')}</div>
+    <div class="form-group" style="margin-bottom:0">
+      <textarea id="ax-notes" rows="3" placeholder="${t('alojPhNotes')}"
+        style="width:100%;background:var(--deep);border:1px solid var(--border);
+               color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem;resize:vertical"></textarea></div>
+  </div>
+  <button class="btn" id="ax-pay-btn" onclick="_submitAddonExpOnly()" style="margin-bottom:.5rem">
+    ${t('addonPayExperienceOnly', _alojMoney(payNow))}
+  </button>
+  <button class="btn btn-secondary" onclick="_addonExperienceCartAppend()" style="margin-bottom:.5rem;width:100%">
+    ${t('expCartAdd')}
+  </button>
+  <button class="btn btn-secondary" onclick="_startHotboatWithAddonExp()" style="width:100%">
+    ${t('alojAddHotboat')}
+  </button>`;
+}
+
+function _addonExperienceCartAppend(){
+  const st=_addonExpState;
+  if(!st?.checkIn){ showToast(t('addonNeedDateExp')); return; }
+  const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
+  const endDate=null;
+  appendExperienceCartLine({
+    kind:'experience',
+    experience_slug:st.slug,
+    experience_name:st.name,
+    start_date:st.checkIn,
+    end_date:endDate,
+    num_people:people,
+    price_per_person:st.pricePerPerson,
+    notes:(document.getElementById('ax-notes')?.value||'').trim()||'',
+    customer_name:'', customer_phone:'', customer_email:null,
+  });
+  showToast(t('expCartToast'));
+}
+
+function _addonPackCartAppend(){
+  const st=_addonPackState;
+  if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
+  const people=Math.max(1, parseInt(document.getElementById('addon-pk-people')?.value||'1',10)||1);
+  const unitPrice=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
+  const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+  appendExperienceCartLine({
+    kind:'pack',
+    pack_slug:st.slug,
+    pack_name:st.name,
+    start_date:st.checkIn,
+    end_date:endDate,
+    num_people:people,
+    unit_price_per_person:unitPrice,
+    notes:(document.getElementById('pk-notes')?.value||'').trim()||'',
+    customer_name:'', customer_phone:'', customer_email:null,
+  });
+  showToast(t('expCartToast'));
+}
+
+async function _submitAddonExpOnly(){
+  const st=_addonExpState;
+  if(!st?.checkIn){ showToast(t('addonNeedDateExp')); return; }
+  const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
+  const btn=document.getElementById('ax-pay-btn');
+  if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
+  try{
+    appendExperienceCartLine({
+      kind:'experience',
+      experience_slug:st.slug,
+      experience_name:st.name,
+      start_date:st.checkIn,
+      end_date:null,
+      num_people:people,
+      price_per_person:st.pricePerPerson,
+      notes:(document.getElementById('ax-notes')?.value||'').trim()||'',
+      customer_name:'', customer_phone:'', customer_email:null,
+    });
+    // Always route "Pagar" through cart checkout so contact data is requested first.
+    renderExperienceCartScreen();
+  }catch(ex){
+    showToast((ex.message||'')||t('alojPayErr'));
+    if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortExp'); }
+    return;
+  }
+  if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortExp'); }
+}
+
+function _startHotboatWithAddonExp(){
+  const st=_addonExpState;
+  if(!st?.checkIn){ showToast(t('addonNeedDateExp')); return; }
+  const notes=(document.getElementById('ax-notes')?.value||'').trim()||'';
+  const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
+  const endDate=null;
+  _pendingAlojBooking=null;
+  _pendingPackBooking=null;
+  appendExperienceCartLine({
+    kind:'experience',
+    experience_slug:st.slug,
+    experience_name:st.name,
+    start_date:st.checkIn,
+    end_date:endDate,
+    num_people:people,
+    price_per_person:st.pricePerPerson,
+    customer_name:'',
+    customer_phone:'',
+    customer_email:null,
+    notes,
+  });
+  S.numPeople=people;
+  goReservar();
+}
+
+function _initAddonPackFlatpickr(){
+  const st=_addonPackState;
+  if(!st) return;
+  const fpCfg={
+    minDate:'today', dateFormat:'Y-m-d',
+    altInput:true, altFormat:'d/m/Y',
+    locale:_fpLocaleObj(), disableMobile:true,
+  };
+  _addonFpIn=flatpickr('#addon-pk-in', {
+    ...fpCfg,
+    onChange(sel){
+      if(!sel.length) return;
+      st.checkIn=flatpickr.formatDate(sel[0],'Y-m-d');
+      st.checkOut=null;
+      const el=document.getElementById('addon-pack-booking-result'); if(el) el.innerHTML='';
+      const h=document.getElementById('addon-pk-days-hint'); if(h) h.textContent='';
+      _addonFpOut.set('minDate', sel[0]);
+      _addonFpOut.clear();
+      setTimeout(()=>_addonFpOut.open(), 120);
+    },
+  });
+  _addonFpOut=flatpickr('#addon-pk-out', {
+    ...fpCfg,
+    minDate:'today',
+    onChange(sel){
+      if(!sel.length||!st.checkIn) return;
+      st.checkOut=flatpickr.formatDate(sel[0],'Y-m-d');
+      _onAddonPackDatesSelected();
+    },
+  });
+}
+
+function _onAddonPackPeopleChange(){
+  if(!_addonPackState?.checkIn||!_addonPackState?.checkOut) return;
+  _onAddonPackDatesSelected();
+}
+
+function _onAddonPackDatesSelected(){
+  const st=_addonPackState;
+  if(!st||!st.checkIn||!st.checkOut) return;
+  const days=_addonComputeDays(st.checkIn,st.checkOut);
+  if(days<1){ showToast(t('addonInvalidDates')); return;}
+  const h=document.getElementById('addon-pk-days-hint');
+  if(h) h.textContent=t('addonDaysLabel', days);
+  _renderAddonPackAvailable();
+}
+
+function _renderAddonPackAvailable(){
+  const st=_addonPackState;
+  if(!st) return;
+  const people=Math.max(1, parseInt(document.getElementById('addon-pk-people')?.value||'1',10)||1);
+  const days=_addonComputeDays(st.checkIn,st.checkOut);
+  if(!days) return;
+  const unit=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
+  const total=unit*people*days;
+  const payNow=total;
+  const result=document.getElementById('addon-pack-booking-result');
+  if(!result) return;
+  result.innerHTML=`
+  <div class="card">
+    <div class="card-title" style="font-size:1rem">${t('alojYourBooking')}</div>
+    <div class="summary-row">
+      <span>📅 ${_fmtDate(st.checkIn)} → ${_fmtDate(st.checkOut)}</span>
+      <span>${t('addonDaysLabel', days)}</span>
+    </div>
+    <div class="summary-row">
+      <span>${_alojMoney(unit)}/pers. × ${people} × ${days}</span>
+      <span><strong>${_alojMoney(total)}</strong></span>
+    </div>
+    <div class="summary-row" style="color:var(--gold)">
+      <span>${t('payNowLabel')}</span>
+      <span><strong>${_alojMoney(payNow)}</strong></span>
+    </div>
+    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(total-payNow))}</div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="font-size:1rem">${t('alojMsgExtra')}</div>
+    <div class="form-group" style="margin-bottom:0">
+      <textarea id="pk-notes" rows="3" placeholder="${t('alojPhNotes')}"
+        style="width:100%;background:var(--deep);border:1px solid var(--border);
+               color:var(--text);border-radius:8px;padding:.5rem;font-size:.9rem;resize:vertical"></textarea></div>
+  </div>
+  <button class="btn" id="pk-pay-btn" onclick="_submitAddonPackOnly()" style="margin-bottom:.6rem">
+    ${t('addonPayPackOnly', _alojMoney(payNow))}
+  </button>
+  <button class="btn btn-secondary" onclick="_addonPackCartAppend()" style="margin-bottom:.5rem;width:100%">
+    ${t('expCartAdd')}
+  </button>
+  <button class="btn btn-secondary" onclick="_startHotboatWithAddonPack()">
+    ${t('alojAddHotboat')}
+  </button>`;
+}
+
+async function _submitAddonPackOnly(){
+  const st=_addonPackState;
+  if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
+  const people=Math.max(1, parseInt(document.getElementById('addon-pk-people')?.value||'1',10)||1);
+  const unitPrice=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
+  const btn=document.getElementById('pk-pay-btn');
+  if(btn){ btn.disabled=true; btn.textContent=t('alojProcessing'); }
+  const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+  try{
+    appendExperienceCartLine({
+      kind:'pack',
+      pack_slug:st.slug,
+      pack_name:st.name,
+      start_date:st.checkIn,
+      end_date:endDate,
+      num_people:people,
+      unit_price_per_person:unitPrice,
+      notes:(document.getElementById('pk-notes')?.value||'').trim()||'',
+      customer_name:'', customer_phone:'', customer_email:null,
+    });
+    // Always route "Pagar" through cart checkout so contact data is requested first.
+    renderExperienceCartScreen();
+  }catch(ex){
+    showToast((ex.message||'')||t('alojPayErr'));
+    if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortPack'); }
+    return;
+  }
+  if(btn){ btn.disabled=false; btn.textContent=t('addonPayShortPack'); }
+}
+
+function _startHotboatWithAddonPack(){
+  const st=_addonPackState;
+  if(!st?.checkIn||!st.checkOut){ showToast(t('addonNeedDates')); return; }
+  const notes=(document.getElementById('pk-notes')?.value||'').trim()||'';
+  const people=Math.max(1, parseInt(document.getElementById('addon-pk-people')?.value||'1',10)||1);
+  const unitPrice=Math.max(1, Math.round(st.priceFrom/Math.max(1,people)));
+  const endDate=st.checkOut===st.checkIn?null:st.checkOut;
+  _pendingAlojBooking=null;
+  _experienceCart=[];
+  _expCartPersist();
+  _pendingPackBooking={
+    pack_slug:st.slug,
+    pack_name:st.name,
+    start_date:st.checkIn,
+    end_date:endDate,
+    num_people:people,
+    unit_price_per_person:unitPrice,
+    customer_name:'',
+    customer_phone:'',
+    customer_email:null,
+    notes,
+  };
+  S.numPeople=people;
+  goReservar();
 }
 
 // Legacy aliases kept for any remaining internal references
@@ -799,18 +1569,19 @@ function showCabalgata(){ showExperienciaDetail('cabalgata'); }
 function showVelerismo(){ showExperienciaDetail('velerismo'); }
 
 function showExtras(){
+  const loc = _moneyLocale();
   mc.innerHTML = `
   <div class="card">
-    <div class="card-title">🎁 Extras disponibles</div>
+    <div class="card-title">${t('extrasListTitle')}</div>
     ${EXTRAS_CATALOG.map(e=>`
     <div class="extra-item" style="margin-bottom:.4rem">
       <span>${e.icon} ${e.name}</span>
-      <span class="extra-price">+$${e.price.toLocaleString('es-CL')}</span>
+      <span class="extra-price">+$${e.price.toLocaleString(loc)}</span>
     </div>`).join('')}
-    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">Los extras se agregan al momento de reservar</p>
+    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">${t('extrasListNote')}</p>
   </div>
-  <button class="btn" onclick="goReservar()">Reservar con extras 🚤</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
+  <button class="btn" onclick="goReservar()">${t('bookWithExtras')}</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
 }
 
 const ALOJAMIENTOS = [
@@ -841,18 +1612,18 @@ const ALOJAMIENTOS = [
 ];
 
 const PACKS = [
-  {id:'romantico',icon:'💕',name:'Pack Romantico',personas:'2 personas',
+  {id:'romantico',slug:'romantico',icon:'💕',name:'Pack Romantico',personas:'2 personas',
    desc:'Escapada romantica con todo incluido',
    includes:['Open Sky Domo (1-2 noches)','Paseo en HotBoat (2p)','Navegacion a velero','Modo Romantico a bordo'],
-   desde:'Desde $400.000'},
-  {id:'familiar',icon:'👨‍👩‍👧‍👦',name:'Pack Familiar',personas:'4 personas',
+   desde:'Desde $400.000', price_from:400000},
+  {id:'familiar',slug:'familiar',icon:'👨‍👩‍👧‍👦',name:'Pack Familiar',personas:'4 personas',
    desc:'Aventura familiar en la naturaleza',
    includes:['Cabana Relikura 4p (1-2 noches)','Paseo en HotBoat (4p)','Rafting Bajo','Cabalgata'],
-   desde:'Desde $650.000'},
-  {id:'amigos',icon:'👥',name:'Pack Amigos',personas:'6 personas',
+   desde:'Desde $650.000', price_from:650000},
+  {id:'amigos',slug:'amigos',icon:'👥',name:'Pack Amigos',personas:'6 personas',
    desc:'Experiencia grupal de aventura',
    includes:['Cabana Relikura 6p (1-2 noches)','Paseo en HotBoat (6p)','Rafting Alto','Extras a bordo'],
-   desde:'Desde $700.000'},
+   desde:'Desde $700.000', price_from:700000},
 ];
 
 const ACTIVIDADES = [
@@ -926,6 +1697,26 @@ function _galBuild(gid, imgs, icon){
   </div>`;
 }
 
+/** Normalize experience image_path + DB extra_images (strings or {url}) into deduped URLs */
+function _expImagesList(e){
+  const out = [];
+  if(!e) return out;
+  if(e.image_path){
+    const p = String(e.image_path).trim();
+    if(p) out.push(p);
+  }
+  let extra = e.extra_images;
+  if(typeof extra === 'string'){
+    try{ extra = JSON.parse(extra); }catch(_){ extra = []; }
+  }
+  if(!Array.isArray(extra)) return out;
+  extra.forEach(x=>{
+    const p = typeof x === 'string' ? String(x).trim() : (x && (x.url || x.path || x.src)) ? String(x.url||x.path||x.src).trim() : '';
+    if(p && !out.includes(p)) out.push(p);
+  });
+  return out;
+}
+
 function _galGoto(gid, dir){
   const wrap = document.getElementById(gid);
   if(!wrap) return;
@@ -960,7 +1751,69 @@ function _galGoto(gid, dir){
 // ── Accommodation booking state & calendar ───────────────────────────────────
 let _alojState = null;
 let _pendingAlojBooking = null;  // accommodation held while user picks HotBoat slot
+const EXP_CART_LS_KEY = 'hb_exp_cart_v1';
+/** @type {object[]} Lines: experience_slug, experience_name, start_date, end_date, num_people, price_per_person, notes, cart_id (+ optional customer_*) */
+let _experienceCart = [];
+
+function _expCartPersist(){
+  try{ localStorage.setItem(EXP_CART_LS_KEY, JSON.stringify(_experienceCart)); }catch(_e){}
+}
+function _expCartLoad(){
+  try{
+    const raw = localStorage.getItem(EXP_CART_LS_KEY);
+    if(raw) _experienceCart = JSON.parse(raw);
+    if(!Array.isArray(_experienceCart)) _experienceCart = [];
+    _experienceCart.forEach(li=>{
+      if(li.pack_slug) li.kind = 'pack';
+      else if(!li.kind) li.kind = 'experience';
+    });
+  }catch(_e){ _experienceCart = []; }
+}
+function appendExperienceCartLine(line){
+  /* Recargar desde LS para no pisar líneas agregadas en otra pestaña / sesión paralela */
+  _expCartLoad();
+  const row = { ...line };
+  if(!row.kind) row.kind = row.pack_slug ? 'pack' : 'experience';
+  row.cart_id = ('ec'+Date.now()+Math.random().toString(36).slice(2,10)).replace(/\./g,'').slice(0,22);
+  _experienceCart.push(row);
+  _expCartPersist();
+}
+function removeExperienceCartLine(cid){
+  _expCartLoad();
+  _experienceCart = _experienceCart.filter(x=>String(x.cart_id)!==String(cid));
+  _expCartPersist();
+}
+
+_expCartLoad();
+let _pendingPackBooking = null;  // pack held while user picks HotBoat slot
+/** @type {{e:any, slug:string, name:string, pricePerPerson:number, checkIn:string|null}|null} */
+let _addonExpState = null;
+/** @type {{p:any, slug:string, name:string, priceFrom:number, checkIn:string|null, checkOut:string|null}|null} */
+let _addonPackState = null;
+let _addonFpIn = null;
+let _addonFpOut = null;
 const _alojAvailCache = {};
+
+function _destroyAddonPickers(){
+  if(_addonFpIn){ try{_addonFpIn.destroy();}catch(_e){}; _addonFpIn=null; }
+  if(_addonFpOut){ try{_addonFpOut.destroy();}catch(_e){}; _addonFpOut=null; }
+}
+
+/** Match server experience-create / pack-create inclusive day span */
+function _addonComputeDays(checkInIso, checkOutIso){
+  if(!checkInIso||!checkOutIso) return 0;
+  if(checkOutIso < checkInIso) return -1;
+  const start = new Date(checkInIso+'T12:00:00');
+  const end   = new Date(checkOutIso+'T12:00:00');
+  if(checkInIso===checkOutIso) return 1;
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+/** Pending experience/pack payloads may omit end_date when same calendar day */
+function _addonDaysFromRange(startIso, endIsoMaybe){
+  if(!startIso) return 1;
+  return _addonComputeDays(startIso, endIsoMaybe || startIso);
+}
 
 async function showAlojamiento(id){
   _trackEvent('view_alojamiento_detail', id);
@@ -1096,6 +1949,23 @@ function _onAlojDatesSelected(){
 
 function _fmtDate(d){ const [y,m,dd]=d.split('-'); return `${dd}/${m}/${y}`; }
 
+/** Stepper for guest count; keeps hidden input in sync for existing submit handlers */
+function _adjPeoplePicker(inputId, delta, callback){
+  const hid = document.getElementById(inputId);
+  if(!hid) return;
+  const mn = parseInt(hid.getAttribute('data-min')||'1',10);
+  const mx = parseInt(hid.getAttribute('data-max')||'99',10);
+  let n = parseInt(hid.value||String(mn),10)||mn;
+  n = Math.max(mn, Math.min(mx, n + delta));
+  hid.value = String(n);
+  const disp = document.getElementById(inputId + '-display');
+  if(disp) disp.textContent = n;
+  if(typeof callback === 'function') callback();
+}
+function _addonExpPick(d){ _adjPeoplePicker('addon-exp-people', d, _onAddonExpPeopleChange); }
+function _addonPkPick(d){ _adjPeoplePicker('addon-pk-people', d, _onAddonPackPeopleChange); }
+function _asPeoplePick(d){ _adjPeoplePicker('as-people', d, null); }
+
 function _renderAlojSolicitud(){
   const {a, checkIn, checkOut, nights} = _alojState;
   document.getElementById('aloj-booking-result').innerHTML = `
@@ -1110,8 +1980,14 @@ function _renderAlojSolicitud(){
       <input type="tel" id="as-phone" placeholder="+56 9 xxxx xxxx"></div>
     <div class="form-group"><label>${t('labelEmail')}</label>
       <input type="email" id="as-email" placeholder="tu@email.com"></div>
-    <div class="form-group"><label>${t('alojPeopleShort')}</label>
-      <input type="number" id="as-people" value="2" min="1" max="${a.cap}"></div>
+    <div class="form-group"><label style="display:block;margin-bottom:.45rem">${t('alojPeopleShort')}</label>
+      <div class="counter counter-addon">
+        <button type="button" class="counter-btn" onclick="_asPeoplePick(-1)">−</button>
+        <div class="counter-val" id="as-people-display">2</div>
+        <button type="button" class="counter-btn" onclick="_asPeoplePick(1)">+</button>
+      </div>
+      <input type="hidden" id="as-people" value="2" data-min="1" data-max="${a.cap}">
+      <p style="font-size:.72rem;color:var(--muted);text-align:center;margin-top:.4rem">1–${a.cap} ${t('personsLabel')}</p></div>
     <div class="form-group"><label>${t('alojMsgExtra')}</label>
       <textarea id="as-notes" rows="2" placeholder="${t('alojPhNotes')}"
         style="width:100%;background:var(--deep);border:1px solid var(--border);
@@ -1158,8 +2034,10 @@ async function _submitAlojSolicitud(){
 
 function _renderAlojAvailable(){
   const {a, checkIn, checkOut, nights, pricePerNight} = _alojState;
-  const total   = pricePerNight * nights;
-  const deposit = Math.round(total * 0.5);
+  const total = pricePerNight * nights;
+  // Alojamiento "solo" (sin HotBoat) cobra el monto completo.
+  const payNow = total;
+  const remaining = Math.max(0, total - payNow);
   document.getElementById('aloj-booking-result').innerHTML = `
   <div class="card">
     <div class="card-title" style="font-size:1rem">${t('alojYourBooking')}</div>
@@ -1172,26 +2050,16 @@ function _renderAlojAvailable(){
       <span><strong>${_alojMoney(total)}</strong></span>
     </div>
     <div class="summary-row" style="color:var(--gold)">
-      <span>${t('alojDepositNow')}</span>
-      <span><strong>${_alojMoney(deposit)}</strong></span>
+      <span>${t('payNowLabel')}</span>
+      <span><strong>${_alojMoney(payNow)}</strong></span>
     </div>
-    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">
-      ${t('alojBalanceArrival', _alojMoney(total-deposit))}
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title" style="font-size:1rem">${t('alojYourData')}</div>
-    <div class="form-group"><label>${t('labelName')} *</label>
-      <input type="text" id="ab-name" placeholder="${t('labelName')}"></div>
-    <div class="form-group"><label>${t('labelPhone')} *</label>
-      <input type="tel" id="ab-phone" placeholder="+56 9 xxxx xxxx"></div>
-    <div class="form-group"><label>${t('alojEmailOpt')}</label>
-      <input type="email" id="ab-email" placeholder="tu@email.com"></div>
+    ${remaining>0 ? `<div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">
+      ${t('alojBalanceArrival', _alojMoney(remaining))}
+    </div>` : ''}
   </div>
 
   <button class="btn" id="ab-pay-btn" onclick="_submitAlojBooking()" style="margin-bottom:.6rem">
-    ${t('alojPayLodging', _alojMoney(deposit))}
+    ${t('alojPayLodging', _alojMoney(payNow))}
   </button>
   <button class="btn btn-secondary" onclick="_startHotboatWithAloj()">
     ${t('alojAddHotboat')}
@@ -1199,49 +2067,65 @@ function _renderAlojAvailable(){
 }
 
 async function _submitAlojBooking(){
-  const name  = (document.getElementById('ab-name')?.value||'').trim();
-  const phone = (document.getElementById('ab-phone')?.value||'').trim();
-  if(!name)  return showToast(t('alojEnterName'));
-  if(!phone) return showToast(t('alojEnterPhone'));
-  const btn = document.getElementById('ab-pay-btn');
-  if(btn){btn.disabled=true;btn.textContent=t('alojProcessing');}
-  const {alojId,a,checkIn,checkOut,pricePerNight}=_alojState;
-  const payload={
-    accommodation_id:   alojId,
-    accommodation_name: a.name,
-    accommodation_slug: a.id,
-    check_in:  checkIn,
-    check_out: checkOut,
-    num_people: a.cap,
-    price_per_night: pricePerNight,
-    customer_name:  name,
-    customer_phone: phone,
-    customer_email: document.getElementById('ab-email')?.value||null,
-  };
-  try{
-    const r = await fetch('/api/booking/accommodation-create',{method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    }).then(d=>d.json());
-    if(r.payment_url){
-      window.location.href=r.payment_url;
-    } else {
+  _ensureCustomerOneOffThen(async ()=>{
+    const btn = document.getElementById('ab-pay-btn');
+    if(btn){btn.disabled=true;btn.textContent=t('alojProcessing');}
+    const {alojId,a,checkIn,checkOut,pricePerNight}=_alojState;
+    const payload={
+      accommodation_id:   alojId,
+      accommodation_name: a.name,
+      accommodation_slug: a.id,
+      check_in:  checkIn,
+      check_out: checkOut,
+      num_people: a.cap,
+      price_per_night: pricePerNight,
+      customer_name:  S.customerName.trim(),
+      customer_phone: S.customerPhone.trim(),
+      customer_email: (S.customerEmail||'').trim()||null,
+    };
+    try{
+      const r = await fetch('/api/booking/accommodation-create',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if(!r.ok) throw new Error(j.detail || t('alojPayErr'));
+      if(j.payment_url){
+        window.location.href=j.payment_url;
+        return;
+      }
+      if(j.requires_email){
+        const ref=j.booking_ref||'';
+        const box=document.getElementById('aloj-booking-result');
+        if(box){
+          box.innerHTML=`
+          <div class="card" style="text-align:center;padding:1.2rem;margin-top:.75rem">
+            <div style="font-size:2.8rem;margin-bottom:.8rem">📧</div>
+            <div class="card-title">${t('addonHighSeasonTitle')}</div>
+            <p style="color:var(--muted);margin-top:.6rem">
+              ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+            </p>
+            <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${ref}</strong></p>
+            <button class="btn btn-secondary" style="margin-top:1rem" onclick="showAlojamientos()">${t('alojMoreOptions')}</button>
+          </div>`;
+        }
+        if(btn){btn.disabled=false;btn.textContent=t('alojPayLodging');}
+        return;
+      }
       showToast(t('alojPayErr'));
       if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
+    }catch(e){
+      showToast(t('alojConnErr'));
+      if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
     }
-  }catch(e){
-    showToast(t('alojConnErr'));
-    if(btn){btn.disabled=false;btn.textContent=t('alojPayLodgingShort');}
-  }
+  });
 }
 
 function _startHotboatWithAloj(){
-  const name  = (document.getElementById('ab-name')?.value||'').trim();
-  const phone = (document.getElementById('ab-phone')?.value||'').trim();
-  if(!name)  return showToast(t('alojEnterName'));
-  if(!phone) return showToast(t('alojEnterPhone'));
-  const email = (document.getElementById('ab-email')?.value||'').trim();
   const {alojId,a,checkIn,checkOut,pricePerNight}=_alojState;
+  _experienceCart = [];
+  _expCartPersist();
   _pendingAlojBooking = {
     accommodation_id:   alojId,
     accommodation_name: a.name,
@@ -1250,14 +2134,10 @@ function _startHotboatWithAloj(){
     check_out:       checkOut,
     num_people:      a.cap,
     price_per_night: pricePerNight,
-    customer_name:   name,
-    customer_phone:  phone,
-    customer_email:  email || null,
+    customer_name:   '',
+    customer_phone:  '',
+    customer_email:  null,
   };
-  // Pre-fill the HotBoat booking form with the same customer data
-  S.customerName  = name;
-  S.customerPhone = phone;
-  S.customerEmail = email;
   goReservar();
 }
 
@@ -1305,12 +2185,22 @@ const PACK_IMGS = {
 };
 
 function showPackDetail(id){
+  _trackEvent('view_pack_detail', id);
   const p = PACKS.find(x=>(x.id||x.slug)===id);
   if(!p) return showPacks();
-  const slug = p.id||p.slug;
+  const slug = p.slug||p.id;
+  const dyn = (DYN_PACKS||[]).find(x=>x.slug===slug)||{};
+  const priceFrom = Math.round(Number(dyn.price_from||p.price_from||0));
+  if(!priceFrom){
+    showToast(t('alojPayErr'));
+    return showPacks();
+  }
+  _destroyAddonPickers();
+  _addonExpState = null;
+  _addonPackState = {p, slug, name: p.name, priceFrom, checkIn:null, checkOut:null};
   const imgs = PACK_IMGS[slug]||{};
   const dynImg = p.image;
-  const desde = p.desde || ('Desde $'+Number(p.price_from||0).toLocaleString('es-CL'));
+  const desde = p.desde || (`Desde ${_alojMoney(priceFrom)}`);
   mc.innerHTML = `
   <div class="card">
     <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${p.icon}</div>
@@ -1321,15 +2211,44 @@ function showPackDetail(id){
     </div>
     <div class="price-tag" style="margin-top:.8rem">
       <div class="price-big">${desde}</div>
-      <div class="price-sub">Precio segun fechas y version (Basico / Premium)</div>
+      <div class="price-sub">${t('addonPackRefNote')}</div>
     </div>
     ${dynImg ? `<button id="mb-btn-pk-${slug}-d" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${slug}-d','mb-box-pk-${slug}-d','${dynImg}',true)">📸 Ver foto del pack</button><div id="mb-box-pk-${slug}-d"></div>` : ''}
     ${imgs.basico ? `<button id="mb-btn-pk-${slug}-b" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${slug}-b','mb-box-pk-${slug}-b','${imgs.basico}',true)">📸 Ver Pack Basico</button><div id="mb-box-pk-${slug}-b"></div>` : ''}
     ${imgs.premium ? `<button id="mb-btn-pk-${slug}-p" class="media-toggle" onclick="toggleMedia('mb-btn-pk-${slug}-p','mb-box-pk-${slug}-p','${imgs.premium}',true)">📸 Ver Pack Premium</button><div id="mb-box-pk-${slug}-p"></div>` : ''}
     <a href="/media/images/packs/resumen-packs.jpg" target="_blank" class="media-pdf">📸 Ver resumen de todos los packs →</a>
   </div>
-  <button class="btn" onclick="showExtrasDateForm('${slug}','${p.name}','pack')">Solicitar este Pack</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showPacks()">Ver otros packs</button>`;
+  <div class="card">
+    <div class="card-title" style="font-size:1rem;margin-bottom:.6rem">${t('alojSelectDates')}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+      <div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">${t('alojLblCheckIn')}</div>
+        <input type="text" id="addon-pk-in" readonly placeholder="${t('alojPhArrival')}"
+          style="width:100%;background:var(--deep);border:1px solid var(--border);
+                 color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
+      </div>
+      <div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">${t('alojLblCheckOut')}</div>
+        <input type="text" id="addon-pk-out" readonly placeholder="${t('alojPhDeparture')}"
+          style="width:100%;background:var(--deep);border:1px solid var(--border);
+                 color:var(--text);border-radius:8px;padding:.5rem .6rem;font-size:.85rem;cursor:pointer">
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:.75rem;margin-bottom:.3rem">
+      <label style="display:block;margin-bottom:.45rem">${t('addonSelectPeople')}</label>
+      <div class="counter counter-addon">
+        <button type="button" class="counter-btn" onclick="_addonPkPick(-1)">−</button>
+        <div class="counter-val" id="addon-pk-people-display">2</div>
+        <button type="button" class="counter-btn" onclick="_addonPkPick(1)">+</button>
+      </div>
+      <input type="hidden" id="addon-pk-people" value="2" data-min="1" data-max="99">
+      <p style="font-size:.72rem;color:var(--muted);text-align:center;margin-top:.4rem">1–99 ${t('personsLabel')}</p>
+    </div>
+    <div id="addon-pk-days-hint" style="font-size:.8rem;color:var(--muted);text-align:center;margin-top:.35rem"></div>
+  </div>
+  <div id="addon-pack-booking-result"></div>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="showPacks()">${t('alojMoreOptions')}</button>`;
+  _initAddonPackFlatpickr();
 }
 
 function showArmaPack(){
@@ -1511,76 +2430,6 @@ async function pagarArmaPack(mitad, total){
   }catch(e){
     showToast('Error: '+e.message);
     if(btn){ btn.textContent='💳 Pagar reserva'; btn.disabled=false; }
-  }
-}
-
-function showExtrasDateForm(slug, name, type){
-  mc.innerHTML = `
-  <div class="card">
-    <div class="card-title">📅 ${name}</div>
-    <p style="color:var(--muted);font-size:.84rem;margin-bottom:1rem">Completa tus datos y fechas para que el Capitán Tomás te confirme la reserva.</p>
-    <div class="form-group"><label>Nombre completo *</label>
-      <input type="text" id="ef-name" placeholder="Tu nombre"></div>
-    <div class="form-group"><label>WhatsApp / Telefono *</label>
-      <input type="tel" id="ef-phone" placeholder="+56 9 xxxx xxxx"></div>
-    <div class="form-group"><label>Fecha inicio *</label>
-      <input type="date" id="ef-start"></div>
-    <div class="form-group"><label>Fecha fin (si aplica)</label>
-      <input type="date" id="ef-end"></div>
-    <div class="form-group"><label>Cuántas personas</label>
-      <input type="number" id="ef-people" min="1" value="2"></div>
-    <div class="form-group"><label>Mensaje adicional</label>
-      <textarea id="ef-notes" rows="2" placeholder="Consultas o preferencias..."></textarea></div>
-  </div>
-  <button class="btn" onclick="enviarExtrasForm('${slug}','${name}','${type}')">Enviar Solicitud 📩</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
-}
-
-async function enviarExtrasForm(slug, name, type){
-  const nameVal  = document.getElementById('ef-name').value.trim();
-  const phone    = document.getElementById('ef-phone').value.trim();
-  const start    = document.getElementById('ef-start').value;
-  const end      = document.getElementById('ef-end').value || null;
-  const people   = parseInt(document.getElementById('ef-people').value)||1;
-  const notes    = document.getElementById('ef-notes').value.trim();
-  if(!nameVal||!phone||!start){ showToast('Ingresa nombre, teléfono y fecha inicio'); return; }
-  const btn = mc.querySelector('.btn');
-  if(btn){ btn.textContent='Enviando...'; btn.disabled=true; }
-  try{
-    // Create extras booking (public endpoint, no auth needed)
-    await fetch('/api/content/extras-booking', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        customer_name: nameVal, customer_phone: phone,
-        item_type: type, item_slug: slug, item_name: name,
-        start_date: start, end_date: end,
-        num_people: people, notes: notes,
-        total_price:0, deposit_paid:0, status:'pendiente',
-      }),
-    });
-    // Also create solicitud for admin notification
-    await fetch('/api/booking/solicitud',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        customer_name:nameVal, customer_phone:phone,
-        service_type: type+':'+slug,
-        title: name,
-        dates_preference: start+(end?' al '+end:''),
-        people: String(people),
-        notes,
-      }),
-    });
-    mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
-      <div style="font-size:3rem;margin-bottom:1rem">✅</div>
-      <div class="card-title">Solicitud enviada</div>
-      <p style="color:var(--muted);margin-top:.5rem">El Capitán Tomás te contactará por WhatsApp para coordinar los detalles.</p>
-    </div>
-    <button class="btn btn-secondary" onclick="renderMenu()">Volver al menu</button>`;
-  }catch(e){
-    showToast('Error: '+e.message);
-    if(btn){ btn.textContent='Enviar Solicitud 📩'; btn.disabled=false; }
   }
 }
 
@@ -1876,9 +2725,13 @@ function renderForm(){
   const total = hbTotal;
   const [yr,mo,dy] = S.selectedDate.split('-');
 
-  // Accommodation block (shown when coming from aloj flow)
+  // Accommodation / experiencia / pack summary (addon + HotBoat)
   let alojBlock = '';
   let combinedDepositNote = '';
+  /** Lines above HotBoat (cart or single pending pack): shown inside unified “Carrito HotBoat”. */
+  let unifiedCartTopInner = '';
+  const mergeHbIntoCartCard = !!( _experienceCart.length || _pendingPackBooking );
+
   if(_pendingAlojBooking){
     const p = _pendingAlojBooking;
     const alojNights = (new Date(p.check_out) - new Date(p.check_in)) / 86400000;
@@ -1903,26 +2756,85 @@ function renderForm(){
       🏠🚤 <strong style="color:var(--gold)">Total abono ahora: $${combinedDeposit.toLocaleString('es-CL')}</strong><br>
       <span style="font-size:.75rem">Alojamiento $${alojDeposit.toLocaleString('es-CL')} + HotBoat $${hbDeposit.toLocaleString('es-CL')} · Total combinado $${combinedTotal.toLocaleString('es-CL')}</span>
     </div>`;
+  } else if(_experienceCart.length){
+    let expTotalAll = 0;
+    const rows = _experienceCart.map((p)=>{
+      const days = _addonDaysFromRange(p.start_date, p.end_date);
+      const isPack = p.kind==='pack' || !!p.pack_slug;
+      const pp = isPack ? (Number(p.unit_price_per_person)||0) : (Number(p.price_per_person)||0);
+      const expTotal = pp * (Math.max(1, Number(p.num_people)||1)) * days;
+      expTotalAll += expTotal;
+      const dateEnd = p.end_date || p.start_date;
+      const ic = isPack ? '📦' : '🎫';
+      const nm = isPack ? (p.pack_name||'') : (p.experience_name||'');
+      const dateRow = !isPack && !p.end_date
+        ? `<span>📅 ${_fmtDate(p.start_date)}</span><span>${t('addonDaysLabel', days)}</span>`
+        : `<span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span>`;
+      const pxRow = days>1
+        ? `${_alojMoney(pp)}/pers. × ${p.num_people} × ${days}`
+        : `${_alojMoney(pp)}/pers. × ${p.num_people}`;
+      const cid = String(p.cart_id || '').replace(/'/g, '');
+      return `
+      <div style="border-bottom:1px solid var(--border);padding:.55rem 0;margin-bottom:.45rem">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;margin-bottom:.2rem;color:var(--text)">${ic} ${nm}</div>
+            <div class="summary-row">${dateRow}</div>
+            <div class="summary-row"><span>${pxRow}</span><span><strong>${_alojMoney(expTotal)}</strong></span></div>
+          </div>
+          <button type="button" onclick="removeExperienceCartLine('${cid}');renderForm();"
+            style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.25rem .5rem;font-size:.75rem;cursor:pointer;flex-shrink:0;align-self:flex-start">${t('expCartRm')}</button>
+        </div>
+      </div>`;
+    }).join('');
+    const expDepositAll = Math.round(expTotalAll * 0.5);
+    const hbDeposit = Math.round(hbTotal * 0.5);
+    const combinedTotal = hbTotal + expTotalAll;
+    const combinedDeposit = hbDeposit + expDepositAll;
+    unifiedCartTopInner = `
+      ${rows}
+      <div class="summary-row" style="color:var(--gold);margin-top:.35rem;padding-top:.35rem;border-top:1px solid var(--border)"><span>${t('alojDepositNow')}</span><span><strong>${_alojMoney(expDepositAll)}</strong></span></div>
+      <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(expTotalAll - expDepositAll))}</div>`;
+    combinedDepositNote = `
+    <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
+      🎫🚤 <strong style="color:var(--gold)">Total abono ahora: ${_alojMoney(combinedDeposit)}</strong><br>
+      <span style="font-size:.75rem">${t('combinedSubtitleExpCartHb', _experienceCart.length, _alojMoney(expDepositAll), _alojMoney(hbDeposit), _alojMoney(combinedTotal))}</span>
+    </div>`;
+  } else if(_pendingPackBooking){
+    const p = _pendingPackBooking;
+    const days = _addonDaysFromRange(p.start_date, p.end_date);
+    const packTotal = (Number(p.unit_price_per_person)||0) * (Math.max(1, Number(p.num_people)||1)) * days;
+    const packDeposit = Math.round(packTotal * 0.5);
+    const hbDeposit = Math.round(hbTotal * 0.5);
+    const combinedTotal = hbTotal + packTotal;
+    const combinedDeposit = hbDeposit + packDeposit;
+    const dateEnd = p.end_date || p.start_date;
+    unifiedCartTopInner = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;margin-bottom:.45rem">
+        <div style="flex:1;min-width:0">
+          <div style="margin-bottom:.35rem;font-weight:600;color:var(--text);font-size:.95rem">📦 ${p.pack_name||''}</div>
+          <div class="summary-row"><span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span></div>
+          <div class="summary-row"><span>${_alojMoney(p.unit_price_per_person)}/pers. × ${p.num_people} × ${days}</span><span><strong>${_alojMoney(packTotal)}</strong></span></div>
+          <div class="summary-row" style="color:var(--gold)"><span>${t('alojDepositNow')}</span><span><strong>${_alojMoney(packDeposit)}</strong></span></div>
+          <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(packTotal - packDeposit))}</div>
+        </div>
+        <button type="button" onclick="_pendingPackBooking=null;renderForm();"
+          style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.25rem .5rem;font-size:.75rem;cursor:pointer;flex-shrink:0;align-self:flex-start">${t('expCartRm')}</button>
+      </div>`;
+    combinedDepositNote = `
+    <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
+      📦🚤 <strong style="color:var(--gold)">Total abono ahora: ${_alojMoney(combinedDeposit)}</strong><br>
+      <span style="font-size:.75rem">${t('combinedSubtitlePackHb', _alojMoney(packDeposit), _alojMoney(hbDeposit), _alojMoney(combinedTotal))}</span>
+    </div>`;
   }
 
-  mc.innerHTML = `
-  ${stepsHtml('datos')}
-  ${alojBlock}
-  <div class="card">
-    <div class="card-title">${t('formTitle')}</div>
-    <div class="summary-row"><span>${t('labelDate')}</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
-    <div class="summary-row"><span>${t('labelPeople')}</span><span>${S.numPeople}</span></div>
-    <div class="summary-row"><span>${t('labelBase')}</span><span>$${sub.toLocaleString('es-CL')}${(()=>{if(S.dpEnabled&&mult!==1.0){const c=mult>1?'#e74c3c':'#2ecc71';const p=Math.round((mult-1)*100);const s=p>0?'+':'';return ` <span style="font-size:.72rem;color:${c}">(${s}${p}%)</span>`;}return '';})()}</span></div>
-    ${extRows}
-    ${flex ? `<div class="summary-row"><span>${t('labelFlex')}</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
-    ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón <strong>${S.couponCode}</strong></span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>` : ''}
-    <div class="summary-row total" id="summary-total-row"><span>${t('labelTotal')}</span><span id="summary-total-val">$${hbTotal.toLocaleString('es-CL')}</span></div>
-    ${combinedDepositNote || `
+  const hbGoldenFallback = `
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
       🚤 <strong style="color:var(--gold)">50% ($${Math.round(hbTotal*0.5).toLocaleString('es-CL')})</strong> — ${t('depositNote')}
-    </div>`}
-    ${S.couponExtra ? `<div style="margin-top:.6rem;padding:.6rem .9rem;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:10px;font-size:.85rem;color:#a5b4fc">🎁 <strong>${LANG==='en'?'Bonus':'Beneficio'}:</strong> ${S.couponExtra}</div>` : ''}
-    <!-- Cupón input -->
+    </div>`;
+  const depositBoxHtml = combinedDepositNote || hbGoldenFallback;
+
+  const couponBlockHtml = `
     <div style="margin-top:.9rem">
       <div style="display:flex;gap:.5rem;align-items:stretch">
         <input type="text" id="coupon-input" placeholder="${LANG==='pt'?'Código de cupom':LANG==='en'?'Coupon code':'Código de cupón'}"
@@ -1942,8 +2854,40 @@ function renderForm(){
           ? '* O desconto aplica-se apenas ao valor base da reserva HotBoat, não aos extras.'
           : '* El descuento aplica solo sobre la tarifa base de la reserva HotBoat, no sobre los extras.'}
       </div>
+    </div>`;
+
+  const hbDetailInner = `
+    <div class="summary-row"><span>${t('labelDate')}</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
+    <div class="summary-row"><span>${t('labelPeople')}</span><span>${S.numPeople}</span></div>
+    <div class="summary-row"><span>${t('labelBase')}</span><span>$${sub.toLocaleString('es-CL')}${(()=>{if(S.dpEnabled&&mult!==1.0){const c=mult>1?'#e74c3c':'#2ecc71';const p=Math.round((mult-1)*100);const s=p>0?'+':'';return ` <span style="font-size:.72rem;color:${c}">(${s}${p}%)</span>`;}return '';})()}</span></div>
+    ${extRows}
+    ${flex ? `<div class="summary-row"><span>${t('labelFlex')}</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
+    ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón <strong>${S.couponCode}</strong></span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>` : ''}
+    <div class="summary-row total" id="summary-total-row"><span>${t('labelTotal')}</span><span id="summary-total-val">$${hbTotal.toLocaleString('es-CL')}</span></div>
+    ${depositBoxHtml}
+    ${S.couponExtra ? `<div style="margin-top:.6rem;padding:.6rem .9rem;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:10px;font-size:.85rem;color:#a5b4fc">🎁 <strong>${LANG==='en'?'Bonus':'Beneficio'}:</strong> ${S.couponExtra}</div>` : ''}
+    ${couponBlockHtml}`;
+
+  const standaloneHbCardHtml = `
+  <div class="card">
+    <div class="card-title">${t('formTitle')}</div>
+    ${hbDetailInner}
+  </div>`;
+
+  const unifiedCartHbCardHtml = `
+  <div class="card" style="border-color:var(--coral)">
+    <div class="card-title">${t('expCartTitle')}</div>
+    ${unifiedCartTopInner}
+    <div style="margin-top:1.05rem;padding-top:1rem;border-top:2px solid var(--border)">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:clamp(1.05rem,3.8vw,1.35rem);color:var(--gold);letter-spacing:.05em;margin-bottom:.65rem;line-height:1.2">${t('cartHbSubtitle')}</div>
+      ${hbDetailInner}
     </div>
-  </div>
+  </div>`;
+
+  mc.innerHTML = `
+  ${stepsHtml('datos')}
+  ${alojBlock}
+  ${mergeHbIntoCartCard ? unifiedCartHbCardHtml : standaloneHbCardHtml}
   <div class="card">
     <div class="card-title">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
     <div class="form-group"><label>${t('labelName')} *</label>
@@ -1955,11 +2899,19 @@ function renderForm(){
     <div class="form-group"><label>${t('labelEmail')}</label>
       <input type="email" id="f-email" placeholder="tu@email.com" value="${S.customerEmail}">
     </div>
-    <div class="form-group"><label>${LANG==='es'?'Fecha de nacimiento':'Date of birth'} <span style="font-weight:400;opacity:.65">(${LANG==='es'?'opcional — para saludarte en tu día 🎂':LANG==='pt'?'opcional 🎂':'optional 🎂'})</span></label>
+    <div class="form-group"><label>${LANG==='es'?'Fecha de nacimiento':'Date of birth'} <span style="font-weight:400;opacity:.65">(${LANG==='es'?'opcional — para regalonearte en tu día 🎂':LANG==='pt'?'opcional 🎂':'optional 🎂'})</span></label>
       <input type="date" id="f-birthday" max="${new Date().toISOString().split('T')[0]}" value="${S.customerBirthday||''}">
     </div>
   </div>
-  <button class="btn" onclick="submitBooking()">${_pendingAlojBooking ? '💳 Pagar alojamiento + HotBoat' : t('pay') + ' 💳'}</button>
+  <button class="btn" onclick="submitBooking()">
+    ${_pendingAlojBooking
+      ? '💳 Pagar alojamiento + HotBoat'
+      : _experienceCart.length
+      ? t('expCartPayHb')
+      : _pendingPackBooking
+      ? '💳 Pagar pack + HotBoat'
+      : t('pay') + ' 💳'}
+  </button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderExtras()">${t('back')}</button>`;
 }
 
@@ -2018,6 +2970,7 @@ async function applyCoupon(){
 }
 
 async function submitBooking(){
+  if(_isSubmittingBooking) return;
   S.customerName = $('f-name').value.trim();
   S.customerPhone = $('f-phone').value.trim();
   S.customerEmail = $('f-email').value.trim();
@@ -2026,6 +2979,7 @@ async function submitBooking(){
     showToast('Por favor ingresa nombre y telefono');
     return;
   }
+  _isSubmittingBooking = true;
   const basepp = S.prices[S.numPeople] || 69990;
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const pp = Math.round(basepp * mult / 1000) * 1000;
@@ -2056,10 +3010,16 @@ async function submitBooking(){
       has_flex: S.hasFlex,
       coupon_code: S.couponCode || null,
       coupon_discount: S.couponDiscount || 0,
+      coupon_extra_benefit: (S.couponExtra || '').trim() || null,
+      utm_source: S.utm_source || '',
+      utm_medium: S.utm_medium || '',
+      utm_campaign: S.utm_campaign || '',
+      utm_content: S.utm_content || '',
+      parametro_url: S.parametro_url || '',
     };
     if(testPrice) payload.test_price = parseInt(testPrice);
     // If coming from accommodation flow, create HotBoat booking without payment order
-    if(_pendingAlojBooking) payload.skip_payment = true;
+    if(_pendingAlojBooking || _experienceCart.length || _pendingPackBooking) payload.skip_payment = true;
 
     const r = await fetch('/api/booking/create',{
       method:'POST',
@@ -2075,6 +3035,9 @@ async function submitBooking(){
     if(_pendingAlojBooking){
       // Create combined WooCommerce order: accommodation + HotBoat in one payment
       const alojPayload = { ..._pendingAlojBooking, hotboat_booking_ref: data.booking_ref };
+      alojPayload.customer_name = S.customerName;
+      alojPayload.customer_phone = S.customerPhone;
+      alojPayload.customer_email = S.customerEmail || null;
       const alojNights = (new Date(alojPayload.check_out) - new Date(alojPayload.check_in)) / 86400000;
       _pendingAlojBooking = null;
       const ar = await fetch('/api/booking/accommodation-create',{
@@ -2086,18 +3049,140 @@ async function submitBooking(){
       if(!ar.ok) throw new Error(adata.detail || 'Error al crear reserva alojamiento');
       S.bookingRef = adata.booking_ref;
       S.paymentUrl = adata.payment_url;
+      if(!adata.payment_url && adata.requires_email){
+        mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+          <div style="font-size:3rem;margin-bottom:1rem">📧</div>
+          <div class="card-title">${t('addonHighSeasonTitle')}</div>
+          <p style="color:var(--muted);margin-top:.6rem">
+            ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+          </p>
+          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${adata.booking_ref}</strong></p>
+          <p style="color:var(--muted);margin-top:.5rem;font-size:.82rem">HotBoat: <strong>${data.booking_ref}</strong></p>
+          <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">${t('backToMenu')}</button>
+        </div>`;
+        return;
+      }
       // Combined totals: HotBoat + accommodation
       const alojTotal = alojPayload.price_per_night * alojNights;
       const alojDeposit = Math.round(alojTotal * 0.5);
       S.totalPrice = total + alojTotal;           // real combined total
       S.depositAmount = Math.round(total * 0.5) + alojDeposit;  // real combined deposit
+    } else if(_experienceCart.length){
+      const items = _experienceCart.map(li=>{
+        const isPack = li.kind==='pack' || !!li.pack_slug;
+        if(isPack){
+          return {
+            item_type:'pack',
+            pack_slug: li.pack_slug,
+            pack_name: li.pack_name,
+            start_date: li.start_date,
+            end_date: li.end_date || null,
+            num_people: Math.max(1, Number(li.num_people)||1),
+            unit_price_per_person: Number(li.unit_price_per_person)||0,
+            notes: (li.notes||'').trim()||null,
+          };
+        }
+        return {
+          item_type:'experience',
+          experience_slug: li.experience_slug,
+          experience_name: li.experience_name,
+          start_date: li.start_date,
+          end_date: li.end_date || null,
+          num_people: Math.max(1, Number(li.num_people)||1),
+          price_per_person: Number(li.price_per_person)||0,
+          notes: (li.notes||'').trim()||null,
+        };
+      });
+      const er = await fetch('/api/booking/experience-cart-create',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          items,
+          customer_name: S.customerName,
+          customer_phone: S.customerPhone,
+          customer_email: S.customerEmail||null,
+          hotboat_booking_ref: data.booking_ref,
+        }),
+      });
+      const edata = await er.json();
+      if(!er.ok) throw new Error(edata.detail || 'Error al crear reserva experiencias');
+
+      const expSumTotal = Number(edata.total_price)||0;
+
+      _experienceCart = [];
+      _expCartPersist();
+
+      S.bookingRef = edata.primary_ref || (edata.booking_refs && edata.booking_refs[0]) || data.booking_ref;
+      S.paymentUrl = edata.payment_url;
+      S.totalPrice = total + expSumTotal;
+      S.depositAmount = Math.round(total * 0.5) + Math.round(expSumTotal * 0.5);
+
+      if(!edata.payment_url && edata.requires_email){
+        const refs = (edata.booking_refs||[]).join(', ');
+        mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+          <div style="font-size:3rem;margin-bottom:1rem">📧</div>
+          <div class="card-title">${t('addonHighSeasonTitle')}</div>
+          <p style="color:var(--muted);margin-top:.6rem">
+            ${t('addonHighSeasonBody')} <strong>info@hotboatchile.com</strong>.
+          </p>
+          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Refs: <strong>${refs||S.bookingRef}</strong></p>
+          <p style="color:var(--muted);margin-top:.5rem;font-size:.82rem">HotBoat: <strong>${data.booking_ref}</strong></p>
+          <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">${t('backToMenu')}</button>
+        </div>`;
+        return;
+      }
+    } else if(_pendingPackBooking){
+      // Create combined WooCommerce order: pack + HotBoat
+      const packPayload = { ..._pendingPackBooking, hotboat_booking_ref: data.booking_ref };
+      packPayload.customer_name = S.customerName;
+      packPayload.customer_phone = S.customerPhone;
+      packPayload.customer_email = S.customerEmail || null;
+      packPayload.num_people = S.numPeople;
+      const start = new Date(packPayload.start_date);
+      const end   = packPayload.end_date ? new Date(packPayload.end_date) : null;
+      const daysCount = (!end || packPayload.end_date === packPayload.start_date)
+        ? 1
+        : Math.round((end - start) / 86400000) + 1;
+      const packTotal = packPayload.unit_price_per_person * packPayload.num_people * daysCount;
+      const packDeposit = Math.round(packTotal * 0.5);
+
+      _pendingPackBooking = null;
+
+      const pr = await fetch('/api/booking/pack-create',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(packPayload)
+      });
+      const pdata = await pr.json();
+      if(!pr.ok) throw new Error(pdata.detail || 'Error al crear reserva pack');
+
+      S.bookingRef = pdata.booking_ref;
+      S.paymentUrl = pdata.payment_url;
+      S.totalPrice = total + packTotal;
+      S.depositAmount = Math.round(total * 0.5) + packDeposit;
+
+      if(!pdata.payment_url && pdata.requires_email){
+        mc.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+          <div style="font-size:3rem;margin-bottom:1rem">📧</div>
+          <div class="card-title">Alta temporada — Coordinamos por email</div>
+          <p style="color:var(--muted);margin-top:.6rem">
+            Para confirmar el pack, escribe a <strong>info@hotboatchile.com</strong>.
+          </p>
+          <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Ref: <strong>${pdata.booking_ref}</strong></p>
+          <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">Volver al inicio</button>
+        </div>`;
+        return;
+      }
     }
 
     _trackEvent('booking_completed', S.selectedDate);
     renderPayment();
   }catch(e){
     _pendingAlojBooking = null;
+    _pendingPackBooking = null;
     mc.innerHTML = `<div class="card"><p style="color:red">Error: ${e.message}</p></div>`;
+  }finally{
+    _isSubmittingBooking = false;
   }
 }
 
@@ -2133,8 +3218,8 @@ function renderPayment(){
 
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.7rem 1rem;margin:.75rem 0;font-size:.8rem;color:var(--muted);text-align:left">
       ${isCombined
-        ? '🏠🚤 El saldo restante se paga <strong>al terminar el paseo en HotBoat</strong>, en efectivo o transferencia.'
-        : '🚤 El saldo restante se paga <strong>al terminar el paseo en HotBoat</strong>, en efectivo o transferencia.'}
+        ? '🏠🚤 El saldo restante se paga <strong>al terminar el paseo en HotBoat</strong>, en efectivo, tarjeta o transferencia.'
+        : '🚤 El saldo restante se paga <strong>al terminar el paseo en HotBoat</strong>, en efectivo, tarjeta o transferencia.'}
     </div>
 
     ${S.paymentUrl ? `
@@ -2193,8 +3278,14 @@ async function init(){
     // Track page exit via sendBeacon (survives page unload)
     window.addEventListener('visibilitychange', ()=>{
       if(document.visibilityState==='hidden'){
-        const d = JSON.stringify({event:'exit',session_id:_sessionId,is_returning:_isReturning,
-          lang:S.lang||'es',referrer:''});
+        const d = JSON.stringify({
+          event:'exit',
+          session_id:_sessionId,
+          is_returning:_isReturning,
+          lang:S.lang||'es',
+          referrer: document.referrer?document.referrer.substring(0,200):'',
+          ..._landingAttribution,
+        });
         navigator.sendBeacon('/api/booking/track', new Blob([d],{type:'application/json'}));
       }
     });

@@ -28,6 +28,34 @@ def _ad_source_col_exists(cur) -> bool:
     return _ad_col_cached
 
 
+_lang_col_ensured: bool = False
+
+def _ensure_lang_col(cur) -> None:
+    """Add preferred_language column if not present (runs once per process)."""
+    global _lang_col_ensured
+    if _lang_col_ensured:
+        return
+    cur.execute(
+        "ALTER TABLE whatsapp_leads ADD COLUMN IF NOT EXISTS preferred_language TEXT"
+    )
+    _lang_col_ensured = True
+
+
+def save_lead_language(phone_number: str, language: str) -> None:
+    """Persist the user's preferred language to the DB (synchronous)."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                _ensure_lang_col(cur)
+                cur.execute(
+                    "UPDATE whatsapp_leads SET preferred_language = %s, updated_at = NOW() WHERE phone_number = %s",
+                    (language, phone_number),
+                )
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"save_lead_language failed: {e}")
+
+
 async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Dict:
     """
     Get or create a lead in the database
@@ -42,17 +70,20 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                _ensure_lang_col(cur)
                 try:
                     cur.execute("""
                         SELECT
                             id, phone_number, customer_name, lead_status,
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
-                            unread_count, last_read_at, priority, ad_source
+                            unread_count, last_read_at, priority, ad_source,
+                            ad_platform, ad_media_type, ad_creative_url, ad_ctwa_clid, ad_audience,
+                            preferred_language
                         FROM whatsapp_leads
                         WHERE phone_number = %s
                     """, (phone_number,))
                 except Exception:
-                    # ad_source column not yet created — fallback without it
+                    conn.rollback()  # psycopg3: reset aborted transaction before fallback
                     cur.execute("""
                         SELECT
                             id, phone_number, customer_name, lead_status,
@@ -98,6 +129,12 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "last_read_at": row[11].isoformat() if len(row) > 11 and row[11] else None,
                         "priority": row[12] if len(row) > 12 else 0,
                         "ad_source": row[13] if len(row) > 13 else None,
+                        "ad_platform": row[14] if len(row) > 14 else None,
+                        "ad_media_type": row[15] if len(row) > 15 else None,
+                        "ad_creative_url": row[16] if len(row) > 16 else None,
+                        "ad_ctwa_clid": row[17] if len(row) > 17 else None,
+                        "ad_audience": row[18] if len(row) > 18 else None,
+                        "preferred_language": row[19] if len(row) > 19 else None,
                     }
                 else:
                     # Create new lead
@@ -604,6 +641,7 @@ async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
 
     Resolves the real ad name from Meta Ads Manager via Graph API (source_id).
     Falls back to referral.headline if the API call fails.
+    Also stores platform (instagram/facebook), media_type, creative_url, ctwa_clid.
     """
     if not referral:
         return None
@@ -616,27 +654,68 @@ async def save_lead_ad_source(phone_number: str, referral: dict) -> str | None:
         label = (referral.get("headline") or source_id or "").strip()
     if not label:
         return None
+
+    # Derive platform and audience from source_url (contains UTM params)
+    source_url_raw = referral.get("source_url") or ""
+    source_url = source_url_raw.lower()
+    if "instagram" in source_url:
+        platform = "instagram"
+    elif source_url:
+        platform = "facebook"
+    else:
+        platform = None
+
+    # Parse utm_content (audience) from source_url
+    audience = None
+    if source_url_raw:
+        try:
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(source_url_raw).query)
+            raw_audience = (qs.get("utm_content") or qs.get("utm_audience") or [None])[0]
+            if raw_audience:
+                audience = raw_audience.replace("-", " ").replace("_", " ").title()
+        except Exception:
+            pass
+
+    media_type    = referral.get("media_type") or None        # "image" | "video"
+    creative_url  = (referral.get("image_url") or referral.get("video_url") or None)
+    ctwa_clid     = referral.get("ctwa_clid") or None
+
     try:
         import json as _json
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Add columns if they don't exist (safe to run every call)
                 cur.execute("""
                     ALTER TABLE whatsapp_leads
                     ADD COLUMN IF NOT EXISTS ad_source TEXT,
-                    ADD COLUMN IF NOT EXISTS ad_referral JSONB
+                    ADD COLUMN IF NOT EXISTS ad_referral JSONB,
+                    ADD COLUMN IF NOT EXISTS ad_platform TEXT,
+                    ADD COLUMN IF NOT EXISTS ad_media_type TEXT,
+                    ADD COLUMN IF NOT EXISTS ad_creative_url TEXT,
+                    ADD COLUMN IF NOT EXISTS ad_ctwa_clid TEXT,
+                    ADD COLUMN IF NOT EXISTS ad_audience TEXT
                 """)
-                # Column now guaranteed to exist — update cache so get_or_create_lead uses it
                 global _ad_col_cached
                 _ad_col_cached = True
-                # Only set if not already set — first ad click wins
                 cur.execute("""
                     UPDATE whatsapp_leads
-                    SET ad_source = %s, ad_referral = %s, updated_at = NOW()
-                    WHERE phone_number = %s AND ad_source IS NULL
-                """, (label, _json.dumps(referral), phone_number))
+                    SET ad_source      = %s,
+                        ad_referral    = %s,
+                        ad_platform    = %s,
+                        ad_media_type  = %s,
+                        ad_creative_url = %s,
+                        ad_ctwa_clid   = %s,
+                        ad_audience    = %s,
+                        updated_at     = NOW()
+                    WHERE phone_number = %s
+                """, (label, _json.dumps(referral), platform, media_type,
+                      creative_url, ctwa_clid, audience, phone_number))
+                rowcount = cur.rowcount
             conn.commit()
-        logger.info(f"Ad source saved for {phone_number}: {label}")
+        if rowcount == 0:
+            logger.warning(f"Ad source NOT saved for {phone_number} (rowcount=0, lead not found?): {label}")
+        else:
+            logger.info(f"Ad source saved for {phone_number}: {label} | platform={platform} | audience={audience}")
         return label
     except Exception as e:
         logger.warning(f"Could not save ad source for {phone_number}: {e}")

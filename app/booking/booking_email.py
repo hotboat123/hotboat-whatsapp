@@ -7,6 +7,7 @@ from app.config import get_settings
 from app.booking.db import (
     get_booking_by_ref, mark_confirmation_email_sent,
     get_bookings_for_followup, mark_followup_email_sent,
+    mark_followup_sent_after_manual_send,
     get_customers_for_birthday_email, mark_birthday_email_sent,
     get_bookings_pending_payment_email, mark_pending_email_sent,
 )
@@ -73,7 +74,13 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
         "business_website":   getattr(s, "business_website", ""),
         "firma_url":          firma_url,
         "customer_language":  lang,
+        "utm_source":   str(booking.get("utm_source") or ""),
+        "utm_medium":   str(booking.get("utm_medium") or ""),
+        "utm_campaign": str(booking.get("utm_campaign") or ""),
+        "utm_content":  str(booking.get("utm_content") or ""),
+        "parametro_url": str(booking.get("parametro_url") or ""),
     }
+    ctx["ad_source_label"] = ctx["utm_campaign"] or ctx["parametro_url"] or ctx["utm_source"]
     if extra:
         ctx.update(extra)
     return ctx
@@ -114,7 +121,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "label_date":   "📅 \u00a0Fecha",
         "label_time":   "⏰ \u00a0Hora",
         "label_people": "👥 \u00a0Personas",
-        "label_paid":   "✅ \u00a0Pagado (50%)",
+        "label_paid":           "✅ \u00a0Pagado (50%)",
+        "label_deposit_due":    "💳 \u00a0Depósito a pagar (50%)",
         "label_total":  "💰 \u00a0Total",
         "hrs":          "hrs",
         "footer_questions": "¿Tienes preguntas? Escríbenos por WhatsApp",
@@ -164,7 +172,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "label_date":   "📅 \u00a0Date",
         "label_time":   "⏰ \u00a0Time",
         "label_people": "👥 \u00a0People",
-        "label_paid":   "✅ \u00a0Paid (50%)",
+        "label_paid":           "✅ \u00a0Paid (50%)",
+        "label_deposit_due":    "💳 \u00a0Deposit due (50%)",
         "label_total":  "💰 \u00a0Total",
         "hrs":          "h",
         "footer_questions": "Any questions? Message us on WhatsApp",
@@ -207,7 +216,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "label_date":   "📅 \u00a0Data",
         "label_time":   "⏰ \u00a0Hora",
         "label_people": "👥 \u00a0Pessoas",
-        "label_paid":   "✅ \u00a0Pago (50%)",
+        "label_paid":           "✅ \u00a0Pago (50%)",
+        "label_deposit_due":    "💳 \u00a0Sinal de reserva (50%)",
         "label_total":  "💰 \u00a0Total",
         "hrs":          "h",
         "footer_questions": "Tem dúvidas? Fale conosco pelo WhatsApp",
@@ -307,8 +317,18 @@ def _footer(ctx: Dict[str, str]) -> str:
 </td></tr></table></td></tr></table></body></html>"""
 
 
-def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str,
-                         accent_bar: str, extra_body: str, cta_rows: str) -> str:
+def _hotboat_email_card(
+    ctx: Dict[str, str],
+    hero_title: str,
+    hero_subtitle: str,
+    accent_bar: str,
+    extra_body: str,
+    cta_rows: str,
+    *,
+    deposit_row_i18n_key: str = "label_paid",
+    extra_detail_rows_html: str = "",
+    after_total_rows_html: str = "",
+) -> str:
     """Shared dark-card layout used by booking_created and booking_confirmed."""
     phone   = ctx.get("business_phone", "")
     website = ctx.get("business_website", "#")
@@ -392,9 +412,11 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
           </tr></table>
         </td></tr>
 
+        {extra_detail_rows_html}
+
         <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
-            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_paid")}</td>
+            <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang, deposit_row_i18n_key)}</td>
             <td align="right" style="color:#e8b86d;font-size:14px;font-weight:700;">{deposit}</td>
           </tr></table>
         </td></tr>
@@ -405,6 +427,8 @@ def _hotboat_email_card(ctx: Dict[str, str], hero_title: str, hero_subtitle: str
             <td align="right" style="color:#10b981;font-size:18px;font-weight:800;">{total}</td>
           </tr></table>
         </td></tr>
+
+        {after_total_rows_html}
 
       </table>
     </td></tr>
@@ -526,6 +550,7 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
         accent_bar=accent,
         extra_body=payment_note,
         cta_rows=cta_rows,
+        deposit_row_i18n_key="label_deposit_due",
     )
 
 
@@ -705,6 +730,16 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
   </p>
 </td></tr>"""
     )
+    _ad = ctx.get("ad_source_label", "")
+    _ad_row = (
+        "<tr><td colspan='2' style='padding:0 26px 8px;'>"
+        "<table role='presentation' width='100%' style='background:#eff6ff;border-radius:8px;"
+        "border:1px solid #bfdbfe;font-size:14px;color:#1e40af;'>"
+        "<tr><td style='padding:10px 16px'><strong>Anuncio (origen)</strong></td>"
+        "<td style='padding:10px 16px;text-align:right;font-weight:600'>\U0001f4e2 " + _ad + "</td>"
+        "</tr></table></td></tr>"
+        if _ad else ""
+    )
     return (
         _header(ctx, "Nuevo lead en formulario", "#7c3aed")
         + f"""<tr><td style="padding:22px 26px 6px;color:#0f172a;font-size:15px;line-height:1.65;">
@@ -731,6 +766,7 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
         <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right;color:#b45309">pendiente de pago</td></tr>
   </table>
 </td></tr>"""
+        + _ad_row
         + wa_btn
         + _footer(ctx)
     )
@@ -1087,6 +1123,90 @@ def send_test_email_for_trigger(trigger: str, to_addr: str) -> Dict[str, Any]:
 
 # ── Daily follow-up sweep ────────────────────────────────────────────────────
 
+def send_manual_followup_email(rid: int) -> Dict[str, Any]:
+    """
+    Send booking_followup (TripAdvisor / survey) for one all_appointments row from the admin UI.
+    Does not require workflow enabled (same templates/subject as auto sweep); needs Resend API key.
+    """
+    out: Dict[str, Any] = {"sent": False, "reason": ""}
+    settings = get_settings()
+    if not (getattr(settings, "resend_api_key", "") or "").strip():
+        out["reason"] = "no_resend_key"
+        return out
+
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, nombre_cliente, telefono, email, fecha, hora, num_personas, "
+                "ingreso_reserva, ingreso_extras, ingreso_total, status, "
+                "COALESCE(customer_language,'es'), source, source_id "
+                "FROM all_appointments WHERE id=%s",
+                (rid,),
+            )
+            row = cur.fetchone()
+
+    if not row:
+        out["reason"] = "not_found"
+        return out
+
+    (
+        _id,
+        nombre,
+        telefono,
+        email,
+        fecha,
+        hora,
+        num_p,
+        ing_res,
+        ing_ext,
+        ing_total,
+        status,
+        lang,
+        source,
+        source_id,
+    ) = row
+
+    to_addr = (email or "").strip()
+    if not to_addr:
+        out["reason"] = "no_customer_email"
+        return out
+
+    src = str(source or "")
+    sid = str(source_id or "").strip()
+    if src == "hotboat_web" and sid:
+        booking_ref = sid
+    else:
+        booking_ref = f"AA-{rid}"
+
+    booking: Dict[str, Any] = {
+        "booking_ref": booking_ref,
+        "customer_name": nombre or "Cliente",
+        "customer_email": to_addr,
+        "customer_phone": telefono or "",
+        "booking_date": str(fecha) if fecha else "",
+        "booking_time": str(hora)[:5] if hora else "",
+        "num_people": str(num_p) if num_p not in (None, "") else "",
+        "total_price": ing_total,
+        "subtotal": ing_res,
+        "extras_total": ing_ext,
+        "status": status or "",
+        "customer_language": lang or "es",
+    }
+    ctx = _booking_ctx(booking)
+    result = _render_and_send("booking_followup", to_addr, ctx)
+    if result.get("sent"):
+        mark_followup_sent_after_manual_send(rid)
+        out["sent"] = True
+        out["reason"] = "ok"
+        logger.info("Manual follow-up email sent rid=%s to=%s", rid, to_addr)
+    else:
+        out["reason"] = result.get("reason") or "send_failed"
+        logger.warning("Manual follow-up email failed rid=%s reason=%s", rid, out["reason"])
+    return out
+
+
 def run_followup_email_sweep() -> dict:
     """
     Run once per day: find confirmed bookings where booking_date = today - days_after
@@ -1218,6 +1338,357 @@ def run_pending_payment_email_sweep(delay_minutes: int = 5) -> dict:
 
 
 # ── Legacy aliases (backwards compat) ─────────────────────────────────────────
+
+def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
+    """
+    Force-send booking_confirmed email for any all_appointments row by integer id.
+    Shows real extras, flex, coupon, and actual paid/balance amounts from the DB.
+    Bypasses status/idempotency guards and any custom body_html template.
+    """
+    import json as _json
+    from app.booking.db import get_connection, _legacy_booking_from_aa
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, source_id, nombre_cliente, telefono, email,
+                          fecha, hora, num_personas,
+                          ingreso_reserva, ingreso_extras, ingreso_total,
+                          extras_json, has_flex, COALESCE(flex_amount,0),
+                          status, payment_id, payment_order_id, payment_status,
+                          paid_at, observaciones, created_at, confirmation_email_sent_at,
+                          COALESCE(customer_language,'es'), coupon_code,
+                          COALESCE(coupon_discount,0),
+                          coupon_extra_benefit, customer_birthday, source,
+                          COALESCE(utm_source,''), COALESCE(utm_medium,''),
+                          COALESCE(utm_campaign,''), COALESCE(utm_content,''),
+                          COALESCE(parametro_url,''),
+                          COALESCE(pagos,'[]'::jsonb),
+                          COALESCE(descuentos,'[]'::jsonb)
+                   FROM all_appointments WHERE id=%s""",
+                (booking_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        return {"sent": False, "reason": "not_found"}
+    cols = [
+        "id", "source_id", "nombre_cliente", "telefono", "email",
+        "fecha", "hora", "num_personas",
+        "ingreso_reserva", "ingreso_extras", "ingreso_total",
+        "extras_json", "has_flex", "flex_amount",
+        "status", "payment_id", "payment_order_id", "payment_status",
+        "paid_at", "observaciones", "created_at", "confirmation_email_sent_at",
+        "customer_language", "coupon_code", "coupon_discount",
+        "coupon_extra_benefit", "customer_birthday", "source",
+        "utm_source", "utm_medium", "utm_campaign", "utm_content", "parametro_url",
+        "pagos", "descuentos",
+    ]
+    d = dict(zip(cols, row))
+
+    # Parse JSON fields (psycopg may return them already as dicts/lists)
+    def _parse_json(v):
+        if v is None:
+            return []
+        if isinstance(v, (list, dict)):
+            return v
+        try:
+            return _json.loads(v)
+        except Exception:
+            return []
+
+    pagos = _parse_json(d.get("pagos"))
+    descuentos = _parse_json(d.get("descuentos"))
+
+    # Normalize extras_json to dict {key: {qty, unit_price, name}}
+    # Three formats exist:
+    #   1. dict  {key: {qty, unit_price, name?, ...}}  — admin-saved
+    #   2. list  [{name, price, quantity}]              — web booking
+    #   3. dict  {extras: [{name, price, quantity}], price_per_person: N}  — web HotBoat envelope
+    raw_ej = _parse_json(d.get("extras_json")) if d.get("extras_json") else {}
+    if isinstance(raw_ej, dict) and isinstance(raw_ej.get("extras"), list):
+        raw_ej = raw_ej["extras"]  # unwrap envelope → now a list
+    if isinstance(raw_ej, list):
+        converted: dict = {}
+        for i, e in enumerate(raw_ej):
+            if not isinstance(e, dict):
+                continue
+            raw_name = str(e.get("name") or f"extra_{i}")
+            key = raw_name.lower().replace(" ", "_")[:40] or f"extra_{i}"
+            converted[key] = {
+                "qty": int(e.get("quantity") or e.get("qty") or 1),
+                "unit_price": float(e.get("price") or e.get("unit_price") or 0),
+                "name": raw_name,
+            }
+        extras_dict: dict = converted
+    else:
+        extras_dict = raw_ej if isinstance(raw_ej, dict) else {}
+
+    booking = _legacy_booking_from_aa(d)
+    to_addr = (booking.get("customer_email") or "").strip()
+    if not to_addr:
+        return {"sent": False, "reason": "no_customer_email"}
+
+    ctx = _booking_ctx(booking)
+
+    # ── Load extras catalog for name lookup ──────────────────────────────────
+    import unicodedata as _unicodedata
+    def _slug(s: str) -> str:
+        s = _unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode()
+        return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+    catalog_by_key: Dict[str, Dict] = {}
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT extra_name_lower, name, COALESCE(precio_venta,0) FROM extras_visibility"
+                )
+                for (name_lower, name, price) in cur.fetchall():
+                    display = name or name_lower
+                    catalog_by_key[_slug(display)] = {"name": display, "price": float(price)}
+                    catalog_by_key[name_lower]     = {"name": display, "price": float(price)}
+    except Exception as _ce:
+        logger.warning("Could not load extras_visibility for email: %s", _ce)
+
+    # ── Compute real amounts ────────────────────────────────────────────────
+    ingreso_reserva   = float(d.get("ingreso_reserva") or 0)
+    ingreso_extras    = float(d.get("ingreso_extras") or 0)
+    ingreso_total     = float(d.get("ingreso_total") or 0)
+    has_flex          = bool(d.get("has_flex"))
+    flex_amount       = float(d.get("flex_amount") or 0)
+    coupon_discount   = float(d.get("coupon_discount") or 0)
+    manual_discounts  = sum(float(dc.get("amount") or 0) for dc in descuentos if isinstance(dc, dict))
+    total_paid        = sum(float(p.get("amount") or 0) for p in pagos if isinstance(p, dict))
+    balance_due       = max(0.0, ingreso_total - total_paid)
+
+    # Override deposit to show real paid
+    ctx["deposit_fmt"] = _fmt_clp(total_paid)
+
+    # ── Build extras detail rows ─────────────────────────────────────────────
+    ROW = (
+        '<tr><td style="padding:10px 20px;border-bottom:1px solid #1a2740;">'
+        '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+        '<td style="color:#94a3b8;font-size:12px;">{label}</td>'
+        '<td align="right" style="color:{color};font-size:13px;font-weight:600;">{value}</td>'
+        '</tr></table></td></tr>'
+    )
+
+    extra_rows = []
+    # Base reservation
+    extra_rows.append(ROW.format(
+        label="Experiencia HotBoat",
+        color="#e2e8f0",
+        value=_fmt_clp(ingreso_reserva),
+    ))
+    # Individual extras — show all items with qty > 0, resolve names from catalog
+    extras_itemized_total = 0.0
+    has_any_extra = False
+    for key, val in extras_dict.items():
+        # val can be: {qty, unit_price, name?}  OR  a plain number (qty)
+        if isinstance(val, (int, float)):
+            qty = int(val)
+            unit_price = 0.0
+            stored_name = ""
+        elif isinstance(val, dict):
+            qty = int(val.get("qty") or val.get("nights") or val.get("cantidad") or 1)
+            unit_price = float(val.get("unit_price") or 0)
+            stored_name = str(val.get("name") or "").strip()
+        else:
+            continue
+        if qty <= 0:
+            continue
+        has_any_extra = True
+        # Price: stored value → catalog fallback
+        if unit_price <= 0:
+            unit_price = float((catalog_by_key.get(key) or {}).get("price") or 0)
+        # Name: stored → catalog → humanise key
+        cat_name = (catalog_by_key.get(key) or {}).get("name") or ""
+        raw_name = stored_name or cat_name or key.replace("_", " ").title()
+        name = raw_name.replace("<", "&lt;")
+        label = f"{name} ×{qty}" if qty > 1 else name
+        line_total = qty * unit_price
+        extras_itemized_total += line_total
+        value_str = _fmt_clp(line_total) if unit_price > 0 else "—"
+        extra_rows.append(ROW.format(label=label, color="#e2e8f0", value=value_str))
+    # Fallback: no items resolved at all but ingreso_extras > 0
+    if not has_any_extra and ingreso_extras > 0:
+        extra_rows.append(ROW.format(
+            label="Extras",
+            color="#e2e8f0",
+            value=_fmt_clp(ingreso_extras),
+        ))
+    # Flex
+    if has_flex and flex_amount > 0:
+        extra_rows.append(ROW.format(
+            label="🔒 Reserva Flex",
+            color="#60a5fa",
+            value=_fmt_clp(flex_amount),
+        ))
+    # Coupon discount
+    if coupon_discount > 0:
+        code = d.get("coupon_code") or ""
+        label = f"Descuento cupón{' ' + code if code else ''}"
+        extra_rows.append(ROW.format(
+            label=label,
+            color="#f87171",
+            value=f"-{_fmt_clp(coupon_discount)}",
+        ))
+    # Manual discounts
+    for dc in descuentos:
+        if not isinstance(dc, dict):
+            continue
+        amt = float(dc.get("amount") or 0)
+        if amt <= 0:
+            continue
+        desc_label = (dc.get("description") or "Descuento").replace("<", "&lt;")
+        extra_rows.append(ROW.format(
+            label=desc_label,
+            color="#f87171",
+            value=f"-{_fmt_clp(amt)}",
+        ))
+
+    extra_detail_rows_html = "".join(extra_rows)
+
+    # ── Payment rows (after total) ────────────────────────────────────────────
+    after_rows = []
+    PAID_ROW = (
+        '<tr><td style="padding:10px 20px;border-bottom:1px solid #1a2740;">'
+        '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+        '<td style="color:#94a3b8;font-size:12px;">{label}</td>'
+        '<td align="right" style="color:#4ade80;font-size:13px;font-weight:600;">{value}</td>'
+        '</tr></table></td></tr>'
+    )
+    for p in pagos:
+        if not isinstance(p, dict):
+            continue
+        amt = float(p.get("amount") or 0)
+        if amt <= 0:
+            continue
+        method = (p.get("method") or p.get("tipo") or "Pago").replace("<", "&lt;")
+        pdate  = p.get("date") or ""
+        label  = f"✅ {method}{' · ' + pdate if pdate else ''}"
+        after_rows.append(PAID_ROW.format(label=label, value=_fmt_clp(amt)))
+
+    if balance_due > 0:
+        after_rows.append(
+            '<tr><td style="padding:14px 20px;background:rgba(251,191,36,.07);">'
+            '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+            '<td style="color:#fcd34d;font-size:12px;font-weight:700;">💳 Saldo pendiente</td>'
+            '<td align="right" style="color:#fbbf24;font-size:15px;font-weight:800;">'
+            + _fmt_clp(balance_due)
+            + '</td></tr></table></td></tr>'
+        )
+
+    after_total_rows_html = "".join(after_rows)
+
+    # ── Build and send email ──────────────────────────────────────────────────
+    # Clear idempotency flag so resend is not blocked
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE all_appointments SET confirmation_email_sent_at=NULL WHERE id=%s",
+                (booking_id,),
+            )
+            conn.commit()
+
+    s = get_settings()
+    api_key = (getattr(s, "resend_api_key", "") or "").strip()
+    if not api_key:
+        return {"sent": False, "reason": "no_resend_key"}
+
+    cfg = get_email_workflow("booking_confirmed")
+    raw_subject = (cfg.get("subject") or "").strip()
+    if not raw_subject:
+        raw_subject = (TRIGGER_META.get("booking_confirmed") or {}).get(
+            "default_subject", "Confirmación de reserva"
+        )
+    subject = _apply_template(raw_subject, ctx)
+
+    lang = ctx.get("customer_language", "es")
+    name = ctx.get("customer_name", "")
+    website  = ctx.get("business_website", "#")
+    firma_url = ctx.get("firma_url", "") or website
+    accent = (
+        '<td width="50%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="50%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
+    )
+    confirmed_note = f"""
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 16px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+             style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:12px;">
+      <tr><td style="padding:15px 20px;">
+        <p style="margin:0;color:#6ee7b7;font-size:13px;line-height:1.65;">
+          <strong>{_t(lang,"confirmed_payment_title")}</strong><br>
+          {_t(lang,"confirmed_payment_body")}
+        </p>
+      </td></tr>
+      </table>
+    </td></tr>
+    </table>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td style="padding:0 28px 24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+             style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;">
+      <tr><td style="padding:15px 20px;">
+        <p style="margin:0 0 8px;color:#fcd34d;font-size:13px;font-weight:700;">
+          {_t(lang,"tc_title")}
+        </p>
+        <p style="margin:0;color:#fde68a;font-size:12px;line-height:1.6;">
+          {_t(lang,"tc_body")}
+        </p>
+        <p style="margin:10px 0 0;">
+          <a href="{firma_url}" style="color:#fbbf24;font-weight:700;font-size:12px;word-break:break-all;">{firma_url}</a>
+        </p>
+      </td></tr>
+      </table>
+    </td></tr>
+    </table>"""
+    cta_rows = f"""
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
+    <tr>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_sign_tc"), firma_url, solid=False)}</td>
+    </tr>
+    </table>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_video"), "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_menu"), "https://hotboatchile.com/tablas/", solid=False)}</td>
+    </tr>
+    </table>"""
+
+    html = _hotboat_email_card(
+        ctx,
+        hero_title=_t(lang, "confirmed_title"),
+        hero_subtitle=_t(lang, "confirmed_subtitle", name=name),
+        accent_bar=accent,
+        extra_body=confirmed_note,
+        cta_rows=cta_rows,
+        deposit_row_i18n_key="label_paid",
+        extra_detail_rows_html=extra_detail_rows_html,
+        after_total_rows_html=after_total_rows_html,
+    )
+
+    from_addr = _get_from_addr(s)
+    reply_to_addr = _get_admin_email(s) or None
+    out: Dict[str, Any] = {"sent": False, "reason": ""}
+    try:
+        send_booking_html(
+            to=to_addr,
+            subject=subject,
+            html=html,
+            from_address=from_addr,
+            api_key=api_key,
+            bcc=_get_bcc(s),
+            reply_to=reply_to_addr,
+        )
+        out["sent"] = True
+        out["reason"] = "ok"
+    except Exception as e:
+        out["reason"] = str(e)
+        logger.error("send_confirmation_admin_force failed booking_id=%s to=%s: %s", booking_id, to_addr, e)
+    return out
+
 
 def try_send_booking_confirmation_after_payment(booking_ref: str) -> Dict[str, Any]:
     result = send_email_for_trigger("booking_confirmed", booking_ref)
@@ -1501,4 +1972,406 @@ def send_daily_summary_email() -> Dict[str, Any]:
         out["reason"] = f"send_error: {send_err}"
         logger.error("daily_summary: send error: %s", send_err)
 
+    return out
+
+    return out
+
+
+# ── Yesterday & Weekly summary emails ─────────────────────────────────────────
+
+_NOTIF_TO = "hotboatnotification@gmail.com"
+
+
+def _fmt_clp_local(v) -> str:
+    try:
+        return f"${int(float(v or 0)):,}".replace(",", ".")
+    except Exception:
+        return "$0"
+
+
+def _build_booking_card_html(b: dict, is_weekly: bool = False) -> str:
+    """Render one booking as a dark HTML card with full detail + missing-data alerts."""
+    import json as _json
+
+    def _p(v) -> str:
+        return str(v or "").strip()
+
+    nombre   = _p(b.get("nombre_cliente")) or "Sin nombre"
+    fecha    = _p(b.get("fecha"))
+    hora     = _p(b.get("hora"))[:5] if b.get("hora") else "-"
+    personas = _p(b.get("num_personas")) or "-"
+    total    = float(b.get("ingreso_total") or 0)
+    ciudad   = _p(b.get("ciudad_origen"))
+    como     = _p(b.get("como_supieron"))
+    quien    = _p(b.get("quien_atendio"))
+    obs      = _p(b.get("observaciones"))
+    telefono = _p(b.get("telefono"))
+    email_c  = _p(b.get("email"))
+    status   = _p(b.get("status"))
+
+    # Payments
+    raw_pagos = b.get("pagos") or []
+    if isinstance(raw_pagos, str):
+        try:
+            raw_pagos = _json.loads(raw_pagos)
+        except Exception:
+            raw_pagos = []
+    pagos = [p for p in raw_pagos if isinstance(p, dict)]
+    total_paid = sum(float(p.get("amount") or 0) for p in pagos)
+    flex       = float(b.get("flex_amount") or 0)
+    balance    = max(0.0, total + flex - total_paid)
+
+    # Extras
+    raw_ej = b.get("extras_json") or {}
+    if isinstance(raw_ej, str):
+        try:
+            raw_ej = _json.loads(raw_ej)
+        except Exception:
+            raw_ej = {}
+    if isinstance(raw_ej, dict) and isinstance(raw_ej.get("extras"), list):
+        raw_ej = raw_ej["extras"]
+
+    # Load catalog for proper names
+    catalog = {}
+    try:
+        from app.db.connection import get_connection as _gc
+        with _gc() as _conn:
+            with _conn.cursor() as _cur:
+                _cur.execute("SELECT extra_name_lower, COALESCE(name, extra_name_lower) FROM extras_visibility")
+                for _k, _n in _cur.fetchall():
+                    catalog[_k.lower()] = _n
+    except Exception:
+        pass
+
+    extras_items = []
+    if isinstance(raw_ej, list):
+        for e in raw_ej:
+            if not isinstance(e, dict):
+                continue
+            name = str(e.get("name") or "Extra").strip()
+            qty  = int(e.get("quantity") or 1)
+            extras_items.append(f"{name}{' ×'+str(qty) if qty > 1 else ''}")
+    elif isinstance(raw_ej, dict):
+        for k, v in raw_ej.items():
+            if isinstance(v, (int, float)):
+                qty = int(v)
+            elif isinstance(v, dict):
+                qty = int(v.get("qty") or v.get("cantidad") or 1)
+            else:
+                continue
+            if qty <= 0:
+                continue
+            name = ""
+            if isinstance(v, dict):
+                name = str(v.get("name") or "").strip()
+            name = name or catalog.get(k.lower()) or k.replace("_", " ").title()
+            extras_items.append(f"{name}{' ×'+str(qty) if qty > 1 else ''}")
+
+    if extras_items:
+        badges = "".join(
+            f'<span style="display:inline-block;margin:2px 3px 2px 0;background:rgba(99,102,241,.15);'
+            f'color:#a5b4fc;border:1px solid rgba(99,102,241,.3);border-radius:6px;'
+            f'padding:2px 8px;font-size:11px;white-space:normal;word-break:break-word;">{e}</span>'
+            for e in extras_items
+        )
+        extras_html = f'<div style="display:flex;flex-wrap:wrap;gap:0;">{badges}</div>'
+    else:
+        extras_html = ""
+
+    # Missing data detection
+    alerts = []
+    if not ciudad:
+        alerts.append("🔴 <strong>Ciudad de origen</strong> no registrada")
+    if not como:
+        alerts.append("🔴 <strong>Cómo supieron</strong> de HotBoat no registrado")
+    if not quien:
+        alerts.append("🟡 <strong>Quién atendió</strong> no registrado")
+    if balance > 0:
+        alerts.append(f"🔴 <strong>Saldo pendiente</strong>: {_fmt_clp_local(balance)}")
+    if not email_c:
+        alerts.append("🟡 <strong>Email del cliente</strong> no registrado")
+
+    status_color = {"confirmed": "#10b981", "pending_payment": "#f59e0b", "cancelled": "#ef4444"}.get(status, "#64748b")
+    status_label = {"confirmed": "Confirmada", "pending_payment": "Pago pendiente", "cancelled": "Cancelada"}.get(status, status or "Sin estado")
+
+    alerts_html = ""
+    if alerts:
+        items = "".join(f'<li style="margin:4px 0;color:#fca5a5;font-size:12px;">{a}</li>' for a in alerts)
+        alerts_html = f"""
+        <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);border-radius:8px;padding:10px 14px;margin:10px 0;">
+          <p style="margin:0 0 6px;color:#f87171;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">⚠️ Datos faltantes</p>
+          <ul style="margin:0;padding-left:16px;">{items}</ul>
+        </div>"""
+
+    pagos_html = ""
+    if pagos:
+        rows = "".join(
+            f'<span style="display:inline-block;margin:2px 4px 2px 0;background:rgba(16,185,129,.15);color:#6ee7b7;'
+            f'border-radius:6px;padding:3px 8px;font-size:11px;">'
+            f'💳 {p.get("method") or p.get("tipo") or "Pago"} · {_fmt_clp_local(p.get("amount"))}'
+            f'{" · " + str(p.get("date",""))[:10] if p.get("date") else ""}</span>'
+            for p in pagos
+        )
+        pagos_html = f'<div style="margin:6px 0;">{rows}</div>'
+    else:
+        pagos_html = '<p style="margin:4px 0;color:#94a3b8;font-size:12px;">Sin pagos registrados</p>'
+
+    def row(label, val, urgent=False):
+        if not val:
+            return ""
+        color = "#fca5a5" if urgent else "#e2e8f0"
+        return (
+            f'<tr><td style="color:#64748b;font-size:11px;padding:4px 8px 4px 0;white-space:nowrap;vertical-align:top;">{label}</td>'
+            f'<td style="color:{color};font-size:12px;padding:4px 0;font-weight:500;">{val}</td></tr>'
+        )
+
+    date_header = f"{fecha} · {hora} hs · " if is_weekly else f"{hora} hs · "
+
+    return f"""
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px 20px;margin:12px 0;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="color:#f8fafc;font-size:15px;font-weight:700;">{date_header}{nombre}</span>
+        <span style="background:{status_color}22;color:{status_color};border:1px solid {status_color}55;
+               border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;">{status_label}</span>
+        <span style="margin-left:auto;color:#10b981;font-size:15px;font-weight:800;">{_fmt_clp_local(total)}</span>
+      </div>
+      {alerts_html}
+      <table cellspacing="0" cellpadding="0" style="width:100%;margin:8px 0;">
+        {row("👥 Personas", personas)}
+        {row("📍 Ciudad origen", ciudad or ('<span style="color:#f87171">—</span>' if not ciudad else ""), urgent=not ciudad)}
+        {row("📣 Cómo supieron", como or ('<span style="color:#f87171">—</span>' if not como else ""), urgent=not como)}
+        {row("🙋 Atendió", quien or "")}
+        {row("📦 Extras", extras_html) if extras_html else ""}
+        {row("📞 Teléfono", telefono)}
+        {row("📧 Email", email_c)}
+        {row("📝 Observaciones", obs)}
+      </table>
+      <div style="border-top:1px solid #334155;padding-top:8px;margin-top:4px;">
+        <p style="margin:0 0 4px;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1px;">PAGOS</p>
+        {pagos_html}
+        {f'<p style="margin:6px 0 0;color:#fbbf24;font-size:12px;font-weight:700;">💳 Saldo pendiente: {_fmt_clp_local(balance)}</p>' if balance > 0 else ""}
+      </div>
+    </div>"""
+
+
+def send_yesterday_summary_email() -> Dict[str, Any]:
+    """Send yesterday's booking summary to hotboatnotification@gmail.com at 09:00."""
+    from datetime import date, timedelta
+    from app.db.connection import get_connection
+
+    out: Dict[str, Any] = {"sent": False, "reason": "", "count": 0}
+    s = get_settings()
+    api_key = (getattr(s, "resend_api_key", "") or "").strip()
+    if not api_key:
+        out["reason"] = "no_resend_key"
+        return out
+
+    yesterday = date.today() - timedelta(days=1)
+    yesterday_str = yesterday.strftime("%d/%m/%Y")
+    weekday_name = yesterday.strftime("%A")
+    weekday_es = {"Monday":"Lunes","Tuesday":"Martes","Wednesday":"Miércoles",
+                  "Thursday":"Jueves","Friday":"Viernes","Saturday":"Sábado","Sunday":"Domingo"}.get(weekday_name, weekday_name)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT nombre_cliente, email, telefono, fecha, hora, num_personas,
+                          ingreso_total, status, extras_json, observaciones,
+                          ciudad_origen, como_supieron, quien_atendio,
+                          COALESCE(pagos,'[]'::jsonb),
+                          COALESCE(flex_amount,0)
+                   FROM all_appointments
+                   WHERE fecha = %s AND status NOT IN ('cancelled','rejected')
+                   ORDER BY hora ASC NULLS LAST""",
+                (yesterday,),
+            )
+            cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
+                    "ingreso_total","status","extras_json","observaciones",
+                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount"]
+            bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    out["count"] = len(bookings)
+    n_alerts = sum(
+        1 for b in bookings
+        if not b.get("ciudad_origen") or not b.get("como_supieron")
+        or max(0.0, float(b.get("ingreso_total") or 0)
+               + float(b.get("flex_amount") or 0)
+               - sum(float(p.get("amount") or 0) for p in (b.get("pagos") or []) if isinstance(p, dict))) > 0
+    )
+
+    urgency_banner = ""
+    if n_alerts > 0:
+        urgency_banner = f"""
+        <div style="background:rgba(239,68,68,.15);border:2px solid #ef4444;border-radius:12px;
+                    padding:14px 20px;margin:0 0 20px;">
+          <p style="margin:0;color:#f87171;font-size:14px;font-weight:700;">
+            🚨 {n_alerts} reserva{'s' if n_alerts!=1 else ''} {'tienen' if n_alerts!=1 else 'tiene'} datos incompletos — completar hoy
+          </p>
+        </div>"""
+
+    if bookings:
+        cards = "".join(_build_booking_card_html(b) for b in bookings)
+        total_rev = sum(float(b.get("ingreso_total") or 0) for b in bookings)
+        total_pax = sum(int(b.get("num_personas") or 0) for b in bookings)
+        stats = f"""
+        <div style="display:flex;gap:12px;margin:0 0 16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Reservas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{len(bookings)}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Personas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{total_pax}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Total</div>
+            <div style="color:#10b981;font-size:20px;font-weight:800;">{_fmt_clp_local(total_rev)}</div>
+          </div>
+        </div>"""
+        body_content = stats + urgency_banner + cards
+    else:
+        body_content = '<p style="color:#94a3b8;text-align:center;padding:32px 0;font-size:15px;">😴 Sin reservas el día anterior</p>'
+
+    html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>Resumen {yesterday_str}</title></head>
+<body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<table width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
+<tr><td align="center" style="padding:28px 16px 40px;">
+<table width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;">
+  <tr><td style="background:#131c2e;border-radius:16px;overflow:hidden;padding:28px;">
+    <h1 style="margin:0 0 4px;color:#f8fafc;font-size:20px;font-weight:800;">
+      📋 Resumen {weekday_es} {yesterday_str}
+    </h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:13px;">Reservas del día anterior · HotBoat</p>
+    {body_content}
+    <p style="margin:24px 0 0;color:#475569;font-size:11px;text-align:center;">
+      Enviado automáticamente por HotBoat · 09:00 Santiago
+    </p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+
+    subject = f"📋 Ayer ({weekday_es} {yesterday_str}) — {len(bookings)} reserva{'s' if len(bookings)!=1 else ''}"
+    if n_alerts > 0:
+        subject = f"🚨 " + subject[2:] + f" · {n_alerts} con datos faltantes"
+
+    from_addr = _get_from_addr(s)
+    try:
+        result = send_booking_html(
+            to=_NOTIF_TO,
+            subject=subject,
+            html=html,
+            from_address=from_addr,
+            api_key=api_key,
+        )
+        out["sent"] = True
+        out["resend_id"] = result.get("id") if isinstance(result, dict) else str(result)
+        logger.info("yesterday_summary: sent %s bookings, %s alerts", len(bookings), n_alerts)
+    except Exception as e:
+        out["reason"] = str(e)
+        logger.error("yesterday_summary send error: %s", e)
+    return out
+
+
+def send_weekly_summary_email() -> Dict[str, Any]:
+    """Send this week's booking overview to hotboatnotification@gmail.com (sent on Mondays)."""
+    from datetime import date, timedelta
+    from app.db.connection import get_connection
+
+    out: Dict[str, Any] = {"sent": False, "reason": "", "count": 0}
+    s = get_settings()
+    api_key = (getattr(s, "resend_api_key", "") or "").strip()
+    if not api_key:
+        out["reason"] = "no_resend_key"
+        return out
+
+    today = date.today()
+    week_end   = today - timedelta(days=1)   # yesterday = last Sunday
+    week_start = today - timedelta(days=7)   # last Monday
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT nombre_cliente, email, telefono, fecha, hora, num_personas,
+                          ingreso_total, status, extras_json, observaciones,
+                          ciudad_origen, como_supieron, quien_atendio,
+                          COALESCE(pagos,'[]'::jsonb),
+                          COALESCE(flex_amount,0)
+                   FROM all_appointments
+                   WHERE fecha BETWEEN %s AND %s
+                     AND status NOT IN ('cancelled','rejected')
+                   ORDER BY fecha ASC, hora ASC NULLS LAST""",
+                (week_start, week_end),
+            )
+            cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
+                    "ingreso_total","status","extras_json","observaciones",
+                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount"]
+            bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    out["count"] = len(bookings)
+
+    week_start_str = week_start.strftime("%d/%m")
+    week_end_str   = week_end.strftime("%d/%m/%Y")
+
+    if bookings:
+        cards = "".join(_build_booking_card_html(b, is_weekly=True) for b in bookings)
+        total_rev = sum(float(b.get("ingreso_total") or 0) for b in bookings)
+        total_pax = sum(int(b.get("num_personas") or 0) for b in bookings)
+        stats = f"""
+        <div style="display:flex;gap:12px;margin:0 0 16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Reservas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{len(bookings)}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Personas</div>
+            <div style="color:#f8fafc;font-size:22px;font-weight:800;">{total_pax}</div>
+          </div>
+          <div style="flex:1;min-width:100px;background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center;">
+            <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Total semana</div>
+            <div style="color:#10b981;font-size:20px;font-weight:800;">{_fmt_clp_local(total_rev)}</div>
+          </div>
+        </div>"""
+        body_content = stats + cards
+    else:
+        body_content = '<p style="color:#94a3b8;text-align:center;padding:32px 0;font-size:15px;">📭 Sin reservas esta semana</p>'
+
+    html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>Semana {week_start_str}–{week_end_str}</title></head>
+<body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<table width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
+<tr><td align="center" style="padding:28px 16px 40px;">
+<table width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;">
+  <tr><td style="background:#131c2e;border-radius:16px;overflow:hidden;padding:28px;">
+    <h1 style="margin:0 0 4px;color:#f8fafc;font-size:20px;font-weight:800;">
+      📆 Semana {week_start_str} – {week_end_str}
+    </h1>
+    <p style="margin:0 0 20px;color:#64748b;font-size:13px;">Reservas de la semana · HotBoat</p>
+    {body_content}
+    <p style="margin:24px 0 0;color:#475569;font-size:11px;text-align:center;">
+      Enviado automáticamente cada lunes · 09:00 Santiago
+    </p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+
+    subject = f"📆 Semana {week_start_str}–{week_end_str} — {len(bookings)} reserva{'s' if len(bookings)!=1 else ''}"
+
+    from_addr = _get_from_addr(s)
+    try:
+        result = send_booking_html(
+            to=_NOTIF_TO,
+            subject=subject,
+            html=html,
+            from_address=from_addr,
+            api_key=api_key,
+        )
+        out["sent"] = True
+        out["resend_id"] = result.get("id") if isinstance(result, dict) else str(result)
+        logger.info("weekly_summary: sent %s bookings for week %s–%s", len(bookings), week_start_str, week_end_str)
+    except Exception as e:
+        out["reason"] = str(e)
+        logger.error("weekly_summary send error: %s", e)
     return out

@@ -27,8 +27,8 @@ AVAILABILITY_CONFIG = AvailabilityConfig(
     operating_hours=[8, 11, 14, 17, 20, 23],  # 9am, 12pm, 3pm, 6pm, 9pm (cada 3 horas)
     duration_hours=3.0,  # Each HotBoat trip lasts 2 hours
     buffer_hours=0.0,  # Sin buffer - con 2 HotBoats podemos tener reservas simultáneas
-    # Keep in sync with booking/router availability queries:
-    # pending_payment/solicitud should NOT block confirmed availability slots.
+    # Extra statuses to omit from occupancy (applied in get_booked_slots);
+    # ``pending_payment`` is never omitted so web drafts still hold the slot.
     exclude_statuses=['cancelled', 'rejected', 'pending_payment', 'solicitud']
 )
 

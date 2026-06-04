@@ -16,6 +16,11 @@
     <meta property="og:image" content="https://hotboatchile.com/wp-content/uploads/cropped-Screenshot_3-192x192.jpg">
     <meta property="og:url" content="https://hotboat-whatsapp-production.up.railway.app">
     <meta property="og:type" content="website">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Kia-Ai">
+    <meta name="mobile-web-app-capable" content="yes">
     <link rel="stylesheet" href="/static/styles.css?v=20260308215700">
     <link rel="stylesheet" href="/static/mobile-fix.css?v=20260117g">
 </head>
@@ -39,12 +44,9 @@
             <aside class="sidebar">
                 <div class="sidebar-header">
                     <h2>💬 Conversations</h2>
-                    <button class="btn-refresh" onclick="loadConversations()" title="Refresh">
-                        🔄
-                    </button>
-                    <button class="btn-secondary sidebar-close-button" onclick="showChatView()">
-                        ✕
-                    </button>
+                    <button class="btn-refresh" onclick="loadConversations()" title="Refresh">🔄</button>
+                    <button class="btn-notif" id="btnNotif" onclick="requestPushPermission()" title="Activar notificaciones" style="display:none">🔔</button>
+                    <button class="btn-secondary sidebar-close-button" onclick="showChatView()">✕</button>
                 </div>
                 
                 <div class="search-box">
@@ -54,6 +56,13 @@
                             <input type="checkbox" id="searchInMessages" onchange="debouncedFilterConversations()">
                             <span><strong>✓ Buscar en todo</strong> (mensajes, nombre, notas del lead)</span>
                         </label>
+                    </div>
+                    <div class="priority-filter-row">
+                        <span style="font-size:.7rem;color:var(--text-secondary);white-space:nowrap;">Filtrar:</span>
+                        <button class="pf-btn" id="pfBtn0" onclick="togglePriorityFilter(0)" title="Todas">Todas</button>
+                        <button class="pf-btn pf-1" id="pfBtn1" onclick="togglePriorityFilter(1)" title="Prioridad Alta">🔴 Alta</button>
+                        <button class="pf-btn pf-2" id="pfBtn2" onclick="togglePriorityFilter(2)" title="Prioridad Media">🟡 Media</button>
+                        <button class="pf-btn pf-3" id="pfBtn3" onclick="togglePriorityFilter(3)" title="Prioridad Baja">🟢 Baja</button>
                     </div>
                 </div>
 
@@ -68,7 +77,7 @@
                     <div class="chat-info">
                         <h3 id="currentChatName">Select a conversation</h3>
                         <p id="currentChatPhone"></p>
-                        <span id="currentChatAdSource" style="display:none;font-size:.75rem;background:#1a4f9f;color:#fff;border-radius:5px;padding:2px 8px;margin-top:2px">📢 <span id="currentChatAdSourceText"></span></span>
+                        <span id="currentChatAdSource" style="display:none;font-size:.6rem;background:#1a4f9f;color:#fff;border-radius:5px;padding:1px 6px;margin-top:2px"><span id="currentChatAdSourceText"></span></span>
                     </div>
                     <div class="chat-actions">
                     <button class="btn-secondary mobile-back-button" onclick="showConversationList()">
@@ -89,6 +98,9 @@
                 </div>
 
                 <div class="message-input-area" id="messageInputArea" style="display: none;">
+                    <div style="display:flex;justify-content:flex-end;padding:0.15rem 0 0.1rem;">
+                        <button type="button" class="btn-collapse-input" id="collapseInputBtn" onclick="toggleInputCollapse()" title="Ocultar / mostrar panel de escritura">▼</button>
+                    </div>
                     <form onsubmit="sendMessage(event)" id="messageForm">
                         <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
                             <button type="button" class="btn-attachment" onclick="document.getElementById('imageFileInput').click()" title="Adjuntar imagen">
@@ -141,50 +153,39 @@
                             <div class="char-counter">
                                 <span id="charCount">0</span>/4096
                             </div>
-                            <div class="priority-section">
-                                <label class="priority-label">Prioridad:</label>
-                                <div class="priority-buttons">
-                                    <button type="button" id="priorityBtn0" class="priority-btn priority-btn-0 active" onclick="updatePriority(0)" title="Sin prioridad">
-                                        ➖
-                                    </button>
-                                    <button type="button" id="priorityBtn1" class="priority-btn priority-btn-1" onclick="updatePriority(1)" title="Prioridad Alta">
-                                        1
-                                    </button>
-                                    <button type="button" id="priorityBtn2" class="priority-btn priority-btn-2" onclick="updatePriority(2)" title="Prioridad Media">
-                                        2
-                                    </button>
-                                    <button type="button" id="priorityBtn3" class="priority-btn priority-btn-3" onclick="updatePriority(3)" title="Prioridad Baja">
-                                        3
-                                    </button>
+                            <div class="priority-translate-row">
+                                <div class="priority-section">
+                                    <label class="priority-label">Prioridad:</label>
+                                    <div class="priority-buttons">
+                                        <button type="button" id="priorityBtn0" class="priority-btn priority-btn-0 active" onclick="updatePriority(0)" title="Sin prioridad">
+                                            ➖
+                                        </button>
+                                        <button type="button" id="priorityBtn1" class="priority-btn priority-btn-1" onclick="updatePriority(1)" title="Prioridad Alta">
+                                            1
+                                        </button>
+                                        <button type="button" id="priorityBtn2" class="priority-btn priority-btn-2" onclick="updatePriority(2)" title="Prioridad Media">
+                                            2
+                                        </button>
+                                        <button type="button" id="priorityBtn3" class="priority-btn priority-btn-3" onclick="updatePriority(3)" title="Prioridad Baja">
+                                            3
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="translate-section">
+                                    <label class="quick-reply-label">Traducir:</label>
+                                    <div class="translate-buttons">
+                                        <button type="button" class="translate-btn" id="translateBtnEN" onclick="toggleTranslateLang('en')" title="Traducir al inglés">🇬🇧</button>
+                                        <button type="button" class="translate-btn" id="translateBtnPT" onclick="toggleTranslateLang('pt')" title="Traducir al portugués">🇧🇷</button>
+                                        <button type="button" class="translate-btn" id="translateBtnFR" onclick="toggleTranslateLang('fr')" title="Traducir al francés">🇫🇷</button>
+                                    </div>
                                 </div>
                             </div>
                             <div class="quick-reply-section">
-                                <label class="quick-reply-label">Respuesta rápida:</label>
-                                <div class="quick-reply-buttons">
-                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(0)" title="Saludo de Tomás (secuencia 4 mensajes)">
-                                        0️⃣
-                                    </button>
-                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(1)" title="Disponibilidad y horarios">
-                                        1️⃣
-                                    </button>
-                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(2)" title="Precios por persona">
-                                        2️⃣
-                                    </button>
-                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(3)" title="Características del HotBoat">
-                                        3️⃣
-                                    </button>
-                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(4)" title="Extras y promociones">
-                                        4️⃣
-                                    </button>
-                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(5)" title="Ubicación y reseñas">
-                                        5️⃣
-                                    </button>
-                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(8)" title="Packs Completos (menú 7→1)" style="font-size:.75rem;font-weight:700;letter-spacing:-.5px">
-                                        7.1 📦
-                                    </button>
-                                    <button type="button" class="quick-reply-btn" onclick="sendQuickReply(9)" title="Solo Alojamientos (menú 7→2)" style="font-size:.75rem;font-weight:700;letter-spacing:-.5px">
-                                        7.2 🏠
-                                    </button>
+                                <label class="quick-reply-label">R.P.</label>
+                                <div class="quick-reply-rows">
+                                    <div id="quick-reply-dynamic" class="quick-reply-buttons" style="flex-wrap:wrap;gap:.25rem">
+                                        <!-- populated dynamically by loadQuickReplyButtons() -->
+                                    </div>
                                 </div>
                             </div>
                             <div class="bot-toggle-section">

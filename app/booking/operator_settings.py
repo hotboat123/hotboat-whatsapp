@@ -5,7 +5,7 @@ All settings stored in hotboat_settings (key/value) table.
 import json
 import logging
 from datetime import date, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 
 from app.db.connection import get_connection
 
@@ -72,6 +72,52 @@ def set_urgency_config(cfg: dict) -> bool:
     return set_setting("urgency_config", json.dumps(cfg))
 
 
+def _time_str_sort_key(t: str) -> int:
+    h, m = map(int, t.split(":"))
+    return h * 60 + m
+
+
+def _normalize_seed_time(t: str) -> Optional[str]:
+    """Accept 'H:MM' or 'HH:MM' → 'HH:MM', or None if invalid."""
+    if not t or not str(t).strip():
+        return None
+    parts = str(t).strip().split(":")
+    if len(parts) < 2:
+        return None
+    try:
+        h, m = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        return None
+    return f"{h:02d}:{m:02d}"
+
+
+def get_effective_urgency_seed_times(config: Optional[dict] = None) -> list:
+    """
+    Semillas HH:MM para el filtro de urgencia (y slots grises).
+
+    - Si `urgency_config.seed_times` tiene entradas válidas: **solo** esas horas
+      actúan como semillas (escasez), más la lógica ±gap alrededor de reservas.
+    - Si seed_times está vacío: se usan todos los `operating_hours` HotBoat.
+
+    No se hace unión con operating_hours cuando ya hay seed_times: unir ambos
+    hacía que casi todo el grid libre coincidiera con una semilla y se mostraran
+    demasiados horarios «disponibles».
+    """
+    cfg = config if config is not None else get_urgency_config()
+    oh = get_operating_hours()
+    raw = cfg.get("seed_times") or []
+    normalized: list = []
+    for x in raw:
+        s = _normalize_seed_time(str(x))
+        if s:
+            normalized.append(s)
+    if normalized:
+        return sorted(set(normalized), key=_time_str_sort_key)
+    return sorted(oh, key=_time_str_sort_key)
+
+
 # ── Vacation days ─────────────────────────────────────────────────────────────
 
 def get_vacation_days(from_date: Optional[date] = None, to_date: Optional[date] = None) -> list:
@@ -130,47 +176,106 @@ def remove_vacation_day(d: date) -> bool:
 
 # ── Per-day urgency overrides ─────────────────────────────────────────────────
 
-def get_urgency_days(from_date: Optional[date] = None, to_date: Optional[date] = None) -> list:
-    """Return list of {date, enabled, reason} for days with urgency override."""
+
+def normalize_urgency_entity(entity_type: str, entity_slug: str) -> Tuple[str, str]:
+    """Canonical scope for urgency_days rows (also used by admin APIs)."""
+    et = (entity_type or "hotboat").strip().lower()
+    if et not in ("hotboat", "experience", "pack", "alojamiento"):
+        et = "hotboat"
+    slug = (entity_slug or "").strip()
+    if len(slug) > 160:
+        slug = slug[:160]
+    return et, slug
+
+
+def get_urgency_days(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    *,
+    entity_type: str = "hotboat",
+    entity_slug: str = "",
+) -> list:
+    """Return list of {date, enabled, reason, entity_type, entity_slug} for the given scope."""
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                wheres, params = [], []
+                wheres, params = ["entity_type = %s", "entity_slug = %s"], [et, slug]
                 if from_date:
-                    wheres.append("fecha >= %s"); params.append(from_date)
+                    wheres.append("fecha >= %s")
+                    params.append(from_date)
                 if to_date:
-                    wheres.append("fecha <= %s"); params.append(to_date)
-                where = ("WHERE " + " AND ".join(wheres)) if wheres else ""
-                cur.execute(f"SELECT fecha, enabled, reason FROM urgency_days {where} ORDER BY fecha", params)
-                return [{"date": str(r[0]), "enabled": r[1], "reason": r[2] or ""} for r in cur.fetchall()]
+                    wheres.append("fecha <= %s")
+                    params.append(to_date)
+                where = "WHERE " + " AND ".join(wheres)
+                cur.execute(
+                    f"SELECT fecha, enabled, reason, entity_type, entity_slug FROM urgency_days {where} ORDER BY fecha",
+                    params,
+                )
+                return [
+                    {
+                        "date": str(r[0]),
+                        "enabled": r[1],
+                        "reason": r[2] or "",
+                        "entity_type": r[3],
+                        "entity_slug": r[4] or "",
+                    }
+                    for r in cur.fetchall()
+                ]
     except Exception as e:
         logger.error(f"get_urgency_days failed: {e}")
         return []
 
 
-def get_urgency_day_override(d: date) -> Optional[bool]:
-    """
-    Returns True/False if the day has an explicit override, None if no override.
-    """
+def get_urgency_day_override_for_scope(d: date, entity_type: str, entity_slug: str) -> Optional[bool]:
+    """True/False if the day has an explicit override for this scope, None if no row."""
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT enabled FROM urgency_days WHERE fecha=%s", (d,))
+                cur.execute(
+                    "SELECT enabled FROM urgency_days WHERE entity_type=%s AND entity_slug=%s AND fecha=%s",
+                    (et, slug, d),
+                )
                 row = cur.fetchone()
                 return row[0] if row else None
     except Exception:
         return None
 
 
-def set_urgency_day(d: date, enabled: bool, reason: str = "") -> bool:
+def get_urgency_day_override(d: date) -> Optional[bool]:
+    """HotBoat/global slot urgency override (entity_type=hotboat, empty slug)."""
+    return get_urgency_day_override_for_scope(d, "hotboat", "")
+
+
+def is_high_season_web_addon(d: date, entity_type: str, entity_slug: str) -> bool:
+    """
+    Temporada alta for web extras (no online payment / requires email):
+    only product-scoped overrides apply (no implicit fallback to HotBoat global urgency).
+    """
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    ov = get_urgency_day_override_for_scope(d, et, slug)
+    return ov is True
+
+
+def set_urgency_day(
+    d: date,
+    enabled: bool,
+    reason: str = "",
+    *,
+    entity_type: str = "hotboat",
+    entity_slug: str = "",
+) -> bool:
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO urgency_days (fecha, enabled, reason)
-                       VALUES (%s, %s, %s)
-                       ON CONFLICT (fecha) DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason""",
-                    (d, enabled, reason),
+                    """INSERT INTO urgency_days (entity_type, entity_slug, fecha, enabled, reason)
+                       VALUES (%s, %s, %s, %s, %s)
+                       ON CONFLICT (entity_type, entity_slug, fecha)
+                       DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason""",
+                    (et, slug, d, enabled, reason),
                 )
                 conn.commit()
         return True
@@ -179,11 +284,20 @@ def set_urgency_day(d: date, enabled: bool, reason: str = "") -> bool:
         return False
 
 
-def remove_urgency_day(d: date) -> bool:
+def remove_urgency_day(
+    d: date,
+    *,
+    entity_type: str = "hotboat",
+    entity_slug: str = "",
+) -> bool:
+    et, slug = normalize_urgency_entity(entity_type, entity_slug)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM urgency_days WHERE fecha=%s", (d,))
+                cur.execute(
+                    "DELETE FROM urgency_days WHERE entity_type=%s AND entity_slug=%s AND fecha=%s",
+                    (et, slug, d),
+                )
                 conn.commit()
         return True
     except Exception as e:
@@ -201,9 +315,9 @@ def apply_urgency_filter(
     """
     Urgency algorithm:
 
-    • Sin reservas → mostrar las horas semilla (seed_times) que estén libres.
-    • Con reservas → para CADA reserva en X, ofrecer X - gap y X + gap.
-      Los seed_times ya NO se muestran; los reemplazan los slots de expansión.
+    • Conjunto base de "semillas" = seed_times (si hay) o bien todos los operating_hours.
+    • Sin reservas → mostrar esas semillas que estén libres (en el grid del día).
+    • Con reservas → además, para cada reserva en X, sugerir X ± gap si cae en cupo libre.
 
     Ejemplos con seeds=[10,18,21] gap=3:
       - Sin reservas          → [10:00, 18:00, 21:00]
@@ -215,7 +329,7 @@ def apply_urgency_filter(
         return []
 
     cfg = config if config is not None else get_urgency_config()
-    seed_times: list = cfg.get("seed_times") or get_operating_hours()
+    seed_times: list = get_effective_urgency_seed_times(cfg)
     gap_hours: float = float(cfg.get("gap_hours", 3))
 
     def _to_min(t: str) -> int:
@@ -277,7 +391,7 @@ def get_urgency_fake_slots(config: Optional[dict] = None) -> list:
     Resultado: [07:00, 13:00, 15:00]
     """
     cfg = config if config is not None else get_urgency_config()
-    seed_times: list = cfg.get("seed_times") or get_operating_hours()
+    seed_times: list = get_effective_urgency_seed_times(cfg)
     gap_hours: float = float(cfg.get("gap_hours", 3))
 
     def _to_min(t: str) -> int:

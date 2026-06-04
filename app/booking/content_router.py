@@ -36,35 +36,58 @@ def _default_extra_icon(key: str) -> str:
 
 
 @content_router.get("/api/content/extras")
-def list_extras():
+def list_extras(lang: str = Query("es", description="es | en | pt")):
     """Public endpoint: returns extras visible in the booking app (show_in_booking = TRUE)."""
     try:
         from app.booking.admin_router import _slugify_extra
-        # Ensure name column exists before querying (may not exist on first deploy)
+        lang = (lang or "es").lower().strip()[:2]
+        if lang not in ("es", "en", "pt"):
+            lang = "es"
+        # Ensure columns exist before querying (may not exist on first deploy)
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    ALTER TABLE extras_visibility
-                    ADD COLUMN IF NOT EXISTS name TEXT
-                """)
+                for col_def in [
+                    "name TEXT",
+                    "description TEXT",
+                    "name_en TEXT",
+                    "name_pt TEXT",
+                    "description_en TEXT",
+                    "description_pt TEXT",
+                ]:
+                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
                 conn.commit()
 
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT extra_name_lower,
-                           COALESCE(name, extra_name_lower) AS name,
+                           COALESCE(name, extra_name_lower) AS name_es,
                            COALESCE(precio_venta, 0)        AS price,
                            COALESCE(icon, '')               AS icon,
-                           COALESCE(description, '')        AS description,
+                           COALESCE(description, '')        AS description_es,
+                           COALESCE(NULLIF(TRIM(name_en), ''), '') AS name_en,
+                           COALESCE(NULLIF(TRIM(name_pt), ''), '') AS name_pt,
+                           COALESCE(NULLIF(TRIM(description_en), ''), '') AS description_en,
+                           COALESCE(NULLIF(TRIM(description_pt), ''), '') AS description_pt,
                            COALESCE(sort_order, 999)        AS sort_order
                     FROM extras_visibility
                     WHERE show_in_booking = TRUE
                     ORDER BY sort_order, extra_name_lower
                 """)
                 extras = []
-                for (name_lower, name, price, icon, description, sort_order) in cur.fetchall():
-                    key = _slugify_extra(name)
+                for row in cur.fetchall():
+                    (name_lower, name_es, price, icon, description_es,
+                     name_en, name_pt, description_en, description_pt, sort_order) = row
+                    if lang == "en":
+                        name = (name_en or "").strip() or name_es
+                        description = (description_en or "").strip() or description_es
+                    elif lang == "pt":
+                        name = (name_pt or "").strip() or name_es
+                        description = (description_pt or "").strip() or description_es
+                    else:
+                        name = name_es
+                        description = description_es
+                    key = _slugify_extra(name_es)
                     resolved_icon = icon or _default_extra_icon(key)
                     extras.append({
                         "id": name_lower,
@@ -83,7 +106,10 @@ def list_extras():
 
 
 @content_router.get("/api/content/alojamientos")
-def list_alojamientos(active_only: bool = True):
+def list_alojamientos(active_only: bool = True, lang: str = Query("es", description="es | en | pt")):
+    lang = (lang or "es").lower().strip()[:2]
+    if lang not in ("es", "en", "pt"):
+        lang = "es"
     with get_connection() as conn:
         with conn.cursor() as cur:
             q = ("SELECT id,slug,name,group_name,icon,description,"
@@ -99,7 +125,19 @@ def list_alojamientos(active_only: bool = True):
             q += " ORDER BY display_order,id"
             cur.execute(q)
             cols = [d.name for d in cur.description]
-            return {"alojamientos": [dict(zip(cols, r)) for r in cur.fetchall()]}
+            rows = []
+            for r in cur.fetchall():
+                row = dict(zip(cols, r))
+                if lang == "en":
+                    row["name"] = (row.get("name_en") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_en") or "").strip() or row.get("description")
+                    row["group_name"] = (row.get("group_name_en") or "").strip() or row.get("group_name")
+                elif lang == "pt":
+                    row["name"] = (row.get("name_pt") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_pt") or "").strip() or row.get("description")
+                    row["group_name"] = (row.get("group_name_pt") or "").strip() or row.get("group_name")
+                rows.append(row)
+            return {"alojamientos": rows}
 
 
 @content_router.get("/api/content/accommodation-availability/{slug}")
@@ -159,23 +197,70 @@ def get_accommodation_availability(slug: str):
 
 
 @content_router.get("/api/content/experiencias")
-def list_experiencias(active_only: bool = True):
+def list_experiencias(active_only: bool = True, lang: str = Query("es", description="es | en | pt")):
+    lang = (lang or "es").lower().strip()[:2]
+    if lang not in ("es", "en", "pt"):
+        lang = "es"
     with get_connection() as conn:
         with conn.cursor() as cur:
-            q = "SELECT id,slug,name,icon,description,price_per_person,cost_per_person,image_path,is_active,display_order FROM experiences"
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS name_en TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS name_pt TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_en TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_pt TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+            q = (
+                "SELECT id,slug,name,icon,description,"
+                "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
+                "price_per_person,cost_per_person,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "is_active,display_order FROM experiences"
+            )
             if active_only:
                 q += " WHERE is_active=TRUE"
             q += " ORDER BY display_order,id"
             cur.execute(q)
             cols = [d.name for d in cur.description]
-            return {"experiences": [dict(zip(cols, r)) for r in cur.fetchall()]}
+            rows = []
+            for r in cur.fetchall():
+                row = dict(zip(cols, r))
+                if lang == "en":
+                    row["name"] = (row.get("name_en") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_en") or "").strip() or row.get("description")
+                elif lang == "pt":
+                    row["name"] = (row.get("name_pt") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_pt") or "").strip() or row.get("description")
+                rows.append(row)
+            return {"experiences": rows}
 
 
 @content_router.get("/api/content/packs")
-def list_packs(active_only: bool = True):
+def list_packs(active_only: bool = True, lang: str = Query("es", description="es | en | pt")):
+    lang = (lang or "es").lower().strip()[:2]
+    if lang not in ("es", "en", "pt"):
+        lang = "es"
     with get_connection() as conn:
         with conn.cursor() as cur:
-            q = "SELECT id,slug,name,icon,description,personas,price_from,cost_from,image_path,includes,is_active,display_order FROM packs"
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS name_en TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS name_pt TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_en TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS description_pt TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS includes_en JSONB DEFAULT '[]'::jsonb")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS includes_pt JSONB DEFAULT '[]'::jsonb")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
+            cur.execute("ALTER TABLE packs ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+            q = (
+                "SELECT id,slug,name,icon,description,"
+                "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
+                "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
+                "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
+                "personas,price_from,cost_from,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "COALESCE(includes,'[]'::jsonb) AS includes,"
+                "COALESCE(includes_en,'[]'::jsonb) AS includes_en,"
+                "COALESCE(includes_pt,'[]'::jsonb) AS includes_pt,"
+                "is_active,display_order FROM packs"
+            )
             if active_only:
                 q += " WHERE is_active=TRUE"
             q += " ORDER BY display_order,id"
@@ -187,6 +272,20 @@ def list_packs(active_only: bool = True):
                 if isinstance(row.get("includes"), str):
                     import json
                     row["includes"] = json.loads(row["includes"])
+                if isinstance(row.get("includes_en"), str):
+                    import json
+                    row["includes_en"] = json.loads(row["includes_en"])
+                if isinstance(row.get("includes_pt"), str):
+                    import json
+                    row["includes_pt"] = json.loads(row["includes_pt"])
+                if lang == "en":
+                    row["name"] = (row.get("name_en") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_en") or "").strip() or row.get("description")
+                    row["includes"] = row.get("includes_en") or row.get("includes") or []
+                elif lang == "pt":
+                    row["name"] = (row.get("name_pt") or "").strip() or row.get("name")
+                    row["description"] = (row.get("description_pt") or "").strip() or row.get("description")
+                    row["includes"] = row.get("includes_pt") or row.get("includes") or []
                 rows.append(row)
             return {"packs": rows}
 

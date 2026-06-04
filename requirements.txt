@@ -30,6 +30,12 @@ resend>=0.8.0
 # Booking Platform - Payment
 mercadopago>=2.2.0
 
+# Web Push notifications (PWA)
+pywebpush>=1.9.4,<2.0.0
+
+# Audio conversion (webm→ogg for WhatsApp voice messages)
+imageio-ffmpeg>=0.4.9
+
 
 
 

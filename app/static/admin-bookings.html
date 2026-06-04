@@ -386,6 +386,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('financial')" id="nav-financial">
       <span class="ni">💰</span> Finanzas
     </div>
+    <div class="nav-item" onclick="showSection('simulator')" id="nav-simulator">
+      <span class="ni">🎯</span> Simulador
+    </div>
     <div class="nav-item" onclick="showSection('logs')" id="nav-logs">
       <span class="ni">🔍</span> Logs
     </div>
@@ -784,10 +787,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               Sube a Hostinger y pega el link. La 1ª foto es la portada. Puedes subir archivos abajo (⚠️ se pierden al reiniciar Railway).
             </small>
           </div>
-          <div class="form-group-adm">
-            <label>Subir archivo(s) <span style="font-weight:400;opacity:.65">(se pierde al reiniciar Railway — mejor usar URL)</span></label>
-            <input type="file" id="aloj-img-file" accept="image/*" multiple>
-          </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveAloj()">Guardar</button>
             <button class="sync-btn" style="flex:1" onclick="closeAlojModal()">Cancelar</button>
@@ -852,6 +851,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div class="form-group-adm"><label>Slug (identificador único)</label><input id="exp-slug" placeholder="rafting"></div>
           <div class="form-group-adm"><label>Icono</label><input id="exp-icon" placeholder="🚣" style="width:80px"></div>
           <div class="form-group-adm"><label>Descripción</label><input id="exp-desc" placeholder="Rio Trancura · Bajo o Alto"></div>
+          <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
+            <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
+            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .6rem">Si están vacías, la reserva web muestra el español. Solo afecta la página pública /booking.</p>
+            <div class="form-group-adm"><label>Nombre (English)</label><input id="exp-name-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Nombre (Português)</label><input id="exp-name-pt" placeholder="Opcional"></div>
+            <div class="form-group-adm"><label>Descripción (English)</label><input id="exp-desc-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Descripción (Português)</label><input id="exp-desc-pt" placeholder="Opcional"></div>
+          </details>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Precio/persona ($)</label><input id="exp-price" type="number" min="0" value="0"></div>
             <div class="form-group-adm"><label>Costo/persona ($)</label><input id="exp-cost" type="number" min="0" value="0"></div>
@@ -861,13 +868,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <label class="toggle-wrap"><input type="checkbox" id="exp-active" checked><span class="toggle-slider"></span></label>
             <span style="font-size:.85rem">Activa (visible en app y WhatsApp)</span>
           </div>
-          <div class="form-group-adm" id="exp-img-wrap" style="display:none">
-            <label>Foto actual</label>
-            <img id="exp-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
-          </div>
-          <div class="form-group-adm">
-            <label>Subir nueva foto</label>
-            <input type="file" id="exp-img-file" accept="image/*">
+          <!-- Multi-image manager -->
+          <div class="form-group-adm" style="margin-top:.8rem">
+            <label style="display:flex;justify-content:space-between;align-items:center">
+              <span>📸 Fotos <span style="font-weight:400;opacity:.6;font-size:.75rem">(arrastra para reordenar)</span></span>
+              <button type="button" onclick="expAddImageRow()" style="font-size:.75rem;padding:.2rem .6rem;background:var(--green);color:#fff;border:none;border-radius:6px;cursor:pointer">+ Agregar URL</button>
+            </label>
+            <div id="exp-images-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem"></div>
+            <small style="color:var(--muted);font-size:.72rem;margin-top:.3rem;display:block">
+              Sube a Hostinger y pega el link. La 1ª foto es la portada. Puedes subir archivos abajo.
+            </small>
           </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveExp()">Guardar</button>
@@ -897,6 +907,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <div class="form-group-adm"><label>Personas</label><input id="pack-personas" placeholder="2 personas"></div>
           </div>
           <div class="form-group-adm"><label>Descripción</label><input id="pack-desc" placeholder="Escapada romántica..."></div>
+          <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
+            <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
+            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .6rem">Si están vacías, la reserva web muestra el español. Solo afecta la página pública /booking.</p>
+            <div class="form-group-adm"><label>Nombre (English)</label><input id="pack-name-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Nombre (Português)</label><input id="pack-name-pt" placeholder="Opcional"></div>
+            <div class="form-group-adm"><label>Descripción (English)</label><input id="pack-desc-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Descripción (Português)</label><input id="pack-desc-pt" placeholder="Opcional"></div>
+          </details>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Precio desde ($)</label><input id="pack-price" type="number" min="0" value="0"></div>
             <div class="form-group-adm"><label>Costo desde ($)</label><input id="pack-cost" type="number" min="0" value="0"></div>
@@ -909,13 +927,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <label class="toggle-wrap"><input type="checkbox" id="pack-active" checked><span class="toggle-slider"></span></label>
             <span style="font-size:.85rem">Activo (visible en app y WhatsApp)</span>
           </div>
-          <div class="form-group-adm" id="pack-img-wrap" style="display:none">
-            <label>Foto actual</label>
-            <img id="pack-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
-          </div>
-          <div class="form-group-adm">
-            <label>Subir nueva foto</label>
-            <input type="file" id="pack-img-file" accept="image/*">
+          <!-- Multi-image manager -->
+          <div class="form-group-adm" style="margin-top:.8rem">
+            <label style="display:flex;justify-content:space-between;align-items:center">
+              <span>📸 Fotos <span style="font-weight:400;opacity:.6;font-size:.75rem">(arrastra para reordenar)</span></span>
+              <button type="button" onclick="packAddImageRow()" style="font-size:.75rem;padding:.2rem .6rem;background:var(--green);color:#fff;border:none;border-radius:6px;cursor:pointer">+ Agregar URL</button>
+            </label>
+            <div id="pack-images-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem"></div>
+            <small style="color:var(--muted);font-size:.72rem;margin-top:.3rem;display:block">
+              Sube a Hostinger y pega el link. La 1ª foto es la portada. Puedes subir archivos abajo.
+            </small>
           </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="savePack()">Guardar</button>
@@ -1115,23 +1136,45 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
       <!-- ── Urgency Days Calendar ──────────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem">
-        <div class="chart-title">⚡ Urgencia por días específicos</div>
+        <!-- Profile definitions -->
+        <div class="chart-title">⚡ Calendario de perfiles por día</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
-          Activa o desactiva el modo urgencia para días concretos, independientemente del toggle global.<br>
-          <strong style="color:var(--gold)">⚡ Amarillo</strong> = urgencia forzada ON &nbsp;·&nbsp; <strong style="color:var(--muted)">✗ Gris</strong> = urgencia forzada OFF
+          Define horarios y modos de urgencia, luego asígnalos a días específicos del calendario.<br>
+          Click en un día para elegir su perfil.
         </p>
+
+        <!-- Profile editors -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.2rem">
+          <!-- Schedule types -->
+          <div style="background:rgba(40,120,200,.08);border:1px solid rgba(40,120,200,.25);border-radius:10px;padding:.8rem">
+            <div style="font-size:.85rem;font-weight:700;color:#5aabff;margin-bottom:.6rem">🗓 Horarios</div>
+            <div id="schedule-types-list"></div>
+            <button onclick="addScheduleType()" style="margin-top:.5rem;background:rgba(40,120,200,.15);border:1px solid rgba(40,120,200,.3);color:#5aabff;border-radius:7px;padding:.3rem .8rem;font-size:.78rem;cursor:pointer">+ Agregar horario</button>
+          </div>
+          <!-- Urgency modes -->
+          <div style="background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.25);border-radius:10px;padding:.8rem">
+            <div style="font-size:.85rem;font-weight:700;color:var(--gold);margin-bottom:.6rem">⚡ Modos de urgencia</div>
+            <div id="urgency-modes-list"></div>
+            <button onclick="addUrgencyMode()" style="margin-top:.5rem;background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.25);color:var(--gold);border-radius:7px;padding:.3rem .8rem;font-size:.78rem;cursor:pointer">+ Agregar modo urgencia</button>
+          </div>
+        </div>
+
+        <!-- Calendar -->
         <div style="display:flex;gap:.6rem;margin-bottom:.8rem;flex-wrap:wrap;align-items:center">
           <button onclick="urgCalPrev()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">‹</button>
           <h2 id="urg-cal-title" style="font-size:.95rem;flex:1;margin:0"></h2>
           <button onclick="urgCalNext()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">›</button>
         </div>
         <div class="cal-grid" id="urg-cal-grid" style="gap:2px"></div>
-        <div style="display:flex;gap:1rem;margin-top:.8rem;font-size:.75rem;color:var(--muted)">
-          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Urgencia ON</span>
-          <span><span style="background:#7070a0;display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Urgencia OFF</span>
-          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem;opacity:.45"></span>Hoy</span>
-        </div>
+        <div id="profile-legend" style="display:flex;gap:.6rem;margin-top:.8rem;font-size:.72rem;flex-wrap:wrap"></div>
         <div id="urg-list" style="margin-top:1rem"></div>
+
+        <!-- Day picker popup -->
+        <div id="day-profile-popup" style="display:none;position:fixed;z-index:9999;background:#1e2030;border:1px solid var(--border);border-radius:12px;padding:1rem;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:220px">
+          <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:.6rem" id="popup-date-label"></div>
+          <div id="popup-options" style="display:flex;flex-direction:column;gap:.35rem"></div>
+          <button onclick="closeProfilePopup()" style="margin-top:.7rem;width:100%;background:var(--border);border:none;color:var(--muted);border-radius:7px;padding:.3rem;font-size:.75rem;cursor:pointer">Cancelar</button>
+        </div>
       </div>
 
       <!-- ── Push Notifications ─────────────────────────────────────── -->
@@ -1445,6 +1488,1489 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
     </div><!-- /section-financial -->
 
+    <!-- ═══════════════════════════ SIMULATOR TAB ═══════════════════════════ -->
+    <div id="section-simulator" class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+        <div>
+          <h2 style="margin:0;font-size:1.1rem;font-weight:700">🎯 Simulador Financiero</h2>
+          <div id="sim-scenario-badge" style="font-size:.72rem;color:var(--muted);margin-top:.12rem">Sin guardar</div>
+        </div>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <button onclick="openScenariosModal()" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">📋 Escenarios</button>
+          <button onclick="simLoadActuals()" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↺ Cargar reales</button>
+          <button onclick="openSaveModal()" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer">💾 Guardar</button>
+        </div>
+      </div>
+
+      <!-- actuals banner -->
+      <div id="sim-actuals-banner" style="display:none;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.25);border-radius:8px;padding:.5rem .9rem;font-size:.78rem;color:var(--muted);margin-bottom:.9rem"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+
+        <!-- ── LEFT: inputs ── -->
+        <div style="display:flex;flex-direction:column;gap:.7rem">
+
+          <!-- Ingresos -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:var(--gold);margin-bottom:.65rem;letter-spacing:.03em">📈 INGRESOS</div>
+            <div class="sim-row">
+              <label>Precio por persona</label>
+              <div class="sim-input-wrap">
+                <span class="sim-prefix">$</span>
+                <input type="number" id="sim-precio" value="45000" step="1000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Personas promedio por reserva</label>
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <input type="range" id="sim-personas-slider" min="2" max="7" step="0.5" value="4"
+                  oninput="document.getElementById('sim-personas').value=this.value;simCalc()"
+                  style="flex:1;accent-color:var(--gold)">
+                <input type="number" id="sim-personas" value="4" min="2" max="7" step="0.5"
+                  oninput="document.getElementById('sim-personas-slider').value=this.value;simCalc()"
+                  style="width:52px;text-align:center">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Reservas por mes</label>
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <input type="range" id="sim-reservas-slider" min="0" max="120" step="1" value="30"
+                  oninput="document.getElementById('sim-reservas').value=this.value;simCalc()"
+                  style="flex:1;accent-color:var(--gold)">
+                <input type="number" id="sim-reservas" value="30" min="0" max="120"
+                  oninput="document.getElementById('sim-reservas-slider').value=this.value;simCalc()"
+                  style="width:52px;text-align:center">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Extras promedio por reserva</label>
+              <div class="sim-input-wrap">
+                <span class="sim-prefix">$</span>
+                <input type="number" id="sim-extras" value="15000" step="1000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+          </div>
+
+          <!-- Costos por reserva -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:#f87171;margin-bottom:.65rem;letter-spacing:.03em">⛽ COSTOS POR RESERVA</div>
+            <div class="sim-row">
+              <label>Costo operativo por salida</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-costo-res" value="18000" step="500" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Combustible adicional</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-combustible" value="0" step="500" min="0" oninput="simCalc()">
+              </div>
+            </div>
+          </div>
+
+          <!-- Costos fijos -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:#f87171;margin-bottom:.65rem;letter-spacing:.03em">🏢 COSTOS FIJOS MENSUALES</div>
+            <div class="sim-row">
+              <label>Estructura operativa (arriendo, servicios…)</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-fijos" value="651000" step="10000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Mantenimiento y seguros</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-mantenim" value="150000" step="10000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Otros fijos</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-otros-fijos" value="0" step="10000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+          </div>
+
+          <!-- Remuneraciones -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:#f87171;margin-bottom:.6rem;letter-spacing:.03em">👥 REMUNERACIONES</div>
+
+            <!-- Worker count selector -->
+            <div class="sim-row" style="margin-bottom:.55rem">
+              <label>Trabajadores</label>
+              <div style="display:flex;gap:.15rem;flex-wrap:wrap">
+                <button type="button" onclick="simSetTrab(1)"  id="sim-trab-btn-1"  style="background:var(--gold);color:#000;border:none;border-radius:5px;width:24px;height:22px;font-size:.74rem;font-weight:700;cursor:pointer">1</button>
+                <button type="button" onclick="simSetTrab(2)"  id="sim-trab-btn-2"  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer">2</button>
+                <button type="button" onclick="simSetTrab(3)"  id="sim-trab-btn-3"  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer">3</button>
+                <button type="button" onclick="simSetTrab(4)"  id="sim-trab-btn-4"  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer">4</button>
+                <button type="button" onclick="simSetTrab(5)"  id="sim-trab-btn-5"  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer">5</button>
+                <button type="button" onclick="simSetTrab(6)"  id="sim-trab-btn-6"  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer">6</button>
+                <button type="button" onclick="simSetTrab(7)"  id="sim-trab-btn-7"  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer">7</button>
+                <button type="button" onclick="simSetTrab(8)"  id="sim-trab-btn-8"  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer">8</button>
+                <button type="button" onclick="simSetTrab(9)"  id="sim-trab-btn-9"  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer">9</button>
+                <button type="button" onclick="simSetTrab(10)" id="sim-trab-btn-10" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:22px;font-size:.72rem;cursor:pointer">10</button>
+              </div>
+              <input type="hidden" id="sim-num-trab" value="1">
+            </div>
+
+            <!-- Worker navigation tabs (hidden when only 1 worker) -->
+            <div id="sim-worker-tabs" style="display:none;gap:.2rem;flex-wrap:wrap;margin-bottom:.6rem"></div>
+
+            <!-- Worker forms (pre-rendered, show/hide by tab) -->
+            <div id="sim-worker-form-1">
+              <div class="sim-row">
+                <label>Nombre</label>
+                <input type="text" id="sim-w1-name" value="Capitán" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem">
+              </div>
+              <div class="sim-row">
+                <label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-w1-sueldo" value="800000" step="50000" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w1-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <span>&gt;</span>
+                    <input type="number" id="sim-w1-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral de reservas"
+                      style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>res·$</span>
+                    <input type="number" id="sim-w1-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono por reserva extra"
+                      style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>/res</span>
+                  </div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w1-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
+                </label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w1-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <input type="number" id="sim-w1-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()"
+                      style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>% ext.</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)">
+                  <span>Cal/Ext si &gt;</span>
+                  <input type="number" id="sim-w1-umbral-act" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas para activar bono cal y ext"
+                    style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem">
+                  <span>res.</span>
+                </div>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-2" style="display:none">
+              <div class="sim-row">
+                <label>Nombre</label>
+                <input type="text" id="sim-w2-name" value="Marinero" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem">
+              </div>
+              <div class="sim-row">
+                <label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-w2-sueldo" value="0" step="50000" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w2-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <span>&gt;</span>
+                    <input type="number" id="sim-w2-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral de reservas"
+                      style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>res·$</span>
+                    <input type="number" id="sim-w2-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono por reserva extra"
+                      style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>/res</span>
+                  </div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w2-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
+                </label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w2-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <input type="number" id="sim-w2-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()"
+                      style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>% ext.</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)">
+                  <span>Cal/Ext si &gt;</span>
+                  <input type="number" id="sim-w2-umbral-act" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas para activar bono cal y ext"
+                    style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem">
+                  <span>res.</span>
+                </div>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-3" style="display:none">
+              <div class="sim-row">
+                <label>Nombre</label>
+                <input type="text" id="sim-w3-name" value="Tripulación 3" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem">
+              </div>
+              <div class="sim-row">
+                <label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-w3-sueldo" value="0" step="50000" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w3-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <span>&gt;</span>
+                    <input type="number" id="sim-w3-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral de reservas"
+                      style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>res·$</span>
+                    <input type="number" id="sim-w3-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono por reserva extra"
+                      style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>/res</span>
+                  </div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w3-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
+                </label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w3-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <input type="number" id="sim-w3-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()"
+                      style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>% ext.</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)">
+                  <span>Cal/Ext si &gt;</span>
+                  <input type="number" id="sim-w3-umbral-act" value="0" step="1" min="0" oninput="simCalc()"
+                    style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem">
+                  <span>res.</span>
+                </div>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-4" style="display:none">
+              <div class="sim-row">
+                <label>Nombre</label>
+                <input type="text" id="sim-w4-name" value="Tripulación 4" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem">
+              </div>
+              <div class="sim-row">
+                <label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-w4-sueldo" value="0" step="50000" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w4-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <span>&gt;</span>
+                    <input type="number" id="sim-w4-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral de reservas"
+                      style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>res·$</span>
+                    <input type="number" id="sim-w4-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono por reserva extra"
+                      style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>/res</span>
+                  </div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w4-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
+                </label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w4-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <input type="number" id="sim-w4-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()"
+                      style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>% ext.</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)">
+                  <span>Cal/Ext si &gt;</span>
+                  <input type="number" id="sim-w4-umbral-act" value="0" step="1" min="0" oninput="simCalc()"
+                    style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem">
+                  <span>res.</span>
+                </div>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-5" style="display:none">
+              <div class="sim-row"><label>Nombre</label>
+                <input type="text" id="sim-w5-name" value="Tripulación 5" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem"></div>
+              <div class="sim-row"><label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span><input type="number" id="sim-w5-sueldo" value="0" step="50000" min="0" oninput="simCalc()"></div></div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w5-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas</label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w5-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res·$</span><input type="number" id="sim-w5-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono/reserva extra" style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>/res</span></div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w5-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w5-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w5-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>% ext.</span></div></div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w5-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-6" style="display:none">
+              <div class="sim-row"><label>Nombre</label>
+                <input type="text" id="sim-w6-name" value="Tripulación 6" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem"></div>
+              <div class="sim-row"><label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span><input type="number" id="sim-w6-sueldo" value="0" step="50000" min="0" oninput="simCalc()"></div></div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w6-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas</label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w6-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res·$</span><input type="number" id="sim-w6-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono/reserva extra" style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>/res</span></div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w6-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w6-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w6-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>% ext.</span></div></div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w6-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-7" style="display:none">
+              <div class="sim-row"><label>Nombre</label>
+                <input type="text" id="sim-w7-name" value="Tripulación 7" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem"></div>
+              <div class="sim-row"><label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span><input type="number" id="sim-w7-sueldo" value="0" step="50000" min="0" oninput="simCalc()"></div></div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w7-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas</label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w7-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res·$</span><input type="number" id="sim-w7-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono/reserva extra" style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>/res</span></div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w7-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w7-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w7-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>% ext.</span></div></div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w7-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-8" style="display:none">
+              <div class="sim-row"><label>Nombre</label>
+                <input type="text" id="sim-w8-name" value="Tripulación 8" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem"></div>
+              <div class="sim-row"><label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span><input type="number" id="sim-w8-sueldo" value="0" step="50000" min="0" oninput="simCalc()"></div></div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w8-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas</label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w8-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res·$</span><input type="number" id="sim-w8-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono/reserva extra" style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>/res</span></div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w8-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w8-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w8-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>% ext.</span></div></div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w8-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-9" style="display:none">
+              <div class="sim-row"><label>Nombre</label>
+                <input type="text" id="sim-w9-name" value="Tripulación 9" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem"></div>
+              <div class="sim-row"><label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span><input type="number" id="sim-w9-sueldo" value="0" step="50000" min="0" oninput="simCalc()"></div></div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w9-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas</label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w9-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res·$</span><input type="number" id="sim-w9-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono/reserva extra" style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>/res</span></div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w9-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w9-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w9-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>% ext.</span></div></div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w9-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-10" style="display:none">
+              <div class="sim-row"><label>Nombre</label>
+                <input type="text" id="sim-w10-name" value="Tripulación 10" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem"></div>
+              <div class="sim-row"><label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span><input type="number" id="sim-w10-sueldo" value="0" step="50000" min="0" oninput="simCalc()"></div></div>
+              <div style="margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07);display:flex;flex-direction:column;gap:.28rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w10-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas</label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w10-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res·$</span><input type="number" id="sim-w10-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono/reserva extra" style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>/res</span></div>
+                </div>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w10-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w10-bono-ext" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Bono extras</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w10-bono-ext-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>% ext.</span></div></div>
+                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w10-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
+              </div>
+            </div>
+
+            <!-- Quality bonus (global for all opted-in workers) -->
+            <div style="margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border)">
+              <div style="font-size:.72rem;font-weight:700;color:#fbbf24;margin-bottom:.4rem;letter-spacing:.03em">⭐ BONO POR CALIDAD</div>
+              <div class="sim-row">
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;flex:1">
+                  <input type="checkbox" id="sim-bono-calidad-check" onchange="simCalc()"
+                    style="accent-color:#fbbf24;cursor:pointer;width:14px;height:14px;flex-shrink:0">
+                  <span>90%+ reseñas 5★ este mes</span>
+                </label>
+              </div>
+              <div class="sim-row" id="sim-bono-calidad-row" style="opacity:.4;pointer-events:none">
+                <label>Monto bono calidad (c/trab.)</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-bono-calidad-monto" value="30000" step="5000" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div id="sim-bono-preview" style="font-size:.73rem;color:#fbbf24;margin-top:.35rem;line-height:1.6;min-height:1.2em"></div>
+            </div>
+
+            <!-- Grand total remuneraciones -->
+            <div id="sim-remu-total" style="margin-top:.55rem;padding:.4rem .55rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;font-size:.82rem"></div>
+          </div>
+
+          <!-- Marketing -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:#a78bfa;margin-bottom:.65rem;letter-spacing:.03em">📢 MARKETING</div>
+            <div class="sim-row">
+              <label>Inversión mensual</label>
+              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                <input type="number" id="sim-mkt" value="200000" step="10000" min="0" oninput="simCalc()">
+              </div>
+            </div>
+            <div class="sim-row">
+              <label>Reservas atribuibles al marketing</label>
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <input type="range" id="sim-mkt-pct-slider" min="0" max="100" step="5" value="40"
+                  oninput="document.getElementById('sim-mkt-pct').value=this.value;simCalc()"
+                  style="flex:1;accent-color:#a78bfa">
+                <input type="number" id="sim-mkt-pct" value="40" min="0" max="100"
+                  oninput="document.getElementById('sim-mkt-pct-slider').value=this.value;simCalc()"
+                  style="width:48px;text-align:center">
+                <span style="font-size:.78rem;color:var(--muted)">%</span>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /left -->
+
+        <!-- ── RIGHT: results ── -->
+        <div style="display:flex;flex-direction:column;gap:.7rem">
+
+          <!-- P&L card -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:var(--muted);margin-bottom:.65rem;letter-spacing:.03em">📊 ESTADO DE RESULTADOS — MENSUAL</div>
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem" id="sim-pnl-table">
+              <tr class="sim-tr-section"><td colspan="2">INGRESOS</td></tr>
+              <tr><td class="sim-td-label">Ingresos base (reservas)</td><td class="sim-td-val" id="sr-base">—</td></tr>
+              <tr><td class="sim-td-label">Ingresos extras</td><td class="sim-td-val" id="sr-extras">—</td></tr>
+              <tr class="sim-tr-total"><td>INGRESOS BRUTOS</td><td id="sr-gross">—</td></tr>
+              <tr class="sim-tr-section"><td colspan="2">COSTOS VARIABLES</td></tr>
+              <tr><td class="sim-td-label">Costos operativos (×reservas)</td><td class="sim-td-val sim-neg" id="sr-cvar">—</td></tr>
+              <tr class="sim-tr-subtotal"><td>Margen de contribución</td><td id="sr-contrib">—</td></tr>
+              <tr class="sim-tr-section"><td colspan="2">COSTOS FIJOS</td></tr>
+              <tr><td class="sim-td-label">Estructura operativa + otros</td><td class="sim-td-val sim-neg" id="sr-cfijo">—</td></tr>
+              <tr><td class="sim-td-label">Remuneraciones</td><td class="sim-td-val sim-neg" id="sr-remu">—</td></tr>
+              <tr id="sr-bonos-row" style="display:none"><td class="sim-td-label" style="color:#fbbf24" id="sr-bonos-label">↳ Bonos reservas</td><td class="sim-td-val sim-neg" id="sr-bonos" style="color:#fbbf24">—</td></tr>
+              <tr id="sr-bonos-cal-row" style="display:none"><td class="sim-td-label" style="color:#fbbf24" id="sr-bonos-cal-label">↳ Bono calidad</td><td class="sim-td-val sim-neg" id="sr-bonos-cal" style="color:#fbbf24">—</td></tr>
+              <tr><td class="sim-td-label">Marketing</td><td class="sim-td-val sim-neg" id="sr-mkt">—</td></tr>
+              <tr class="sim-tr-total sim-result" id="sim-ebitda-row"><td>RESULTADO NETO</td><td id="sr-ebitda">—</td></tr>
+            </table>
+          </div>
+
+          <!-- KPI chips -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Margen neto</div>
+              <div class="sim-kpi-val" id="kpi-margen">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Break-even (reservas)</div>
+              <div class="sim-kpi-val" id="kpi-be">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Ingreso por reserva</div>
+              <div class="sim-kpi-val" id="kpi-ipr">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">ROI Marketing</div>
+              <div class="sim-kpi-val" id="kpi-roi">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Costo total por reserva</div>
+              <div class="sim-kpi-val" id="kpi-ctpr">—</div>
+            </div>
+            <div class="sim-kpi-card">
+              <div class="sim-kpi-label">Ingresos anuales (est.)</div>
+              <div class="sim-kpi-val" id="kpi-anual">—</div>
+            </div>
+            <div class="sim-kpi-card" id="kpi-bono-card" style="display:none;border-color:#fbbf2440">
+              <div class="sim-kpi-label" style="color:#fbbf24">🎯 Bono mes actual</div>
+              <div class="sim-kpi-val" id="kpi-bono" style="color:#fbbf24">—</div>
+            </div>
+            <div class="sim-kpi-card" id="kpi-bono-anual-card" style="display:none;border-color:#fbbf2440">
+              <div class="sim-kpi-label" style="color:#fbbf24">🎯 Bonos anuales (est.)</div>
+              <div class="sim-kpi-val" id="kpi-bono-anual" style="color:#fbbf24">—</div>
+            </div>
+          </div>
+
+          <!-- Break-even progress bar -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:var(--muted);margin-bottom:.5rem">📍 Break-even vs Objetivo de reservas</div>
+            <div style="background:var(--bg);border-radius:6px;overflow:hidden;height:18px;position:relative">
+              <div id="sim-be-bar" style="height:100%;background:linear-gradient(90deg,#34d399,#facc15);border-radius:6px;transition:width .3s;width:0%"></div>
+              <div id="sim-be-bar-over" style="position:absolute;inset:0;height:100%;background:linear-gradient(90deg,#f87171,#ef4444);border-radius:6px;transition:width .3s;display:none;width:0%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin-top:.3rem">
+              <span>0</span>
+              <span id="sim-be-label">—</span>
+              <span id="sim-reservas-label">—</span>
+            </div>
+          </div>
+
+          <!-- 12-month forecast -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+            <div style="font-size:.78rem;font-weight:700;color:var(--muted);margin-bottom:.65rem;letter-spacing:.03em">📅 PROYECCIÓN ANUAL (ESTACIONALIDAD ESTIMADA)</div>
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:.75rem" id="sim-forecast-table">
+                <thead>
+                  <tr style="color:var(--muted);border-bottom:1px solid var(--border)">
+                    <th style="text-align:left;padding:.3rem .4rem">Mes</th>
+                    <th style="text-align:right;padding:.3rem .4rem">Factor</th>
+                    <th style="text-align:right;padding:.3rem .4rem">Reservas</th>
+                    <th style="text-align:right;padding:.3rem .4rem">Ingresos</th>
+                    <th style="text-align:right;padding:.3rem .4rem">Resultado</th>
+                  </tr>
+                </thead>
+                <tbody id="sim-forecast-body"></tbody>
+                <tfoot id="sim-forecast-foot"></tfoot>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- /right -->
+      </div><!-- /grid -->
+
+      <!-- ── Gráfico Ingresos vs Costos ──────────────────────────────────── -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem;margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem;margin-bottom:.6rem">
+          <div style="font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.03em">📈 INGRESOS VS COSTOS POR N° DE RESERVAS</div>
+          <div style="display:flex;gap:.55rem;flex-wrap:wrap;font-size:.72rem">
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-ingreso" checked onchange="simDrawChart()">
+              <span style="color:#34d399">● Ingresos</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-costo-total" checked onchange="simDrawChart()">
+              <span style="color:#f87171">● Costo total</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-resultado" checked onchange="simDrawChart()">
+              <span style="color:#60a5fa">● Resultado</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-cvar" onchange="simDrawChart()">
+              <span style="color:#fb923c">– Costo variable</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-cfijo" onchange="simDrawChart()">
+              <span style="color:#f97316">– Costo fijo</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-remu" onchange="simDrawChart()">
+              <span style="color:#fbbf24">– Remuneraciones</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-mkt" onchange="simDrawChart()">
+              <span style="color:#a78bfa">– Marketing</span></label>
+          </div>
+        </div>
+        <canvas id="sim-chart-canvas" style="width:100%;display:block;border-radius:6px" height="220"></canvas>
+        <div style="font-size:.69rem;color:var(--muted);margin-top:.35rem;text-align:center">
+          <span style="margin-right:.8rem">▼ = reservas actuales</span>
+          <span style="color:#facc15">BE = break-even</span>
+        </div>
+      </div>
+
+      <style>
+        .sim-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.45rem;font-size:.82rem}
+        .sim-row label{color:var(--text);flex:1;min-width:0}
+        .sim-input-wrap{display:flex;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:7px;overflow:hidden;width:130px;flex-shrink:0}
+        .sim-prefix{padding:0 .4rem;color:var(--muted);font-size:.8rem;user-select:none}
+        .sim-input-wrap input{border:none;background:transparent;color:var(--text);width:100%;padding:.28rem .4rem .28rem 0;font-size:.82rem;outline:none;min-width:0}
+        .sim-td-label{padding:.3rem .35rem;color:var(--muted)}
+        .sim-td-val{text-align:right;padding:.3rem .35rem;font-variant-numeric:tabular-nums}
+        .sim-neg{color:#f87171}
+        .sim-tr-section td{font-size:.7rem;font-weight:700;letter-spacing:.05em;color:var(--muted);padding:.45rem .35rem .18rem;border-top:1px solid var(--border)}
+        .sim-tr-subtotal td{font-weight:600;border-top:1px solid var(--border);padding:.3rem .35rem}
+        .sim-tr-total td{font-weight:700;border-top:2px solid var(--border);padding:.35rem .35rem;font-size:.85rem}
+        .sim-result td:last-child{font-size:.92rem}
+        .sim-kpi-card{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:.6rem .75rem}
+        .sim-kpi-label{font-size:.7rem;color:var(--muted);margin-bottom:.2rem}
+        .sim-kpi-val{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums}
+        #sim-forecast-body tr:nth-child(even){background:rgba(255,255,255,.02)}
+        #sim-forecast-body td{padding:.28rem .4rem}
+        #sim-forecast-body td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+        #sim-forecast-foot td{padding:.35rem .4rem;font-weight:700;border-top:2px solid var(--border)}
+        #sim-forecast-foot td:not(:first-child){text-align:right}
+      </style>
+
+      <script>
+      // ── Seasonality factors (Jan=1 … Dec=12) ─────────────────────────────
+      const SIM_SEASON = [0.55,0.6,0.7,0.85,0.9,1.0,1.15,1.2,1.0,0.9,0.95,0.85];
+      const SIM_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+      function simV(id){ return parseFloat(document.getElementById(id)?.value) || 0; }
+
+      let _simActiveWorker = 1;
+
+      const SIM_MAX_WORKERS = 10;
+
+      // Updates worker count button styles + hidden input WITHOUT calling simCalc.
+      // Use this when restoring a scenario so simCalc only runs once at the end.
+      function _simSetTrabCount(n){
+        document.getElementById('sim-num-trab').value = n;
+        const onCSS  = 'background:var(--gold);color:#000;border:none;border-radius:5px;width:24px;height:22px;font-size:.74rem;font-weight:700;cursor:pointer';
+        const off10  = 'background:var(--gold);color:#000;border:none;border-radius:5px;width:28px;height:22px;font-size:.72rem;font-weight:700;cursor:pointer';
+        const offCSS = 'background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer';
+        const off10b = 'background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:22px;font-size:.72rem;cursor:pointer';
+        for(let i = 1; i <= SIM_MAX_WORKERS; i++){
+          const btn = document.getElementById(`sim-trab-btn-${i}`);
+          if(!btn) continue;
+          if(i === n) btn.style.cssText = i === 10 ? off10  : onCSS;
+          else        btn.style.cssText = i === 10 ? off10b : offCSS;
+        }
+        if(_simActiveWorker > n) _simActiveWorker = n;
+      }
+
+      function simSetTrab(n){
+        document.getElementById('sim-num-trab').value = n;
+        const onCSS  = 'background:var(--gold);color:#000;border:none;border-radius:5px;width:24px;height:22px;font-size:.74rem;font-weight:700;cursor:pointer';
+        const off10  = 'background:var(--gold);color:#000;border:none;border-radius:5px;width:28px;height:22px;font-size:.72rem;font-weight:700;cursor:pointer';
+        const offCSS = 'background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer';
+        const off10b = 'background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:22px;font-size:.72rem;cursor:pointer';
+        for(let i = 1; i <= SIM_MAX_WORKERS; i++){
+          const btn = document.getElementById(`sim-trab-btn-${i}`);
+          if(!btn) continue;
+          if(i === n) btn.style.cssText = i === 10 ? off10 : onCSS;
+          else        btn.style.cssText = i === 10 ? off10b : offCSS;
+        }
+        if(_simActiveWorker > n) _simActiveWorker = n;
+        simRenderWorkerTabs();
+        simCalc();
+      }
+
+      function simRenderWorkerTabs(){
+        const n = parseInt(document.getElementById('sim-num-trab').value) || 1;
+        const tabsEl = document.getElementById('sim-worker-tabs');
+        if(n <= 1){
+          tabsEl.style.display = 'none';
+          for(let w = 1; w <= SIM_MAX_WORKERS; w++){
+            const f = document.getElementById(`sim-worker-form-${w}`);
+            if(f) f.style.display = w === 1 ? '' : 'none';
+          }
+          return;
+        }
+        tabsEl.style.display = 'flex';
+        tabsEl.innerHTML = '';
+        for(let w = 1; w <= n; w++){
+          const name = document.getElementById(`sim-w${w}-name`)?.value || `Trab. ${w}`;
+          const isActive = w === _simActiveWorker;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = name;
+          btn.style.cssText = isActive
+            ? 'background:var(--gold);color:#000;border:none;border-radius:5px;padding:.2rem .5rem;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap'
+            : 'background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.2rem .5rem;font-size:.75rem;cursor:pointer;white-space:nowrap';
+          btn.onclick = (()=>{const ww=w; return ()=>simSelectWorker(ww);})();
+          tabsEl.appendChild(btn);
+        }
+        for(let w = 1; w <= SIM_MAX_WORKERS; w++){
+          const f = document.getElementById(`sim-worker-form-${w}`);
+          if(f) f.style.display = (w === _simActiveWorker && w <= n) ? '' : 'none';
+        }
+      }
+
+      function simSelectWorker(w){
+        _simActiveWorker = w;
+        simRenderWorkerTabs();
+      }
+      function simFmt(n){ return '$' + Math.round(n).toLocaleString('es-CL'); }
+      function simFmtK(n){
+        if(Math.abs(n)>=1e6) return '$' + (n/1e6).toFixed(1).replace('.',',')+'M';
+        if(Math.abs(n)>=1e3) return '$' + Math.round(n/1000)+'k';
+        return '$' + Math.round(n).toLocaleString('es-CL');
+      }
+      function simColor(n){ return n >= 0 ? 'var(--green,#34d399)' : '#f87171'; }
+
+      let _simChartData = null;
+
+      function simDrawChart(){
+        const canvas = document.getElementById('sim-chart-canvas');
+        if(!canvas || !_simChartData) return;
+        const d = _simChartData;
+
+        const dpr = window.devicePixelRatio || 1;
+        let W = canvas.offsetWidth;
+        if(!W){ requestAnimationFrame(simDrawChart); return; } // section hidden, retry when visible
+        const H   = 220;
+        canvas.width  = W * dpr;
+        canvas.height = H * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const pad = { top:18, right:14, bottom:34, left:68 };
+        const cW  = W - pad.left - pad.right;
+        const cH  = H - pad.top  - pad.bottom;
+
+        const maxR = Math.max(Math.ceil(d.reservas * 2.5), 30, d.be > 0 ? Math.ceil(d.be * 1.6) : 0);
+        const ingrPerRes = d.precio * d.personas + d.extras;
+
+        function getIngreso(r)    { return ingrPerRes * r; }
+        function getCostoVar(r)   { return d.cVar * r; }
+        function getCostoFijo()   { return d.cFijo; }
+        function getRemu(r){
+          let bres = 0;
+          for(const wd of d.wData){
+            if(wd.bonoResOn && wd.bonoPorResW > 0) bres += Math.max(0, r - wd.umbralW) * wd.bonoPorResW;
+          }
+          const bcal = d.bonoCalidadCheck ? d.bonoCalidadMonto * d.trabConBonoCal : 0;
+          return d.remuBase + bres + bcal;
+        }
+        function getMkt()         { return d.mkt; }
+        function getCostoTotal(r) { return getCostoVar(r) + getCostoFijo() + getRemu(r) + getMkt(); }
+        function getResultado(r)  { return getIngreso(r) - getCostoTotal(r); }
+
+        // Y range
+        const steps = 80;
+        let yMax = 0, yMin = 0;
+        for(let i = 0; i <= steps; i++){
+          const r = maxR * i / steps;
+          yMax = Math.max(yMax, getIngreso(r), getCostoTotal(r), getCostoVar(r), getCostoFijo(), getRemu(r), getMkt());
+          yMin = Math.min(yMin, getResultado(r));
+        }
+        yMax = yMax * 1.08;
+        yMin = yMin < 0 ? yMin * 1.12 : 0;
+        const yRange = yMax - yMin || 1;
+
+        function xPx(r){ return pad.left + (r / maxR) * cW; }
+        function yPx(v){ return pad.top  + (1 - (v - yMin) / yRange) * cH; }
+
+        ctx.clearRect(0, 0, W, H);
+
+        // Grid + axes
+        ctx.font = `${10 * dpr / dpr}px sans-serif`;
+        ctx.textAlign = 'right';
+        const yTicks = 5;
+        for(let i = 0; i <= yTicks; i++){
+          const v  = yMin + yRange * (i / yTicks);
+          const py = yPx(v);
+          ctx.strokeStyle = 'rgba(255,255,255,.06)';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(pad.left, py); ctx.lineTo(pad.left + cW, py); ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,.32)';
+          ctx.fillText(simFmtK(v), pad.left - 5, py + 3.5);
+        }
+        const xStep = Math.max(1, Math.ceil(maxR / 10));
+        ctx.textAlign = 'center';
+        for(let r = 0; r <= maxR; r += xStep){
+          const px = xPx(r);
+          ctx.strokeStyle = 'rgba(255,255,255,.05)';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(px, pad.top); ctx.lineTo(px, pad.top + cH); ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,.32)';
+          ctx.fillText(r, px, pad.top + cH + 13);
+        }
+        // X axis label
+        ctx.fillStyle = 'rgba(255,255,255,.25)';
+        ctx.font = `9px sans-serif`;
+        ctx.fillText('reservas / mes', pad.left + cW / 2, pad.top + cH + 26);
+
+        // Zero line
+        if(yMin < 0){
+          const py0 = yPx(0);
+          ctx.strokeStyle = 'rgba(255,255,255,.18)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
+          ctx.beginPath(); ctx.moveTo(pad.left, py0); ctx.lineTo(pad.left + cW, py0); ctx.stroke();
+        }
+
+        const pts = 200;
+        const series = [
+          { id:'sim-chart-cvar',        fn: r=>getCostoVar(r),   color:'#fb923c', dash:[5,3], w:1.5 },
+          { id:'sim-chart-cfijo',       fn: r=>getCostoFijo(),   color:'#f97316', dash:[6,3], w:1.5 },
+          { id:'sim-chart-remu',        fn: r=>getRemu(r),       color:'#fbbf24', dash:[4,3], w:1.5 },
+          { id:'sim-chart-mkt',         fn: r=>getMkt(),         color:'#a78bfa', dash:[4,3], w:1.5 },
+          { id:'sim-chart-costo-total', fn: r=>getCostoTotal(r), color:'#f87171', dash:[],    w:2   },
+          { id:'sim-chart-resultado',   fn: r=>getResultado(r),  color:'#60a5fa', dash:[],    w:2   },
+          { id:'sim-chart-ingreso',     fn: r=>getIngreso(r),    color:'#34d399', dash:[],    w:2   },
+        ];
+        for(const s of series){
+          if(!document.getElementById(s.id)?.checked) continue;
+          ctx.strokeStyle = s.color;
+          ctx.lineWidth   = s.w;
+          ctx.setLineDash(s.dash);
+          ctx.beginPath();
+          for(let i = 0; i <= pts; i++){
+            const r = maxR * i / pts;
+            const x = xPx(r), y = yPx(s.fn(r));
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        // Break-even vertical
+        if(d.be > 0 && d.be < maxR){
+          const bePx = xPx(d.be);
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath(); ctx.moveTo(bePx, pad.top + 12); ctx.lineTo(bePx, pad.top + cH); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#facc15';
+          ctx.textAlign = 'center';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.fillText('BE', bePx, pad.top + 9);
+        }
+
+        // Current reservations vertical
+        if(d.reservas > 0 && d.reservas <= maxR){
+          const curPx = xPx(d.reservas);
+          ctx.strokeStyle = 'rgba(255,255,255,.45)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath(); ctx.moveTo(curPx, pad.top + 14); ctx.lineTo(curPx, pad.top + cH); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(255,255,255,.6)';
+          ctx.textAlign = 'center';
+          ctx.font = '10px sans-serif';
+          ctx.fillText('▼', curPx, pad.top + 11);
+        }
+      }
+
+      window.addEventListener('resize', ()=>{ if(_simChartData) simDrawChart(); });
+
+      function simCalc(){
+        const precio       = simV('sim-precio');
+        const personas     = simV('sim-personas');
+        const reservas     = simV('sim-reservas');
+        const extras       = simV('sim-extras');
+        const cVar         = simV('sim-costo-res') + simV('sim-combustible');
+        const cFijo        = simV('sim-fijos') + simV('sim-mantenim') + simV('sim-otros-fijos');
+        const numTrab      = parseInt(document.getElementById('sim-num-trab').value) || 1;
+        const mkt          = simV('sim-mkt');
+        const mktPct       = simV('sim-mkt-pct') / 100;
+        const bonoCalidadCheck  = document.getElementById('sim-bono-calidad-check').checked;
+        const bonoCalidadMonto  = simV('sim-bono-calidad-monto');
+
+        // Toggle quality bonus input active state
+        const calRow = document.getElementById('sim-bono-calidad-row');
+        if(calRow){ calRow.style.opacity = bonoCalidadCheck ? '1' : '.4'; calRow.style.pointerEvents = bonoCalidadCheck ? '' : 'none'; }
+
+        // Per-worker accumulation — each worker has their own salary, umbral, bono rate
+        let remuBase = 0, bonoResTotal = 0, trabConBonoCal = 0, bonoExtTotal = 0;
+        const _wData = []; // cache for preview + annual forecast
+        for(let w = 1; w <= numTrab; w++){
+          const sueldo     = simV(`sim-w${w}-sueldo`);
+          const bonoResOn  = document.getElementById(`sim-w${w}-bono-res`)?.checked ?? true;
+          const bonoCalOn  = document.getElementById(`sim-w${w}-bono-cal`)?.checked ?? false;
+          const bonoExtOn   = document.getElementById(`sim-w${w}-bono-ext`)?.checked ?? false;
+          const umbralW     = bonoResOn ? simV(`sim-w${w}-bono-umbral`) : 0;
+          const bonoPorResW = bonoResOn ? simV(`sim-w${w}-bono-por-res`) : 0;
+          const bonoExtPct  = bonoExtOn ? simV(`sim-w${w}-bono-ext-pct`) / 100 : 0;
+          const umbralActW  = simV(`sim-w${w}-umbral-act`); // threshold for cal/ext
+          const umbralActMet = reservas > umbralActW;
+          const extrasW     = bonoResOn ? Math.max(0, reservas - umbralW) : 0;
+          const bonoResW    = extrasW * bonoPorResW;
+          const ingresoExtraTotal = extras * reservas;
+          const bonoExtW    = (bonoExtOn && umbralActMet) ? ingresoExtraTotal * bonoExtPct : 0;
+          remuBase    += sueldo;
+          bonoResTotal += bonoResW;
+          bonoExtTotal += bonoExtW;
+          if(bonoCalOn && umbralActMet) trabConBonoCal++;
+          _wData.push({ w, sueldo, bonoResOn, bonoCalOn, bonoExtOn, umbralW, bonoPorResW, extrasW, bonoResW, bonoExtPct, bonoExtW,
+                        umbralActW, umbralActMet,
+                        name: document.getElementById(`sim-w${w}-name`)?.value || `Trab. ${w}` });
+        }
+        const bonoCalTotal = bonoCalidadCheck ? bonoCalidadMonto * trabConBonoCal : 0;
+        const bonoActual        = bonoResTotal + bonoCalTotal + bonoExtTotal;
+        const remuner           = remuBase + bonoActual;
+
+        // ── Per-worker monthly breakdown ───────────────────────────────────
+        let grandTotal = 0;
+        for(const wd of _wData){
+          const formEl = document.getElementById(`sim-worker-form-${wd.w}`);
+          if(!formEl) continue;
+          let totalEl = document.getElementById(`sim-w${wd.w}-total`);
+          if(!totalEl){
+            totalEl = document.createElement('div');
+            totalEl.id = `sim-w${wd.w}-total`;
+            totalEl.style.cssText = 'margin-top:.45rem;padding:.38rem .5rem;background:rgba(250,204,21,.06);border:1px solid rgba(250,204,21,.2);border-radius:6px;font-size:.79rem';
+            formEl.appendChild(totalEl);
+          }
+          const bonoCalW = (bonoCalidadCheck && wd.bonoCalOn && wd.umbralActMet) ? bonoCalidadMonto : 0;
+          const totalW   = wd.sueldo + wd.bonoResW + bonoCalW + wd.bonoExtW;
+          grandTotal    += totalW;
+          const bonoResDetail = wd.bonoResOn && wd.bonoResW > 0
+            ? ` <span style="color:rgba(251,191,36,.6);font-size:.72rem">(${wd.extrasW} extra×${simFmtK(wd.bonoPorResW)})</span>` : '';
+          const bonoExtDetail = wd.bonoExtOn && wd.bonoExtW > 0
+            ? ` <span style="color:rgba(96,165,250,.6);font-size:.72rem">(${(wd.bonoExtPct*100).toFixed(0)}% de ${simFmtK(extras*reservas)})</span>` : '';
+          const umbralNote = (wd.bonoCalOn || wd.bonoExtOn) && wd.umbralActW > 0 && !wd.umbralActMet
+            ? `<tr><td colspan="2" style="font-size:.69rem;color:#f87171;padding-top:.1rem">⚠ Cal/Ext inactivos (mín. ${wd.umbralActW} res.)</td></tr>` : '';
+          totalEl.innerHTML =
+            `<table style="width:100%;border-collapse:collapse;line-height:1.7">` +
+            `<tr><td style="color:var(--muted)">Sueldo base</td><td style="text-align:right">${simFmt(wd.sueldo)}</td></tr>` +
+            `<tr><td style="color:${wd.bonoResW>0?'#fbbf24':'var(--muted)'}">+ Bono reservas${bonoResDetail}</td><td style="text-align:right;color:${wd.bonoResW>0?'#fbbf24':'var(--muted)'}">${simFmt(wd.bonoResW)}</td></tr>` +
+            `<tr><td style="color:${bonoCalW>0?'#fbbf24':'var(--muted)'}">+ Bono calidad</td><td style="text-align:right;color:${bonoCalW>0?'#fbbf24':'var(--muted)'}">${simFmt(bonoCalW)}</td></tr>` +
+            `<tr><td style="color:${wd.bonoExtW>0?'#60a5fa':'var(--muted)'}">+ Bono extras${bonoExtDetail}</td><td style="text-align:right;color:${wd.bonoExtW>0?'#60a5fa':'var(--muted)'}">${simFmt(wd.bonoExtW)}</td></tr>` +
+            umbralNote +
+            `<tr style="border-top:1px solid rgba(250,204,21,.25)"><td style="font-weight:700;padding-top:.15rem">= Total mensual</td><td style="text-align:right;font-weight:700;padding-top:.15rem">${simFmt(totalW)}</td></tr>` +
+            `</table>`;
+        }
+
+        // ── Grand total remuneraciones ─────────────────────────────────────
+        const remuTotalEl = document.getElementById('sim-remu-total');
+        if(remuTotalEl) remuTotalEl.style.display = 'none'; // preview table above shows it
+
+        const ingresoBase  = precio * personas * reservas;
+        const ingresoExtra = extras * reservas;
+        const ingresoGross = ingresoBase + ingresoExtra;
+        const costoVar     = cVar * reservas;
+        const contrib      = ingresoGross - costoVar;
+        const totalFijo    = cFijo + remuner + mkt;
+        const ebitda       = contrib - totalFijo;
+        const margenPct    = ingresoGross > 0 ? (ebitda / ingresoGross * 100) : 0;
+        const ingrPerRes   = reservas > 0 ? ingresoGross / reservas : 0;
+        const costoPerRes  = reservas > 0 ? (costoVar + totalFijo) / reservas : 0;
+        const ingrMktRes   = precio * personas * (reservas * mktPct) + extras * (reservas * mktPct);
+        const roi          = mkt > 0 ? (ingrMktRes / mkt * 100) : 0;
+
+        // break-even: reservas needed to cover all fixed costs (bonuses excluded — they kick in above threshold)
+        const fixedBelowThreshold = cFijo + remuBase + mkt;
+        const margPorRes = ingrPerRes - cVar;
+        const be = margPorRes > 0 ? Math.ceil(fixedBelowThreshold / margPorRes) : null;
+
+        // ── Worker summary table (sim-bono-preview) ───────────────────────
+        const prevEl = document.getElementById('sim-bono-preview');
+        if(prevEl && _wData.length > 0){
+          let rows = '';
+          for(const wd of _wData){
+            const bonoCalW = (bonoCalidadCheck && wd.bonoCalOn && wd.umbralActMet) ? bonoCalidadMonto : 0;
+            const totalW   = wd.sueldo + wd.bonoResW + bonoCalW + wd.bonoExtW;
+            const resCell  = wd.bonoResOn && wd.bonoPorResW > 0
+              ? (wd.extrasW > 0
+                  ? `<span style="color:#fbbf24">${simFmt(wd.bonoResW)}</span><br><span style="font-size:.68rem;color:rgba(251,191,36,.55)">${wd.extrasW}×${simFmtK(wd.bonoPorResW)}</span>`
+                  : `<span style="color:var(--muted);font-size:.72rem">— (${Math.ceil(wd.umbralW-reservas+1)||0} más)</span>`)
+              : `<span style="color:var(--muted)">—</span>`;
+            const calCell  = bonoCalW > 0
+              ? `<span style="color:#fbbf24">${simFmt(bonoCalW)}</span>`
+              : `<span style="color:var(--muted)">—</span>`;
+            const extCell  = wd.bonoExtW > 0
+              ? `<span style="color:#60a5fa">${simFmt(wd.bonoExtW)}</span><br><span style="font-size:.68rem;color:rgba(96,165,250,.55)">${(wd.bonoExtPct*100).toFixed(0)}%</span>`
+              : `<span style="color:var(--muted)">—</span>`;
+            rows += `<tr style="border-top:1px solid rgba(255,255,255,.05)">
+              <td style="padding:.28rem .3rem;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px">${wd.name}</td>
+              <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;white-space:nowrap">${simFmt(wd.sueldo)}</td>
+              <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;line-height:1.3">${resCell}</td>
+              <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem">${calCell}</td>
+              <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;line-height:1.3">${extCell}</td>
+              <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;font-weight:700;white-space:nowrap">${simFmt(totalW)}</td>
+            </tr>`;
+          }
+          prevEl.innerHTML =
+            `<table style="width:100%;border-collapse:collapse;margin-top:.3rem">
+              <thead><tr style="font-size:.69rem;color:var(--muted)">
+                <th style="text-align:left;padding:.15rem .3rem;font-weight:400"></th>
+                <th style="text-align:right;padding:.15rem .3rem;font-weight:400">Sueldo</th>
+                <th style="text-align:right;padding:.15rem .3rem;font-weight:400">B.res.</th>
+                <th style="text-align:right;padding:.15rem .3rem;font-weight:400">B.cal.</th>
+                <th style="text-align:right;padding:.15rem .3rem;font-weight:400">B.ext.</th>
+                <th style="text-align:right;padding:.15rem .3rem;font-weight:400">Total</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+              <tfoot><tr style="border-top:2px solid rgba(255,255,255,.15);font-weight:700;font-size:.8rem">
+                <td style="padding:.3rem .3rem;color:var(--muted)">Total (${_wData.length} trab.)</td>
+                <td colspan="4"></td>
+                <td style="text-align:right;padding:.3rem .3rem">${simFmt(grandTotal)}</td>
+              </tr></tfoot>
+            </table>`;
+        }
+
+        // ── Bonus KPI cards ────────────────────────────────────────────────
+        const bonoCardEl = document.getElementById('kpi-bono-card');
+        const bonoAnualCardEl = document.getElementById('kpi-bono-anual-card');
+        const anyBonoResConfig = _wData.some(wd => wd.bonoResOn && wd.bonoPorResW > 0);
+        const bonoActivo = anyBonoResConfig || bonoCalidadCheck;
+        if(bonoActivo){
+          bonoCardEl.style.display = '';
+          let kpiTxt = simFmtK(bonoActual);
+          if(bonoResTotal > 0) kpiTxt += ` (+bonos)`;
+          if(bonoCalidadCheck && bonoCalTotal > 0) kpiTxt += ` +⭐`;
+          document.getElementById('kpi-bono').textContent = kpiTxt;
+        } else {
+          bonoCardEl.style.display = 'none';
+        }
+
+        // ── P&L table ─────────────────────────────────────────────────────
+        document.getElementById('sr-base').textContent   = simFmt(ingresoBase);
+        document.getElementById('sr-extras').textContent = simFmt(ingresoExtra);
+        document.getElementById('sr-gross').textContent  = simFmt(ingresoGross);
+        document.getElementById('sr-cvar').textContent   = '−' + simFmt(costoVar);
+        document.getElementById('sr-contrib').textContent= simFmt(contrib);
+        document.getElementById('sr-cfijo').textContent  = '−' + simFmt(cFijo);
+        document.getElementById('sr-remu').textContent   = '−' + simFmt(remuner);
+        const bonosRow = document.getElementById('sr-bonos-row');
+        if(bonoResTotal > 0){
+          bonosRow.style.display = '';
+          const trabConBonoResCount = _wData.filter(wd=>wd.bonoResOn && wd.bonoResW > 0).length;
+          document.getElementById('sr-bonos-label').textContent = trabConBonoResCount > 1 ? `↳ Bonos reservas (${trabConBonoResCount} trab.)` : '↳ Bonos reservas';
+          document.getElementById('sr-bonos').textContent = '−' + simFmt(bonoResTotal);
+        } else {
+          bonosRow.style.display = 'none';
+        }
+        const bonosCalRow = document.getElementById('sr-bonos-cal-row');
+        if(bonoCalTotal > 0){
+          bonosCalRow.style.display = '';
+          document.getElementById('sr-bonos-cal-label').textContent = trabConBonoCal > 1 ? `↳ Bono calidad (${trabConBonoCal} trab.)` : '↳ Bono calidad'; // trabConBonoCal from per-worker loop
+          document.getElementById('sr-bonos-cal').textContent = '−' + simFmt(bonoCalTotal);
+        } else {
+          bonosCalRow.style.display = 'none';
+        }
+        document.getElementById('sr-mkt').textContent    = '−' + simFmt(mkt);
+
+        const eEl = document.getElementById('sr-ebitda');
+        eEl.textContent = (ebitda >= 0 ? '' : '−') + simFmt(Math.abs(ebitda));
+        eEl.style.color = simColor(ebitda);
+        document.getElementById('sim-ebitda-row').style.background =
+          ebitda >= 0 ? 'rgba(52,211,153,.07)' : 'rgba(248,113,113,.07)';
+
+        // ── KPIs ──────────────────────────────────────────────────────────
+        const km = document.getElementById('kpi-margen');
+        km.textContent = margenPct.toFixed(1) + '%';
+        km.style.color = simColor(margenPct);
+
+        document.getElementById('kpi-be').textContent   = be !== null ? be + ' res.' : '∞';
+        document.getElementById('kpi-ipr').textContent  = simFmtK(ingrPerRes);
+        document.getElementById('kpi-ctpr').textContent = simFmtK(costoPerRes);
+        document.getElementById('kpi-roi').textContent  = roi > 0 ? roi.toFixed(0) + '%' : '—';
+
+        // Annual estimate using seasonality
+        const annualIncome = SIM_SEASON.reduce((s,f)=>s + ingresoGross*f, 0);
+        document.getElementById('kpi-anual').textContent = simFmtK(annualIncome);
+
+        // ── Break-even progress bar ────────────────────────────────────────
+        document.getElementById('sim-be-label').textContent = be !== null ? 'Break-even: '+be : '—';
+        document.getElementById('sim-reservas-label').textContent = 'Objetivo: '+Math.round(reservas);
+        const bar = document.getElementById('sim-be-bar');
+        const barOver = document.getElementById('sim-be-bar-over');
+        if(be !== null && reservas > 0){
+          if(reservas >= be){
+            const pct = Math.min(be / reservas * 100, 100);
+            bar.style.display = ''; bar.style.width = pct + '%';
+            barOver.style.display = 'none';
+          } else {
+            bar.style.display = ''; bar.style.width = '100%';
+            barOver.style.display = ''; barOver.style.width = '100%';
+          }
+        } else {
+          bar.style.width = '0%'; barOver.style.display = 'none';
+        }
+
+        // ── 12-month forecast ─────────────────────────────────────────────
+        const now = new Date();
+        const startMonth = now.getMonth(); // 0-based
+        let totRev = 0, totRes = 0, totEbitda = 0, totBonos = 0;
+        const tbody = document.getElementById('sim-forecast-body');
+        tbody.innerHTML = '';
+        for(let i = 0; i < 12; i++){
+          const mi = (startMonth + i) % 12;
+          const yr = now.getFullYear() + Math.floor((startMonth + i) / 12);
+          const f = SIM_SEASON[mi];
+          const r = Math.round(reservas * f);
+          const rev = ingresoGross * f;
+          const varC = cVar * r;
+          // Bonus recalculated per month — each worker has own umbral + rate
+          let bonoResMes = 0, bonoExtMes = 0;
+          const ingresoExtraMes = extras * r;
+          let trabConBonoCalMes = 0;
+          for(const wd of _wData){
+            const metMes = r > wd.umbralActW;
+            if(wd.bonoResOn && wd.bonoPorResW > 0) bonoResMes += Math.max(0, r - wd.umbralW) * wd.bonoPorResW;
+            if(wd.bonoExtOn && wd.bonoExtPct > 0 && metMes) bonoExtMes += ingresoExtraMes * wd.bonoExtPct;
+            if(wd.bonoCalOn && metMes) trabConBonoCalMes++;
+          }
+          const bonoCalMes = bonoCalidadCheck ? bonoCalidadMonto * trabConBonoCalMes : 0;
+          const bonoMes    = bonoResMes + bonoCalMes + bonoExtMes;
+          const remuMes    = remuBase + bonoMes;
+          const totalFijoMes = cFijo + remuMes + mkt;
+          const net = rev - varC - totalFijoMes;
+          totRev += rev; totRes += r; totEbitda += net; totBonos += bonoMes;
+          const tr = document.createElement('tr');
+          const isCurrentMonth = (i === 0);
+          if(isCurrentMonth) tr.style.fontWeight = '600';
+          const bonoTag = bonoMes > 0
+            ? `<span style="font-size:.68rem;color:#fbbf24;margin-left:.3rem">+${simFmtK(bonoMes)} bono</span>`
+            : '';
+          tr.innerHTML = `<td>${SIM_MONTHS[mi]} ${yr}</td>` +
+            `<td style="color:var(--muted)">${(f*100).toFixed(0)}%</td>` +
+            `<td>${r}${bonoTag}</td>` +
+            `<td>${simFmtK(rev)}</td>` +
+            `<td style="color:${simColor(net)}">${net>=0?'':'-'}${simFmtK(Math.abs(net))}</td>`;
+          tbody.appendChild(tr);
+        }
+        const tfoot = document.getElementById('sim-forecast-foot');
+        tfoot.innerHTML = `<tr><td>TOTAL 12m</td><td></td><td>${totRes}</td>` +
+          `<td>${simFmtK(totRev)}</td>` +
+          `<td style="color:${simColor(totEbitda)}">${totEbitda>=0?'':'-'}${simFmtK(Math.abs(totEbitda))}</td></tr>`;
+
+        // Annual bonus KPI
+        if(totBonos > 0){
+          bonoAnualCardEl.style.display = '';
+          document.getElementById('kpi-bono-anual').textContent = simFmtK(totBonos);
+        } else {
+          bonoAnualCardEl.style.display = 'none';
+        }
+
+        // ── Chart data cache + render ──────────────────────────────────────
+        _simChartData = {
+          precio, personas, extras, cVar, cFijo, remuBase, mkt,
+          reservas, bonoCalidadCheck, bonoCalidadMonto, trabConBonoCal,
+          wData: _wData,
+          be: be !== null ? be : 0,
+        };
+        simDrawChart();
+      }
+
+      async function simLoadActuals(){
+        try {
+          const r = await fetch('/api/admin/financial/simulator', {headers:{'x-admin-key': KEY||''}});
+          if(!r.ok) throw new Error(await r.text());
+          const d = await r.json();
+          const sc = d.scenario || {};
+          const ac = d.actuals || {};
+
+          // Reuse simLoadScenario logic for scenario fields (without toast/badge)
+          const setV = (id, val) => { if(val == null) return; const el = document.getElementById(id); if(el) el.value = val; };
+          setV('sim-precio',            sc.precio_por_persona);
+          setV('sim-personas',          sc.personas_promedio);
+          setV('sim-reservas',          sc.reservas_por_mes);
+          setV('sim-extras',            sc.extras_promedio_por_reserva);
+          setV('sim-costo-res',         sc.costo_por_salida ?? sc.costo_operativo_por_reserva);
+          setV('sim-combustible',       sc.combustible ?? 0);
+          setV('sim-fijos',             sc.costos_fijos_mensuales);
+          setV('sim-mantenim',          sc.mantenimiento_seguros);
+          setV('sim-otros-fijos',       sc.otros_fijos);
+          setV('sim-mkt',               sc.marketing_mensual);
+          setV('sim-mkt-pct',           sc.marketing_pct);
+          setV('sim-bono-calidad-monto',sc.bono_calidad_monto);
+          ['sim-personas','sim-reservas','sim-mkt-pct'].forEach(id => {
+            const sl = document.getElementById(id+'-slider'), inp = document.getElementById(id);
+            if(sl && inp) sl.value = inp.value;
+          });
+          const calCheck = document.getElementById('sim-bono-calidad-check');
+          if(calCheck && sc.bono_calidad_activo != null) calCheck.checked = !!sc.bono_calidad_activo;
+          if(sc.workers && sc.workers.length){
+            _simSetTrabCount(sc.workers.length);
+            sc.workers.forEach((w, idx) => {
+              const n = idx + 1;
+              setV(`sim-w${n}-name`,        w.name ?? `Trabajador ${n}`);
+              setV(`sim-w${n}-sueldo`,      w.sueldo ?? 0);
+              setV(`sim-w${n}-bono-umbral`, w.bono_umbral ?? sc.bono_umbral_reservas ?? 14);
+              setV(`sim-w${n}-bono-por-res`,w.bono_por_res ?? sc.bono_por_reserva_extra ?? 9300);
+              setV(`sim-w${n}-bono-ext-pct`, w.bono_ext_pct ?? 10);
+              const bonoResEl = document.getElementById(`sim-w${n}-bono-res`);
+              const bonoCalEl = document.getElementById(`sim-w${n}-bono-cal`);
+              const bonoExtEl = document.getElementById(`sim-w${n}-bono-ext`);
+              if(bonoResEl) bonoResEl.checked = w.bono_res ?? true;
+              if(bonoCalEl) bonoCalEl.checked = w.bono_cal ?? false;
+              if(bonoExtEl) bonoExtEl.checked = w.bono_ext ?? false;
+            });
+          } else if(sc.bono_num_trabajadores){
+            _simSetTrabCount(sc.bono_num_trabajadores);
+            const legacy = (sc.remuneracion_capitan||0)+(sc.remuneracion_personal||0)+(sc.remuneracion_admin||0);
+            setV('sim-w1-sueldo',      legacy || null);
+            setV('sim-w1-bono-umbral', sc.bono_umbral_reservas);
+            setV('sim-w1-bono-por-res',sc.bono_por_reserva_extra);
+          }
+          simRenderWorkerTabs();
+
+          // Show actuals banner
+          if(ac.n_bookings){
+            const banner = document.getElementById('sim-actuals-banner');
+            banner.style.display = '';
+            banner.innerHTML = `ℹ️ Reales últimos ${ac.period_days} días — ` +
+              `<strong>${ac.reservas_reales_mes}</strong> reservas/mes | ` +
+              `<strong>$${Math.round(ac.ingreso_por_reserva_real).toLocaleString('es-CL')}</strong>/reserva | ` +
+              `<strong>${ac.personas_promedio_real}</strong> personas prom.`;
+          }
+
+          simCalc();
+          showToast('✅ Escenario cargado');
+        } catch(e){ showToast('❌ '+e.message, true); }
+      }
+
+      // ── Scenario state ─────────────────────────────────────────────────────
+      let _simScenarioId   = null;
+      let _simScenarioName = null;
+      let _simLoadedScenarios = []; // cache for modal list (avoids JSON in onclick)
+
+      function _simGetData(){
+        const n = parseInt(document.getElementById('sim-num-trab').value) || 1;
+        const workers = [];
+        for(let w = 1; w <= n; w++){
+          workers.push({
+            name:         document.getElementById(`sim-w${w}-name`)?.value ?? `Trabajador ${w}`,
+            sueldo:       simV(`sim-w${w}-sueldo`),
+            bono_res:     document.getElementById(`sim-w${w}-bono-res`)?.checked ?? true,
+            bono_umbral:  simV(`sim-w${w}-bono-umbral`),
+            bono_por_res: simV(`sim-w${w}-bono-por-res`),
+            bono_cal:     document.getElementById(`sim-w${w}-bono-cal`)?.checked ?? false,
+            bono_ext:     document.getElementById(`sim-w${w}-bono-ext`)?.checked ?? false,
+            bono_ext_pct: simV(`sim-w${w}-bono-ext-pct`),
+            umbral_act:   simV(`sim-w${w}-umbral-act`),
+          });
+        }
+        return {
+          precio_por_persona:          simV('sim-precio'),
+          personas_promedio:           simV('sim-personas'),
+          reservas_por_mes:            simV('sim-reservas'),
+          extras_promedio_por_reserva: simV('sim-extras'),
+          costo_por_salida:            simV('sim-costo-res'),
+          combustible:                 simV('sim-combustible'),
+          costo_operativo_por_reserva: simV('sim-costo-res') + simV('sim-combustible'), // legacy compat
+          costos_fijos_mensuales:      simV('sim-fijos'),
+          mantenimiento_seguros:       simV('sim-mantenim'),
+          otros_fijos:                 simV('sim-otros-fijos'),
+          workers,
+          marketing_mensual:           simV('sim-mkt'),
+          marketing_pct:               simV('sim-mkt-pct'),
+          bono_umbral_reservas:        workers[0]?.bono_umbral ?? 14,  // legacy compat
+          bono_por_reserva_extra:      workers[0]?.bono_por_res ?? 9300, // legacy compat
+          bono_calidad_activo:         document.getElementById('sim-bono-calidad-check').checked,
+          bono_calidad_monto:          simV('sim-bono-calidad-monto'),
+        };
+      }
+
+      function _simSetBadge(name){
+        _simScenarioName = name;
+        const el = document.getElementById('sim-scenario-badge');
+        if(el) el.textContent = name || 'Sin guardar';
+      }
+
+      // ── Save modal ─────────────────────────────────────────────────────────
+      function openSaveModal(){
+        const modal = document.getElementById('sim-save-modal');
+        modal.style.display = 'flex';
+        const inp = document.getElementById('sim-save-name');
+        inp.value = _simScenarioName || '';
+        setTimeout(()=>inp.focus(), 50);
+      }
+      function closeSaveModal(){
+        document.getElementById('sim-save-modal').style.display = 'none';
+      }
+
+      async function confirmSaveScenario(){
+        const name = document.getElementById('sim-save-name').value.trim();
+        if(!name){ document.getElementById('sim-save-name').focus(); return; }
+        closeSaveModal();
+        try {
+          // Load existing list
+          const r0 = await fetch('/api/admin/financial/simulator/scenarios', {headers:{'x-admin-key':KEY||''}});
+          const existing = r0.ok ? await r0.json() : {scenarios:[]};
+          const list = existing.scenarios || [];
+
+          const data = _simGetData();
+          const now  = new Date().toISOString();
+
+          // Update in place if same name already exists OR same ID (rename)
+          const existingIdx = list.findIndex(s => s.id === _simScenarioId || s.name === name);
+          if(existingIdx >= 0){
+            list[existingIdx] = { ...list[existingIdx], ...data, name, updated_at: now };
+            _simScenarioId = list[existingIdx].id;
+          } else {
+            const newId = Date.now().toString();
+            _simScenarioId = newId;
+            list.unshift({ id: newId, name, created_at: now, updated_at: now, ...data });
+          }
+
+          const r1 = await fetch('/api/admin/financial/simulator/scenarios', {
+            method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY||''},
+            body: JSON.stringify({scenarios: list})
+          });
+          if(!r1.ok) throw new Error(await r1.text());
+          _simSetBadge(name);
+          showToast('💾 "'+name+'" guardado');
+        } catch(e){ showToast('❌ '+e.message, true); }
+      }
+
+      // ── Scenarios list modal ───────────────────────────────────────────────
+      async function openScenariosModal(){
+        const modal = document.getElementById('sim-scenarios-modal');
+        modal.style.display = 'flex';
+        const listEl = document.getElementById('sim-scenarios-list');
+        listEl.innerHTML = '<div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1rem">Cargando…</div>';
+        try {
+          const r = await fetch('/api/admin/financial/simulator/scenarios', {headers:{'x-admin-key':KEY||''}});
+          const d = r.ok ? await r.json() : {scenarios:[]};
+          const list = d.scenarios || [];
+          _simLoadedScenarios = list; // cache so load button can reference by index
+          if(!list.length){
+            listEl.innerHTML = '<div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1.5rem">No hay escenarios guardados.<br><span style="font-size:.75rem">Presiona 💾 Guardar para crear el primero.</span></div>';
+            return;
+          }
+          listEl.innerHTML = list.map((s, i) => {
+            const date = s.updated_at ? new Date(s.updated_at).toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'numeric'}) : '';
+            const nTrab = s.workers ? `${s.workers.length} trab.` : '';
+            const res  = s.reservas_por_mes ? `${s.reservas_por_mes} res./mes` : '';
+            const isActive = s.id === _simScenarioId;
+            return `<div style="display:flex;align-items:center;gap:.6rem;padding:.6rem .5rem;border-bottom:1px solid var(--border);border-radius:7px;${isActive?'background:rgba(250,204,21,.06)':''}">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:${isActive?700:500};font-size:.85rem;color:${isActive?'var(--gold)':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}${isActive?' ✓':''}</div>
+                <div style="font-size:.7rem;color:var(--muted)">${[date,res,nTrab].filter(Boolean).join(' · ')}</div>
+              </div>
+              <button onclick="simLoadScenarioByIndex(${i})"
+                style="background:var(--gold);color:#000;border:none;border-radius:6px;padding:.25rem .65rem;font-size:.78rem;font-weight:600;cursor:pointer;white-space:nowrap">Cargar</button>
+              <button onclick="simDeleteScenario('${s.id}','${(s.name||'').replace(/'/g,"\\'").replace(/\\/g,'\\\\')}')"
+                style="background:none;border:1px solid rgba(248,113,113,.4);color:#f87171;border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer">🗑</button>
+            </div>`;
+          }).join('');
+        } catch(e){
+          listEl.innerHTML = `<div style="color:var(--red);font-size:.82rem;padding:.5rem">Error: ${e.message}</div>`;
+        }
+      }
+
+      function simLoadScenarioByIndex(i){
+        const s = _simLoadedScenarios[i];
+        if(s) simLoadScenario(s);
+      }
+      function closeScenariosModal(){
+        document.getElementById('sim-scenarios-modal').style.display = 'none';
+      }
+
+      function simLoadScenario(s){
+        closeScenariosModal();
+
+        // 1. All scalar inputs — set value only when the field exists
+        const setV = (id, val) => { if(val == null) return; const el = document.getElementById(id); if(el) el.value = val; };
+        setV('sim-precio',            s.precio_por_persona);
+        setV('sim-personas',          s.personas_promedio);
+        setV('sim-reservas',          s.reservas_por_mes);
+        setV('sim-extras',            s.extras_promedio_por_reserva);
+        setV('sim-costo-res',         s.costo_por_salida ?? s.costo_operativo_por_reserva);
+        setV('sim-combustible',       s.combustible ?? 0);
+        setV('sim-fijos',             s.costos_fijos_mensuales);
+        setV('sim-mantenim',          s.mantenimiento_seguros);
+        setV('sim-otros-fijos',       s.otros_fijos);
+        setV('sim-mkt',               s.marketing_mensual);
+        setV('sim-mkt-pct',           s.marketing_pct);
+        setV('sim-bono-calidad-monto',s.bono_calidad_monto);
+
+        // 2. Sync all sliders
+        ['sim-personas','sim-reservas','sim-mkt-pct'].forEach(id => {
+          const sl = document.getElementById(id+'-slider'), inp = document.getElementById(id);
+          if(sl && inp) sl.value = inp.value;
+        });
+
+        // 3. Quality bonus checkbox
+        const cal = document.getElementById('sim-bono-calidad-check');
+        if(cal && s.bono_calidad_activo != null) cal.checked = !!s.bono_calidad_activo;
+
+        // 4. Workers — set count WITHOUT triggering simCalc, then fill inputs
+        if(s.workers && s.workers.length){
+          _simSetTrabCount(s.workers.length);
+          s.workers.forEach((w, idx) => {
+            const n = idx + 1;
+            setV(`sim-w${n}-name`,        w.name ?? `Trabajador ${n}`);
+            setV(`sim-w${n}-sueldo`,      w.sueldo ?? 0);
+            setV(`sim-w${n}-bono-umbral`, w.bono_umbral ?? s.bono_umbral_reservas ?? 14);
+            setV(`sim-w${n}-bono-por-res`,w.bono_por_res ?? s.bono_por_reserva_extra ?? 9300);
+            setV(`sim-w${n}-bono-ext-pct`, w.bono_ext_pct ?? 10);
+            setV(`sim-w${n}-umbral-act`,   w.umbral_act ?? 0);
+            const bonoResEl = document.getElementById(`sim-w${n}-bono-res`);
+            const bonoCalEl = document.getElementById(`sim-w${n}-bono-cal`);
+            const bonoExtEl = document.getElementById(`sim-w${n}-bono-ext`);
+            if(bonoResEl) bonoResEl.checked = w.bono_res ?? true;
+            if(bonoCalEl) bonoCalEl.checked = w.bono_cal ?? false;
+            if(bonoExtEl) bonoExtEl.checked = w.bono_ext ?? false;
+          });
+        } else if(s.bono_num_trabajadores){
+          // Backward compat: old format stored a flat salary total
+          _simSetTrabCount(s.bono_num_trabajadores);
+          const legacy = (s.remuneracion_capitan||0) + (s.remuneracion_personal||0) + (s.remuneracion_admin||0);
+          setV('sim-w1-sueldo',      legacy || null);
+          setV('sim-w1-bono-umbral', s.bono_umbral_reservas);
+          setV('sim-w1-bono-por-res',s.bono_por_reserva_extra);
+        }
+
+        // 5. Update tab display, then compute — ONE simCalc at the end
+        simRenderWorkerTabs();
+        _simScenarioId = s.id;
+        _simSetBadge(s.name);
+        simCalc();
+        showToast('📋 Escenario "'+s.name+'" cargado');
+      }
+
+      async function simDeleteScenario(id, name){
+        if(!confirm(`¿Eliminar escenario "${name}"?`)) return;
+        try {
+          const r0 = await fetch('/api/admin/financial/simulator/scenarios', {headers:{'x-admin-key':KEY||''}});
+          const d   = r0.ok ? await r0.json() : {scenarios:[]};
+          const list = (d.scenarios || []).filter(s => s.id !== id);
+          await fetch('/api/admin/financial/simulator/scenarios', {
+            method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY||''},
+            body: JSON.stringify({scenarios: list})
+          });
+          if(_simScenarioId === id){ _simScenarioId = null; _simSetBadge(null); }
+          await openScenariosModal(); // refresh list
+          showToast('🗑 Escenario eliminado');
+        } catch(e){ showToast('❌ '+e.message, true); }
+      }
+
+      // ── Legacy simSave (kept for backward compat) ──────────────────────────
+      async function simSave(){ openSaveModal(); }
+
+      document.addEventListener('DOMContentLoaded', ()=>{ simCalc(); });
+      </script>
+
+      <!-- ── Save scenario modal ───────────────────────────────────── -->
+      <div id="sim-save-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;align-items:center;justify-content:center"
+           onclick="if(event.target===this)closeSaveModal()">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.3rem 1.5rem;width:340px;max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+          <div style="font-weight:700;font-size:.95rem;margin-bottom:.9rem">💾 Guardar escenario</div>
+          <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Nombre</label>
+          <input id="sim-save-name" type="text" placeholder="Ej: Temporada alta 2026"
+            style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.45rem .65rem;font-size:.85rem;outline:none"
+            onkeydown="if(event.key==='Enter')confirmSaveScenario();if(event.key==='Escape')closeSaveModal()">
+          <div style="display:flex;gap:.5rem;margin-top:.9rem;justify-content:flex-end">
+            <button onclick="closeSaveModal()"
+              style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.32rem .8rem;font-size:.82rem;cursor:pointer">Cancelar</button>
+            <button onclick="confirmSaveScenario()"
+              style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.32rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer">Guardar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Scenarios list modal ──────────────────────────────────── -->
+      <div id="sim-scenarios-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;align-items:center;justify-content:center"
+           onclick="if(event.target===this)closeScenariosModal()">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;width:480px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+          <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:700;font-size:.95rem">📋 Escenarios guardados</span>
+            <button onclick="closeScenariosModal()"
+              style="background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;line-height:1">✕</button>
+          </div>
+          <div id="sim-scenarios-list" style="overflow-y:auto;padding:.7rem 1rem;flex:1;min-height:60px">
+            <div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1rem">Cargando…</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /section-simulator -->
+
     <!-- ══ LOGS SECTION ══════════════════════════════════════════════════════ -->
     <div id="section-logs" class="section">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
@@ -1581,7 +3107,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',logs:'Logs del servidor'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',logs:'Logs del servidor'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
@@ -1595,6 +3121,7 @@ function showSection(name){
   if(name==='packs-admin') loadPacksAdmin();
   if(name==='cal-extras') loadCalExtras();
   if(name==='financial') initFinancialSection();
+  if(name==='simulator') requestAnimationFrame(()=>{ simCalc(); });
   if(name==='logs') initLogsSection();
   else clearInterval(_logAutoRefresh);
 }
@@ -2403,6 +3930,12 @@ async function openModal(id){
                      border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
               📧 Enviar resumen
             </button>
+            <button type="button" onclick="sendFollowupReviewEmail(${id})"
+              title="TripAdvisor y encuesta (mismo mail que el envío automático ~2 h después del horario)"
+              style="background:rgba(46,204,113,.1);color:#2ecc71;border:1px solid rgba(46,204,113,.35);
+                     border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
+              ⭐ Mail reseña
+            </button>
           </div>
           <input type="hidden" id="_bref_val" value="${r.booking_ref||''}">
         </div>
@@ -2539,6 +4072,16 @@ async function sendFirmasSummary(bookingRef){
   try{
     await api(`/api/admin/reservas/${encodeURIComponent(bookingRef)}/firmas/summary-email`,{method:'POST'});
     showToast('📧 Resumen enviado a hotboatnotification@gmail.com');
+  }catch(e){
+    showToast('Error: '+e.message);
+  }
+}
+async function sendFollowupReviewEmail(rid){
+  if(!rid) return;
+  try{
+    const res = await api(`/api/admin/reservas/${rid}/send-followup-email`,{method:'POST'});
+    if(res.ok || res.sent) showToast('⭐ Mail de reseña enviado al cliente');
+    else showToast('No enviado: '+(res.reason||''));
   }catch(e){
     showToast('Error: '+e.message);
   }
@@ -3378,16 +4921,54 @@ function renderVacList(vacDays){
 
 // ── Urgency days calendar ─────────────────────────────────────────────────────
 let urgYear = new Date().getFullYear(), urgMonth = new Date().getMonth();
-let urgencyDays = {}; // {dateStr: true=ON, false=OFF}
+// ── Profile calendar ──────────────────────────────────────────────────────────
+let urgencyDays   = {}; // {dateStr: {enabled, profile_key}}
+let scheduleTypes = []; // [{id, name, hours}]
+let urgencyModes  = []; // [{id, name, seed_times, gap_hours}]
+
+// Colors per profile kind
+const PROFILE_COLORS = {
+  schedule: ['#2878c8','#1a5c9e','#0d4080','#3a9fe0','#5ab5f5'],
+  urgency:  ['#c87820','#a05010','#e09030','#d4a030','#b87010'],
+};
+
+function _profileColor(id){
+  const allS = scheduleTypes.map(t=>t.id);
+  const allU = urgencyModes.map(m=>m.id);
+  const si = allS.indexOf(id), ui = allU.indexOf(id);
+  if(si >= 0) return PROFILE_COLORS.schedule[si % PROFILE_COLORS.schedule.length];
+  if(ui >= 0) return PROFILE_COLORS.urgency[ui % PROFILE_COLORS.urgency.length];
+  return '#888';
+}
+
+function _profileLabel(pk){
+  if(!pk) return null;
+  const s = scheduleTypes.find(t=>t.id===pk);
+  if(s) return {icon:'🗓', name:s.name};
+  const u = urgencyModes.find(m=>m.id===pk);
+  if(u) return {icon:'⚡', name:u.name};
+  return null;
+}
 
 async function loadUrgencyDays(){
   try{
-    const d = await api('/api/admin/urgency-days');
-    urgencyDays = {};
-    (d.urgency_days||[]).forEach(v=>{ urgencyDays[v.date] = v.enabled; });
+    const [dDays, dSched, dModes] = await Promise.all([
+      api('/api/admin/urgency-days'),
+      api('/api/admin/schedule-types'),
+      api('/api/admin/urgency-modes'),
+    ]);
+    scheduleTypes = dSched.schedule_types || [];
+    urgencyModes  = dModes.urgency_modes  || [];
+    urgencyDays   = {};
+    (dDays.urgency_days||[]).forEach(v=>{
+      urgencyDays[v.date] = {enabled: v.enabled, profile_key: v.profile_key||null};
+    });
+    renderScheduleTypes();
+    renderUrgencyModes();
     renderUrgCal();
     renderUrgList();
-  }catch(e){}
+    renderProfileLegend();
+  }catch(e){ console.error('loadUrgencyDays',e); }
 }
 
 function urgCalPrev(){ urgMonth--; if(urgMonth<0){urgMonth=11;urgYear--;} renderUrgCal(); }
@@ -3408,39 +4989,100 @@ function renderUrgCal(){
     const dateStr=`${urgYear}-${String(urgMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dt=new Date(urgYear,urgMonth,d);
     const isToday=dt.getTime()===today.getTime();
-    const override=urgencyDays.hasOwnProperty(dateStr);
-    const isOn=override&&urgencyDays[dateStr]===true;
-    const isOff=override&&urgencyDays[dateStr]===false;
-    const cls=`cal-day${isOn?' urgency-on':isOff?' urgency-off':''}${isToday?' today':''}`;
-    const icon=isOn?'⚡':isOff?'✗':'';
-    const tip=isOn?'Urgencia ON — click para ciclar':isOff?'Urgencia OFF — click para quitar':'Click para activar urgencia';
-    html+=`<div class="${cls}" onclick="cycleUrgDay('${dateStr}')" title="${tip}">
+    const entry = urgencyDays[dateStr];
+    const pk = entry?.profile_key;
+    const color = pk ? _profileColor(pk) : (entry ? (entry.enabled ? 'var(--gold)' : '#7070a0') : '');
+    const lbl = pk ? _profileLabel(pk) : null;
+    const icon = lbl ? lbl.icon : (entry ? (entry.enabled ? '⚡' : '✗') : '');
+    const shortName = lbl ? lbl.name.substring(0,6) : '';
+    const bg = color ? `background:${color}22;outline:1.5px solid ${color}55;` : '';
+    html+=`<div class="cal-day${isToday?' today':''}" style="${bg}cursor:pointer" onclick="openProfilePopup('${dateStr}',event)" title="${lbl?lbl.name:(entry?'Urgencia '+(entry.enabled?'ON':'OFF'):'Sin perfil')}">
       <div class="cal-day-num">${d}</div>
-      ${icon?`<div style="font-size:.6rem">${icon}</div>`:''}
+      ${icon?`<div style="font-size:.55rem;line-height:1.1">${icon}</div>`:''}
+      ${shortName?`<div style="font-size:.45rem;line-height:1;color:${color};overflow:hidden;max-width:100%">${shortName}</div>`:''}
     </div>`;
   }
   grid.innerHTML = html;
 }
 
-async function cycleUrgDay(dateStr){
-  const cur = urgencyDays.hasOwnProperty(dateStr) ? urgencyDays[dateStr] : null;
+function renderProfileLegend(){
+  const el = document.getElementById('profile-legend');
+  if(!el) return;
+  let html = '';
+  scheduleTypes.forEach((t,i)=>{
+    const c = PROFILE_COLORS.schedule[i%PROFILE_COLORS.schedule.length];
+    html+=`<span style="display:flex;align-items:center;gap:.25rem"><span style="background:${c};width:10px;height:10px;border-radius:2px;display:inline-block"></span><span style="color:var(--muted)">🗓 ${t.name}</span></span>`;
+  });
+  urgencyModes.forEach((m,i)=>{
+    const c = PROFILE_COLORS.urgency[i%PROFILE_COLORS.urgency.length];
+    html+=`<span style="display:flex;align-items:center;gap:.25rem"><span style="background:${c};width:10px;height:10px;border-radius:2px;display:inline-block"></span><span style="color:var(--muted)">⚡ ${m.name}</span></span>`;
+  });
+  el.innerHTML = html;
+}
+
+// ── Profile popup ─────────────────────────────────────────────────────────────
+let _popupDate = null;
+
+function openProfilePopup(dateStr, evt){
+  _popupDate = dateStr;
+  const popup = document.getElementById('day-profile-popup');
+  const label = document.getElementById('popup-date-label');
+  const opts  = document.getElementById('popup-options');
+  label.textContent = `📅 ${dateStr}`;
+
+  let html = '';
+  scheduleTypes.forEach(t=>{
+    const c = _profileColor(t.id);
+    html+=`<button onclick="setDayProfile('${dateStr}','${t.id}',true)" style="background:${c}22;border:1px solid ${c}55;color:#fff;border-radius:7px;padding:.35rem .7rem;font-size:.8rem;cursor:pointer;text-align:left">🗓 ${t.name}</button>`;
+  });
+  urgencyModes.forEach(m=>{
+    const c = _profileColor(m.id);
+    html+=`<button onclick="setDayProfile('${dateStr}','${m.id}',true)" style="background:${c}22;border:1px solid ${c}55;color:#fff;border-radius:7px;padding:.35rem .7rem;font-size:.8rem;cursor:pointer;text-align:left">⚡ ${m.name}</button>`;
+  });
+  html+=`<button onclick="clearDayProfile('${dateStr}')" style="background:rgba(160,80,80,.15);border:1px solid rgba(160,80,80,.3);color:#e08080;border-radius:7px;padding:.35rem .7rem;font-size:.8rem;cursor:pointer;text-align:left">✕ Sin perfil (global)</button>`;
+  opts.innerHTML = html;
+
+  // Position near click
+  popup.style.display = 'block';
+  const x = Math.min(evt.clientX, window.innerWidth - 240);
+  const y = Math.min(evt.clientY + 10, window.innerHeight - 300);
+  popup.style.left = x + 'px';
+  popup.style.top  = y + 'px';
+}
+
+function closeProfilePopup(){
+  document.getElementById('day-profile-popup').style.display = 'none';
+  _popupDate = null;
+}
+document.addEventListener('click', e=>{
+  const p = document.getElementById('day-profile-popup');
+  if(p && p.style.display!=='none' && !p.contains(e.target) && !e.target.closest('.cal-day')) closeProfilePopup();
+});
+
+async function setDayProfile(dateStr, profileKey, isUrgencyType){
+  closeProfilePopup();
+  const isUrgency = urgencyModes.some(m=>m.id===profileKey);
   try{
-    if(cur === null){
-      // No override → force ON
-      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({date:dateStr,enabled:true})});
-      urgencyDays[dateStr] = true;
-      showToast(`⚡ ${dateStr}: urgencia ON`);
-    } else if(cur === true){
-      // Force ON → force OFF
-      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({date:dateStr,enabled:false})});
-      urgencyDays[dateStr] = false;
-      showToast(`✗ ${dateStr}: urgencia OFF`);
-    } else {
-      // Force OFF → remove override
-      await api(`/api/admin/urgency-days/${dateStr}`,{method:'DELETE'});
-      delete urgencyDays[dateStr];
-      showToast(`${dateStr}: sigue el ajuste global`);
-    }
+    await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({
+      date: dateStr,
+      enabled: isUrgency,
+      profile_key: profileKey
+    })});
+    urgencyDays[dateStr] = {enabled: isUrgency, profile_key: profileKey};
+    const lbl = _profileLabel(profileKey);
+    showToast(`${lbl?.icon||'✓'} ${dateStr}: ${lbl?.name||profileKey}`);
+    renderUrgCal();
+    renderUrgList();
+    try{ const r=await api('/api/admin/availability-cache-clear',{method:'POST'}); }catch(e){}
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function clearDayProfile(dateStr){
+  closeProfilePopup();
+  try{
+    await api(`/api/admin/urgency-days/${dateStr}`,{method:'DELETE'});
+    delete urgencyDays[dateStr];
+    showToast(`${dateStr}: perfil borrado`);
     renderUrgCal();
     renderUrgList();
   }catch(e){ showToast('Error: '+e.message); }
@@ -3450,14 +5092,93 @@ function renderUrgList(){
   const el = document.getElementById('urg-list');
   if(!el) return;
   const entries = Object.entries(urgencyDays);
-  if(!entries.length){ el.innerHTML='<p style="color:var(--muted);font-size:.82rem">Sin overrides por día.</p>'; return; }
+  if(!entries.length){ el.innerHTML='<p style="color:var(--muted);font-size:.82rem">Sin perfiles asignados.</p>'; return; }
   el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem">
-    ${entries.sort(([a],[b])=>a<b?-1:1).map(([date,enabled])=>`
-      <div style="background:${enabled?'rgba(245,200,66,.15)':'rgba(112,112,160,.12)'};border:1px solid ${enabled?'rgba(245,200,66,.35)':'rgba(112,112,160,.3)'};border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
-        ${enabled?'⚡':'✗'} ${date}
-        <button onclick="cycleUrgDay('${date}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem" title="Ciclar estado">↻</button>
-      </div>`).join('')}
+    ${entries.sort(([a],[b])=>a<b?-1:1).map(([date,v])=>{
+      const lbl = v.profile_key ? _profileLabel(v.profile_key) : null;
+      const c = v.profile_key ? _profileColor(v.profile_key) : (v.enabled?'rgba(245,200,66,.35)':'rgba(112,112,160,.3)');
+      const icon = lbl?.icon || (v.enabled?'⚡':'✗');
+      const name = lbl?.name || (v.enabled?'Urgencia ON':'OFF');
+      return `<div style="background:${c}22;border:1px solid ${c};border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
+        ${icon} <strong>${date}</strong> <span style="color:var(--muted)">${name}</span>
+        <button onclick="clearDayProfile('${date}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem" title="Quitar perfil">✕</button>
+      </div>`;
+    }).join('')}
   </div>`;
+}
+
+// ── Schedule types editor ─────────────────────────────────────────────────────
+function renderScheduleTypes(){
+  const el = document.getElementById('schedule-types-list');
+  if(!el) return;
+  if(!scheduleTypes.length){ el.innerHTML='<p style="color:var(--muted);font-size:.75rem">Sin horarios definidos.</p>'; return; }
+  el.innerHTML = scheduleTypes.map((t,i)=>`
+    <div style="background:rgba(40,120,200,.08);border:1px solid rgba(40,120,200,.2);border-radius:7px;padding:.4rem .6rem;margin-bottom:.35rem;font-size:.78rem">
+      <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem">
+        <input value="${t.name}" onchange="scheduleTypes[${i}].name=this.value;saveScheduleTypes()" style="background:transparent;border:none;border-bottom:1px solid rgba(40,120,200,.4);color:var(--text);font-size:.78rem;flex:1;outline:none" placeholder="Nombre">
+        <button onclick="scheduleTypes.splice(${i},1);saveScheduleTypes();renderScheduleTypes();renderProfileLegend();renderUrgCal()" style="background:none;border:none;color:#e08080;cursor:pointer;font-size:.85rem" title="Eliminar">✕</button>
+      </div>
+      <div style="color:var(--muted);font-size:.72rem;margin-bottom:.2rem">Horas (HH:MM, separadas por coma):</div>
+      <input value="${(t.hours||[]).join(', ')}" onchange="scheduleTypes[${i}].hours=this.value.split(',').map(h=>h.trim()).filter(Boolean);saveScheduleTypes()" style="background:rgba(0,0,0,.2);border:1px solid rgba(40,120,200,.2);border-radius:5px;color:var(--text);font-size:.75rem;width:100%;box-sizing:border-box;padding:.2rem .4rem;outline:none" placeholder="10:00, 14:00, 18:00">
+    </div>`).join('');
+}
+
+function addScheduleType(){
+  const id = 's'+(Date.now()%10000);
+  scheduleTypes.push({id, name:`Horario ${scheduleTypes.length+1}`, hours:[]});
+  saveScheduleTypes();
+  renderScheduleTypes();
+  renderProfileLegend();
+}
+
+async function saveScheduleTypes(){
+  try{
+    await api('/api/admin/schedule-types',{method:'PUT',body:JSON.stringify({schedule_types:scheduleTypes})});
+    renderUrgCal();
+    renderUrgList();
+    renderProfileLegend();
+  }catch(e){ showToast('Error guardando horarios'); }
+}
+
+// ── Urgency modes editor ──────────────────────────────────────────────────────
+function renderUrgencyModes(){
+  const el = document.getElementById('urgency-modes-list');
+  if(!el) return;
+  if(!urgencyModes.length){ el.innerHTML='<p style="color:var(--muted);font-size:.75rem">Sin modos definidos.</p>'; return; }
+  el.innerHTML = urgencyModes.map((m,i)=>`
+    <div style="background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.2);border-radius:7px;padding:.4rem .6rem;margin-bottom:.35rem;font-size:.78rem">
+      <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem">
+        <input value="${m.name}" onchange="urgencyModes[${i}].name=this.value;saveUrgencyModes()" style="background:transparent;border:none;border-bottom:1px solid rgba(245,200,66,.4);color:var(--text);font-size:.78rem;flex:1;outline:none" placeholder="Nombre">
+        <button onclick="urgencyModes.splice(${i},1);saveUrgencyModes();renderUrgencyModes();renderProfileLegend();renderUrgCal()" style="background:none;border:none;color:#e08080;cursor:pointer;font-size:.85rem" title="Eliminar">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem">
+        <div>
+          <div style="color:var(--muted);font-size:.72rem">Seeds (HH:MM):</div>
+          <input value="${(m.seed_times||[]).join(', ')}" onchange="urgencyModes[${i}].seed_times=this.value.split(',').map(h=>h.trim()).filter(Boolean);saveUrgencyModes()" style="background:rgba(0,0,0,.2);border:1px solid rgba(245,200,66,.2);border-radius:5px;color:var(--text);font-size:.75rem;width:100%;box-sizing:border-box;padding:.2rem .4rem;outline:none" placeholder="10:00, 18:00">
+        </div>
+        <div>
+          <div style="color:var(--muted);font-size:.72rem">Gap horas:</div>
+          <input type="number" step="0.5" min="0.5" value="${m.gap_hours||3}" onchange="urgencyModes[${i}].gap_hours=parseFloat(this.value);saveUrgencyModes()" style="background:rgba(0,0,0,.2);border:1px solid rgba(245,200,66,.2);border-radius:5px;color:var(--text);font-size:.75rem;width:100%;box-sizing:border-box;padding:.2rem .4rem;outline:none">
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function addUrgencyMode(){
+  const id = 'u'+(Date.now()%10000);
+  urgencyModes.push({id, name:`Urgencia ${urgencyModes.length+1}`, seed_times:['10:00','18:00'], gap_hours:3});
+  saveUrgencyModes();
+  renderUrgencyModes();
+  renderProfileLegend();
+}
+
+async function saveUrgencyModes(){
+  try{
+    await api('/api/admin/urgency-modes',{method:'PUT',body:JSON.stringify({urgency_modes:urgencyModes})});
+    renderUrgCal();
+    renderUrgList();
+    renderProfileLegend();
+  }catch(e){ showToast('Error guardando modos'); }
 }
 
 // ── Payment rows ──────────────────────────────────────────────────────────────
@@ -4429,6 +6150,54 @@ let _exps = [];
 // ═══════════════════════════════════════════════════════════════
 let _alojs = [];
 let _alojImagesList = [];  // ordered list of image URLs for the modal being edited
+let _expImagesList  = [];
+let _packImagesList = [];
+
+function renderExpImagesList(){
+  const container = document.getElementById('exp-images-list');
+  if(!container) return;
+  if(!_expImagesList.length){ container.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:.3rem 0">Sin fotos aún</div>'; return; }
+  container.innerHTML = _expImagesList.map((url, i) => `
+    <div style="display:flex;gap:.4rem;align-items:center">
+      <span style="color:var(--muted);font-size:.75rem;width:18px;text-align:right;flex-shrink:0">${i===0?'📌':(i+1)}</span>
+      ${url?`<img src="${url}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">` : ''}
+      <input type="url" value="${url}" placeholder="https://..."
+        style="flex:1;font-size:.78rem;padding:.3rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px"
+        oninput="_expImagesList[${i}]=this.value;renderExpImagesList()">
+      <button type="button" onclick="_expImagesList.splice(${i},1);renderExpImagesList()"
+        style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer;flex-shrink:0">✕</button>
+      ${i>0?`<button type="button" onclick="_expImagesList.splice(${i-1},0,_expImagesList.splice(${i},1)[0]);renderExpImagesList()"
+        style="background:var(--input);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.25rem .4rem;font-size:.75rem;cursor:pointer;flex-shrink:0" title="Subir">↑</button>`:''}
+    </div>`).join('');
+}
+function expAddImageRow(){
+  _expImagesList.push('');
+  renderExpImagesList();
+  setTimeout(()=>{ const inp = document.querySelectorAll('#exp-images-list input[type=url]'); if(inp.length) inp[inp.length-1].focus(); }, 50);
+}
+
+function renderPackImagesList(){
+  const container = document.getElementById('pack-images-list');
+  if(!container) return;
+  if(!_packImagesList.length){ container.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:.3rem 0">Sin fotos aún</div>'; return; }
+  container.innerHTML = _packImagesList.map((url, i) => `
+    <div style="display:flex;gap:.4rem;align-items:center">
+      <span style="color:var(--muted);font-size:.75rem;width:18px;text-align:right;flex-shrink:0">${i===0?'📌':(i+1)}</span>
+      ${url?`<img src="${url}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">` : ''}
+      <input type="url" value="${url}" placeholder="https://..."
+        style="flex:1;font-size:.78rem;padding:.3rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px"
+        oninput="_packImagesList[${i}]=this.value;renderPackImagesList()">
+      <button type="button" onclick="_packImagesList.splice(${i},1);renderPackImagesList()"
+        style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer;flex-shrink:0">✕</button>
+      ${i>0?`<button type="button" onclick="_packImagesList.splice(${i-1},0,_packImagesList.splice(${i},1)[0]);renderPackImagesList()"
+        style="background:var(--input);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.25rem .4rem;font-size:.75rem;cursor:pointer;flex-shrink:0" title="Subir">↑</button>`:''}
+    </div>`).join('');
+}
+function packAddImageRow(){
+  _packImagesList.push('');
+  renderPackImagesList();
+  setTimeout(()=>{ const inp = document.querySelectorAll('#pack-images-list input[type=url]'); if(inp.length) inp[inp.length-1].focus(); }, 50);
+}
 
 function renderAlojImagesList(){
   const container = document.getElementById('aloj-images-list');
@@ -4536,7 +6305,6 @@ function openAlojModal(id){
   }
   _alojImagesList = allImgs.slice();
   renderAlojImagesList();
-  document.getElementById('aloj-img-file').value='';
   document.getElementById('aloj-modal').style.display='';
 }
 function closeAlojModal(){ document.getElementById('aloj-modal').style.display='none'; }
@@ -4573,22 +6341,6 @@ async function saveAloj(){
     const url = id ? `/api/admin/alojamientos/${id}` : '/api/admin/alojamientos';
     const method = id ? 'PUT' : 'POST';
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    const d = await r.json();
-    const savedId = id || d.id;
-    // Upload files if any (appended to image list)
-    const files = document.getElementById('aloj-img-file').files;
-    for(const file of files){
-      const fd = new FormData(); fd.append('file', file);
-      const ur = await fetch(`/api/admin/alojamientos/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
-      const ud = await ur.json();
-      if(ud.image_path) _alojImagesList.push(ud.image_path);
-    }
-    // Re-save if files were uploaded (to persist the updated list)
-    if(files.length){
-      body.image_path = _alojImagesList[0]||null;
-      body.extra_images = _alojImagesList.slice(1);
-      await fetch(`/api/admin/alojamientos/${savedId}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    }
     closeAlojModal(); await loadAlojamientos(); showToast('Alojamiento guardado ✅');
   }catch(e){ showToast('Error: '+e.message); }
 }
@@ -4787,44 +6539,49 @@ function openExpModal(id){
   document.getElementById('exp-slug').value = e ? e.slug : '';
   document.getElementById('exp-icon').value = e ? e.icon : '🚣';
   document.getElementById('exp-desc').value = e ? (e.description||'') : '';
+  document.getElementById('exp-name-en').value = e ? (e.name_en||'') : '';
+  document.getElementById('exp-name-pt').value = e ? (e.name_pt||'') : '';
+  document.getElementById('exp-desc-en').value = e ? (e.description_en||'') : '';
+  document.getElementById('exp-desc-pt').value = e ? (e.description_pt||'') : '';
   document.getElementById('exp-price').value = e ? e.price_per_person : 0;
   document.getElementById('exp-cost').value = e ? e.cost_per_person : 0;
   document.getElementById('exp-order').value = e ? e.display_order : 0;
   document.getElementById('exp-active').checked = e ? e.is_active : true;
-  const wrap = document.getElementById('exp-img-wrap');
-  if(e && e.image_path){ wrap.style.display=''; document.getElementById('exp-img-preview').src=e.image_path; }
-  else { wrap.style.display='none'; }
-  document.getElementById('exp-img-file').value='';
+  const allImgs = [];
+  if(e && e.image_path) allImgs.push(e.image_path);
+  if(e && e.extra_images){ const ex = typeof e.extra_images==='string'?JSON.parse(e.extra_images||'[]'):(e.extra_images||[]); ex.forEach(u=>{if(u&&!allImgs.includes(u))allImgs.push(u);}); }
+  _expImagesList = allImgs.slice();
+  renderExpImagesList();
   document.getElementById('exp-modal').style.display='';
 }
 function closeExpModal(){ document.getElementById('exp-modal').style.display='none'; }
 
 async function saveExp(){
   const id = document.getElementById('exp-id').value;
+  const name = document.getElementById('exp-name').value.trim();
+  let slug = document.getElementById('exp-slug').value.trim();
+  if(!name){ showToast('El nombre es obligatorio'); return; }
+  if(!slug){ slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); document.getElementById('exp-slug').value=slug; }
   const body = {
-    slug: document.getElementById('exp-slug').value.trim(),
-    name: document.getElementById('exp-name').value.trim(),
+    slug,
+    name,
     icon: document.getElementById('exp-icon').value.trim()||'🚣',
     description: document.getElementById('exp-desc').value.trim(),
+    name_en: document.getElementById('exp-name-en').value.trim(),
+    name_pt: document.getElementById('exp-name-pt').value.trim(),
+    description_en: document.getElementById('exp-desc-en').value.trim(),
+    description_pt: document.getElementById('exp-desc-pt').value.trim(),
     price_per_person: +document.getElementById('exp-price').value||0,
     cost_per_person: +document.getElementById('exp-cost').value||0,
     display_order: +document.getElementById('exp-order').value||0,
     is_active: document.getElementById('exp-active').checked,
-    image_path: id ? (_exps.find(x=>x.id==id)?.image_path||null) : null,
+    image_path: _expImagesList[0] || null,
+    extra_images: _expImagesList.slice(1),
   };
-  if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
   try{
     const url = id ? `/api/admin/experiencias/${id}` : '/api/admin/experiencias';
     const method = id ? 'PUT' : 'POST';
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    const d = await r.json();
-    const savedId = id || d.id;
-    // Upload image if selected
-    const file = document.getElementById('exp-img-file').files[0];
-    if(file && savedId){
-      const fd = new FormData(); fd.append('file',file);
-      await fetch(`/api/admin/experiencias/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
-    }
     closeExpModal(); await loadExperiencias(); showToast('Experiencia guardada ✅');
   }catch(e){ showToast('Error: '+e.message); }
 }
@@ -4888,48 +6645,53 @@ function openPackModal(id){
   document.getElementById('pack-icon').value = p ? p.icon : '🎁';
   document.getElementById('pack-personas').value = p ? p.personas : '2 personas';
   document.getElementById('pack-desc').value = p ? (p.description||'') : '';
+  document.getElementById('pack-name-en').value = p ? (p.name_en||'') : '';
+  document.getElementById('pack-name-pt').value = p ? (p.name_pt||'') : '';
+  document.getElementById('pack-desc-en').value = p ? (p.description_en||'') : '';
+  document.getElementById('pack-desc-pt').value = p ? (p.description_pt||'') : '';
   document.getElementById('pack-price').value = p ? p.price_from : 0;
   document.getElementById('pack-cost').value = p ? p.cost_from : 0;
   document.getElementById('pack-includes').value = p ? (p.includes||[]).join('\n') : '';
   document.getElementById('pack-order').value = p ? p.display_order : 0;
   document.getElementById('pack-active').checked = p ? p.is_active : true;
-  const wrap = document.getElementById('pack-img-wrap');
-  if(p && p.image_path){ wrap.style.display=''; document.getElementById('pack-img-preview').src=p.image_path; }
-  else { wrap.style.display='none'; }
-  document.getElementById('pack-img-file').value='';
+  const allImgs = [];
+  if(p && p.image_path) allImgs.push(p.image_path);
+  if(p && p.extra_images){ const ex = typeof p.extra_images==='string'?JSON.parse(p.extra_images||'[]'):(p.extra_images||[]); ex.forEach(u=>{if(u&&!allImgs.includes(u))allImgs.push(u);}); }
+  _packImagesList = allImgs.slice();
+  renderPackImagesList();
   document.getElementById('pack-modal').style.display='';
 }
 function closePackModal(){ document.getElementById('pack-modal').style.display='none'; }
 
 async function savePack(){
   const id = document.getElementById('pack-id').value;
-  const includesTxt = document.getElementById('pack-includes').value;
-  const includes = includesTxt.split('\n').map(s=>s.trim()).filter(Boolean);
+  const name = document.getElementById('pack-name').value.trim();
+  let slug = document.getElementById('pack-slug').value.trim();
+  if(!name){ showToast('El nombre es obligatorio'); return; }
+  if(!slug){ slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); document.getElementById('pack-slug').value=slug; }
+  const includes = document.getElementById('pack-includes').value.split('\n').map(s=>s.trim()).filter(Boolean);
   const body = {
-    slug: document.getElementById('pack-slug').value.trim(),
-    name: document.getElementById('pack-name').value.trim(),
+    slug,
+    name,
     icon: document.getElementById('pack-icon').value.trim()||'🎁',
     description: document.getElementById('pack-desc').value.trim(),
+    name_en: document.getElementById('pack-name-en').value.trim(),
+    name_pt: document.getElementById('pack-name-pt').value.trim(),
+    description_en: document.getElementById('pack-desc-en').value.trim(),
+    description_pt: document.getElementById('pack-desc-pt').value.trim(),
     personas: document.getElementById('pack-personas').value.trim()||'2 personas',
     price_from: +document.getElementById('pack-price').value||0,
     cost_from: +document.getElementById('pack-cost').value||0,
     display_order: +document.getElementById('pack-order').value||0,
     is_active: document.getElementById('pack-active').checked,
     includes,
-    image_path: id ? (_packs.find(x=>x.id==id)?.image_path||null) : null,
+    image_path: _packImagesList[0] || null,
+    extra_images: _packImagesList.slice(1),
   };
-  if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
   try{
     const url = id ? `/api/admin/packs/${id}` : '/api/admin/packs';
     const method = id ? 'PUT' : 'POST';
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    const d = await r.json();
-    const savedId = id || d.id;
-    const file = document.getElementById('pack-img-file').files[0];
-    if(file && savedId){
-      const fd = new FormData(); fd.append('file',file);
-      await fetch(`/api/admin/packs/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
-    }
     closePackModal(); await loadPacksAdmin(); showToast('Pack guardado ✅');
   }catch(e){ showToast('Error: '+e.message); }
 }

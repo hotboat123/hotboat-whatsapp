@@ -197,7 +197,128 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(loadConversations, 10000); // Refresh every 10 seconds
     setInterval(refreshCurrentConversation, 5000); // Refresh current chat every 5 seconds
     setupResponsiveLayout();
+    initPWA();
+    loadQuickReplyButtons();
 });
+
+// ── PWA / Web Push ────────────────────────────────────────────────────────────
+
+let _swRegistration = null;
+
+async function initPWA() {
+    if (!('serviceWorker' in navigator)) return;
+
+    try {
+        _swRegistration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        console.log('✅ Service Worker registered');
+
+        // Listen for SW → open chat messages
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data?.type === 'OPEN_CHAT' && event.data.phone) {
+                selectConversation(event.data.phone);
+            }
+        });
+
+        // Auto-open conversation if app was opened from a notification
+        const urlParams = new URLSearchParams(window.location.search);
+        const phoneParam = urlParams.get('phone');
+        if (phoneParam) {
+            const trySelect = setInterval(() => {
+                if (conversations.length > 0) {
+                    clearInterval(trySelect);
+                    selectConversation(phoneParam);
+                }
+            }, 300);
+            setTimeout(() => clearInterval(trySelect), 5000);
+        }
+
+        // Check push state — show bell button if not yet subscribed
+        await _checkPushState();
+    } catch (err) {
+        console.warn('Service Worker registration failed:', err);
+    }
+}
+
+async function _checkPushState() {
+    if (!('PushManager' in window) || !_swRegistration) return;
+    if (Notification.permission === 'denied') return;
+
+    try {
+        const resp = await fetch('/api/push/vapid-public-key');
+        const { publicKey } = await resp.json();
+        if (!publicKey) { console.warn('No VAPID public key from server'); return; }
+
+        const existing = await _swRegistration.pushManager.getSubscription();
+        if (existing) {
+            // Already subscribed — refresh server record silently
+            await savePushSubscription(existing);
+            _updateNotifBtn('active');
+            console.log('✅ Push already subscribed');
+        } else {
+            // Not subscribed — show bell button so user can tap to enable
+            _updateNotifBtn('inactive');
+        }
+    } catch (err) {
+        console.warn('Push state check failed:', err);
+    }
+}
+
+// Called when user taps the 🔔 button
+async function requestPushPermission() {
+    if (!('PushManager' in window) || !_swRegistration) {
+        showToast('Tu navegador no soporta notificaciones push', 'error');
+        return;
+    }
+    try {
+        const resp = await fetch('/api/push/vapid-public-key');
+        const { publicKey } = await resp.json();
+        if (!publicKey) { showToast('Servidor sin VAPID key configurada', 'error'); return; }
+
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            showToast('Permiso de notificaciones denegado', 'error');
+            return;
+        }
+        const subscription = await _swRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: _urlBase64ToUint8Array(publicKey),
+        });
+        await savePushSubscription(subscription);
+        _updateNotifBtn('active');
+        showToast('✅ Notificaciones activadas', 'success');
+        console.log('✅ Push subscribed:', subscription.endpoint.slice(0, 60));
+    } catch (err) {
+        showToast('Error activando notificaciones: ' + err.message, 'error');
+        console.error('Push subscribe failed:', err);
+    }
+}
+
+function _updateNotifBtn(state) {
+    const btn = document.getElementById('btnNotif');
+    if (!btn) return;
+    if (state === 'active') {
+        btn.style.display = 'none'; // hidden when working fine
+    } else {
+        btn.style.display = '';    // visible when needs action
+        btn.title = 'Tap para activar notificaciones';
+    }
+}
+
+async function savePushSubscription(subscription) {
+    const json = subscription.toJSON();
+    await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+    });
+}
+
+function _urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
 
 // Event Listeners
 function setupEventListeners() {
@@ -278,7 +399,9 @@ async function loadConversations(limit = null) {
                     last_message_at: timestamp,
                     created_at: timestamp,
                     unread_count: item.unread_count || 0,
-                    priority: item.priority || 0  // ✅ Preserve priority
+                    priority: item.priority || 0,
+                    ad_source: item.ad_source || null,
+                    ad_audience: item.ad_audience || null
                 });
             }
         });
@@ -326,12 +449,16 @@ function renderConversations() {
     const container = document.getElementById('conversationsList');
     if (!container) return;
 
-    if (conversations.length === 0) {
+    const displayConvs = activePriorityFilter === 0
+        ? conversations
+        : conversations.filter(c => (c.priority || 0) === activePriorityFilter);
+
+    if (displayConvs.length === 0) {
         container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No conversations yet</div>';
         return;
     }
 
-    container.innerHTML = conversations.map(conv => {
+    container.innerHTML = displayConvs.map(conv => {
         const unreadCount = conv.unread_count || 0;
         const unreadBadge = unreadCount > 0 ? `<span class="unread-indicator">${unreadCount}</span>` : '';
         
@@ -348,7 +475,10 @@ function renderConversations() {
         }
 
         const adBadge = conv.ad_source
-            ? `<span style="font-size:.68rem;background:#1a4f9f;color:#fff;border-radius:4px;padding:2px 7px;display:inline-block" title="Vino del anuncio: ${conv.ad_source}">📢 ${conv.ad_source}</span>`
+            ? `<span style="font-size:.43rem;background:#1a4f9f;color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:5px" title="Anuncio: ${conv.ad_source}">📢 ${conv.ad_source}</span>`
+            : '';
+        const audienceBadge = conv.ad_audience
+            ? `<span style="font-size:.43rem;background:#1a5c3a;color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:3px" title="Audiencia: ${conv.ad_audience}">👥 ${conv.ad_audience}</span>`
             : '';
 
         return `
@@ -359,10 +489,11 @@ function renderConversations() {
                     ${conv.customer_name || conv.phone_number}
                     ${unreadBadge}
                     ${priorityBadge}
+                    ${adBadge}
+                    ${audienceBadge}
                 </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
             </div>
-            ${adBadge ? `<div style="margin:.15rem 0 .1rem">${adBadge}</div>` : ''}
             <div class="conversation-preview">
                 ${truncate(conv.last_message || 'No messages', 50)}
             </div>
@@ -400,8 +531,14 @@ async function loadMoreConversations() {
 
 // Select Conversation
 async function selectConversation(phoneNumber) {
+    // Track which phone was last requested to abort stale responses
+    selectConversation._pendingPhone = phoneNumber;
     try {
         const data = await fetchConversationData(phoneNumber, { limit: MESSAGES_PAGE_SIZE });
+
+        // Abort if the user selected a different conversation while this was loading
+        if (selectConversation._pendingPhone !== phoneNumber) return;
+
         currentConversation = {
             phone_number: phoneNumber,
             customer_name: data.lead?.customer_name || phoneNumber,
@@ -410,6 +547,9 @@ async function selectConversation(phoneNumber) {
             nextCursor: data.next_cursor || null,
             priority: data.lead?.priority || 0,
             ad_source: data.lead?.ad_source || null,
+            ad_platform: data.lead?.ad_platform || null,
+            ad_media_type: data.lead?.ad_media_type || null,
+            ad_audience: data.lead?.ad_audience || null,
         };
 
         // Update bot toggle state from lead info
@@ -438,22 +578,29 @@ async function selectConversation(phoneNumber) {
 // Refresh Current Conversation (auto-refresh)
 async function refreshCurrentConversation() {
     if (!currentConversation) return;
-    
+
+    // Capture phone before the async call to detect mid-flight conversation changes
+    const targetPhone = currentConversation.phone_number;
+
     try {
         const existingCount = currentConversation.messages?.length || 0;
         const limit = Math.min(
             Math.max(existingCount, MESSAGES_PAGE_SIZE),
             MAX_REFRESH_LIMIT
         );
-        
-        const data = await fetchConversationData(currentConversation.phone_number, { limit });
+
+        const data = await fetchConversationData(targetPhone, { limit });
+
+        // Discard if the user switched to a different conversation while fetching
+        if (!currentConversation || currentConversation.phone_number !== targetPhone) return;
+
         const normalized = normalizeMessages(data.messages);
         const mergedMessages = mergeMessageLists(currentConversation.messages || [], normalized);
-        
+
         const hadChanges = mergedMessages.length !== (currentConversation.messages || []).length ||
             (mergedMessages.length && currentConversation.messages?.length &&
                 mergedMessages[mergedMessages.length - 1]?.id !== currentConversation.messages[currentConversation.messages.length - 1]?.id);
-        
+
         currentConversation.messages = mergedMessages;
         currentConversation.hasMore = Boolean(data.has_more) || Boolean(currentConversation.hasMore);
         
@@ -468,7 +615,11 @@ async function refreshCurrentConversation() {
         }
         
         if (hadChanges) {
-            renderCurrentChat();
+            const container = document.getElementById('messagesContainer');
+            const isNearBottom = container
+                ? container.scrollHeight - container.scrollTop - container.clientHeight < 120
+                : true;
+            renderCurrentChat({ scrollToBottom: isNearBottom, preserveScroll: !isNearBottom });
         }
     } catch (error) {
         console.log('Auto-refresh failed:', error);
@@ -481,6 +632,7 @@ async function loadOlderMessages() {
     }
 
     isLoadingOlderMessages = true;
+    const targetPhone = currentConversation.phone_number;
     const loadButton = document.getElementById('loadOlderButton');
     if (loadButton) {
         loadButton.disabled = true;
@@ -489,10 +641,13 @@ async function loadOlderMessages() {
 
     try {
         const beforeCursor = currentConversation.nextCursor;
-        const data = await fetchConversationData(currentConversation.phone_number, {
+        const data = await fetchConversationData(targetPhone, {
             limit: MESSAGES_PAGE_SIZE,
             before: beforeCursor
         });
+
+        // Discard if conversation changed while loading
+        if (!currentConversation || currentConversation.phone_number !== targetPhone) return;
 
         const olderMessages = normalizeMessages(data.messages);
         currentConversation.messages = mergeMessageLists(currentConversation.messages || [], olderMessages);
@@ -559,11 +714,18 @@ function renderCurrentChat(options = {}) {
     const adSourceEl = document.getElementById('currentChatAdSource');
     const adSourceText = document.getElementById('currentChatAdSourceText');
     if (adSourceEl && adSourceText) {
+        adSourceEl.style.display = 'inline-block';
         if (currentConversation.ad_source) {
-            adSourceText.textContent = currentConversation.ad_source;
-            adSourceEl.style.display = 'inline-block';
+            const platformIcon = currentConversation.ad_platform === 'instagram' ? '📸' : currentConversation.ad_platform === 'facebook' ? '👥' : '📢';
+            const mediaIcon = currentConversation.ad_media_type === 'video' ? ' 🎬' : currentConversation.ad_media_type === 'image' ? ' 🖼️' : '';
+            const audiencePart = currentConversation.ad_audience ? `  👥 ${currentConversation.ad_audience}` : '';
+            adSourceText.textContent = `${platformIcon} ${currentConversation.ad_source}${mediaIcon}${audiencePart}`;
+            adSourceEl.style.background = '#1a4f9f';
+            adSourceEl.style.color = '#fff';
         } else {
-            adSourceEl.style.display = 'none';
+            adSourceText.textContent = '📢 no hay ad asociado';
+            adSourceEl.style.background = 'transparent';
+            adSourceEl.style.color = '#888';
         }
     }
     messageInputArea.style.display = 'block';
@@ -586,6 +748,17 @@ function renderCurrentChat(options = {}) {
             </div>
         `;
     } else {
+        // Collect the last 10 incoming text message IDs for translation
+        const translatableIds = new Set();
+        if (activeTranslateLang) {
+            const incomingTextMsgs = currentConversation.messages.filter(m => {
+                const dir = m.direction ?? (m.role === 'assistant' ? 'outgoing' : 'incoming');
+                const t = (m.message_type || 'text');
+                return dir === 'incoming' && t !== 'image' && t !== 'audio' && m.id;
+            });
+            incomingTextMsgs.slice(-10).forEach(m => translatableIds.add(m.id));
+        }
+
         const messagesHtml = currentConversation.messages.map(msg => {
             const text = (msg.message_text ?? msg.content ?? '').trim();
             const direction = msg.direction ?? (msg.role === 'assistant' ? 'outgoing' : 'incoming');
@@ -647,9 +820,19 @@ function renderCurrentChat(options = {}) {
                     </div>
                 `;
             } else {
+                let translationHtml = '';
+                if (isIncoming && activeTranslateLang && text && translatableIds.has(messageId)) {
+                    const cacheKey = `${messageId}_${activeTranslateLang}`;
+                    const cached = translationCache[cacheKey];
+                    if (cached !== 'ERROR') {
+                        const translatedText = cached && cached !== '⏳' ? '🌐 ' + cached : '⏳ traduciendo...';
+                        translationHtml = `<div class="incoming-translation" data-msg-id="${messageId}" style="margin-top:4px;font-size:0.78rem;color:#94a3b8;border-top:1px solid rgba(255,255,255,0.08);padding-top:4px;font-style:italic;">${escapeHtml(translatedText)}</div>`;
+                        if (!cached) translateIncomingMessage(messageId, text);
+                    }
+                }
                 messageHtml = `
                     <div class="message ${isIncoming ? 'received incoming' : 'sent outgoing'}" data-message-id="${messageId}">
-                        <div class="message-text">${sanitized || '&nbsp;'}</div>
+                        <div class="message-text">${sanitized || '&nbsp;'}${translationHtml}</div>
                         <div class="message-time">${formatTime(msg.timestamp)}</div>
                     </div>
                 `;
@@ -792,8 +975,20 @@ function renderLeadInfo(lead) {
         </div>
         ${lead.ad_source ? `
             <div class="info-item">
-                <div class="info-label">📢 Anuncio origen</div>
+                <div class="info-label">📢 Anuncio</div>
                 <div class="info-value" style="color:#4a9fff;font-weight:600">${escapeHtml(lead.ad_source)}</div>
+            </div>
+        ` : ''}
+        ${lead.ad_platform ? `
+            <div class="info-item">
+                <div class="info-label">${lead.ad_platform === 'instagram' ? '📸 Plataforma' : '👥 Plataforma'}</div>
+                <div class="info-value">${lead.ad_platform === 'instagram' ? 'Instagram' : 'Facebook'}</div>
+            </div>
+        ` : ''}
+        ${lead.ad_media_type ? `
+            <div class="info-item">
+                <div class="info-label">${lead.ad_media_type === 'video' ? '🎬 Creativo' : '🖼️ Creativo'}</div>
+                <div class="info-value">${lead.ad_media_type === 'video' ? 'Video' : 'Imagen'}${lead.ad_creative_url ? ` <a href="${lead.ad_creative_url}" target="_blank" style="color:#4a9fff;font-size:.75rem">ver</a>` : ''}</div>
             </div>
         ` : ''}
         ${lead.notes ? `
@@ -863,13 +1058,68 @@ function updateBotToggleUI(enabled) {
     }
 }
 
+// ── Collapse input panel ───────────────────────────────────────────────────
+function toggleInputCollapse() {
+    const area = document.getElementById('messageInputArea');
+    const btn  = document.getElementById('collapseInputBtn');
+    if (!area) return;
+    const collapsed = area.classList.toggle('collapsed');
+    if (btn) btn.textContent = collapsed ? '▲' : '▼';
+}
+
+// ── Translation language selector ──────────────────────────────────────────
+let activeTranslateLang = null;
+const translationCache = {}; // { messageId: translatedText }
+
+function toggleTranslateLang(lang) {
+    if (activeTranslateLang === lang) {
+        activeTranslateLang = null;
+    } else {
+        activeTranslateLang = lang;
+    }
+    ['EN','PT','FR'].forEach(l => {
+        const btn = document.getElementById(`translateBtn${l}`);
+        if (btn) btn.classList.toggle('active', activeTranslateLang === l.toLowerCase());
+    });
+    // Re-render chat to show/hide translations
+    renderCurrentChat({ scrollToBottom: false, preserveScroll: true });
+}
+
+async function translateText(text, targetLang) {
+    const resp = await fetch('/api/translate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text, target_lang: targetLang})
+    });
+    if (!resp.ok) throw new Error('Translation failed');
+    const data = await resp.json();
+    return data.translated;
+}
+
+async function translateIncomingMessage(msgId, text) {
+    if (!msgId || !text || !activeTranslateLang) return;
+    const cacheKey = `${msgId}_${activeTranslateLang}`;
+    if (translationCache[cacheKey] && translationCache[cacheKey] !== 'ERROR') return;
+    translationCache[cacheKey] = '⏳'; // placeholder
+    try {
+        const translated = await translateText(text, 'es');
+        translationCache[cacheKey] = translated;
+        const els = document.querySelectorAll(`.incoming-translation[data-msg-id="${msgId}"]`);
+        els.forEach(e => { e.textContent = '🌐 ' + translated; });
+    } catch (e) {
+        translationCache[cacheKey] = 'ERROR'; // truthy → won't retry on next render
+        const els = document.querySelectorAll(`.incoming-translation[data-msg-id="${msgId}"]`);
+        els.forEach(e => { e.textContent = ''; });
+    }
+}
+
 // Send Message (Reply in Conversation)
 async function sendMessage(event) {
     event.preventDefault();
-    
+
     const input = document.getElementById('messageInput');
-    const message = input.value.trim();
-    
+    let message = input.value.trim();
+
     // Check if user recorded an audio
     if (recordedAudioBlob) {
         await sendAudioFromRecording();
@@ -883,7 +1133,20 @@ async function sendMessage(event) {
     }
     
     if (!message || !currentConversation) return;
-    
+
+    // Translate if a language is selected
+    if (activeTranslateLang) {
+        try {
+            const sendBtn = document.querySelector('#messageForm button[type="submit"]');
+            if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = '⏳'; }
+            message = await translateText(message, activeTranslateLang);
+            if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+        } catch(e) {
+            console.error('Translation error:', e);
+            // Proceed with original message if translation fails
+        }
+    }
+
     try {
         const payload = {
             to: currentConversation.phone_number,
@@ -1839,43 +2102,59 @@ function updatePriorityUI(priority) {
     }
 }
 
+// ── Dynamic quick-reply buttons ───────────────────────────────────────────────
+
+let _qrButtons = [];  // cached from API
+
+async function loadQuickReplyButtons() {
+    try {
+        const r = await fetch('/api/admin/bot/quick-replies');
+        const d = await r.json();
+        _qrButtons = d.buttons || [];
+    } catch (e) {
+        console.warn('Could not load quick-reply buttons:', e);
+        _qrButtons = [];
+    }
+    renderQuickReplyButtons();
+}
+
+function renderQuickReplyButtons() {
+    const container = document.getElementById('quick-reply-dynamic');
+    if (!container) return;
+    if (!_qrButtons.length) {
+        container.innerHTML = '<span style="color:var(--muted);font-size:.75rem">Sin botones configurados</span>';
+        return;
+    }
+    container.innerHTML = _qrButtons.map(b => {
+        const lbl = b.button_label || String(b.menu_option);
+        return `<button type="button" class="quick-reply-btn" onclick="sendQuickReply(${b.menu_option})" title="${lbl}">${lbl}</button>`;
+    }).join('');
+}
+
 // Send quick reply menu option
 async function sendQuickReply(menuOption) {
     if (!currentConversation) {
         showToast('Selecciona una conversación primero', 'warning');
         return;
     }
-    
-    const menuNames = {
-        0: 'Saludo Tomás',
-        1: 'Disponibilidad',
-        2: 'Precios',
-        3: 'Características',
-        4: 'Extras',
-        5: 'Ubicación',
-        9: 'Alojamientos'
-    };
-    
+
+    const btn = _qrButtons.find(b => b.menu_option === menuOption);
+    const label = btn ? btn.button_label : String(menuOption);
+
     try {
-        showToast(`Enviando respuesta: ${menuNames[menuOption]}...`, 'info');
-        
+        showToast(`Enviando: ${label}…`, 'info');
+
         const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/quick-reply`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ menu_option: menuOption })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ menu_option: menuOption, translate_to: activeTranslateLang || null })
         });
-        
-        if (!response.ok) {
-            throw new Error('Failed to send quick reply');
-        }
-        
-        showToast(`Respuesta "${menuNames[menuOption]}" enviada`, 'success');
-        
-        // Reload conversation to show the sent message
+
+        if (!response.ok) throw new Error('Failed to send quick reply');
+
+        showToast(`"${label}" enviado`, 'success');
         await selectConversation(currentConversation.phone_number);
-        
+
     } catch (error) {
         console.error('Error sending quick reply:', error);
         showToast('Error al enviar respuesta rápida', 'error');
@@ -1928,9 +2207,13 @@ async function sendReaction(messageId, emoji) {
 document.addEventListener('DOMContentLoaded', () => {
     attachReactionListeners();
     console.log('✅ Reaction listeners attached');
-    
+
     // Initialize search
     initializeSearch();
+
+    // Mark "Todas" as active by default
+    const btn0 = document.getElementById('pfBtn0');
+    if (btn0) btn0.classList.add('active');
 });
 
 // ==================== SEARCH FUNCTIONALITY ====================
@@ -1938,6 +2221,16 @@ document.addEventListener('DOMContentLoaded', () => {
 let allConversations = []; // Store all conversations for search
 let searchCache = new Map(); // Cache for message searches
 let filterDebounceTimer = null;
+let activePriorityFilter = 0; // 0=all, 1=alta, 2=media, 3=baja
+
+function togglePriorityFilter(p) {
+    activePriorityFilter = (activePriorityFilter === p) ? 0 : p;
+    [0, 1, 2, 3].forEach(i => {
+        const btn = document.getElementById(`pfBtn${i}`);
+        if (btn) btn.classList.toggle('active', i === activePriorityFilter);
+    });
+    renderConversations();
+}
 
 // Debounced filter - prevents excessive API calls while typing
 function debouncedFilterConversations() {
