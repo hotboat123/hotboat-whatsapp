@@ -7143,14 +7143,17 @@ function generarRecibo(){
       extrasRows.push({ name: it.name||it.key, qty: it.qty, unit: it.unit_price, total: (+it.qty)*(+it.unit_price) });
   });
 
-  // Descuentos
+  // Descuentos manuales + cupón aplicado
   const descRows = _descuentos.filter(d=>(+d.amount||0)>0);
+  const couponDiscount = (_appliedCoupon && +_appliedCoupon.discount_amount > 0)
+    ? { amount: +_appliedCoupon.discount_amount, note: `Cupón ${_appliedCoupon.code}` }
+    : null;
 
   // Totales (incluye flex si aplica)
   const precioBase   = +r.ingreso_reserva||0;
   const flexAmount   = (r.has_flex && r.flex_amount) ? +r.flex_amount : 0;
   const totalExtras  = extrasRows.reduce((s,e)=>s+(+e.total||0),0);
-  const totalDesc    = descRows.reduce((s,d)=>s+(+d.amount||0),0);
+  const totalDesc    = descRows.reduce((s,d)=>s+(+d.amount||0),0) + (couponDiscount?.amount||0);
   const totalFinal   = precioBase + totalExtras + flexAmount - totalDesc;
   const totalPagado  = _pagos.reduce((s,p)=>s+(+p.amount||0),0);
   const saldoPend    = totalFinal - totalPagado;
@@ -7177,11 +7180,16 @@ function generarRecibo(){
       <td style="padding:.45rem .6rem;text-align:right;font-weight:600">${money(e.total)}</td>
     </tr>`).join('') + flexRow) : `<tr><td colspan="4" style="padding:.45rem .6rem;color:#888">Sin extras</td></tr>`;
 
-  const descHtml = descRows.length ? descRows.map(d=>`
+  const couponRow = couponDiscount ? `
+    <tr style="color:#16a34a">
+      <td colspan="3" style="padding:.35rem .6rem">🎟️ ${couponDiscount.note}</td>
+      <td style="padding:.35rem .6rem;text-align:right;font-weight:600">− ${money(couponDiscount.amount)}</td>
+    </tr>` : '';
+  const descHtml = (descRows.length ? descRows.map(d=>`
     <tr style="color:#e55">
       <td colspan="3" style="padding:.35rem .6rem">Descuento${d.note?` — ${d.note}`:''}</td>
       <td style="padding:.35rem .6rem;text-align:right;font-weight:600">− ${money(d.amount)}</td>
-    </tr>`).join('') : '';
+    </tr>`).join('') : '') + couponRow;
 
   const pagosHtml = _pagos.filter(p=>+p.amount>0).map(p=>`
     <tr>
