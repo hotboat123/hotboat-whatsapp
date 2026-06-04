@@ -1683,7 +1683,21 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             </div>
             <!-- Bonus system -->
             <div style="margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)">
-              <div style="font-size:.72rem;font-weight:700;color:#fbbf24;margin-bottom:.5rem;letter-spacing:.03em">🎯 BONO POR RESERVAS</div>
+              <div style="font-size:.72rem;font-weight:700;color:#fbbf24;margin-bottom:.5rem;letter-spacing:.03em">🎯 BONOS POR RESERVAS</div>
+              <div class="sim-row">
+                <label>Nº de trabajadores con bono</label>
+                <div style="display:flex;gap:.2rem">
+                  <button type="button" onclick="simSetTrab(1)" id="sim-trab-btn-1"
+                    style="background:var(--gold);color:#000;border:none;border-radius:5px;width:28px;height:24px;font-size:.78rem;font-weight:700;cursor:pointer">1</button>
+                  <button type="button" onclick="simSetTrab(2)" id="sim-trab-btn-2"
+                    style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer">2</button>
+                  <button type="button" onclick="simSetTrab(3)" id="sim-trab-btn-3"
+                    style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer">3</button>
+                  <button type="button" onclick="simSetTrab(4)" id="sim-trab-btn-4"
+                    style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer">4</button>
+                </div>
+                <input type="hidden" id="sim-num-trab" value="1">
+              </div>
               <div class="sim-row">
                 <label>Umbral (reservas/mes)</label>
                 <input type="number" id="sim-bono-umbral" value="14" step="1" min="0"
@@ -1691,12 +1705,29 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                   style="width:72px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .4rem;font-size:.82rem">
               </div>
               <div class="sim-row">
-                <label>Bono por reserva extra</label>
+                <label>Bono por reserva extra (c/trab.)</label>
                 <div class="sim-input-wrap"><span class="sim-prefix">$</span>
                   <input type="number" id="sim-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()">
                 </div>
               </div>
-              <div id="sim-bono-preview" style="font-size:.73rem;color:#fbbf24;margin-top:.3rem;min-height:1.2em"></div>
+              <!-- Quality bonus -->
+              <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px dashed rgba(251,191,36,.25)">
+                <div style="font-size:.72rem;font-weight:700;color:#fbbf24;margin-bottom:.4rem;letter-spacing:.03em">⭐ BONO POR CALIDAD</div>
+                <div class="sim-row" style="align-items:flex-start">
+                  <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;flex:1">
+                    <input type="checkbox" id="sim-bono-calidad-check" onchange="simCalc()"
+                      style="accent-color:#fbbf24;cursor:pointer;width:14px;height:14px;flex-shrink:0">
+                    <span>90%+ reseñas 5★ este mes</span>
+                  </label>
+                </div>
+                <div class="sim-row" id="sim-bono-calidad-row" style="opacity:.4;pointer-events:none">
+                  <label>Bono calidad (c/trab.)</label>
+                  <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                    <input type="number" id="sim-bono-calidad-monto" value="30000" step="5000" min="0" oninput="simCalc()">
+                  </div>
+                </div>
+              </div>
+              <div id="sim-bono-preview" style="font-size:.73rem;color:#fbbf24;margin-top:.35rem;line-height:1.5;min-height:1.2em"></div>
             </div>
           </div>
 
@@ -1742,7 +1773,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <tr class="sim-tr-section"><td colspan="2">COSTOS FIJOS</td></tr>
               <tr><td class="sim-td-label">Estructura operativa + otros</td><td class="sim-td-val sim-neg" id="sr-cfijo">—</td></tr>
               <tr><td class="sim-td-label">Remuneraciones</td><td class="sim-td-val sim-neg" id="sr-remu">—</td></tr>
-              <tr id="sr-bonos-row" style="display:none"><td class="sim-td-label" style="color:#fbbf24">↳ Bonos trabajadores</td><td class="sim-td-val sim-neg" id="sr-bonos" style="color:#fbbf24">—</td></tr>
+              <tr id="sr-bonos-row" style="display:none"><td class="sim-td-label" style="color:#fbbf24" id="sr-bonos-label">↳ Bonos reservas</td><td class="sim-td-val sim-neg" id="sr-bonos" style="color:#fbbf24">—</td></tr>
+              <tr id="sr-bonos-cal-row" style="display:none"><td class="sim-td-label" style="color:#fbbf24" id="sr-bonos-cal-label">↳ Bono calidad</td><td class="sim-td-val sim-neg" id="sr-bonos-cal" style="color:#fbbf24">—</td></tr>
               <tr><td class="sim-td-label">Marketing</td><td class="sim-td-val sim-neg" id="sr-mkt">—</td></tr>
               <tr class="sim-tr-total sim-result" id="sim-ebitda-row"><td>RESULTADO NETO</td><td id="sr-ebitda">—</td></tr>
             </table>
@@ -1850,6 +1882,17 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       const SIM_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
       function simV(id){ return parseFloat(document.getElementById(id)?.value) || 0; }
+
+      function simSetTrab(n){
+        document.getElementById('sim-num-trab').value = n;
+        const onCSS  = 'background:var(--gold);color:#000;border:none;border-radius:5px;width:28px;height:24px;font-size:.78rem;font-weight:700;cursor:pointer';
+        const offCSS = 'background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer';
+        [1,2,3,4].forEach(i => {
+          const btn = document.getElementById(`sim-trab-btn-${i}`);
+          if(btn) btn.style.cssText = i === n ? onCSS : offCSS;
+        });
+        simCalc();
+      }
       function simFmt(n){ return '$' + Math.round(n).toLocaleString('es-CL'); }
       function simFmtK(n){
         if(Math.abs(n)>=1e6) return '$' + (n/1e6).toFixed(1).replace('.',',')+'M';
@@ -1868,13 +1911,22 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const remuBase     = simV('sim-capitan') + simV('sim-personal') + simV('sim-admin-rem');
         const mkt          = simV('sim-mkt');
         const mktPct       = simV('sim-mkt-pct') / 100;
-        const bonoUmbral   = simV('sim-bono-umbral');
-        const bonoPorRes   = simV('sim-bono-por-res');
+        const bonoUmbral        = simV('sim-bono-umbral');
+        const bonoPorRes        = simV('sim-bono-por-res');
+        const numTrab           = parseInt(document.getElementById('sim-num-trab').value) || 1;
+        const bonoCalidadCheck  = document.getElementById('sim-bono-calidad-check').checked;
+        const bonoCalidadMonto  = simV('sim-bono-calidad-monto');
 
-        // Bonus: fixed amount per reservation above the threshold
-        const extrasResActual = Math.max(0, reservas - bonoUmbral);
-        const bonoActual      = extrasResActual * bonoPorRes;
-        const remuner         = remuBase + bonoActual;
+        // Toggle quality bonus input active state
+        const calRow = document.getElementById('sim-bono-calidad-row');
+        if(calRow){ calRow.style.opacity = bonoCalidadCheck ? '1' : '.4'; calRow.style.pointerEvents = bonoCalidadCheck ? '' : 'none'; }
+
+        // Bonuses per worker, then multiply by number of workers
+        const extrasResActual   = Math.max(0, reservas - bonoUmbral);
+        const bonoResTotal      = extrasResActual * bonoPorRes * numTrab;
+        const bonoCalTotal      = bonoCalidadCheck ? bonoCalidadMonto * numTrab : 0;
+        const bonoActual        = bonoResTotal + bonoCalTotal;
+        const remuner           = remuBase + bonoActual;
 
         const ingresoBase  = precio * personas * reservas;
         const ingresoExtra = extras * reservas;
@@ -1894,26 +1946,32 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const margPorRes = ingrPerRes - cVar;
         const be = margPorRes > 0 ? Math.ceil(fixedBelowThreshold / margPorRes) : null;
 
-        // ── Bonus preview line ─────────────────────────────────────────────
+        // ── Bonus preview lines ────────────────────────────────────────────
         const prevEl = document.getElementById('sim-bono-preview');
+        const trabLabel = numTrab > 1 ? ` × ${numTrab} trab.` : '';
+        let prevLines = [];
         if(bonoPorRes > 0 && bonoUmbral > 0){
-          if(reservas <= bonoUmbral){
-            prevEl.textContent = `Sin bono (necesitas ${Math.ceil(bonoUmbral - reservas + 1)} reserva(s) más)`;
+          if(extrasResActual > 0){
+            prevLines.push(`${extrasResActual} res. extra × ${simFmtK(bonoPorRes)}${trabLabel} = ${simFmtK(bonoResTotal)}`);
           } else {
-            prevEl.textContent = `${extrasResActual} reservas extra × ${simFmtK(bonoPorRes)} = ${simFmtK(bonoActual)}`;
+            prevLines.push(`Sin bono reservas (faltan ${Math.ceil(bonoUmbral - reservas + 1)} res.)`);
           }
-        } else {
-          prevEl.textContent = '';
         }
+        if(bonoCalidadCheck && bonoCalidadMonto > 0){
+          prevLines.push(`⭐ Bono calidad: ${simFmtK(bonoCalidadMonto)}${trabLabel} = ${simFmtK(bonoCalTotal)}`);
+        }
+        prevEl.innerHTML = prevLines.map(l=>`<div>${l}</div>`).join('');
 
         // ── Bonus KPI cards ────────────────────────────────────────────────
         const bonoCardEl = document.getElementById('kpi-bono-card');
         const bonoAnualCardEl = document.getElementById('kpi-bono-anual-card');
-        if(bonoPorRes > 0 && bonoUmbral > 0){
+        const bonoActivo = (bonoPorRes > 0 && bonoUmbral > 0) || bonoCalidadCheck;
+        if(bonoActivo){
           bonoCardEl.style.display = '';
-          document.getElementById('kpi-bono').textContent = bonoActual > 0
-            ? `${simFmtK(bonoActual)} (${extrasResActual} res. extra)`
-            : `$0 (umbral: ${bonoUmbral} res.)`;
+          let kpiTxt = simFmtK(bonoActual);
+          if(extrasResActual > 0 && bonoResTotal > 0) kpiTxt += ` (${extrasResActual} res. extra)`;
+          if(bonoCalidadCheck && bonoCalTotal > 0) kpiTxt += ` +⭐`;
+          document.getElementById('kpi-bono').textContent = kpiTxt;
         } else {
           bonoCardEl.style.display = 'none';
         }
@@ -1927,11 +1985,20 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         document.getElementById('sr-cfijo').textContent  = '−' + simFmt(cFijo);
         document.getElementById('sr-remu').textContent   = '−' + simFmt(remuner);
         const bonosRow = document.getElementById('sr-bonos-row');
-        if(bonoActual > 0){
+        if(bonoResTotal > 0){
           bonosRow.style.display = '';
-          document.getElementById('sr-bonos').textContent = '−' + simFmt(bonoActual);
+          document.getElementById('sr-bonos-label').textContent = numTrab > 1 ? `↳ Bonos reservas (${numTrab} trab.)` : '↳ Bonos reservas';
+          document.getElementById('sr-bonos').textContent = '−' + simFmt(bonoResTotal);
         } else {
           bonosRow.style.display = 'none';
+        }
+        const bonosCalRow = document.getElementById('sr-bonos-cal-row');
+        if(bonoCalTotal > 0){
+          bonosCalRow.style.display = '';
+          document.getElementById('sr-bonos-cal-label').textContent = numTrab > 1 ? `↳ Bono calidad (${numTrab} trab.)` : '↳ Bono calidad';
+          document.getElementById('sr-bonos-cal').textContent = '−' + simFmt(bonoCalTotal);
+        } else {
+          bonosCalRow.style.display = 'none';
         }
         document.getElementById('sr-mkt').textContent    = '−' + simFmt(mkt);
 
@@ -1987,8 +2054,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const rev = ingresoGross * f;
           const varC = cVar * r;
           // Bonus recalculated per month because reservas vary with seasonality
-          const bonoMes = Math.max(0, r - bonoUmbral) * bonoPorRes;
-          const remuMes = remuBase + bonoMes;
+          const bonoResMes = Math.max(0, r - bonoUmbral) * bonoPorRes * numTrab;
+          const bonoCalMes = bonoCalidadCheck ? bonoCalidadMonto * numTrab : 0;
+          const bonoMes    = bonoResMes + bonoCalMes;
+          const remuMes    = remuBase + bonoMes;
           const totalFijoMes = cFijo + remuMes + mkt;
           const net = rev - varC - totalFijoMes;
           totRev += rev; totRes += r; totEbitda += net; totBonos += bonoMes;
@@ -2043,6 +2112,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             'sim-mkt': sc.marketing_mensual,
             'sim-bono-umbral': sc.bono_umbral_reservas,
             'sim-bono-por-res': sc.bono_por_reserva_extra,
+            'sim-bono-calidad-monto': sc.bono_calidad_monto,
           };
           for(const [id, val] of Object.entries(map)){
             if(val != null){
@@ -2056,6 +2126,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             const inp = document.getElementById(id);
             if(sl && inp) sl.value = inp.value;
           });
+          // Restore worker count buttons
+          if(sc.bono_num_trabajadores) simSetTrab(sc.bono_num_trabajadores);
+          // Restore quality bonus checkbox
+          const calCheck = document.getElementById('sim-bono-calidad-check');
+          if(calCheck && sc.bono_calidad_activo != null) calCheck.checked = !!sc.bono_calidad_activo;
 
           // Show actuals banner
           if(ac.n_bookings){
@@ -2089,6 +2164,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           marketing_mensual: simV('sim-mkt'),
           bono_umbral_reservas: simV('sim-bono-umbral'),
           bono_por_reserva_extra: simV('sim-bono-por-res'),
+          bono_num_trabajadores: parseInt(document.getElementById('sim-num-trab').value) || 1,
+          bono_calidad_activo: document.getElementById('sim-bono-calidad-check').checked,
+          bono_calidad_monto: simV('sim-bono-calidad-monto'),
         };
         try {
           const r = await fetch('/api/admin/financial/simulator', {
