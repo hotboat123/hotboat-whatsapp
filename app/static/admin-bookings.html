@@ -389,6 +389,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('simulator')" id="nav-simulator">
       <span class="ni">🎯</span> Simulador
     </div>
+    <div class="nav-item" onclick="showSection('payment-test')" id="nav-payment-test">
+      <span class="ni">💳</span> Test Pagos
+    </div>
     <div class="nav-item" onclick="showSection('logs')" id="nav-logs">
       <span class="ni">🔍</span> Logs
     </div>
@@ -3104,6 +3107,43 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
 
     </div><!-- /section-simulator -->
+
+    <!-- ══ TEST PAGOS SECTION ════════════════════════════════════════════════ -->
+    <div id="section-payment-test" class="section">
+      <div style="display:grid;gap:1rem">
+
+        <!-- Diagnóstico -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.2rem">
+          <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.9rem">🔍 DIAGNÓSTICO DE PAGOS</div>
+          <button onclick="loadPaymentDiag()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer;margin-bottom:.9rem">
+            Verificar configuración
+          </button>
+          <div id="payment-diag-result"></div>
+        </div>
+
+        <!-- Test pago $1.000 -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.2rem">
+          <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.4rem">🧪 PAGO DE PRUEBA ($1.000 CLP)</div>
+          <div style="font-size:.8rem;color:var(--muted);margin-bottom:.9rem;line-height:1.5">
+            Crea una orden real en WooCommerce por $1.000 CLP. Al pagar con Transbank, verifica que el webhook llegue y la reserva quede confirmada.
+          </div>
+          <button onclick="createTestPayment()" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">
+            Crear pago de prueba
+          </button>
+          <div id="test-payment-result" style="margin-top:.9rem"></div>
+        </div>
+
+        <!-- Log de webhooks -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.2rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem">
+            <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em">📡 WEBHOOKS RECIBIDOS (últimos 50)</div>
+            <button onclick="loadWebhookEvents()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.25rem .7rem;font-size:.75rem;cursor:pointer">↺ Actualizar</button>
+          </div>
+          <div id="webhook-events-list"><span style="color:var(--muted);font-size:.8rem">Pulsa Actualizar para ver eventos.</span></div>
+        </div>
+
+      </div>
+    </div>
 
     <!-- ══ LOGS SECTION ══════════════════════════════════════════════════════ -->
     <div id="section-logs" class="section">
@@ -6273,6 +6313,74 @@ function showToast(msg){
 
 // helper: return current admin key (KEY is set by doLogin)
 function getKey(){ return KEY; }
+
+// ── Payment diagnostics ─────────────────────────────────────────────────────
+async function loadPaymentDiag(){
+  const el = document.getElementById('payment-diag-result');
+  el.innerHTML = '<span style="color:var(--muted);font-size:.8rem">Verificando...</span>';
+  try{
+    const d = await api('/api/admin/payment-diagnostics');
+    const ok  = v => `<span style="color:#34d399">✓</span>`;
+    const bad = v => `<span style="color:#f87171">✗</span>`;
+    const row = (label, val, good) =>
+      `<div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.8rem">
+        <span style="color:var(--muted)">${label}</span>
+        <span style="font-weight:600">${good !== undefined ? (good?ok():bad()) : ''} ${val}</span>
+      </div>`;
+    el.innerHTML =
+      row('URL Webhook (configura en WooCommerce)', `<code style="font-size:.72rem;word-break:break-all">${d.webhook_url}</code>`) +
+      row('WooCommerce URL', d.woo_url) +
+      row('Credenciales WooCommerce', d.woo_credentials_ok?'OK':'⚠ No configuradas', d.woo_credentials_ok) +
+      row('Webhook Secret', d.webhook_secret_set?'Configurado':'⚠ Sin secret (acepta todo)', d.webhook_secret_set) +
+      row('WooCommerce accesible', d.woo_reachable?(d.woo_url):(d.woo_error||'No responde'), d.woo_reachable) +
+      `<div style="margin-top:.6rem;font-size:.72rem;color:#fbbf24;line-height:1.5">
+        ⚠ Asegúrate que en WooCommerce → Ajustes → Avanzado → Webhooks, la URL apunte exactamente a: <code>${d.webhook_url}</code>
+      </div>`;
+  }catch(e){
+    el.innerHTML = `<span style="color:#f87171;font-size:.8rem">Error: ${e.message}</span>`;
+  }
+}
+
+async function createTestPayment(){
+  const el = document.getElementById('test-payment-result');
+  el.innerHTML = '<span style="color:var(--muted);font-size:.8rem">Creando orden en WooCommerce...</span>';
+  try{
+    const d = await api('/api/admin/test-payment', {method:'POST'});
+    el.innerHTML = `
+      <div style="font-size:.8rem;line-height:1.8">
+        <div>✅ Orden creada: <strong>WC #${d.wc_order_id}</strong> · Referencia: <code>${d.test_ref}</code></div>
+        <a href="${d.payment_url}" target="_blank"
+          style="display:inline-block;margin:.5rem 0;background:#3b82f6;color:#fff;border-radius:8px;padding:.45rem 1rem;font-weight:700;font-size:.82rem;text-decoration:none">
+          💳 Ir a pagar $1.000 →
+        </a>
+        <div style="color:var(--muted);font-size:.75rem">Después de pagar, pulsa "↺ Actualizar" en la sección de webhooks para verificar que llegó la confirmación.</div>
+      </div>`;
+  }catch(e){
+    el.innerHTML = `<span style="color:#f87171;font-size:.8rem">Error: ${e.message}</span>`;
+  }
+}
+
+async function loadWebhookEvents(){
+  const el = document.getElementById('webhook-events-list');
+  el.innerHTML = '<span style="color:var(--muted);font-size:.8rem">Cargando...</span>';
+  try{
+    const d = await api('/api/admin/webhook-events');
+    if(!d.events.length){
+      el.innerHTML = '<span style="color:var(--muted);font-size:.8rem">Sin eventos registrados desde que arrancó el servidor.</span>';
+      return;
+    }
+    const resultColor = r => r==='confirmed'?'#34d399': r==='ping'?'#60a5fa': r.startsWith('ignored')?'#94a3b8':'#f87171';
+    el.innerHTML = d.events.map(e=>`
+      <div style="display:grid;grid-template-columns:auto auto 1fr auto;gap:.5rem;align-items:center;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.75rem">
+        <span style="color:var(--muted);white-space:nowrap">${e.ts}</span>
+        <span style="color:${resultColor(e.result)};font-weight:700">${e.result}</span>
+        <span style="color:var(--muted)">${e.wc_order_id?'WC #'+e.wc_order_id:''} ${e.booking_ref||''}</span>
+        <span style="color:var(--muted)">${e.total?'$'+parseInt(e.total).toLocaleString('es-CL'):''}</span>
+      </div>`).join('');
+  }catch(e){
+    el.innerHTML = `<span style="color:#f87171;font-size:.8rem">Error: ${e.message}</span>`;
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // EXPERIENCIAS admin

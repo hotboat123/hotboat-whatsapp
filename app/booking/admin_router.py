@@ -5,6 +5,8 @@ import logging
 import os
 import re
 import shutil
+from collections import deque
+from datetime import datetime
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
@@ -23,6 +25,9 @@ logger = logging.getLogger(__name__)
 admin_router = APIRouter()
 CHILE_TZ = ZoneInfo("America/Santiago")
 TABLE = "all_appointments"
+
+# In-memory webhook event log (last 50 events)
+_webhook_log: deque = deque(maxlen=50)
 
 
 def _normalize_pagos_for_db(pagos: list) -> list:
@@ -1998,13 +2003,24 @@ async def woo_webhook(request: Request):
 
     sig = request.headers.get("x-wc-webhook-signature", "")
     from app.payment.woocommerce import verify_webhook_signature
+    _wh_entry: dict = {
+        "ts": datetime.now(CHILE_TZ).isoformat(timespec="seconds"),
+        "bytes": len(body),
+        "sig_present": bool(sig),
+        "result": "unknown",
+        "detail": "",
+    }
     if not verify_webhook_signature(body, sig):
+        _wh_entry["result"] = "rejected_signature"
+        _webhook_log.appendleft(_wh_entry)
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     logger.info(f"WC webhook body ({len(body)} bytes): {body[:200]!r}")
 
     # Accept empty / non-JSON bodies (WooCommerce ping on webhook save)
     if not body or not body.strip():
+        _wh_entry["result"] = "ping"
+        _webhook_log.appendleft(_wh_entry)
         return {"ok": True, "ignored": True, "reason": "ping"}
 
     try:
@@ -2014,13 +2030,20 @@ async def woo_webhook(request: Request):
             data = json.loads(body)
         except json.JSONDecodeError as je:
             logger.warning(f"WC webhook non-JSON body (ignored): {je} | body: {body[:300]!r}")
+            _wh_entry["result"] = "non_json"
+            _webhook_log.appendleft(_wh_entry)
             return {"ok": True, "ignored": True, "reason": "non_json"}
 
         status = data.get("status", "")
         wc_id  = data.get("id")
         total  = float(data.get("total", 0) or 0)
+        _wh_entry["wc_order_id"] = wc_id
+        _wh_entry["wc_status"]   = status
+        _wh_entry["total"]       = total
 
         if status not in ("processing", "completed"):
+            _wh_entry["result"] = f"ignored_status:{status}"
+            _webhook_log.appendleft(_wh_entry)
             return {"ok": True, "ignored": True, "status": status}
 
         # Extract HotBoat metadata from the order
@@ -2351,11 +2374,121 @@ async def woo_webhook(request: Request):
                 logger.error("WC webhook: error updating exp/pack extras_bookings: %s", ep)
 
         logger.info(f"WC webhook: order {wc_id} processed → status={status}, amount={total}")
+        _wh_entry["result"]      = "confirmed"
+        _wh_entry["res_id"]      = res_id
+        _wh_entry["booking_ref"] = booking_ref_wc
+        _webhook_log.appendleft(_wh_entry)
         return {"ok": True, "reservation_id": res_id, "booking_ref": booking_ref_wc, "status": status}
 
     except Exception as e:
         logger.error(f"WC webhook error: {e}")
+        _wh_entry["result"] = f"error:{str(e)[:120]}"
+        _webhook_log.appendleft(_wh_entry)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Payment diagnostics & test payment ────────────────────────────────────────
+
+@admin_router.get("/api/admin/payment-diagnostics")
+async def payment_diagnostics(x_admin_key: str = Header("")):
+    """Returns current payment config, webhook URL, and recent webhook events."""
+    _check_auth(x_admin_key)
+    from app.payment.woocommerce import WOO_URL, WOO_CK, WOO_CS, WOO_SECRET, APP_URL
+
+    # Test WooCommerce connectivity
+    woo_reachable = False
+    woo_error = ""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(f"{WOO_URL}/wp-json/wc/v3/system_status",
+                                 auth=(WOO_CK, WOO_CS))
+            woo_reachable = r.is_success
+            if not woo_reachable:
+                woo_error = f"HTTP {r.status_code}"
+    except Exception as ce:
+        woo_error = str(ce)[:120]
+
+    return {
+        "webhook_url":        f"{APP_URL}/api/woo-webhook",
+        "app_url":            APP_URL,
+        "woo_url":            WOO_URL,
+        "woo_credentials_ok": bool(WOO_CK and WOO_CS),
+        "webhook_secret_set": bool(WOO_SECRET),
+        "woo_reachable":      woo_reachable,
+        "woo_error":          woo_error,
+        "recent_webhook_events": list(_webhook_log),
+    }
+
+
+@admin_router.post("/api/admin/test-payment")
+async def create_test_payment(x_admin_key: str = Header("")):
+    """
+    Create a real $1.000 CLP WooCommerce order for end-to-end payment testing.
+    Returns the /pagar URL — open it in a browser to test Transbank.
+    A test row is inserted in all_appointments so the webhook can confirm it.
+    """
+    _check_auth(x_admin_key)
+    from app.payment.woocommerce import create_order
+    from psycopg.types.json import Jsonb as PgJson
+
+    test_ref = f"TEST-{int(datetime.now().timestamp())}"
+
+    # Insert a minimal test reservation so the webhook can find it
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""INSERT INTO {TABLE}
+                    (source, source_id, nombre_cliente, telefono, email,
+                     fecha, num_personas, ingreso_total, status, created_at, updated_at)
+                    VALUES ('hotboat_web', %s, 'Test Pago', '+56900000000', 'test@hotboatchile.com',
+                            CURRENT_DATE, 1, 1000, 'pending_payment', NOW(), NOW())
+                    ON CONFLICT DO NOTHING""",
+                (test_ref,)
+            )
+            conn.commit()
+
+    order = await create_order(
+        reservation_id=0,
+        booking_ref=test_ref,
+        nombre="Test Pago HotBoat",
+        telefono="+56900000000",
+        email="test@hotboatchile.com",
+        monto_reserva=1000,
+        monto_extras=0,
+        fecha=datetime.now(CHILE_TZ).strftime("%Y-%m-%d"),
+        num_personas=1,
+    )
+
+    # Store WC order_id in test reservation
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE {TABLE} SET payment_id=%s WHERE source='hotboat_web' AND source_id=%s",
+                (str(order["order_id"]), test_ref)
+            )
+            conn.commit()
+
+    return {
+        "ok":              True,
+        "test_ref":        test_ref,
+        "wc_order_id":     order["order_id"],
+        "payment_url":     order["payment_url"],
+        "woo_direct_url":  order["woo_direct_url"],
+        "amount_clp":      1000,
+        "instructions":    (
+            "1. Abre payment_url en el navegador y completa el pago con Transbank. "
+            "2. Después revisa GET /api/admin/payment-diagnostics para ver si el webhook se recibió. "
+            "3. Si 'result: confirmed' aparece en recent_webhook_events, el flujo completo funciona."
+        ),
+    }
+
+
+@admin_router.get("/api/admin/webhook-events")
+async def get_webhook_events(x_admin_key: str = Header("")):
+    """Returns the last 50 webhook events received."""
+    _check_auth(x_admin_key)
+    return {"events": list(_webhook_log), "total": len(_webhook_log)}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
