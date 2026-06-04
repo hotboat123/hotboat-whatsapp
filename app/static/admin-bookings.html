@@ -1666,42 +1666,127 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
           <!-- Remuneraciones -->
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
-            <div style="font-size:.78rem;font-weight:700;color:#f87171;margin-bottom:.65rem;letter-spacing:.03em">👥 REMUNERACIONES</div>
-            <div class="sim-row">
-              <label>Capitán</label>
-              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
-                <input type="number" id="sim-capitan" value="800000" step="50000" min="0" oninput="simCalc()">
+            <div style="font-size:.78rem;font-weight:700;color:#f87171;margin-bottom:.6rem;letter-spacing:.03em">👥 REMUNERACIONES</div>
+
+            <!-- Worker count selector -->
+            <div class="sim-row" style="margin-bottom:.55rem">
+              <label>Trabajadores</label>
+              <div style="display:flex;gap:.2rem">
+                <button type="button" onclick="simSetTrab(1)" id="sim-trab-btn-1"
+                  style="background:var(--gold);color:#000;border:none;border-radius:5px;width:28px;height:24px;font-size:.78rem;font-weight:700;cursor:pointer">1</button>
+                <button type="button" onclick="simSetTrab(2)" id="sim-trab-btn-2"
+                  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer">2</button>
+                <button type="button" onclick="simSetTrab(3)" id="sim-trab-btn-3"
+                  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer">3</button>
+                <button type="button" onclick="simSetTrab(4)" id="sim-trab-btn-4"
+                  style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer">4</button>
               </div>
+              <input type="hidden" id="sim-num-trab" value="1">
             </div>
-            <div class="sim-row">
-              <label>Personal adicional</label>
-              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
-                <input type="number" id="sim-personal" value="0" step="50000" min="0" oninput="simCalc()">
-              </div>
-            </div>
-            <div class="sim-row">
-              <label>Administración</label>
-              <div class="sim-input-wrap"><span class="sim-prefix">$</span>
-                <input type="number" id="sim-admin-rem" value="0" step="50000" min="0" oninput="simCalc()">
-              </div>
-            </div>
-            <!-- Bonus system -->
-            <div style="margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)">
-              <div style="font-size:.72rem;font-weight:700;color:#fbbf24;margin-bottom:.5rem;letter-spacing:.03em">🎯 BONOS POR RESERVAS</div>
+
+            <!-- Worker navigation tabs (hidden when only 1 worker) -->
+            <div id="sim-worker-tabs" style="display:none;gap:.2rem;flex-wrap:wrap;margin-bottom:.6rem"></div>
+
+            <!-- Worker forms (pre-rendered, show/hide by tab) -->
+            <div id="sim-worker-form-1">
               <div class="sim-row">
-                <label>Nº de trabajadores con bono</label>
-                <div style="display:flex;gap:.2rem">
-                  <button type="button" onclick="simSetTrab(1)" id="sim-trab-btn-1"
-                    style="background:var(--gold);color:#000;border:none;border-radius:5px;width:28px;height:24px;font-size:.78rem;font-weight:700;cursor:pointer">1</button>
-                  <button type="button" onclick="simSetTrab(2)" id="sim-trab-btn-2"
-                    style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer">2</button>
-                  <button type="button" onclick="simSetTrab(3)" id="sim-trab-btn-3"
-                    style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer">3</button>
-                  <button type="button" onclick="simSetTrab(4)" id="sim-trab-btn-4"
-                    style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:24px;font-size:.78rem;cursor:pointer">4</button>
-                </div>
-                <input type="hidden" id="sim-num-trab" value="1">
+                <label>Nombre</label>
+                <input type="text" id="sim-w1-name" value="Capitán" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem">
               </div>
+              <div class="sim-row">
+                <label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-w1-sueldo" value="800000" step="50000" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:.22rem;margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07)">
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w1-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">
+                  Recibe bono por reservas
+                </label>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w1-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">
+                  Recibe bono por calidad
+                </label>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-2" style="display:none">
+              <div class="sim-row">
+                <label>Nombre</label>
+                <input type="text" id="sim-w2-name" value="Marinero" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem">
+              </div>
+              <div class="sim-row">
+                <label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-w2-sueldo" value="0" step="50000" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:.22rem;margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07)">
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w2-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">
+                  Recibe bono por reservas
+                </label>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w2-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">
+                  Recibe bono por calidad
+                </label>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-3" style="display:none">
+              <div class="sim-row">
+                <label>Nombre</label>
+                <input type="text" id="sim-w3-name" value="Tripulación 3" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem">
+              </div>
+              <div class="sim-row">
+                <label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-w3-sueldo" value="0" step="50000" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:.22rem;margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07)">
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w3-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">
+                  Recibe bono por reservas
+                </label>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w3-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">
+                  Recibe bono por calidad
+                </label>
+              </div>
+            </div>
+
+            <div id="sim-worker-form-4" style="display:none">
+              <div class="sim-row">
+                <label>Nombre</label>
+                <input type="text" id="sim-w4-name" value="Tripulación 4" oninput="simRenderWorkerTabs()"
+                  style="flex:1;max-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .45rem;font-size:.82rem">
+              </div>
+              <div class="sim-row">
+                <label>Sueldo base</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-w4-sueldo" value="0" step="50000" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:.22rem;margin-top:.35rem;padding-top:.35rem;border-top:1px dashed rgba(255,255,255,.07)">
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w4-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">
+                  Recibe bono por reservas
+                </label>
+                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
+                  <input type="checkbox" id="sim-w4-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">
+                  Recibe bono por calidad
+                </label>
+              </div>
+            </div>
+
+            <!-- Bonus rates -->
+            <div style="margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border)">
+              <div style="font-size:.72rem;font-weight:700;color:#fbbf24;margin-bottom:.5rem;letter-spacing:.03em">🎯 TASAS DE BONOS</div>
               <div class="sim-row">
                 <label>Umbral (reservas/mes)</label>
                 <input type="number" id="sim-bono-umbral" value="14" step="1" min="0"
@@ -1714,10 +1799,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                   <input type="number" id="sim-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()">
                 </div>
               </div>
-              <!-- Quality bonus -->
               <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px dashed rgba(251,191,36,.25)">
                 <div style="font-size:.72rem;font-weight:700;color:#fbbf24;margin-bottom:.4rem;letter-spacing:.03em">⭐ BONO POR CALIDAD</div>
-                <div class="sim-row" style="align-items:flex-start">
+                <div class="sim-row">
                   <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;flex:1">
                     <input type="checkbox" id="sim-bono-calidad-check" onchange="simCalc()"
                       style="accent-color:#fbbf24;cursor:pointer;width:14px;height:14px;flex-shrink:0">
@@ -1725,13 +1809,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                   </label>
                 </div>
                 <div class="sim-row" id="sim-bono-calidad-row" style="opacity:.4;pointer-events:none">
-                  <label>Bono calidad (c/trab.)</label>
+                  <label>Monto bono calidad (c/trab.)</label>
                   <div class="sim-input-wrap"><span class="sim-prefix">$</span>
                     <input type="number" id="sim-bono-calidad-monto" value="30000" step="5000" min="0" oninput="simCalc()">
                   </div>
                 </div>
               </div>
-              <div id="sim-bono-preview" style="font-size:.73rem;color:#fbbf24;margin-top:.35rem;line-height:1.5;min-height:1.2em"></div>
+              <div id="sim-bono-preview" style="font-size:.73rem;color:#fbbf24;margin-top:.35rem;line-height:1.6;min-height:1.2em"></div>
             </div>
           </div>
 
@@ -1887,6 +1971,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
       function simV(id){ return parseFloat(document.getElementById(id)?.value) || 0; }
 
+      let _simActiveWorker = 1;
+
       function simSetTrab(n){
         document.getElementById('sim-num-trab').value = n;
         const onCSS  = 'background:var(--gold);color:#000;border:none;border-radius:5px;width:28px;height:24px;font-size:.78rem;font-weight:700;cursor:pointer';
@@ -1895,7 +1981,45 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const btn = document.getElementById(`sim-trab-btn-${i}`);
           if(btn) btn.style.cssText = i === n ? onCSS : offCSS;
         });
+        if(_simActiveWorker > n) _simActiveWorker = n;
+        simRenderWorkerTabs();
         simCalc();
+      }
+
+      function simRenderWorkerTabs(){
+        const n = parseInt(document.getElementById('sim-num-trab').value) || 1;
+        const tabsEl = document.getElementById('sim-worker-tabs');
+        if(n <= 1){
+          tabsEl.style.display = 'none';
+          [1,2,3,4].forEach(w => {
+            const f = document.getElementById(`sim-worker-form-${w}`);
+            if(f) f.style.display = w === 1 ? '' : 'none';
+          });
+          return;
+        }
+        tabsEl.style.display = 'flex';
+        tabsEl.innerHTML = '';
+        for(let w = 1; w <= n; w++){
+          const name = document.getElementById(`sim-w${w}-name`)?.value || `Trabajador ${w}`;
+          const isActive = w === _simActiveWorker;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = name;
+          btn.style.cssText = isActive
+            ? 'background:var(--gold);color:#000;border:none;border-radius:5px;padding:.2rem .55rem;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap'
+            : 'background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.2rem .55rem;font-size:.78rem;cursor:pointer;white-space:nowrap';
+          btn.onclick = (()=>{const ww=w; return ()=>simSelectWorker(ww);})();
+          tabsEl.appendChild(btn);
+        }
+        [1,2,3,4].forEach(w => {
+          const f = document.getElementById(`sim-worker-form-${w}`);
+          if(f) f.style.display = (w === _simActiveWorker && w <= n) ? '' : 'none';
+        });
+      }
+
+      function simSelectWorker(w){
+        _simActiveWorker = w;
+        simRenderWorkerTabs();
       }
       function simFmt(n){ return '$' + Math.round(n).toLocaleString('es-CL'); }
       function simFmtK(n){
@@ -1912,12 +2036,17 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const extras       = simV('sim-extras');
         const cVar         = simV('sim-costo-res') + simV('sim-combustible');
         const cFijo        = simV('sim-fijos') + simV('sim-mantenim') + simV('sim-otros-fijos');
-        const remuBase     = simV('sim-capitan') + simV('sim-personal') + simV('sim-admin-rem');
+        const numTrab      = parseInt(document.getElementById('sim-num-trab').value) || 1;
+        let remuBase = 0, trabConBonoRes = 0, trabConBonoCal = 0;
+        for(let w = 1; w <= numTrab; w++){
+          remuBase += simV(`sim-w${w}-sueldo`);
+          if(document.getElementById(`sim-w${w}-bono-res`)?.checked) trabConBonoRes++;
+          if(document.getElementById(`sim-w${w}-bono-cal`)?.checked) trabConBonoCal++;
+        }
         const mkt          = simV('sim-mkt');
         const mktPct       = simV('sim-mkt-pct') / 100;
         const bonoUmbral        = simV('sim-bono-umbral');
         const bonoPorRes        = simV('sim-bono-por-res');
-        const numTrab           = parseInt(document.getElementById('sim-num-trab').value) || 1;
         const bonoCalidadCheck  = document.getElementById('sim-bono-calidad-check').checked;
         const bonoCalidadMonto  = simV('sim-bono-calidad-monto');
 
@@ -1925,10 +2054,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const calRow = document.getElementById('sim-bono-calidad-row');
         if(calRow){ calRow.style.opacity = bonoCalidadCheck ? '1' : '.4'; calRow.style.pointerEvents = bonoCalidadCheck ? '' : 'none'; }
 
-        // Bonuses per worker, then multiply by number of workers
+        // Bonuses per worker (only workers with the respective opt-in)
         const extrasResActual   = Math.max(0, reservas - bonoUmbral);
-        const bonoResTotal      = extrasResActual * bonoPorRes * numTrab;
-        const bonoCalTotal      = bonoCalidadCheck ? bonoCalidadMonto * numTrab : 0;
+        const bonoResTotal      = extrasResActual * bonoPorRes * trabConBonoRes;
+        const bonoCalTotal      = bonoCalidadCheck ? bonoCalidadMonto * trabConBonoCal : 0;
         const bonoActual        = bonoResTotal + bonoCalTotal;
         const remuner           = remuBase + bonoActual;
 
@@ -1952,17 +2081,18 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
         // ── Bonus preview lines ────────────────────────────────────────────
         const prevEl = document.getElementById('sim-bono-preview');
-        const trabLabel = numTrab > 1 ? ` × ${numTrab} trab.` : '';
+        const resLabel = trabConBonoRes > 1 ? ` × ${trabConBonoRes} trab.` : '';
+        const calLabel = trabConBonoCal > 1 ? ` × ${trabConBonoCal} trab.` : '';
         let prevLines = [];
         if(bonoPorRes > 0 && bonoUmbral > 0){
           if(extrasResActual > 0){
-            prevLines.push(`${extrasResActual} res. extra × ${simFmtK(bonoPorRes)}${trabLabel} = ${simFmtK(bonoResTotal)}`);
+            prevLines.push(`${extrasResActual} res. extra × ${simFmtK(bonoPorRes)}${resLabel} = ${simFmtK(bonoResTotal)}`);
           } else {
             prevLines.push(`Sin bono reservas (faltan ${Math.ceil(bonoUmbral - reservas + 1)} res.)`);
           }
         }
         if(bonoCalidadCheck && bonoCalidadMonto > 0){
-          prevLines.push(`⭐ Bono calidad: ${simFmtK(bonoCalidadMonto)}${trabLabel} = ${simFmtK(bonoCalTotal)}`);
+          prevLines.push(`⭐ Bono calidad: ${simFmtK(bonoCalidadMonto)}${calLabel} = ${simFmtK(bonoCalTotal)}`);
         }
         prevEl.innerHTML = prevLines.map(l=>`<div>${l}</div>`).join('');
 
@@ -1991,7 +2121,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const bonosRow = document.getElementById('sr-bonos-row');
         if(bonoResTotal > 0){
           bonosRow.style.display = '';
-          document.getElementById('sr-bonos-label').textContent = numTrab > 1 ? `↳ Bonos reservas (${numTrab} trab.)` : '↳ Bonos reservas';
+          document.getElementById('sr-bonos-label').textContent = trabConBonoRes > 1 ? `↳ Bonos reservas (${trabConBonoRes} trab.)` : '↳ Bonos reservas';
           document.getElementById('sr-bonos').textContent = '−' + simFmt(bonoResTotal);
         } else {
           bonosRow.style.display = 'none';
@@ -1999,7 +2129,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const bonosCalRow = document.getElementById('sr-bonos-cal-row');
         if(bonoCalTotal > 0){
           bonosCalRow.style.display = '';
-          document.getElementById('sr-bonos-cal-label').textContent = numTrab > 1 ? `↳ Bono calidad (${numTrab} trab.)` : '↳ Bono calidad';
+          document.getElementById('sr-bonos-cal-label').textContent = trabConBonoCal > 1 ? `↳ Bono calidad (${trabConBonoCal} trab.)` : '↳ Bono calidad';
           document.getElementById('sr-bonos-cal').textContent = '−' + simFmt(bonoCalTotal);
         } else {
           bonosCalRow.style.display = 'none';
@@ -2058,8 +2188,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const rev = ingresoGross * f;
           const varC = cVar * r;
           // Bonus recalculated per month because reservas vary with seasonality
-          const bonoResMes = Math.max(0, r - bonoUmbral) * bonoPorRes * numTrab;
-          const bonoCalMes = bonoCalidadCheck ? bonoCalidadMonto * numTrab : 0;
+          const bonoResMes = Math.max(0, r - bonoUmbral) * bonoPorRes * trabConBonoRes;
+          const bonoCalMes = bonoCalidadCheck ? bonoCalidadMonto * trabConBonoCal : 0;
           const bonoMes    = bonoResMes + bonoCalMes;
           const remuMes    = remuBase + bonoMes;
           const totalFijoMes = cFijo + remuMes + mkt;
@@ -2110,9 +2240,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             'sim-fijos': sc.costos_fijos_mensuales,
             'sim-mantenim': sc.mantenimiento_seguros,
             'sim-otros-fijos': sc.otros_fijos,
-            'sim-capitan': sc.remuneracion_capitan,
-            'sim-personal': sc.remuneracion_personal,
-            'sim-admin-rem': sc.remuneracion_admin,
             'sim-mkt': sc.marketing_mensual,
             'sim-bono-umbral': sc.bono_umbral_reservas,
             'sim-bono-por-res': sc.bono_por_reserva_extra,
@@ -2130,8 +2257,26 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             const inp = document.getElementById(id);
             if(sl && inp) sl.value = inp.value;
           });
-          // Restore worker count buttons
-          if(sc.bono_num_trabajadores) simSetTrab(sc.bono_num_trabajadores);
+          // Restore workers (new format) or fall back to old fields
+          if(sc.workers && sc.workers.length){
+            simSetTrab(sc.workers.length);
+            sc.workers.forEach((w, idx) => {
+              const n = idx + 1;
+              const nameEl    = document.getElementById(`sim-w${n}-name`);
+              const sueldoEl  = document.getElementById(`sim-w${n}-sueldo`);
+              const bonoResEl = document.getElementById(`sim-w${n}-bono-res`);
+              const bonoCalEl = document.getElementById(`sim-w${n}-bono-cal`);
+              if(nameEl)    nameEl.value    = w.name   || `Trabajador ${n}`;
+              if(sueldoEl)  sueldoEl.value  = w.sueldo != null ? w.sueldo : 0;
+              if(bonoResEl) bonoResEl.checked = w.bono_res ?? true;
+              if(bonoCalEl) bonoCalEl.checked = w.bono_cal ?? false;
+            });
+            simRenderWorkerTabs();
+          } else if(sc.bono_num_trabajadores){
+            simSetTrab(sc.bono_num_trabajadores);
+            const legacyTotal = (sc.remuneracion_capitan||0) + (sc.remuneracion_personal||0) + (sc.remuneracion_admin||0);
+            if(legacyTotal){ const el = document.getElementById('sim-w1-sueldo'); if(el) el.value = legacyTotal; }
+          }
           // Restore quality bonus checkbox
           const calCheck = document.getElementById('sim-bono-calidad-check');
           if(calCheck && sc.bono_calidad_activo != null) calCheck.checked = !!sc.bono_calidad_activo;
@@ -2157,6 +2302,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       let _simScenarioName = null;
 
       function _simGetData(){
+        const n = parseInt(document.getElementById('sim-num-trab').value) || 1;
+        const workers = [];
+        for(let w = 1; w <= n; w++){
+          workers.push({
+            name:     document.getElementById(`sim-w${w}-name`)?.value || `Trabajador ${w}`,
+            sueldo:   simV(`sim-w${w}-sueldo`),
+            bono_res: document.getElementById(`sim-w${w}-bono-res`)?.checked ?? true,
+            bono_cal: document.getElementById(`sim-w${w}-bono-cal`)?.checked ?? false,
+          });
+        }
         return {
           precio_por_persona:          simV('sim-precio'),
           personas_promedio:           simV('sim-personas'),
@@ -2166,13 +2321,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           costos_fijos_mensuales:      simV('sim-fijos'),
           mantenimiento_seguros:       simV('sim-mantenim'),
           otros_fijos:                 simV('sim-otros-fijos'),
-          remuneracion_capitan:        simV('sim-capitan'),
-          remuneracion_personal:       simV('sim-personal'),
-          remuneracion_admin:          simV('sim-admin-rem'),
+          workers,
           marketing_mensual:           simV('sim-mkt'),
           bono_umbral_reservas:        simV('sim-bono-umbral'),
           bono_por_reserva_extra:      simV('sim-bono-por-res'),
-          bono_num_trabajadores:       parseInt(document.getElementById('sim-num-trab').value) || 1,
           bono_calidad_activo:         document.getElementById('sim-bono-calidad-check').checked,
           bono_calidad_monto:          simV('sim-bono-calidad-monto'),
         };
@@ -2278,9 +2430,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           'sim-fijos':        s.costos_fijos_mensuales,
           'sim-mantenim':     s.mantenimiento_seguros,
           'sim-otros-fijos':  s.otros_fijos,
-          'sim-capitan':      s.remuneracion_capitan,
-          'sim-personal':     s.remuneracion_personal,
-          'sim-admin-rem':    s.remuneracion_admin,
           'sim-mkt':          s.marketing_mensual,
           'sim-bono-umbral':  s.bono_umbral_reservas,
           'sim-bono-por-res': s.bono_por_reserva_extra,
@@ -2293,7 +2442,27 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const sl = document.getElementById(id+'-slider'), inp = document.getElementById(id);
           if(sl && inp) sl.value = inp.value;
         });
-        if(s.bono_num_trabajadores) simSetTrab(s.bono_num_trabajadores);
+        // Restore workers (new format)
+        if(s.workers && s.workers.length){
+          simSetTrab(s.workers.length);
+          s.workers.forEach((w, idx) => {
+            const n = idx + 1;
+            const nameEl     = document.getElementById(`sim-w${n}-name`);
+            const sueldoEl   = document.getElementById(`sim-w${n}-sueldo`);
+            const bonoResEl  = document.getElementById(`sim-w${n}-bono-res`);
+            const bonoCalEl  = document.getElementById(`sim-w${n}-bono-cal`);
+            if(nameEl)    nameEl.value    = w.name   || `Trabajador ${n}`;
+            if(sueldoEl)  sueldoEl.value  = w.sueldo != null ? w.sueldo : 0;
+            if(bonoResEl) bonoResEl.checked = w.bono_res ?? true;
+            if(bonoCalEl) bonoCalEl.checked = w.bono_cal ?? false;
+          });
+          simRenderWorkerTabs();
+        } else if(s.bono_num_trabajadores){
+          // Backward compat: old format had remuneracion_capitan etc.
+          simSetTrab(s.bono_num_trabajadores);
+          const legacyTotal = (s.remuneracion_capitan||0) + (s.remuneracion_personal||0) + (s.remuneracion_admin||0);
+          if(legacyTotal){ const el = document.getElementById('sim-w1-sueldo'); if(el) el.value = legacyTotal; }
+        }
         const cal = document.getElementById('sim-bono-calidad-check');
         if(cal && s.bono_calidad_activo != null) cal.checked = !!s.bono_calidad_activo;
         _simScenarioId = s.id;
