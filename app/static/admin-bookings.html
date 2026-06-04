@@ -2114,7 +2114,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
           <!-- 12-month forecast -->
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem">
-            <div style="font-size:.78rem;font-weight:700;color:var(--muted);margin-bottom:.65rem;letter-spacing:.03em">📅 PROYECCIÓN ANUAL (ESTACIONALIDAD ESTIMADA)</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem">
+              <div style="font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.03em">📅 PROYECCIÓN ANUAL (ESTACIONALIDAD ESTIMADA)</div>
+              <button onclick="simResetSeason()" title="Restaurar factores por defecto" style="font-size:.68rem;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:.15rem .45rem;cursor:pointer">↺ Resetear</button>
+            </div>
             <div style="overflow-x:auto">
               <table style="width:100%;border-collapse:collapse;font-size:.75rem" id="sim-forecast-table">
                 <thead>
@@ -2197,6 +2200,20 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       // ── Seasonality factors (Jan=1 … Dec=12) ─────────────────────────────
       const SIM_SEASON = [0.55,0.6,0.7,0.85,0.9,1.0,1.15,1.2,1.0,0.9,0.95,0.85];
       const SIM_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      let _simSeasonFactors = [...SIM_SEASON]; // editable copy
+
+      function simSetSeasonPct(mi, val){
+        _simSeasonFactors[mi] = Math.max(0, (parseFloat(val) || 0) / 100);
+        simCalc();
+      }
+      function simSetSeasonRes(mi, val, baseRes){
+        if(baseRes > 0) _simSeasonFactors[mi] = Math.max(0, (parseFloat(val) || 0) / baseRes);
+        simCalc();
+      }
+      function simResetSeason(){
+        _simSeasonFactors = [...SIM_SEASON];
+        simCalc();
+      }
 
       function simV(id){ return parseFloat(document.getElementById(id)?.value) || 0; }
 
@@ -2657,7 +2674,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         document.getElementById('kpi-roi').textContent  = roi > 0 ? roi.toFixed(0) + '%' : '—';
 
         // Annual estimate using seasonality
-        const annualIncome = SIM_SEASON.reduce((s,f)=>s + ingresoGross*f, 0);
+        const annualIncome = _simSeasonFactors.reduce((s,f)=>s + ingresoGross*f, 0);
         document.getElementById('kpi-anual').textContent = simFmtK(annualIncome);
 
         // ── Break-even progress bar ────────────────────────────────────────
@@ -2687,7 +2704,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         for(let i = 0; i < 12; i++){
           const mi = (startMonth + i) % 12;
           const yr = now.getFullYear() + Math.floor((startMonth + i) / 12);
-          const f = SIM_SEASON[mi];
+          const f = _simSeasonFactors[mi];
           const r = Math.round(reservas * f);
           const rev = ingresoGross * f;
           const varC = cVar * r;
@@ -2712,9 +2729,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const bonoTag = bonoMes > 0
             ? `<span style="font-size:.68rem;color:#fbbf24;margin-left:.3rem">+${simFmtK(bonoMes)} bono</span>`
             : '';
+          const inputStyle = 'text-align:center;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:3px;padding:.05rem .15rem;font-size:.75rem;-moz-appearance:textfield';
           tr.innerHTML = `<td>${SIM_MONTHS[mi]} ${yr}</td>` +
-            `<td style="color:var(--muted)">${(f*100).toFixed(0)}%</td>` +
-            `<td>${r}${bonoTag}</td>` +
+            `<td><input type="number" value="${(f*100).toFixed(0)}" step="5" min="0" max="500" onchange="simSetSeasonPct(${mi},this.value)" style="width:40px;${inputStyle}">%</td>` +
+            `<td><input type="number" value="${r}" step="1" min="0" onchange="simSetSeasonRes(${mi},this.value,${reservas})" style="width:46px;${inputStyle}">${bonoTag}</td>` +
             `<td>${simFmtK(rev)}</td>` +
             `<td style="color:${simColor(net)}">${net>=0?'':'-'}${simFmtK(Math.abs(net))}</td>`;
           tbody.appendChild(tr);
@@ -2859,6 +2877,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           bono_por_reserva_extra:      workers[0]?.bono_por_res ?? 9300, // legacy compat
           bono_calidad_activo:         document.getElementById('sim-bono-calidad-check').checked,
           bono_calidad_monto:          simV('sim-bono-calidad-monto'),
+          season_factors:              [..._simSeasonFactors],
         };
       }
 
@@ -2983,9 +3002,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           if(sl && inp) sl.value = inp.value;
         });
 
-        // 3. Quality bonus checkbox
+        // 3. Quality bonus checkbox + season factors
         const cal = document.getElementById('sim-bono-calidad-check');
         if(cal && s.bono_calidad_activo != null) cal.checked = !!s.bono_calidad_activo;
+        if(s.season_factors && s.season_factors.length === 12) _simSeasonFactors = [...s.season_factors];
+        else _simSeasonFactors = [...SIM_SEASON];
 
         // 4. Workers — set count WITHOUT triggering simCalc, then fill inputs
         if(s.workers && s.workers.length){
