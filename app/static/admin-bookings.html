@@ -787,10 +787,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               Sube a Hostinger y pega el link. La 1ª foto es la portada. Puedes subir archivos abajo (⚠️ se pierden al reiniciar Railway).
             </small>
           </div>
-          <div class="form-group-adm">
-            <label>Subir archivo(s) <span style="font-weight:400;opacity:.65">(se pierde al reiniciar Railway — mejor usar URL)</span></label>
-            <input type="file" id="aloj-img-file" accept="image/*" multiple>
-          </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveAloj()">Guardar</button>
             <button class="sync-btn" style="flex:1" onclick="closeAlojModal()">Cancelar</button>
@@ -883,10 +879,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               Sube a Hostinger y pega el link. La 1ª foto es la portada. Puedes subir archivos abajo.
             </small>
           </div>
-          <div class="form-group-adm">
-            <label>Subir archivo(s) <span style="font-weight:400;opacity:.65">(se pierde al reiniciar Railway — mejor usar URL)</span></label>
-            <input type="file" id="exp-img-file" accept="image/*" multiple>
-          </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveExp()">Guardar</button>
             <button class="sync-btn" style="flex:1" onclick="closeExpModal()">Cancelar</button>
@@ -945,10 +937,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <small style="color:var(--muted);font-size:.72rem;margin-top:.3rem;display:block">
               Sube a Hostinger y pega el link. La 1ª foto es la portada. Puedes subir archivos abajo.
             </small>
-          </div>
-          <div class="form-group-adm">
-            <label>Subir archivo(s) <span style="font-weight:400;opacity:.65">(se pierde al reiniciar Railway — mejor usar URL)</span></label>
-            <input type="file" id="pack-img-file" accept="image/*" multiple>
           </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="savePack()">Guardar</button>
@@ -6207,7 +6195,6 @@ function openAlojModal(id){
   }
   _alojImagesList = allImgs.slice();
   renderAlojImagesList();
-  document.getElementById('aloj-img-file').value='';
   document.getElementById('aloj-modal').style.display='';
 }
 function closeAlojModal(){ document.getElementById('aloj-modal').style.display='none'; }
@@ -6244,22 +6231,6 @@ async function saveAloj(){
     const url = id ? `/api/admin/alojamientos/${id}` : '/api/admin/alojamientos';
     const method = id ? 'PUT' : 'POST';
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    const d = await r.json();
-    const savedId = id || d.id;
-    // Upload files if any (appended to image list)
-    const files = document.getElementById('aloj-img-file').files;
-    for(const file of files){
-      const fd = new FormData(); fd.append('file', file);
-      const ur = await fetch(`/api/admin/alojamientos/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
-      const ud = await ur.json();
-      if(ud.image_path) _alojImagesList.push(ud.image_path);
-    }
-    // Re-save if files were uploaded (to persist the updated list)
-    if(files.length){
-      body.image_path = _alojImagesList[0]||null;
-      body.extra_images = _alojImagesList.slice(1);
-      await fetch(`/api/admin/alojamientos/${savedId}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    }
     closeAlojModal(); await loadAlojamientos(); showToast('Alojamiento guardado ✅');
   }catch(e){ showToast('Error: '+e.message); }
 }
@@ -6471,7 +6442,6 @@ function openExpModal(id){
   if(e && e.extra_images){ const ex = typeof e.extra_images==='string'?JSON.parse(e.extra_images||'[]'):(e.extra_images||[]); ex.forEach(u=>{if(u&&!allImgs.includes(u))allImgs.push(u);}); }
   _expImagesList = allImgs.slice();
   renderExpImagesList();
-  document.getElementById('exp-img-file').value='';
   document.getElementById('exp-modal').style.display='';
 }
 function closeExpModal(){ document.getElementById('exp-modal').style.display='none'; }
@@ -6502,20 +6472,6 @@ async function saveExp(){
     const url = id ? `/api/admin/experiencias/${id}` : '/api/admin/experiencias';
     const method = id ? 'PUT' : 'POST';
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    const d = await r.json();
-    const savedId = id || d.id;
-    const files = document.getElementById('exp-img-file').files;
-    for(const file of files){
-      const fd = new FormData(); fd.append('file',file);
-      const ur = await fetch(`/api/admin/experiencias/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
-      const ud = await ur.json();
-      if(ud.image_path) _expImagesList.push(ud.image_path);
-    }
-    if(files.length){
-      body.image_path = _expImagesList[0]||null;
-      body.extra_images = _expImagesList.slice(1);
-      await fetch(`/api/admin/experiencias/${savedId}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    }
     closeExpModal(); await loadExperiencias(); showToast('Experiencia guardada ✅');
   }catch(e){ showToast('Error: '+e.message); }
 }
@@ -6593,7 +6549,6 @@ function openPackModal(id){
   if(p && p.extra_images){ const ex = typeof p.extra_images==='string'?JSON.parse(p.extra_images||'[]'):(p.extra_images||[]); ex.forEach(u=>{if(u&&!allImgs.includes(u))allImgs.push(u);}); }
   _packImagesList = allImgs.slice();
   renderPackImagesList();
-  document.getElementById('pack-img-file').value='';
   document.getElementById('pack-modal').style.display='';
 }
 function closePackModal(){ document.getElementById('pack-modal').style.display='none'; }
@@ -6627,20 +6582,6 @@ async function savePack(){
     const url = id ? `/api/admin/packs/${id}` : '/api/admin/packs';
     const method = id ? 'PUT' : 'POST';
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    const d = await r.json();
-    const savedId = id || d.id;
-    const files = document.getElementById('pack-img-file').files;
-    for(const file of files){
-      const fd = new FormData(); fd.append('file',file);
-      const ur = await fetch(`/api/admin/packs/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
-      const ud = await ur.json();
-      if(ud.image_path) _packImagesList.push(ud.image_path);
-    }
-    if(files.length){
-      body.image_path = _packImagesList[0]||null;
-      body.extra_images = _packImagesList.slice(1);
-      await fetch(`/api/admin/packs/${savedId}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
-    }
     closePackModal(); await loadPacksAdmin(); showToast('Pack guardado ✅');
   }catch(e){ showToast('Error: '+e.message); }
 }
