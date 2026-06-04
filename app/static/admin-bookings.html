@@ -101,7 +101,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .cal-hdr{background:var(--surface);padding:.5rem;text-align:center;font-size:.73rem;
   color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .cal-day{background:var(--card);border:1px solid var(--border);border-radius:6px;
-  min-height:90px;padding:.4rem;position:relative;cursor:pointer;transition:border-color .15s;height:auto}
+  min-height:90px;padding:.4rem;position:relative;cursor:pointer;transition:border-color .15s}
 .cal-day:hover{border-color:var(--gold)}
 .cal-day.empty{background:transparent;border-color:transparent;cursor:default}
 .cal-day.today{border-color:var(--gold)}
@@ -392,9 +392,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('logs')" id="nav-logs">
       <span class="ni">🔍</span> Logs
     </div>
-    <div class="nav-item" onclick="showSection('chatbot')" id="nav-chatbot">
-      <span class="ni">🤖</span> Chatbot
-    </div>
     <div class="nav-item" onclick="showSection('settings')" id="nav-settings">
       <span class="ni">⚙️</span> Configuracion
     </div>
@@ -454,7 +451,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <thead>
             <tr>
               <th onclick="sortBy('fecha')">Fecha ⇅</th>
-              <th onclick="sortBy('created_at')">Creada ⇅</th>
               <th>Hora</th>
               <th onclick="sortBy('nombre_cliente')">Cliente ⇅</th>
               <th>Telefono</th>
@@ -464,7 +460,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th>Fuente</th>
             </tr>
           </thead>
-          <tbody id="lista-tbody"><tr><td colspan="9" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="lista-tbody"><tr><td colspan="8" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
       <p style="color:var(--muted);font-size:.78rem;margin-top:.5rem" id="lista-count"></p>
@@ -573,8 +569,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th>Ícono</th>
               <th>Nombre extra</th>
               <th>Descripción (app)</th>
-              <th style="min-width:136px;color:#93c5fd;font-size:.78rem">🇺🇸 EN</th>
-              <th style="min-width:136px;color:#86efac;font-size:.78rem">🇧🇷 PT</th>
               <th style="text-align:center">Mostrar en<br>reservas</th>
               <th style="text-align:right">Precio venta</th>
               <th style="text-align:right">Costo</th>
@@ -583,7 +577,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th style="text-align:center;color:#a78bfa" title="Ingredientes de stock">🧪</th>
             </tr>
           </thead>
-          <tbody id="ec-tbody"><tr><td colspan="12" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="ec-tbody"><tr><td colspan="10" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -751,11 +745,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div class="form-group-adm"><label>Descripción</label><input id="aloj-desc" placeholder="Domo transparente con tina de baño interior..."></div>
           <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
             <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
-            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .35rem">Si están vacías, la reserva web muestra el español. Solo afecta la página pública /booking.</p>
-            <div style="margin:0 0 .55rem">
-              <button type="button" class="sync-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .55rem;border:none;border-radius:6px;cursor:pointer"
-                onclick="autoTranslateAlojI18n()" title="Desde nombre, grupo y descripción en español (requiere GROQ_API_KEY)">✨ Traducir con IA</button>
-            </div>
+            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .6rem">Si están vacías, la reserva web muestra el español. Solo afecta la página pública /booking.</p>
             <div class="form-group-adm"><label>Nombre (English)</label><input id="aloj-name-en" placeholder="Optional"></div>
             <div class="form-group-adm"><label>Nombre (Português)</label><input id="aloj-name-pt" placeholder="Opcional"></div>
             <div class="form-group-adm"><label>Grupo (English)</label><input id="aloj-group-en" placeholder="Optional"></div>
@@ -865,22 +855,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div class="form-group-adm"><label>Slug (identificador único)</label><input id="exp-slug" placeholder="rafting"></div>
           <div class="form-group-adm"><label>Icono</label><input id="exp-icon" placeholder="🚣" style="width:80px"></div>
           <div class="form-group-adm"><label>Descripción</label><input id="exp-desc" placeholder="Rio Trancura · Bajo o Alto"></div>
-          <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
-            <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
-            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .35rem">Si están vacías, la reserva web muestra el español.</p>
-            <div style="margin:0 0 .55rem">
-              <button type="button" class="sync-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .55rem;border:none;border-radius:6px;cursor:pointer"
-                onclick="autoTranslateExpI18n()" title="Desde nombre y descripción en español (requiere GROQ_API_KEY)">✨ Traducir con IA</button>
-            </div>
-            <div class="form-group-adm"><label>Nombre (English)</label><input id="exp-name-en" placeholder="Optional"></div>
-            <div class="form-group-adm"><label>Nombre (Português)</label><input id="exp-name-pt" placeholder="Opcional"></div>
-            <div class="form-group-adm"><label>Descripción (English)</label><input id="exp-desc-en" placeholder="Optional"></div>
-            <div class="form-group-adm"><label>Descripción (Português)</label><input id="exp-desc-pt" placeholder="Opcional"></div>
-          </details>
-          <div class="form-group-adm">
-            <label>WhatsApp administrador</label>
-            <input id="exp-admin-wa" placeholder="+56 9 XXXX XXXX" style="font-family:monospace">
-          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Precio/persona ($)</label><input id="exp-price" type="number" min="0" value="0"></div>
             <div class="form-group-adm"><label>Costo/persona ($)</label><input id="exp-cost" type="number" min="0" value="0"></div>
@@ -890,16 +864,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <label class="toggle-wrap"><input type="checkbox" id="exp-active" checked><span class="toggle-slider"></span></label>
             <span style="font-size:.85rem">Activa (visible en app y WhatsApp)</span>
           </div>
-          <div class="form-group-adm" style="margin-top:.8rem">
-            <label style="display:flex;justify-content:space-between;align-items:center">
-              <span>📸 Fotos</span>
-              <button type="button" onclick="expAddImageRow()" style="font-size:.75rem;padding:.2rem .6rem;background:var(--green);color:#fff;border:none;border-radius:6px;cursor:pointer">+ Agregar URL</button>
-            </label>
-            <div id="exp-images-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem"></div>
+          <div class="form-group-adm" id="exp-img-wrap" style="display:none">
+            <label>Foto actual</label>
+            <img id="exp-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
           </div>
           <div class="form-group-adm">
-            <label>Subir archivo(s) <span style="font-weight:400;opacity:.65">(recomendado usar URL)</span></label>
-            <input type="file" id="exp-img-file" accept="image/*" multiple>
+            <label>Subir nueva foto</label>
+            <input type="file" id="exp-img-file" accept="image/*">
           </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveExp()">Guardar</button>
@@ -929,22 +900,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <div class="form-group-adm"><label>Personas</label><input id="pack-personas" placeholder="2 personas"></div>
           </div>
           <div class="form-group-adm"><label>Descripción</label><input id="pack-desc" placeholder="Escapada romántica..."></div>
-          <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
-            <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
-            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .35rem">Si están vacías, la reserva web muestra el español.</p>
-            <div style="margin:0 0 .55rem">
-              <button type="button" class="sync-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .55rem;border:none;border-radius:6px;cursor:pointer"
-                onclick="autoTranslatePackI18n()" title="Desde nombre y descripción en español (requiere GROQ_API_KEY)">✨ Traducir con IA</button>
-            </div>
-            <div class="form-group-adm"><label>Nombre (English)</label><input id="pack-name-en" placeholder="Optional"></div>
-            <div class="form-group-adm"><label>Nombre (Português)</label><input id="pack-name-pt" placeholder="Opcional"></div>
-            <div class="form-group-adm"><label>Descripción (English)</label><input id="pack-desc-en" placeholder="Optional"></div>
-            <div class="form-group-adm"><label>Descripción (Português)</label><input id="pack-desc-pt" placeholder="Opcional"></div>
-          </details>
-          <div class="form-group-adm">
-            <label>WhatsApp administrador</label>
-            <input id="pack-admin-wa" placeholder="+56 9 XXXX XXXX" style="font-family:monospace">
-          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Precio desde ($)</label><input id="pack-price" type="number" min="0" value="0"></div>
             <div class="form-group-adm"><label>Costo desde ($)</label><input id="pack-cost" type="number" min="0" value="0"></div>
@@ -957,16 +912,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <label class="toggle-wrap"><input type="checkbox" id="pack-active" checked><span class="toggle-slider"></span></label>
             <span style="font-size:.85rem">Activo (visible en app y WhatsApp)</span>
           </div>
-          <div class="form-group-adm" style="margin-top:.8rem">
-            <label style="display:flex;justify-content:space-between;align-items:center">
-              <span>📸 Fotos</span>
-              <button type="button" onclick="packAddImageRow()" style="font-size:.75rem;padding:.2rem .6rem;background:var(--green);color:#fff;border:none;border-radius:6px;cursor:pointer">+ Agregar URL</button>
-            </label>
-            <div id="pack-images-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem"></div>
+          <div class="form-group-adm" id="pack-img-wrap" style="display:none">
+            <label>Foto actual</label>
+            <img id="pack-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
           </div>
           <div class="form-group-adm">
-            <label>Subir archivo(s) <span style="font-weight:400;opacity:.65">(recomendado usar URL)</span></label>
-            <input type="file" id="pack-img-file" accept="image/*" multiple>
+            <label>Subir nueva foto</label>
+            <input type="file" id="pack-img-file" accept="image/*">
           </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="savePack()">Guardar</button>
@@ -1132,8 +1084,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">⚡ Modo Genera Urgencia</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
-          El día se genera con un <strong>rango de horas</strong> alrededor del horario HotBoat (± diferencia entre slots); sobre ese grid solo se marcan disponibles los <strong>semilleros</strong> de abajo que queden libres.<br>
-          Si dejas la lista de semillas <strong>vacía</strong> y guardas, se usan <strong>todos</strong> los Horarios HotBoat como semillas (comportamiento amplio). Con reservas reales: además se pueden ofrecer huecos ± diferencia de horas junto a cada reserva.
+          Muestra solo los <strong>horarios semilla</strong> para crear sensación de escasez.<br>
+          Sin reservas: muestra los horarios semilla. Con reservas: agrega horarios ± diferencia de horas cerca de cada reserva.
         </p>
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem">
           <label class="toggle-wrap">
@@ -1146,7 +1098,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <!-- Urgency config -->
         <div style="border-top:1px solid var(--border);padding-top:1rem;display:flex;flex-direction:column;gap:1rem">
           <div>
-            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">Semillas (horarios a mostrar)</label>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">Horarios semilla (Prioridad 1)</label>
             <div id="seed-chips" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem"></div>
             <div style="display:flex;gap:.5rem;align-items:center">
               <input type="time" id="new-seed-input" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.85rem">
@@ -1164,64 +1116,47 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
-      <!-- ── Urgency Days Calendar (HotBoat global) ─────────────────── -->
+      <!-- ── Urgency Days Calendar ──────────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem">
-        <div class="chart-title">⚡ Urgencia HotBoat por días específicos</div>
+        <!-- Profile definitions -->
+        <div class="chart-title">⚡ Calendario de perfiles por día</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
-          Activa o desactiva urgencia para días concretos del <strong>calendario HotBoat (horarios en WhatsApp/web)</strong>.<br>
-          <strong style="color:var(--gold)">⚡ Amarillo</strong> = ON &nbsp;·&nbsp; <strong style="color:var(--muted)">✗ Gris</strong> = OFF
+          Define horarios y modos de urgencia, luego asígnalos a días específicos del calendario.<br>
+          Click en un día para elegir su perfil.
         </p>
+
+        <!-- Profile editors -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.2rem">
+          <!-- Schedule types -->
+          <div style="background:rgba(40,120,200,.08);border:1px solid rgba(40,120,200,.25);border-radius:10px;padding:.8rem">
+            <div style="font-size:.85rem;font-weight:700;color:#5aabff;margin-bottom:.6rem">🗓 Horarios</div>
+            <div id="schedule-types-list"></div>
+            <button onclick="addScheduleType()" style="margin-top:.5rem;background:rgba(40,120,200,.15);border:1px solid rgba(40,120,200,.3);color:#5aabff;border-radius:7px;padding:.3rem .8rem;font-size:.78rem;cursor:pointer">+ Agregar horario</button>
+          </div>
+          <!-- Urgency modes -->
+          <div style="background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.25);border-radius:10px;padding:.8rem">
+            <div style="font-size:.85rem;font-weight:700;color:var(--gold);margin-bottom:.6rem">⚡ Modos de urgencia</div>
+            <div id="urgency-modes-list"></div>
+            <button onclick="addUrgencyMode()" style="margin-top:.5rem;background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.25);color:var(--gold);border-radius:7px;padding:.3rem .8rem;font-size:.78rem;cursor:pointer">+ Agregar modo urgencia</button>
+          </div>
+        </div>
+
+        <!-- Calendar -->
         <div style="display:flex;gap:.6rem;margin-bottom:.8rem;flex-wrap:wrap;align-items:center">
           <button onclick="urgCalPrev()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">‹</button>
           <h2 id="urg-cal-title" style="font-size:.95rem;flex:1;margin:0"></h2>
           <button onclick="urgCalNext()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">›</button>
         </div>
         <div class="cal-grid" id="urg-cal-grid" style="gap:2px"></div>
-        <div style="display:flex;gap:1rem;margin-top:.8rem;font-size:.75rem;color:var(--muted)">
-          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Urgencia ON</span>
-          <span><span style="background:#7070a0;display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Urgencia OFF</span>
-          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem;opacity:.45"></span>Hoy</span>
-        </div>
+        <div id="profile-legend" style="display:flex;gap:.6rem;margin-top:.8rem;font-size:.72rem;flex-wrap:wrap"></div>
         <div id="urg-list" style="margin-top:1rem"></div>
-      </div>
 
-      <!-- ── High season by product ─────────────────────────────────── -->
-      <div class="chart-wrap" style="margin-bottom:1rem">
-        <div class="chart-title">🔥 Temporada alta por producto</div>
-        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
-          Marca días de temporada alta para <strong>experiencias, packs y alojamientos</strong>.<br>
-          Estos días desactivan pago web para ese producto específico y pasan a flujo por email/confirmación manual.
-        </p>
-        <div style="display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem;align-items:flex-end">
-          <div>
-            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:.35rem">Tipo de producto</label>
-            <select id="hs-scope-type" onchange="onHighSeasonTypeChange()"
-              style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;font-size:.85rem;min-width:220px">
-              <option value="experience">Experiencia</option>
-              <option value="pack">Pack</option>
-              <option value="alojamiento">Alojamiento</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:.35rem">Producto</label>
-            <select id="hs-scope-slug" onchange="loadHighSeasonDays()"
-              style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;font-size:.85rem;min-width:280px">
-              <option value="">— Elige producto —</option>
-            </select>
-          </div>
+        <!-- Day picker popup -->
+        <div id="day-profile-popup" style="display:none;position:fixed;z-index:9999;background:#1e2030;border:1px solid var(--border);border-radius:12px;padding:1rem;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:220px">
+          <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:.6rem" id="popup-date-label"></div>
+          <div id="popup-options" style="display:flex;flex-direction:column;gap:.35rem"></div>
+          <button onclick="closeProfilePopup()" style="margin-top:.7rem;width:100%;background:var(--border);border:none;color:var(--muted);border-radius:7px;padding:.3rem;font-size:.75rem;cursor:pointer">Cancelar</button>
         </div>
-        <div style="display:flex;gap:.6rem;margin-bottom:.8rem;flex-wrap:wrap;align-items:center">
-          <button onclick="hsCalPrev()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">‹</button>
-          <h2 id="hs-cal-title" style="font-size:.95rem;flex:1;margin:0"></h2>
-          <button onclick="hsCalNext()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">›</button>
-        </div>
-        <div class="cal-grid" id="hs-cal-grid" style="gap:2px"></div>
-        <div style="display:flex;gap:1rem;margin-top:.8rem;font-size:.75rem;color:var(--muted)">
-          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Temporada alta ON</span>
-          <span><span style="background:#7070a0;display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Temporada alta OFF</span>
-          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem;opacity:.45"></span>Hoy</span>
-        </div>
-        <div id="hs-list" style="margin-top:1rem"></div>
       </div>
 
       <!-- ── Push Notifications ─────────────────────────────────────── -->
@@ -1436,7 +1371,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right">I.Aloj.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Exp.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Ext.</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Descuentos manual + cupón (prorrateados en I.Reserva…I.Ext.)">Desc.</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Comis.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Neto</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo operativo: N reservas × costo_operativo_por_reserva (config)">C.Op</th>
@@ -1526,34 +1460,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <!-- ── Forecast Panel ─────────────────────────────────────────────── -->
     <div id="fin-fc-panel" style="display:none">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
-        <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+        <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600;font-size:.92rem">🔭 Forecast vs Budget</span>
-          <div style="display:flex;gap:.4rem;align-items:center">
-            <div style="display:flex;gap:.2rem;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:.18rem">
-              <button id="fc-view-monthly" onclick="setFcView('monthly')"
-                style="background:var(--gold);color:#000;border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;font-weight:600;cursor:pointer">Mensual</button>
-              <button id="fc-view-weekly" onclick="setFcView('weekly')"
-                style="background:transparent;color:var(--muted);border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;cursor:pointer">Semanal</button>
-            </div>
-            <button onclick="loadForecast(_fcView)" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↻</button>
-          </div>
-        </div>
-        <!-- Date range bar -->
-        <div style="padding:.55rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;background:var(--card)">
-          <span style="font-size:.72rem;color:var(--muted);font-weight:500;white-space:nowrap">Rango:</span>
-          <input type="date" id="fc-date-from"
-            style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .45rem;font-size:.75rem;outline:none"
-            onchange="fcApplyRange()">
-          <span style="color:var(--muted);font-size:.75rem">→</span>
-          <input type="date" id="fc-date-to"
-            style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .45rem;font-size:.75rem;outline:none"
-            onchange="fcApplyRange()">
-          <div style="display:flex;gap:.25rem;margin-left:.2rem">
-            <button onclick="fcSetPreset(3)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">3m</button>
-            <button onclick="fcSetPreset(6)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">6m</button>
-            <button onclick="fcSetPreset(9)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">9m</button>
-            <button onclick="fcSetPreset(14)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">1a</button>
-          </div>
+          <button onclick="loadForecast()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↻ Actualizar</button>
         </div>
         <div id="fin-fc-content" style="padding:1rem"></div>
       </div>
@@ -2057,6 +1966,41 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div><!-- /right -->
       </div><!-- /grid -->
 
+      <!-- ── Gráfico Ingresos vs Costos ──────────────────────────────────── -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.85rem;margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem;margin-bottom:.6rem">
+          <div style="font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.03em">📈 INGRESOS VS COSTOS POR N° DE RESERVAS</div>
+          <div style="display:flex;gap:.55rem;flex-wrap:wrap;font-size:.72rem">
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-ingreso" checked onchange="simDrawChart()">
+              <span style="color:#34d399">● Ingresos</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-costo-total" checked onchange="simDrawChart()">
+              <span style="color:#f87171">● Costo total</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-resultado" checked onchange="simDrawChart()">
+              <span style="color:#60a5fa">● Resultado</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-cvar" onchange="simDrawChart()">
+              <span style="color:#fb923c">– Costo variable</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-cfijo" onchange="simDrawChart()">
+              <span style="color:#f97316">– Costo fijo</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-remu" onchange="simDrawChart()">
+              <span style="color:#fbbf24">– Remuneraciones</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-mkt" onchange="simDrawChart()">
+              <span style="color:#a78bfa">– Marketing</span></label>
+          </div>
+        </div>
+        <canvas id="sim-chart-canvas" style="width:100%;display:block;border-radius:6px" height="220"></canvas>
+        <div style="font-size:.69rem;color:var(--muted);margin-top:.35rem;text-align:center">
+          <span style="margin-right:.8rem">▼ = reservas actuales</span>
+          <span style="color:#facc15">BE = break-even</span>
+        </div>
+      </div>
+
       <style>
         .sim-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.45rem;font-size:.82rem}
         .sim-row label{color:var(--text);flex:1;min-width:0}
@@ -2168,6 +2112,154 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       }
       function simColor(n){ return n >= 0 ? 'var(--green,#34d399)' : '#f87171'; }
 
+      let _simChartData = null;
+
+      function simDrawChart(){
+        const canvas = document.getElementById('sim-chart-canvas');
+        if(!canvas || !_simChartData) return;
+        const d = _simChartData;
+
+        const dpr = window.devicePixelRatio || 1;
+        let W = canvas.offsetWidth;
+        if(!W){ requestAnimationFrame(simDrawChart); return; } // section hidden, retry when visible
+        const H   = 220;
+        canvas.width  = W * dpr;
+        canvas.height = H * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const pad = { top:18, right:14, bottom:34, left:68 };
+        const cW  = W - pad.left - pad.right;
+        const cH  = H - pad.top  - pad.bottom;
+
+        const maxR = Math.max(Math.ceil(d.reservas * 2.5), 30, d.be > 0 ? Math.ceil(d.be * 1.6) : 0);
+        const ingrPerRes = d.precio * d.personas + d.extras;
+
+        function getIngreso(r)    { return ingrPerRes * r; }
+        function getCostoVar(r)   { return d.cVar * r; }
+        function getCostoFijo()   { return d.cFijo; }
+        function getRemu(r){
+          let bres = 0;
+          for(const wd of d.wData){
+            if(wd.bonoResOn && wd.bonoPorResW > 0) bres += Math.max(0, r - wd.umbralW) * wd.bonoPorResW;
+          }
+          const bcal = d.bonoCalidadCheck ? d.bonoCalidadMonto * d.trabConBonoCal : 0;
+          return d.remuBase + bres + bcal;
+        }
+        function getMkt()         { return d.mkt; }
+        function getCostoTotal(r) { return getCostoVar(r) + getCostoFijo() + getRemu(r) + getMkt(); }
+        function getResultado(r)  { return getIngreso(r) - getCostoTotal(r); }
+
+        // Y range
+        const steps = 80;
+        let yMax = 0, yMin = 0;
+        for(let i = 0; i <= steps; i++){
+          const r = maxR * i / steps;
+          yMax = Math.max(yMax, getIngreso(r), getCostoTotal(r), getCostoVar(r), getCostoFijo(), getRemu(r), getMkt());
+          yMin = Math.min(yMin, getResultado(r));
+        }
+        yMax = yMax * 1.08;
+        yMin = yMin < 0 ? yMin * 1.12 : 0;
+        const yRange = yMax - yMin || 1;
+
+        function xPx(r){ return pad.left + (r / maxR) * cW; }
+        function yPx(v){ return pad.top  + (1 - (v - yMin) / yRange) * cH; }
+
+        ctx.clearRect(0, 0, W, H);
+
+        // Grid + axes
+        ctx.font = `${10 * dpr / dpr}px sans-serif`;
+        ctx.textAlign = 'right';
+        const yTicks = 5;
+        for(let i = 0; i <= yTicks; i++){
+          const v  = yMin + yRange * (i / yTicks);
+          const py = yPx(v);
+          ctx.strokeStyle = 'rgba(255,255,255,.06)';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(pad.left, py); ctx.lineTo(pad.left + cW, py); ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,.32)';
+          ctx.fillText(simFmtK(v), pad.left - 5, py + 3.5);
+        }
+        const xStep = Math.max(1, Math.ceil(maxR / 10));
+        ctx.textAlign = 'center';
+        for(let r = 0; r <= maxR; r += xStep){
+          const px = xPx(r);
+          ctx.strokeStyle = 'rgba(255,255,255,.05)';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(px, pad.top); ctx.lineTo(px, pad.top + cH); ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,.32)';
+          ctx.fillText(r, px, pad.top + cH + 13);
+        }
+        // X axis label
+        ctx.fillStyle = 'rgba(255,255,255,.25)';
+        ctx.font = `9px sans-serif`;
+        ctx.fillText('reservas / mes', pad.left + cW / 2, pad.top + cH + 26);
+
+        // Zero line
+        if(yMin < 0){
+          const py0 = yPx(0);
+          ctx.strokeStyle = 'rgba(255,255,255,.18)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
+          ctx.beginPath(); ctx.moveTo(pad.left, py0); ctx.lineTo(pad.left + cW, py0); ctx.stroke();
+        }
+
+        const pts = 200;
+        const series = [
+          { id:'sim-chart-cvar',        fn: r=>getCostoVar(r),   color:'#fb923c', dash:[5,3], w:1.5 },
+          { id:'sim-chart-cfijo',       fn: r=>getCostoFijo(),   color:'#f97316', dash:[6,3], w:1.5 },
+          { id:'sim-chart-remu',        fn: r=>getRemu(r),       color:'#fbbf24', dash:[4,3], w:1.5 },
+          { id:'sim-chart-mkt',         fn: r=>getMkt(),         color:'#a78bfa', dash:[4,3], w:1.5 },
+          { id:'sim-chart-costo-total', fn: r=>getCostoTotal(r), color:'#f87171', dash:[],    w:2   },
+          { id:'sim-chart-resultado',   fn: r=>getResultado(r),  color:'#60a5fa', dash:[],    w:2   },
+          { id:'sim-chart-ingreso',     fn: r=>getIngreso(r),    color:'#34d399', dash:[],    w:2   },
+        ];
+        for(const s of series){
+          if(!document.getElementById(s.id)?.checked) continue;
+          ctx.strokeStyle = s.color;
+          ctx.lineWidth   = s.w;
+          ctx.setLineDash(s.dash);
+          ctx.beginPath();
+          for(let i = 0; i <= pts; i++){
+            const r = maxR * i / pts;
+            const x = xPx(r), y = yPx(s.fn(r));
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        // Break-even vertical
+        if(d.be > 0 && d.be < maxR){
+          const bePx = xPx(d.be);
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath(); ctx.moveTo(bePx, pad.top + 12); ctx.lineTo(bePx, pad.top + cH); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#facc15';
+          ctx.textAlign = 'center';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.fillText('BE', bePx, pad.top + 9);
+        }
+
+        // Current reservations vertical
+        if(d.reservas > 0 && d.reservas <= maxR){
+          const curPx = xPx(d.reservas);
+          ctx.strokeStyle = 'rgba(255,255,255,.45)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath(); ctx.moveTo(curPx, pad.top + 14); ctx.lineTo(curPx, pad.top + cH); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(255,255,255,.6)';
+          ctx.textAlign = 'center';
+          ctx.font = '10px sans-serif';
+          ctx.fillText('▼', curPx, pad.top + 11);
+        }
+      }
+
+      window.addEventListener('resize', ()=>{ if(_simChartData) simDrawChart(); });
+
       function simCalc(){
         const precio       = simV('sim-precio');
         const personas     = simV('sim-personas');
@@ -2234,14 +2326,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
         // ── Grand total remuneraciones ─────────────────────────────────────
         const remuTotalEl = document.getElementById('sim-remu-total');
-        if(remuTotalEl && _wData.length > 0){
-          const trabLabel = _wData.length > 1 ? `${_wData.length} trabajadores` : _wData[0].name;
-          remuTotalEl.innerHTML =
-            `<div style="display:flex;justify-content:space-between;align-items:center">` +
-            `<span style="color:var(--muted)">Total remuneraciones <span style="font-size:.74rem">(${trabLabel})</span></span>` +
-            `<span style="font-weight:700;font-size:.88rem">${simFmt(grandTotal)}</span>` +
-            `</div>`;
-        }
+        if(remuTotalEl) remuTotalEl.style.display = 'none'; // preview table above shows it
 
         const ingresoBase  = precio * personas * reservas;
         const ingresoExtra = extras * reservas;
@@ -2261,23 +2346,46 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const margPorRes = ingrPerRes - cVar;
         const be = margPorRes > 0 ? Math.ceil(fixedBelowThreshold / margPorRes) : null;
 
-        // ── Bonus preview lines ────────────────────────────────────────────
+        // ── Worker summary table (sim-bono-preview) ───────────────────────
         const prevEl = document.getElementById('sim-bono-preview');
-        let prevLines = [], trabSinBonoRes = 0;
-        for(const wd of _wData){
-          if(!wd.bonoResOn || wd.bonoPorResW === 0) continue;
-          if(wd.extrasW > 0){
-            prevLines.push(`${wd.name}: ${wd.extrasW} extra × ${simFmtK(wd.bonoPorResW)} = ${simFmtK(wd.bonoResW)}`);
-          } else {
-            trabSinBonoRes++;
+        if(prevEl && _wData.length > 0){
+          let rows = '';
+          for(const wd of _wData){
+            const bonoCalW = (bonoCalidadCheck && wd.bonoCalOn) ? bonoCalidadMonto : 0;
+            const totalW   = wd.sueldo + wd.bonoResW + bonoCalW;
+            const resCell  = wd.bonoResOn && wd.bonoPorResW > 0
+              ? (wd.extrasW > 0
+                  ? `<span style="color:#fbbf24">${simFmt(wd.bonoResW)}</span><br><span style="font-size:.68rem;color:rgba(251,191,36,.55)">${wd.extrasW}×${simFmtK(wd.bonoPorResW)}</span>`
+                  : `<span style="color:var(--muted);font-size:.72rem">— (${Math.ceil(wd.umbralW-reservas+1)||0} más)</span>`)
+              : `<span style="color:var(--muted)">—</span>`;
+            const calCell  = bonoCalW > 0
+              ? `<span style="color:#fbbf24">${simFmt(bonoCalW)}</span>`
+              : `<span style="color:var(--muted)">—</span>`;
+            rows += `<tr style="border-top:1px solid rgba(255,255,255,.05)">
+              <td style="padding:.28rem .3rem;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px">${wd.name}</td>
+              <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;white-space:nowrap">${simFmt(wd.sueldo)}</td>
+              <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;line-height:1.3">${resCell}</td>
+              <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem">${calCell}</td>
+              <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;font-weight:700;white-space:nowrap">${simFmt(totalW)}</td>
+            </tr>`;
           }
+          prevEl.innerHTML =
+            `<table style="width:100%;border-collapse:collapse;margin-top:.3rem">
+              <thead><tr style="font-size:.69rem;color:var(--muted)">
+                <th style="text-align:left;padding:.15rem .3rem;font-weight:400"></th>
+                <th style="text-align:right;padding:.15rem .3rem;font-weight:400">Sueldo</th>
+                <th style="text-align:right;padding:.15rem .3rem;font-weight:400">Bono res.</th>
+                <th style="text-align:right;padding:.15rem .3rem;font-weight:400">Bono cal.</th>
+                <th style="text-align:right;padding:.15rem .3rem;font-weight:400">Total</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+              <tfoot><tr style="border-top:2px solid rgba(255,255,255,.15);font-weight:700;font-size:.8rem">
+                <td style="padding:.3rem .3rem;color:var(--muted)">Total (${_wData.length} trab.)</td>
+                <td colspan="3"></td>
+                <td style="text-align:right;padding:.3rem .3rem">${simFmt(grandTotal)}</td>
+              </tr></tfoot>
+            </table>`;
         }
-        if(trabSinBonoRes > 0) prevLines.push(`${trabSinBonoRes} trab. sin bono aún`);
-        if(bonoCalidadCheck && bonoCalidadMonto > 0 && trabConBonoCal > 0){
-          const calLabel = trabConBonoCal > 1 ? ` × ${trabConBonoCal} trab.` : '';
-          prevLines.push(`⭐ Bono calidad: ${simFmtK(bonoCalidadMonto)}${calLabel} = ${simFmtK(bonoCalTotal)}`);
-        }
-        prevEl.innerHTML = prevLines.map(l=>`<div>${l}</div>`).join('');
 
         // ── Bonus KPI cards ────────────────────────────────────────────────
         const bonoCardEl = document.getElementById('kpi-bono-card');
@@ -2408,6 +2516,15 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         } else {
           bonoAnualCardEl.style.display = 'none';
         }
+
+        // ── Chart data cache + render ──────────────────────────────────────
+        _simChartData = {
+          precio, personas, extras, cVar, cFijo, remuBase, mkt,
+          reservas, bonoCalidadCheck, bonoCalidadMonto, trabConBonoCal,
+          wData: _wData,
+          be: be !== null ? be : 0,
+        };
+        simDrawChart();
       }
 
       async function simLoadActuals(){
@@ -2727,52 +2844,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div><!-- /section-simulator -->
 
     <!-- ══ LOGS SECTION ══════════════════════════════════════════════════════ -->
-    <!-- ── Chatbot Admin ─────────────────────────────────────────── -->
-    <div id="section-chatbot" class="section">
-      <div style="display:grid;gap:1.2rem">
-
-        <!-- Responses card -->
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
-          <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem">
-            <span style="font-weight:600;font-size:.95rem">💬 Mensajes del chatbot</span>
-            <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Usa <code>---</code> en línea sola para separar en múltiples mensajes · <b>Chat</b> = botón admin · <b>Menú</b> = aparece en el menú de bienvenida al cliente</span>
-            <button onclick="rebuildWelcomeMenu()" title="Reconstruir el mensaje de bienvenida automáticamente desde los ítems con Menú activado" style="margin-left:auto;background:rgba(56,189,248,.15);border:1px solid #38bdf8;color:#38bdf8;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">🔄 Reconstruir menú</button>
-            <button onclick="loadBotResponses()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
-          </div>
-          <div id="bot-responses-list" style="padding:.8rem 1.2rem;display:flex;flex-direction:column;gap:.8rem"></div>
-        </div>
-
-        <!-- Keywords card -->
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
-          <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem">
-            <span style="font-weight:600;font-size:.95rem">🔑 Keywords del chatbot</span>
-            <button onclick="loadBotKeywords()" style="margin-left:auto;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
-          </div>
-          <div style="padding:.8rem 1.2rem">
-            <!-- Add new keyword form -->
-            <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
-              <input id="new-kw-word" type="text" placeholder="Keyword (ej: cuanto vale)" style="flex:1;min-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.38rem .7rem;font-size:.83rem;outline:none">
-              <select id="new-kw-key" style="flex:1;min-width:160px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.38rem .7rem;font-size:.83rem;outline:none">
-                <option value="">— Respuesta —</option>
-              </select>
-              <button onclick="addBotKeyword()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.38rem .9rem;font-size:.83rem;cursor:pointer;font-weight:600">Agregar</button>
-            </div>
-            <table style="width:100%;border-collapse:collapse;font-size:.83rem" id="bot-kw-table">
-              <thead>
-                <tr>
-                  <th style="text-align:left;padding:.4rem .6rem;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)">Keyword</th>
-                  <th style="text-align:left;padding:.4rem .6rem;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)">Respuesta</th>
-                  <th style="width:40px;border-bottom:1px solid var(--border)"></th>
-                </tr>
-              </thead>
-              <tbody id="bot-kw-body"></tbody>
-            </table>
-          </div>
-        </div>
-
-      </div>
-    </div><!-- /section-chatbot -->
-
     <div id="section-logs" class="section">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
         <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
@@ -2908,7 +2979,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',logs:'Logs del servidor',chatbot:'Chatbot'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',logs:'Logs del servidor'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
@@ -2916,14 +2987,13 @@ function showSection(name){
   if(name==='stats'){ loadStats(); loadCashReport(); }
   if(name==='extras-cat') loadExtrasCat();
   if(name==='emails') loadEmailBookingConfig();
-  if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); onHighSeasonTypeChange(); }
+  if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); }
   if(name==='alojamientos-admin') loadAlojamientos();
   if(name==='experiencias') loadExperiencias();
   if(name==='packs-admin') loadPacksAdmin();
   if(name==='cal-extras') loadCalExtras();
   if(name==='financial') initFinancialSection();
-  if(name==='simulator'){ simLoadActuals().catch(()=>simCalc()); }
-  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); }
+  if(name==='simulator') requestAnimationFrame(()=>{ simCalc(); });
   if(name==='logs') initLogsSection();
   else clearInterval(_logAutoRefresh);
 }
@@ -2985,7 +3055,7 @@ function renderCal(){
     const dt=new Date(calYear,calMonth,d);
     const isToday = dt.getTime()===today.getTime();
     const rsvs=byDate[dateStr]||[];
-    const pills = rsvs.slice().sort((a,b)=>(a.hora||'').localeCompare(b.hora||'')).map(r=>{
+    const pills = rsvs.slice().sort((a,b)=>(a.hora||'').localeCompare(b.hora||'')).slice(0,3).map(r=>{
       const col = statusColor(r.status);
       const firstName = (r.nombre_cliente||'Sin nombre').trim().split(/\s+/)[0];
       const hora = r.hora ? r.hora.substring(0,5) : '';
@@ -3001,9 +3071,10 @@ function renderCal(){
         ${(personas||icons||faltHtml)?`<div class="cal-pill-sub">${personas?`<span>${personas}</span>`:''}${icons?`<span class="cal-pill-icons">${icons}</span>`:''}${faltHtml}</div>`:''}
       </div>`;
     }).join('');
+    const more = rsvs.length>3?`<div style="font-size:.6rem;color:var(--muted)">+${rsvs.length-3} más</div>`:'';
     html+=`<div class="cal-day${isToday?' today':''}" onclick="${rsvs.length?`showDayReservas('${dateStr}')`:`openNewReservaModal('${dateStr}')`}">
       <div class="cal-day-num">${d}${rsvs.length?` <span style="color:var(--gold);font-size:.6rem">(${rsvs.length})</span>`:''}</div>
-      ${pills}
+      ${pills}${more}
     </div>`;
   }
   grid.innerHTML=html;
@@ -3044,7 +3115,7 @@ async function loadLista(){
   if(status&&status!=='all') url+=`&status=${status}`;
   if(source&&source!=='all') url+=`&source=${source}`;
   const tbody=document.getElementById('lista-tbody');
-  tbody.innerHTML=`<tr><td colspan="9" class="loading-msg">Cargando...</td></tr>`;
+  tbody.innerHTML=`<tr><td colspan="8" class="loading-msg">Cargando...</td></tr>`;
   try{
     const data=await api(url);
     let rows=data.reservas;
@@ -3052,7 +3123,6 @@ async function loadLista(){
     tbody.innerHTML=rows.length?rows.map(r=>`
       <tr onclick="openModal(${r.id})">
         <td>${r.fecha||'-'}</td>
-        <td style="color:var(--muted);font-size:.82rem">${r.created_at?r.created_at.slice(0,10):'-'}</td>
         <td>${r.hora||'-'}</td>
         <td><strong>${r.nombre_cliente||'-'}</strong></td>
         <td>${r.telefono||'-'}</td>
@@ -3066,10 +3136,10 @@ async function loadLista(){
           <span class="chip">${r.source||'-'}</span>
           ${r.has_flex?`<span class="chip" style="background:#1e3a5f44;color:#60a5fa;border:1px solid #1e4a7f">🔒 Flex</span>`:''}
         </td>
-      </tr>`).join(''):`<tr><td colspan="9" class="no-data">Sin resultados</td></tr>`;
+      </tr>`).join(''):`<tr><td colspan="8" class="no-data">Sin resultados</td></tr>`;
     document.getElementById('lista-count').textContent=`${rows.length} reservas`;
   }catch(e){
-    tbody.innerHTML=`<tr><td colspan="9" class="no-data">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="8" class="no-data">Error: ${e.message}</td></tr>`;
   }
 }
 function sortBy(col){
@@ -3750,10 +3820,6 @@ async function openModal(id){
           style="background:rgba(37,211,102,.15);color:#25d366;border:1px solid rgba(37,211,102,.35);border-radius:8px;padding:.5rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">
           💳 Solicitar Pago
         </button>
-        <button onclick="sendConfirmationEmail(${id})" title="Enviar el mismo mail de confirmación que recibe el cliente al reservar online"
-          style="background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.35);border-radius:8px;padding:.5rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">
-          📧 Confirmación
-        </button>
         <button onclick="generarRecibo()" title="Generar boleta/recibo imprimible"
           style="background:rgba(74,158,255,.12);color:#4a9eff;border:1px solid rgba(74,158,255,.35);border-radius:8px;padding:.5rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">
           🧾 Recibo
@@ -3893,27 +3959,6 @@ async function sendFollowupReviewEmail(rid){
   }
 }
 
-async function sendConfirmationEmail(rid){
-  if(!rid) return;
-  if(!confirm('¿Enviar mail de confirmación de reserva al cliente?')) return;
-  try{
-    const res = await api(`/api/admin/reservas/${rid}/send-confirmation`,{method:'POST'});
-    console.log('[send-confirmation debug]', JSON.stringify(res._debug));
-    if(res.ok){
-      const sent = res.result?.sent;
-      const reason = res.result?.reason;
-      const dbg = res._debug;
-      const extrasInfo = dbg ? ` | extras_json: ${JSON.stringify(dbg.extras_json_raw)} | ingreso_extras: ${dbg.ingreso_extras}` : '';
-      if(sent) showToast(`📧 Confirmación enviada a ${res.email}${extrasInfo}`);
-      else showToast(`No enviado: ${reason||'sin motivo'}${extrasInfo}`);
-    } else {
-      showToast('Error al enviar confirmación');
-    }
-  }catch(e){
-    showToast('Error: '+e.message);
-  }
-}
-
 function closeModal(e){
   if(e&&e.target!==document.getElementById('overlay')) return;
   document.getElementById('overlay').classList.remove('show');
@@ -3981,9 +4026,8 @@ async function saveModal(id){
   // Cupón
   body.coupon_code = _appliedCoupon ? _appliedCoupon.code : null;
   body.coupon_discount = _appliedCoupon ? (_appliedCoupon.discount_amount || 0) : 0;
-  body.coupon_extra_benefit = _appliedCoupon ? ((_appliedCoupon.extra_benefit||'').trim()||null) : null;
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount','coupon_extra_benefit']);
+  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -4057,7 +4101,6 @@ function sourceColor(s){ if(!s) return '#7070a0'; if(s==='sheets') return '#7070
 // Default emoji icon for an extra based on its slugified key
 function defaultExtraIcon(key){
   const k = (key||'').toLowerCase();
-  if(k.startsWith('aloj__')||k.includes('alojamiento')||k.includes('cabana')||k.includes('hospedaje')) return '🏠';
   if(k.includes('roman')||k.includes('rosas')||k.includes('flores')) return '🌹';
   if(k.includes('foto'))            return '📸';
   if(k.includes('gopro')||k.includes('video')||k.includes('camara')||k.includes('cam_')) return '🎥';
@@ -4072,6 +4115,7 @@ function defaultExtraIcon(key){
   if(k.includes('espumante')||k.includes('champagne')||k.includes('botella')||k.includes('vino')) return '🍾';
   if(k.includes('cocktail')||k.includes('trago')||k.includes('pisco')) return '🍹';
   if(k.includes('cerveza'))         return '🍺';
+  if(k.includes('alojamiento')||k.includes('cabana')||k.includes('hospedaje')) return '🏠';
   if(k.includes('pack'))            return '📦';
   if(k.includes('musica')||k.includes('dj')) return '🎵';
   if(k.includes('decoracion')||k.includes('deco')) return '🎊';
@@ -4747,30 +4791,60 @@ function renderVacList(vacDays){
   </div>`;
 }
 
-// ── Urgency days calendar (HotBoat) ──────────────────────────────────────────
+// ── Urgency days calendar ─────────────────────────────────────────────────────
 let urgYear = new Date().getFullYear(), urgMonth = new Date().getMonth();
-let urgencyDays = {}; // {dateStr: true=ON, false=OFF}
+// ── Profile calendar ──────────────────────────────────────────────────────────
+let urgencyDays   = {}; // {dateStr: {enabled, profile_key}}
+let scheduleTypes = []; // [{id, name, hours}]
+let urgencyModes  = []; // [{id, name, seed_times, gap_hours}]
 
-// ── High season calendar (per product) ───────────────────────────────────────
-let hsYear = new Date().getFullYear(), hsMonth = new Date().getMonth();
-let highSeasonDays = {}; // {dateStr: true=ON, false=OFF}
+// Colors per profile kind
+const PROFILE_COLORS = {
+  schedule: ['#2878c8','#1a5c9e','#0d4080','#3a9fe0','#5ab5f5'],
+  urgency:  ['#c87820','#a05010','#e09030','#d4a030','#b87010'],
+};
+
+function _profileColor(id){
+  const allS = scheduleTypes.map(t=>t.id);
+  const allU = urgencyModes.map(m=>m.id);
+  const si = allS.indexOf(id), ui = allU.indexOf(id);
+  if(si >= 0) return PROFILE_COLORS.schedule[si % PROFILE_COLORS.schedule.length];
+  if(ui >= 0) return PROFILE_COLORS.urgency[ui % PROFILE_COLORS.urgency.length];
+  return '#888';
+}
+
+function _profileLabel(pk){
+  if(!pk) return null;
+  const s = scheduleTypes.find(t=>t.id===pk);
+  if(s) return {icon:'🗓', name:s.name};
+  const u = urgencyModes.find(m=>m.id===pk);
+  if(u) return {icon:'⚡', name:u.name};
+  return null;
+}
 
 async function loadUrgencyDays(){
   try{
-    const lastDay = new Date(urgYear, urgMonth + 1, 0).getDate();
-    const desde = `${urgYear}-${String(urgMonth+1).padStart(2,'0')}-01`;
-    const hasta = `${urgYear}-${String(urgMonth+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
-    const url = `/api/admin/urgency-days?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&entity_type=hotboat`;
-    const d = await api(url);
-    urgencyDays = {};
-    (d.urgency_days||[]).forEach(v=>{ urgencyDays[v.date] = v.enabled; });
+    const [dDays, dSched, dModes] = await Promise.all([
+      api('/api/admin/urgency-days'),
+      api('/api/admin/schedule-types'),
+      api('/api/admin/urgency-modes'),
+    ]);
+    scheduleTypes = dSched.schedule_types || [];
+    urgencyModes  = dModes.urgency_modes  || [];
+    urgencyDays   = {};
+    (dDays.urgency_days||[]).forEach(v=>{
+      urgencyDays[v.date] = {enabled: v.enabled, profile_key: v.profile_key||null};
+    });
+    renderScheduleTypes();
+    renderUrgencyModes();
     renderUrgCal();
     renderUrgList();
-  }catch(_e){}
+    renderProfileLegend();
+  }catch(e){ console.error('loadUrgencyDays',e); }
 }
 
-function urgCalPrev(){ urgMonth--; if(urgMonth<0){urgMonth=11;urgYear--;} loadUrgencyDays(); }
-function urgCalNext(){ urgMonth++; if(urgMonth>11){urgMonth=0;urgYear++;} loadUrgencyDays(); }
+function urgCalPrev(){ urgMonth--; if(urgMonth<0){urgMonth=11;urgYear--;} renderUrgCal(); }
+function urgCalNext(){ urgMonth++; if(urgMonth>11){urgMonth=0;urgYear++;} renderUrgCal(); }
 
 function renderUrgCal(){
   const grid = document.getElementById('urg-cal-grid');
@@ -4787,38 +4861,100 @@ function renderUrgCal(){
     const dateStr=`${urgYear}-${String(urgMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dt=new Date(urgYear,urgMonth,d);
     const isToday=dt.getTime()===today.getTime();
-    const override=urgencyDays.hasOwnProperty(dateStr);
-    const isOn=override&&urgencyDays[dateStr]===true;
-    const isOff=override&&urgencyDays[dateStr]===false;
-    const cls=`cal-day${isOn?' urgency-on':isOff?' urgency-off':''}${isToday?' today':''}`;
-    const icon=isOn?'⚡':isOff?'✗':'';
-    const tip=isOn?'Urgencia ON — click para ciclar':isOff?'Urgencia OFF — click para quitar':'Click para activar urgencia';
-    html+=`<div class="${cls}" onclick="cycleUrgDay('${dateStr}')" title="${tip}">
+    const entry = urgencyDays[dateStr];
+    const pk = entry?.profile_key;
+    const color = pk ? _profileColor(pk) : (entry ? (entry.enabled ? 'var(--gold)' : '#7070a0') : '');
+    const lbl = pk ? _profileLabel(pk) : null;
+    const icon = lbl ? lbl.icon : (entry ? (entry.enabled ? '⚡' : '✗') : '');
+    const shortName = lbl ? lbl.name.substring(0,6) : '';
+    const bg = color ? `background:${color}22;outline:1.5px solid ${color}55;` : '';
+    html+=`<div class="cal-day${isToday?' today':''}" style="${bg}cursor:pointer" onclick="openProfilePopup('${dateStr}',event)" title="${lbl?lbl.name:(entry?'Urgencia '+(entry.enabled?'ON':'OFF'):'Sin perfil')}">
       <div class="cal-day-num">${d}</div>
-      ${icon?`<div style="font-size:.6rem">${icon}</div>`:''}
+      ${icon?`<div style="font-size:.55rem;line-height:1.1">${icon}</div>`:''}
+      ${shortName?`<div style="font-size:.45rem;line-height:1;color:${color};overflow:hidden;max-width:100%">${shortName}</div>`:''}
     </div>`;
   }
   grid.innerHTML = html;
 }
 
-async function cycleUrgDay(dateStr){
-  const cur = urgencyDays.hasOwnProperty(dateStr) ? urgencyDays[dateStr] : null;
-  const scope = {entity_type:'hotboat', entity_slug:''};
+function renderProfileLegend(){
+  const el = document.getElementById('profile-legend');
+  if(!el) return;
+  let html = '';
+  scheduleTypes.forEach((t,i)=>{
+    const c = PROFILE_COLORS.schedule[i%PROFILE_COLORS.schedule.length];
+    html+=`<span style="display:flex;align-items:center;gap:.25rem"><span style="background:${c};width:10px;height:10px;border-radius:2px;display:inline-block"></span><span style="color:var(--muted)">🗓 ${t.name}</span></span>`;
+  });
+  urgencyModes.forEach((m,i)=>{
+    const c = PROFILE_COLORS.urgency[i%PROFILE_COLORS.urgency.length];
+    html+=`<span style="display:flex;align-items:center;gap:.25rem"><span style="background:${c};width:10px;height:10px;border-radius:2px;display:inline-block"></span><span style="color:var(--muted)">⚡ ${m.name}</span></span>`;
+  });
+  el.innerHTML = html;
+}
+
+// ── Profile popup ─────────────────────────────────────────────────────────────
+let _popupDate = null;
+
+function openProfilePopup(dateStr, evt){
+  _popupDate = dateStr;
+  const popup = document.getElementById('day-profile-popup');
+  const label = document.getElementById('popup-date-label');
+  const opts  = document.getElementById('popup-options');
+  label.textContent = `📅 ${dateStr}`;
+
+  let html = '';
+  scheduleTypes.forEach(t=>{
+    const c = _profileColor(t.id);
+    html+=`<button onclick="setDayProfile('${dateStr}','${t.id}',true)" style="background:${c}22;border:1px solid ${c}55;color:#fff;border-radius:7px;padding:.35rem .7rem;font-size:.8rem;cursor:pointer;text-align:left">🗓 ${t.name}</button>`;
+  });
+  urgencyModes.forEach(m=>{
+    const c = _profileColor(m.id);
+    html+=`<button onclick="setDayProfile('${dateStr}','${m.id}',true)" style="background:${c}22;border:1px solid ${c}55;color:#fff;border-radius:7px;padding:.35rem .7rem;font-size:.8rem;cursor:pointer;text-align:left">⚡ ${m.name}</button>`;
+  });
+  html+=`<button onclick="clearDayProfile('${dateStr}')" style="background:rgba(160,80,80,.15);border:1px solid rgba(160,80,80,.3);color:#e08080;border-radius:7px;padding:.35rem .7rem;font-size:.8rem;cursor:pointer;text-align:left">✕ Sin perfil (global)</button>`;
+  opts.innerHTML = html;
+
+  // Position near click
+  popup.style.display = 'block';
+  const x = Math.min(evt.clientX, window.innerWidth - 240);
+  const y = Math.min(evt.clientY + 10, window.innerHeight - 300);
+  popup.style.left = x + 'px';
+  popup.style.top  = y + 'px';
+}
+
+function closeProfilePopup(){
+  document.getElementById('day-profile-popup').style.display = 'none';
+  _popupDate = null;
+}
+document.addEventListener('click', e=>{
+  const p = document.getElementById('day-profile-popup');
+  if(p && p.style.display!=='none' && !p.contains(e.target) && !e.target.closest('.cal-day')) closeProfilePopup();
+});
+
+async function setDayProfile(dateStr, profileKey, isUrgencyType){
+  closeProfilePopup();
+  const isUrgency = urgencyModes.some(m=>m.id===profileKey);
   try{
-    if(cur === null){
-      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({ date:dateStr, enabled:true, ...scope })});
-      urgencyDays[dateStr] = true;
-      showToast(`⚡ ${dateStr}: urgencia HotBoat ON`);
-    } else if(cur === true){
-      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({ date:dateStr, enabled:false, ...scope })});
-      urgencyDays[dateStr] = false;
-      showToast(`✗ ${dateStr}: urgencia HotBoat OFF`);
-    } else {
-      const du = `/api/admin/urgency-days/${encodeURIComponent(dateStr)}?entity_type=hotboat`;
-      await api(du,{method:'DELETE'});
-      delete urgencyDays[dateStr];
-      showToast(`${dateStr}: sin override HotBoat`);
-    }
+    await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({
+      date: dateStr,
+      enabled: isUrgency,
+      profile_key: profileKey
+    })});
+    urgencyDays[dateStr] = {enabled: isUrgency, profile_key: profileKey};
+    const lbl = _profileLabel(profileKey);
+    showToast(`${lbl?.icon||'✓'} ${dateStr}: ${lbl?.name||profileKey}`);
+    renderUrgCal();
+    renderUrgList();
+    try{ const r=await api('/api/admin/availability-cache-clear',{method:'POST'}); }catch(e){}
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function clearDayProfile(dateStr){
+  closeProfilePopup();
+  try{
+    await api(`/api/admin/urgency-days/${dateStr}`,{method:'DELETE'});
+    delete urgencyDays[dateStr];
+    showToast(`${dateStr}: perfil borrado`);
     renderUrgCal();
     renderUrgList();
   }catch(e){ showToast('Error: '+e.message); }
@@ -4828,160 +4964,93 @@ function renderUrgList(){
   const el = document.getElementById('urg-list');
   if(!el) return;
   const entries = Object.entries(urgencyDays);
-  if(!entries.length){ el.innerHTML='<p style="color:var(--muted);font-size:.82rem">Sin overrides HotBoat por día.</p>'; return; }
+  if(!entries.length){ el.innerHTML='<p style="color:var(--muted);font-size:.82rem">Sin perfiles asignados.</p>'; return; }
   el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem">
-    ${entries.sort(([a],[b])=>a<b?-1:1).map(([date,enabled])=>`
-      <div style="background:${enabled?'rgba(245,200,66,.15)':'rgba(112,112,160,.12)'};border:1px solid ${enabled?'rgba(245,200,66,.35)':'rgba(112,112,160,.3)'};border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
-        ${enabled?'⚡':'✗'} ${date}
-        <button onclick="cycleUrgDay('${date}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem" title="Ciclar estado">↻</button>
-      </div>`).join('')}
+    ${entries.sort(([a],[b])=>a<b?-1:1).map(([date,v])=>{
+      const lbl = v.profile_key ? _profileLabel(v.profile_key) : null;
+      const c = v.profile_key ? _profileColor(v.profile_key) : (v.enabled?'rgba(245,200,66,.35)':'rgba(112,112,160,.3)');
+      const icon = lbl?.icon || (v.enabled?'⚡':'✗');
+      const name = lbl?.name || (v.enabled?'Urgencia ON':'OFF');
+      return `<div style="background:${c}22;border:1px solid ${c};border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
+        ${icon} <strong>${date}</strong> <span style="color:var(--muted)">${name}</span>
+        <button onclick="clearDayProfile('${date}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem" title="Quitar perfil">✕</button>
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
-function hsScopeQuery(){
-  const typeEl = document.getElementById('hs-scope-type');
-  const slugEl = document.getElementById('hs-scope-slug');
-  const entity_type = typeEl ? typeEl.value : 'experience';
-  const entity_slug = slugEl && slugEl.value ? slugEl.value : '';
-  return {entity_type, entity_slug};
-}
-
-async function onHighSeasonTypeChange(){
-  const sel = document.getElementById('hs-scope-slug');
-  const typeEl = document.getElementById('hs-scope-type');
-  const t = typeEl ? typeEl.value : 'experience';
-  if(!sel) return;
-  sel.innerHTML = '<option value="">— Cargando —</option>';
-  try{
-    if(t === 'experience'){
-      let list = EXP_CATALOG || [];
-      if(!list.length){
-        const er = await fetch('/api/admin/experiencias',{headers:{'x-admin-key':KEY}}).then(r=>r.json());
-        EXP_CATALOG = er.experiences || [];
-        list = EXP_CATALOG;
-      }
-      const escV = s => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-      sel.innerHTML = '<option value="">— Elige experiencia —</option>' +
-        list.map(e=>`<option value="${escV(e.slug)}">${escV(e.icon||'')} ${escV(e.name)} (${escV(e.slug)})</option>`).join('');
-    } else if(t === 'alojamiento'){
-      let list = ALOJ_CATALOG || [];
-      if(!list.length){
-        const ar = await fetch('/api/admin/alojamientos',{headers:{'x-admin-key':KEY}}).then(r=>r.json());
-        ALOJ_CATALOG = ar.alojamientos || [];
-        list = ALOJ_CATALOG;
-      }
-      const escV = s => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-      sel.innerHTML = '<option value="">— Elige alojamiento —</option>' +
-        list.map(a=>`<option value="${escV(a.slug)}">${escV(a.icon||'')} ${escV(a.name)} (${escV(a.slug)})</option>`).join('');
-    } else {
-      let list = typeof _packs !== 'undefined' ? _packs : [];
-      if(!list.length){
-        const pr = await fetch('/api/admin/packs',{headers:{'x-admin-key':KEY}}).then(r=>r.json());
-        _packs = pr.packs || [];
-        list = _packs;
-      }
-      const escV = s => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-      sel.innerHTML = '<option value="">— Elige pack —</option>' +
-        list.map(p=>`<option value="${escV(p.slug)}">${escV(p.icon||'')} ${escV(p.name)} (${escV(p.slug)})</option>`).join('');
-    }
-  }catch(_e){
-    sel.innerHTML = '<option value="">— Error al cargar —</option>';
-  }
-  await loadHighSeasonDays();
-}
-
-async function loadHighSeasonDays(){
-  try{
-    const {entity_type, entity_slug} = hsScopeQuery();
-    if(!entity_slug){
-      highSeasonDays = {};
-      renderHighSeasonCal();
-      renderHighSeasonList();
-      return;
-    }
-    const lastDay = new Date(hsYear, hsMonth + 1, 0).getDate();
-    const desde = `${hsYear}-${String(hsMonth+1).padStart(2,'0')}-01`;
-    const hasta = `${hsYear}-${String(hsMonth+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
-    let url = `/api/admin/urgency-days?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&entity_type=${encodeURIComponent(entity_type)}`;
-    url += `&entity_slug=${encodeURIComponent(entity_slug)}`;
-    const d = await api(url);
-    highSeasonDays = {};
-    (d.urgency_days||[]).forEach(v=>{ highSeasonDays[v.date] = v.enabled; });
-    renderHighSeasonCal();
-    renderHighSeasonList();
-  }catch(_e){}
-}
-
-function hsCalPrev(){ hsMonth--; if(hsMonth<0){hsMonth=11;hsYear--;} loadHighSeasonDays(); }
-function hsCalNext(){ hsMonth++; if(hsMonth>11){hsMonth=0;hsYear++;} loadHighSeasonDays(); }
-
-function renderHighSeasonCal(){
-  const grid = document.getElementById('hs-cal-grid');
-  const title = document.getElementById('hs-cal-title');
-  if(!grid) return;
-  title.textContent = `${MONTHS[hsMonth]} ${hsYear}`;
-  const firstDayJs = new Date(hsYear,hsMonth,1).getDay();
-  const leadDays = calLeadDaysMonFirst(firstDayJs);
-  const daysInMonth = new Date(hsYear,hsMonth+1,0).getDate();
-  const today = new Date(); today.setHours(0,0,0,0);
-  let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
-  for(let i=0;i<leadDays;i++) html+=`<div class="cal-day empty"></div>`;
-  for(let d=1;d<=daysInMonth;d++){
-    const dateStr=`${hsYear}-${String(hsMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const dt=new Date(hsYear,hsMonth,d);
-    const isToday=dt.getTime()===today.getTime();
-    const override=highSeasonDays.hasOwnProperty(dateStr);
-    const isOn=override&&highSeasonDays[dateStr]===true;
-    const isOff=override&&highSeasonDays[dateStr]===false;
-    const cls=`cal-day${isOn?' urgency-on':isOff?' urgency-off':''}${isToday?' today':''}`;
-    const icon=isOn?'🔥':isOff?'✗':'';
-    const tip=isOn?'Temporada alta ON — click para ciclar':isOff?'Temporada alta OFF — click para quitar':'Click para marcar temporada alta';
-    html+=`<div class="${cls}" onclick="cycleHighSeasonDay('${dateStr}')" title="${tip}">
-      <div class="cal-day-num">${d}</div>
-      ${icon?`<div style="font-size:.6rem">${icon}</div>`:''}
-    </div>`;
-  }
-  grid.innerHTML = html;
-}
-
-async function cycleHighSeasonDay(dateStr){
-  const {entity_type, entity_slug} = hsScopeQuery();
-  if(!entity_slug){ showToast('Elige un producto primero'); return; }
-  const cur = highSeasonDays.hasOwnProperty(dateStr) ? highSeasonDays[dateStr] : null;
-  const scope = {entity_type, entity_slug};
-  try{
-    if(cur === null){
-      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({ date:dateStr, enabled:true, ...scope })});
-      highSeasonDays[dateStr] = true;
-      showToast(`🔥 ${dateStr}: temporada alta ON`);
-    } else if(cur === true){
-      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({ date:dateStr, enabled:false, ...scope })});
-      highSeasonDays[dateStr] = false;
-      showToast(`✗ ${dateStr}: temporada alta OFF`);
-    } else {
-      let du = `/api/admin/urgency-days/${encodeURIComponent(dateStr)}?entity_type=${encodeURIComponent(entity_type)}`;
-      du += `&entity_slug=${encodeURIComponent(entity_slug)}`;
-      await api(du,{method:'DELETE'});
-      delete highSeasonDays[dateStr];
-      showToast(`${dateStr}: sin override de temporada alta`);
-    }
-    renderHighSeasonCal();
-    renderHighSeasonList();
-  }catch(e){ showToast('Error: '+e.message); }
-}
-
-function renderHighSeasonList(){
-  const el = document.getElementById('hs-list');
+// ── Schedule types editor ─────────────────────────────────────────────────────
+function renderScheduleTypes(){
+  const el = document.getElementById('schedule-types-list');
   if(!el) return;
-  const entries = Object.entries(highSeasonDays);
-  if(!entries.length){ el.innerHTML='<p style="color:var(--muted);font-size:.82rem">Sin overrides de temporada alta para este producto.</p>'; return; }
-  el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem">
-    ${entries.sort(([a],[b])=>a<b?-1:1).map(([date,enabled])=>`
-      <div style="background:${enabled?'rgba(245,200,66,.15)':'rgba(112,112,160,.12)'};border:1px solid ${enabled?'rgba(245,200,66,.35)':'rgba(112,112,160,.3)'};border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
-        ${enabled?'🔥':'✗'} ${date}
-        <button onclick="cycleHighSeasonDay('${date}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem" title="Ciclar estado">↻</button>
-      </div>`).join('')}
-  </div>`;
+  if(!scheduleTypes.length){ el.innerHTML='<p style="color:var(--muted);font-size:.75rem">Sin horarios definidos.</p>'; return; }
+  el.innerHTML = scheduleTypes.map((t,i)=>`
+    <div style="background:rgba(40,120,200,.08);border:1px solid rgba(40,120,200,.2);border-radius:7px;padding:.4rem .6rem;margin-bottom:.35rem;font-size:.78rem">
+      <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem">
+        <input value="${t.name}" onchange="scheduleTypes[${i}].name=this.value;saveScheduleTypes()" style="background:transparent;border:none;border-bottom:1px solid rgba(40,120,200,.4);color:var(--text);font-size:.78rem;flex:1;outline:none" placeholder="Nombre">
+        <button onclick="scheduleTypes.splice(${i},1);saveScheduleTypes();renderScheduleTypes();renderProfileLegend();renderUrgCal()" style="background:none;border:none;color:#e08080;cursor:pointer;font-size:.85rem" title="Eliminar">✕</button>
+      </div>
+      <div style="color:var(--muted);font-size:.72rem;margin-bottom:.2rem">Horas (HH:MM, separadas por coma):</div>
+      <input value="${(t.hours||[]).join(', ')}" onchange="scheduleTypes[${i}].hours=this.value.split(',').map(h=>h.trim()).filter(Boolean);saveScheduleTypes()" style="background:rgba(0,0,0,.2);border:1px solid rgba(40,120,200,.2);border-radius:5px;color:var(--text);font-size:.75rem;width:100%;box-sizing:border-box;padding:.2rem .4rem;outline:none" placeholder="10:00, 14:00, 18:00">
+    </div>`).join('');
+}
+
+function addScheduleType(){
+  const id = 's'+(Date.now()%10000);
+  scheduleTypes.push({id, name:`Horario ${scheduleTypes.length+1}`, hours:[]});
+  saveScheduleTypes();
+  renderScheduleTypes();
+  renderProfileLegend();
+}
+
+async function saveScheduleTypes(){
+  try{
+    await api('/api/admin/schedule-types',{method:'PUT',body:JSON.stringify({schedule_types:scheduleTypes})});
+    renderUrgCal();
+    renderUrgList();
+    renderProfileLegend();
+  }catch(e){ showToast('Error guardando horarios'); }
+}
+
+// ── Urgency modes editor ──────────────────────────────────────────────────────
+function renderUrgencyModes(){
+  const el = document.getElementById('urgency-modes-list');
+  if(!el) return;
+  if(!urgencyModes.length){ el.innerHTML='<p style="color:var(--muted);font-size:.75rem">Sin modos definidos.</p>'; return; }
+  el.innerHTML = urgencyModes.map((m,i)=>`
+    <div style="background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.2);border-radius:7px;padding:.4rem .6rem;margin-bottom:.35rem;font-size:.78rem">
+      <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem">
+        <input value="${m.name}" onchange="urgencyModes[${i}].name=this.value;saveUrgencyModes()" style="background:transparent;border:none;border-bottom:1px solid rgba(245,200,66,.4);color:var(--text);font-size:.78rem;flex:1;outline:none" placeholder="Nombre">
+        <button onclick="urgencyModes.splice(${i},1);saveUrgencyModes();renderUrgencyModes();renderProfileLegend();renderUrgCal()" style="background:none;border:none;color:#e08080;cursor:pointer;font-size:.85rem" title="Eliminar">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem">
+        <div>
+          <div style="color:var(--muted);font-size:.72rem">Seeds (HH:MM):</div>
+          <input value="${(m.seed_times||[]).join(', ')}" onchange="urgencyModes[${i}].seed_times=this.value.split(',').map(h=>h.trim()).filter(Boolean);saveUrgencyModes()" style="background:rgba(0,0,0,.2);border:1px solid rgba(245,200,66,.2);border-radius:5px;color:var(--text);font-size:.75rem;width:100%;box-sizing:border-box;padding:.2rem .4rem;outline:none" placeholder="10:00, 18:00">
+        </div>
+        <div>
+          <div style="color:var(--muted);font-size:.72rem">Gap horas:</div>
+          <input type="number" step="0.5" min="0.5" value="${m.gap_hours||3}" onchange="urgencyModes[${i}].gap_hours=parseFloat(this.value);saveUrgencyModes()" style="background:rgba(0,0,0,.2);border:1px solid rgba(245,200,66,.2);border-radius:5px;color:var(--text);font-size:.75rem;width:100%;box-sizing:border-box;padding:.2rem .4rem;outline:none">
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function addUrgencyMode(){
+  const id = 'u'+(Date.now()%10000);
+  urgencyModes.push({id, name:`Urgencia ${urgencyModes.length+1}`, seed_times:['10:00','18:00'], gap_hours:3});
+  saveUrgencyModes();
+  renderUrgencyModes();
+  renderProfileLegend();
+}
+
+async function saveUrgencyModes(){
+  try{
+    await api('/api/admin/urgency-modes',{method:'PUT',body:JSON.stringify({urgency_modes:urgencyModes})});
+    renderUrgCal();
+    renderUrgList();
+    renderProfileLegend();
+  }catch(e){ showToast('Error guardando modos'); }
 }
 
 // ── Payment rows ──────────────────────────────────────────────────────────────
@@ -5223,14 +5292,14 @@ let _extrasCatData = [];   // full list loaded from API
 async function loadExtrasCat(){
   const tbody = document.getElementById('ec-tbody');
   if(!tbody) return;
-  tbody.innerHTML='<tr><td colspan="12" class="loading-msg">Cargando...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="6" class="loading-msg">Cargando...</td></tr>';
   try{
     const d = await api('/api/admin/precios-extras');
     EXTRAS_CATALOG = d.extras||[];   // also refresh catalog for modal dropdowns
     _extrasCatData = d.extras||[];
     renderExtrasCat(_extrasCatData);
   }catch(e){
-    tbody.innerHTML=`<tr><td colspan="12" class="no-data">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="6" class="no-data">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -5240,7 +5309,7 @@ function renderExtrasCat(list){
   if(!tbody) return;
   if(countEl) countEl.textContent = `${list.length} extras`;
   if(!list.length){
-    tbody.innerHTML='<tr><td colspan="12" class="no-data">Sin extras</td></tr>';
+    tbody.innerHTML='<tr><td colspan="6" class="no-data">Sin extras</td></tr>';
     return;
   }
   tbody.innerHTML = list.map((e,i)=>{
@@ -5267,22 +5336,6 @@ function renderExtrasCat(list){
           placeholder="Texto informativo visible en la app"
           oninput="ecMarkDirty('${e.id}')" style="min-width:220px;font-size:.8rem">
       </td>
-      <td style="vertical-align:top;padding:.35rem .45rem">
-        <input class="ec-input" value="${escHtml(e.name_en||'')}" data-field="name_en"
-          placeholder="English name"
-          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.78rem;margin-bottom:.22rem">
-        <input class="ec-input" value="${escHtml(e.description_en||'')}" data-field="description_en"
-          placeholder="English description"
-          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.72rem">
-      </td>
-      <td style="vertical-align:top;padding:.35rem .45rem">
-        <input class="ec-input" value="${escHtml(e.name_pt||'')}" data-field="name_pt"
-          placeholder="Nome (PT)"
-          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.78rem;margin-bottom:.22rem">
-        <input class="ec-input" value="${escHtml(e.description_pt||'')}" data-field="description_pt"
-          placeholder="Descrição (PT)"
-          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.72rem">
-      </td>
       <td style="text-align:center">
         <label class="toggle-wrap" title="Mostrar en app de reservas">
           <input type="checkbox" ${e.show_in_booking!==false?'checked':''} data-field="show_in_booking"
@@ -5300,9 +5353,7 @@ function renderExtrasCat(list){
       </td>
       <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
       <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
-      <td style="display:flex;gap:.35rem;align-items:center;padding:.5rem .35rem;white-space:nowrap;flex-wrap:wrap;justify-content:flex-end">
-        <button type="button" class="ec-save-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .45rem"
-          onclick="autoTranslateExtra('${e.id}')" title="Generar inglés y portugués desde nombre y descripción en español (IA)">✨ IA</button>
+      <td style="display:flex;gap:.4rem;align-items:center;padding:.5rem .4rem;white-space:nowrap">
         <button class="ec-save-btn" id="ec-btn-${e.id}" onclick="saveExtra('${e.id}')">Guardar</button>
         <button onclick="openBomModal('${escHtml(e.key||e.name.toLowerCase().replace(/\s+/g,'_'))}','${escHtml(e.name)}')"
           title="Ingredientes / stock" style="background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer">🧪</button>
@@ -5318,7 +5369,7 @@ async function moveExtra(idx, dir){
   // Swap in local array
   [_extrasCatData[idx], _extrasCatData[newIdx]] = [_extrasCatData[newIdx], _extrasCatData[idx]];
   // Assign consecutive sort_order values
-  const payload = _extrasCatData.map((e, i) => ({ name_lower: e.id, sort_order: i + 1 }));
+  const payload = _extrasCatData.map((e, i) => ({ name_lower: e.name.toLowerCase(), sort_order: i + 1 }));
   renderExtrasCat(_extrasCatData);
   try{
     await api('/api/admin/precios-extras/reorder', { method:'POST', body: JSON.stringify(payload) });
@@ -5328,10 +5379,7 @@ async function moveExtra(idx, dir){
 
 function filterExtrasCat(){
   const q = document.getElementById('ec-search')?.value.toLowerCase()||'';
-  renderExtrasCat(q ? _extrasCatData.filter(e=>{
-    const hay = [e.name,e.description,e.name_en,e.name_pt,e.description_en,e.description_pt].map(x=>(x||'').toLowerCase()).join(' ');
-    return hay.includes(q);
-  }) : _extrasCatData);
+  renderExtrasCat(q ? _extrasCatData.filter(e=>e.name.toLowerCase().includes(q)) : _extrasCatData);
 }
 
 function ecGetRow(id){
@@ -5391,15 +5439,6 @@ async function saveExtraVisibility(id, visible){
     const idx = _extrasCatData.findIndex(e=>e.id===id);
     if(idx>=0) _extrasCatData[idx].show_in_booking = visible;
     showToast(visible ? '✓ Extra visible en reservas' : '✓ Extra oculto en reservas');
-  }catch(e){ showToast('Error: '+e.message); }
-}
-
-async function autoTranslateExtra(id){
-  try{
-    showToast('Traduciendo con IA...');
-    await api(`/api/admin/precios-extras/${encodeURIComponent(id)}/auto-translate`, { method:'POST', body:'{}' });
-    showToast('EN / PT guardados ✓');
-    await loadExtrasCat();
   }catch(e){ showToast('Error: '+e.message); }
 }
 
@@ -5515,11 +5554,7 @@ function addDescuento(){
 // ── Cupones en modal ──────────────────────────────────────────────────────────
 function initCouponSection(r){
   _appliedCoupon = r.coupon_code
-    ? {
-        code: r.coupon_code,
-        discount_amount: +r.coupon_discount||0,
-        extra_benefit: r.coupon_extra_benefit || '',
-      }
+    ? { code: r.coupon_code, discount_amount: +r.coupon_discount||0 }
     : null;
   renderCouponSection();
 }
@@ -5532,12 +5567,8 @@ function renderCouponSection(){
     appliedRow.style.display = 'flex';
     inputRow.style.display   = 'none';
     document.getElementById('coupon-applied-code').textContent = _appliedCoupon.code;
-    const discPart = _appliedCoupon.discount_amount > 0
-      ? '-'+fmtMoney(_appliedCoupon.discount_amount)
-      : 'sin descuento monetario';
-    const extraPart = (_appliedCoupon.extra_benefit||'').trim();
     document.getElementById('coupon-applied-desc').textContent =
-      extraPart ? discPart+' · '+extraPart : discPart;
+      _appliedCoupon.discount_amount > 0 ? '-'+fmtMoney(_appliedCoupon.discount_amount) : 'sin descuento monetario';
   } else {
     appliedRow.style.display = 'none';
     inputRow.style.display   = 'flex';
@@ -5556,7 +5587,7 @@ async function applyCouponToModal(){
     let disc = 0;
     if(d.discount_percent) disc = Math.round(base * d.discount_percent / 100 * 100) / 100;
     else if(d.discount_fixed) disc = +d.discount_fixed;
-    _appliedCoupon = { code: d.code, discount_amount: disc, extra_benefit: d.extra_description || '' };
+    _appliedCoupon = { code: d.code, discount_amount: disc };
     renderCouponSection();
     updateExtrasTotals();
     showToast(`Cupón ${d.code} aplicado ✅`);
@@ -5813,10 +5844,6 @@ function initExtrasEditor(extrasJson){
   }
   const catalogByKey = {};
   EXTRAS_CATALOG.forEach(e=>{ catalogByKey[e.key]=e; });
-  // Web HotBoat: envelope { extras: [...], price_per_person }
-  if(extrasJson && typeof extrasJson==='object' && !Array.isArray(extrasJson) && Array.isArray(extrasJson.extras)){
-    extrasJson = extrasJson.extras;
-  }
   // Web bookings store extras as an array [{name,price,quantity}] — convert to dict
   if(Array.isArray(extrasJson)){
     const converted = {};
@@ -5982,59 +6009,6 @@ function showToast(msg){
   clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity='0',3000);
 }
 
-async function fetchCatalogI18nTranslate(payload){
-  return api('/api/admin/auto-translate-catalog-i18n',{
-    method:'POST',
-    body:JSON.stringify(payload)
-  });
-}
-function fillCatalogI18nFields(prefix, d){
-  const ids = [['name-en','name_en'],['name-pt','name_pt'],['desc-en','description_en'],['desc-pt','description_pt']];
-  for(const [suffix, apiKey] of ids){
-    const el = document.getElementById(prefix+suffix);
-    if(el&&d[apiKey]!==undefined) el.value=d[apiKey];
-  }
-  if(prefix==='aloj-'){
-    const ge=document.getElementById('aloj-group-en'), gp=document.getElementById('aloj-group-pt');
-    if(ge&&d.group_name_en!==undefined) ge.value=d.group_name_en;
-    if(gp&&d.group_name_pt!==undefined) gp.value=d.group_name_pt;
-  }
-}
-async function autoTranslateExpI18n(){
-  const name_es=document.getElementById('exp-name')?.value?.trim()||'';
-  const description_es=document.getElementById('exp-desc')?.value?.trim()||'';
-  if(!name_es){ showToast('Completa el nombre en español primero'); return; }
-  try{
-    showToast('Traduciendo con IA...');
-    const d = await fetchCatalogI18nTranslate({name_es,description_es,group_es:''});
-    fillCatalogI18nFields('exp-',d);
-    showToast('EN / PT listos — pulsa Guardar para aplicar');
-  }catch(e){ showToast('Error: '+e.message); }
-}
-async function autoTranslatePackI18n(){
-  const name_es=document.getElementById('pack-name')?.value?.trim()||'';
-  const description_es=document.getElementById('pack-desc')?.value?.trim()||'';
-  if(!name_es){ showToast('Completa el nombre en español primero'); return; }
-  try{
-    showToast('Traduciendo con IA...');
-    const d = await fetchCatalogI18nTranslate({name_es,description_es,group_es:''});
-    fillCatalogI18nFields('pack-',d);
-    showToast('EN / PT listos — pulsa Guardar para aplicar');
-  }catch(e){ showToast('Error: '+e.message); }
-}
-async function autoTranslateAlojI18n(){
-  const name_es=document.getElementById('aloj-name')?.value?.trim()||'';
-  const description_es=document.getElementById('aloj-desc')?.value?.trim()||'';
-  const group_es=document.getElementById('aloj-group')?.value?.trim()||'';
-  if(!name_es){ showToast('Completa el nombre en español primero'); return; }
-  try{
-    showToast('Traduciendo con IA...');
-    const d = await fetchCatalogI18nTranslate({name_es,description_es,group_es});
-    fillCatalogI18nFields('aloj-',d);
-    showToast('EN / PT listos — pulsa Guardar para aplicar');
-  }catch(e){ showToast('Error: '+e.message); }
-}
-
 // helper: return current admin key (KEY is set by doLogin)
 function getKey(){ return KEY; }
 
@@ -6042,7 +6016,6 @@ function getKey(){ return KEY; }
 // EXPERIENCIAS admin
 // ═══════════════════════════════════════════════════════════════
 let _exps = [];
-let _expImagesList = [];
 
 // ═══════════════════════════════════════════════════════════════
 // ALOJAMIENTOS ADMIN
@@ -6379,36 +6352,6 @@ async function loadExperiencias(){
   }catch(e){ showToast('Error cargando experiencias: '+e.message); }
 }
 
-function renderExpImagesList(){
-  const container = document.getElementById('exp-images-list');
-  if(!container) return;
-  if(!_expImagesList.length){
-    container.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:.3rem 0">Sin fotos aún</div>';
-    return;
-  }
-  container.innerHTML = _expImagesList.map((url, i) => `
-    <div style="display:flex;gap:.4rem;align-items:center">
-      <span style="color:var(--muted);font-size:.75rem;width:18px;text-align:right;flex-shrink:0">${i===0?'📌':(i+1)}</span>
-      ${url ? `<img src="${url}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">` : ''}
-      <input type="url" value="${url}" placeholder="https://..."
-        style="flex:1;font-size:.78rem;padding:.3rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px"
-        oninput="_expImagesList[${i}]=this.value;renderExpImagesList()">
-      <button type="button" onclick="_expImagesList.splice(${i},1);renderExpImagesList()"
-        style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer;flex-shrink:0">✕</button>
-      ${i>0?`<button type="button" onclick="_expImagesList.splice(${i-1},0,_expImagesList.splice(${i},1)[0]);renderExpImagesList()"
-        style="background:var(--input);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.25rem .4rem;font-size:.75rem;cursor:pointer;flex-shrink:0" title="Subir">↑</button>`:''}
-    </div>`).join('');
-}
-
-function expAddImageRow(){
-  _expImagesList.push('');
-  renderExpImagesList();
-  setTimeout(()=>{
-    const inputs = document.querySelectorAll('#exp-images-list input[type=url]');
-    if(inputs.length) inputs[inputs.length-1].focus();
-  }, 50);
-}
-
 function renderExpList(){
   const el = document.getElementById('exp-list');
   if(!_exps.length){ el.innerHTML='<p style="color:var(--muted)">No hay experiencias aún. Haz click en "+ Nueva Experiencia".</p>'; return; }
@@ -6419,7 +6362,6 @@ function renderExpList(){
         <div style="font-weight:700;font-size:.95rem">${e.icon} ${e.name}</div>
         <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${e.description||''}</div>
         <div style="font-size:.8rem">Precio: <strong>$${Number(e.price_per_person).toLocaleString('es-CL')}/persona</strong> · Costo: $${Number(e.cost_per_person).toLocaleString('es-CL')}</div>
-        ${e.admin_whatsapp ? `<div style="font-size:.75rem;color:var(--muted);margin:.1rem 0">📱 Admin: <a href="https://wa.me/${(e.admin_whatsapp).replace(/[^0-9]/g,'')}" target="_blank" style="color:#25D366">${e.admin_whatsapp}</a></div>` : '<div style="font-size:.75rem;color:#ff6b6b;margin:.1rem 0">⚠️ Sin WhatsApp admin</div>'}
         <span class="status-badge ${e.is_active?'badge-on':'badge-off'}" style="margin-top:.35rem">${e.is_active?'Activa':'Inactiva'}</span>
       </div>
       <div class="item-actions">
@@ -6438,23 +6380,13 @@ function openExpModal(id){
   document.getElementById('exp-slug').value = e ? e.slug : '';
   document.getElementById('exp-icon').value = e ? e.icon : '🚣';
   document.getElementById('exp-desc').value = e ? (e.description||'') : '';
-  document.getElementById('exp-name-en').value = e ? (e.name_en||'') : '';
-  document.getElementById('exp-name-pt').value = e ? (e.name_pt||'') : '';
-  document.getElementById('exp-desc-en').value = e ? (e.description_en||'') : '';
-  document.getElementById('exp-desc-pt').value = e ? (e.description_pt||'') : '';
-  document.getElementById('exp-admin-wa').value = e ? (e.admin_whatsapp||'') : '';
   document.getElementById('exp-price').value = e ? e.price_per_person : 0;
   document.getElementById('exp-cost').value = e ? e.cost_per_person : 0;
   document.getElementById('exp-order').value = e ? e.display_order : 0;
   document.getElementById('exp-active').checked = e ? e.is_active : true;
-  const allImgs = [];
-  if(e && e.image_path) allImgs.push(e.image_path);
-  if(e && e.extra_images){
-    const extras = typeof e.extra_images === 'string' ? JSON.parse(e.extra_images||'[]') : (e.extra_images||[]);
-    extras.forEach(u => { if(u && !allImgs.includes(u)) allImgs.push(u); });
-  }
-  _expImagesList = allImgs.slice();
-  renderExpImagesList();
+  const wrap = document.getElementById('exp-img-wrap');
+  if(e && e.image_path){ wrap.style.display=''; document.getElementById('exp-img-preview').src=e.image_path; }
+  else { wrap.style.display='none'; }
   document.getElementById('exp-img-file').value='';
   document.getElementById('exp-modal').style.display='';
 }
@@ -6467,17 +6399,11 @@ async function saveExp(){
     name: document.getElementById('exp-name').value.trim(),
     icon: document.getElementById('exp-icon').value.trim()||'🚣',
     description: document.getElementById('exp-desc').value.trim(),
-    name_en: document.getElementById('exp-name-en').value.trim(),
-    name_pt: document.getElementById('exp-name-pt').value.trim(),
-    description_en: document.getElementById('exp-desc-en').value.trim(),
-    description_pt: document.getElementById('exp-desc-pt').value.trim(),
-    admin_whatsapp: document.getElementById('exp-admin-wa').value.trim(),
     price_per_person: +document.getElementById('exp-price').value||0,
     cost_per_person: +document.getElementById('exp-cost').value||0,
     display_order: +document.getElementById('exp-order').value||0,
     is_active: document.getElementById('exp-active').checked,
-    image_path: _expImagesList[0] || null,
-    extra_images: _expImagesList.slice(1),
+    image_path: id ? (_exps.find(x=>x.id==id)?.image_path||null) : null,
   };
   if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
   try{
@@ -6486,18 +6412,11 @@ async function saveExp(){
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
     const d = await r.json();
     const savedId = id || d.id;
-    // Upload files if any (appended to image list)
-    const files = document.getElementById('exp-img-file').files;
-    for(const file of files){
-      const fd = new FormData(); fd.append('file', file);
-      const ur = await fetch(`/api/admin/experiencias/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
-      const ud = await ur.json();
-      if(ud.image_path) _expImagesList.push(ud.image_path);
-    }
-    if(files.length){
-      body.image_path = _expImagesList[0]||null;
-      body.extra_images = _expImagesList.slice(1);
-      await fetch(`/api/admin/experiencias/${savedId}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+    // Upload image if selected
+    const file = document.getElementById('exp-img-file').files[0];
+    if(file && savedId){
+      const fd = new FormData(); fd.append('file',file);
+      await fetch(`/api/admin/experiencias/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
     }
     closeExpModal(); await loadExperiencias(); showToast('Experiencia guardada ✅');
   }catch(e){ showToast('Error: '+e.message); }
@@ -6506,7 +6425,7 @@ async function saveExp(){
 async function toggleExp(id, active){
   const e = _exps.find(x=>x.id===id);
   if(!e) return;
-  const body = {...e, is_active:active, image_path:e.image_path||null, extra_images:(Array.isArray(e.extra_images)?e.extra_images:[])};
+  const body = {...e, is_active:active, image_path:e.image_path||null};
   delete body.id; delete body.created_at; delete body.updated_at;
   await fetch(`/api/admin/experiencias/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
   await loadExperiencias(); showToast(active?'Experiencia activada ✅':'Experiencia desactivada');
@@ -6522,37 +6441,6 @@ async function deleteExp(id){
 // PACKS ADMIN
 // ═══════════════════════════════════════════════════════════════
 let _packs = [];
-let _packImagesList = [];
-
-function renderPackImagesList(){
-  const container = document.getElementById('pack-images-list');
-  if(!container) return;
-  if(!_packImagesList.length){
-    container.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:.3rem 0">Sin fotos aún</div>';
-    return;
-  }
-  container.innerHTML = _packImagesList.map((url, i) => `
-    <div style="display:flex;gap:.4rem;align-items:center">
-      <span style="color:var(--muted);font-size:.75rem;width:18px;text-align:right;flex-shrink:0">${i===0?'📌':(i+1)}</span>
-      ${url ? `<img src="${url}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">` : ''}
-      <input type="url" value="${url}" placeholder="https://..."
-        style="flex:1;font-size:.78rem;padding:.3rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px"
-        oninput="_packImagesList[${i}]=this.value;renderPackImagesList()">
-      <button type="button" onclick="_packImagesList.splice(${i},1);renderPackImagesList()"
-        style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer;flex-shrink:0">✕</button>
-      ${i>0?`<button type="button" onclick="_packImagesList.splice(${i-1},0,_packImagesList.splice(${i},1)[0]);renderPackImagesList()"
-        style="background:var(--input);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.25rem .4rem;font-size:.75rem;cursor:pointer;flex-shrink:0" title="Subir">↑</button>`:''}
-    </div>`).join('');
-}
-
-function packAddImageRow(){
-  _packImagesList.push('');
-  renderPackImagesList();
-  setTimeout(()=>{
-    const inputs = document.querySelectorAll('#pack-images-list input[type=url]');
-    if(inputs.length) inputs[inputs.length-1].focus();
-  }, 50);
-}
 
 async function loadPacksAdmin(){
   try{
@@ -6574,7 +6462,6 @@ function renderPackList(){
         <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${p.personas} · ${p.description||''}</div>
         <div style="font-size:.8rem">Desde: <strong>$${Number(p.price_from).toLocaleString('es-CL')}</strong> · Costo: $${Number(p.cost_from).toLocaleString('es-CL')}</div>
         <div style="font-size:.75rem;color:var(--muted);margin-top:.2rem">${(p.includes||[]).slice(0,3).map(i=>'✓ '+i).join(' · ')}</div>
-        ${p.admin_whatsapp ? `<div style="font-size:.75rem;color:var(--muted);margin:.1rem 0">📱 Admin: <a href="https://wa.me/${(p.admin_whatsapp).replace(/[^0-9]/g,'')}" target="_blank" style="color:#25D366">${p.admin_whatsapp}</a></div>` : '<div style="font-size:.75rem;color:#ff6b6b;margin:.1rem 0">⚠️ Sin WhatsApp admin</div>'}
         <span class="status-badge ${p.is_active?'badge-on':'badge-off'}" style="margin-top:.35rem">${p.is_active?'Activo':'Inactivo'}</span>
       </div>
       <div class="item-actions">
@@ -6594,24 +6481,14 @@ function openPackModal(id){
   document.getElementById('pack-icon').value = p ? p.icon : '🎁';
   document.getElementById('pack-personas').value = p ? p.personas : '2 personas';
   document.getElementById('pack-desc').value = p ? (p.description||'') : '';
-  document.getElementById('pack-name-en').value = p ? (p.name_en||'') : '';
-  document.getElementById('pack-name-pt').value = p ? (p.name_pt||'') : '';
-  document.getElementById('pack-desc-en').value = p ? (p.description_en||'') : '';
-  document.getElementById('pack-desc-pt').value = p ? (p.description_pt||'') : '';
-  document.getElementById('pack-admin-wa').value = p ? (p.admin_whatsapp||'') : '';
   document.getElementById('pack-price').value = p ? p.price_from : 0;
   document.getElementById('pack-cost').value = p ? p.cost_from : 0;
   document.getElementById('pack-includes').value = p ? (p.includes||[]).join('\n') : '';
   document.getElementById('pack-order').value = p ? p.display_order : 0;
   document.getElementById('pack-active').checked = p ? p.is_active : true;
-  const allImgs = [];
-  if(p && p.image_path) allImgs.push(p.image_path);
-  if(p && p.extra_images){
-    const extras = typeof p.extra_images === 'string' ? JSON.parse(p.extra_images||'[]') : (p.extra_images||[]);
-    extras.forEach(u => { if(u && !allImgs.includes(u)) allImgs.push(u); });
-  }
-  _packImagesList = allImgs.slice();
-  renderPackImagesList();
+  const wrap = document.getElementById('pack-img-wrap');
+  if(p && p.image_path){ wrap.style.display=''; document.getElementById('pack-img-preview').src=p.image_path; }
+  else { wrap.style.display='none'; }
   document.getElementById('pack-img-file').value='';
   document.getElementById('pack-modal').style.display='';
 }
@@ -6626,19 +6503,13 @@ async function savePack(){
     name: document.getElementById('pack-name').value.trim(),
     icon: document.getElementById('pack-icon').value.trim()||'🎁',
     description: document.getElementById('pack-desc').value.trim(),
-    name_en: document.getElementById('pack-name-en').value.trim(),
-    name_pt: document.getElementById('pack-name-pt').value.trim(),
-    description_en: document.getElementById('pack-desc-en').value.trim(),
-    description_pt: document.getElementById('pack-desc-pt').value.trim(),
-    admin_whatsapp: document.getElementById('pack-admin-wa').value.trim(),
     personas: document.getElementById('pack-personas').value.trim()||'2 personas',
     price_from: +document.getElementById('pack-price').value||0,
     cost_from: +document.getElementById('pack-cost').value||0,
     display_order: +document.getElementById('pack-order').value||0,
     is_active: document.getElementById('pack-active').checked,
     includes,
-    image_path: _packImagesList[0] || null,
-    extra_images: _packImagesList.slice(1),
+    image_path: id ? (_packs.find(x=>x.id==id)?.image_path||null) : null,
   };
   if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
   try{
@@ -6647,17 +6518,10 @@ async function savePack(){
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
     const d = await r.json();
     const savedId = id || d.id;
-    const files = document.getElementById('pack-img-file').files;
-    for(const file of files){
+    const file = document.getElementById('pack-img-file').files[0];
+    if(file && savedId){
       const fd = new FormData(); fd.append('file',file);
-      const ur = await fetch(`/api/admin/packs/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
-      const ud = await ur.json();
-      if(ud.image_path) _packImagesList.push(ud.image_path);
-    }
-    if(files.length){
-      body.image_path = _packImagesList[0]||null;
-      body.extra_images = _packImagesList.slice(1);
-      await fetch(`/api/admin/packs/${savedId}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
+      await fetch(`/api/admin/packs/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
     }
     closePackModal(); await loadPacksAdmin(); showToast('Pack guardado ✅');
   }catch(e){ showToast('Error: '+e.message); }
@@ -6666,7 +6530,7 @@ async function savePack(){
 async function togglePack(id, active){
   const p = _packs.find(x=>x.id===id);
   if(!p) return;
-  const body = {...p, is_active:active, image_path:p.image_path||null, extra_images:(Array.isArray(p.extra_images)?p.extra_images:[])};
+  const body = {...p, is_active:active, image_path:p.image_path||null};
   delete body.id; delete body.created_at; delete body.updated_at;
   await fetch(`/api/admin/packs/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
   await loadPacksAdmin(); showToast(active?'Pack activado ✅':'Pack desactivado');
@@ -7161,7 +7025,6 @@ function generarRecibo(){
 
 // Pre-render calendars so they display immediately when the section is opened
 renderUrgCal();
-renderHighSeasonCal();
 renderVacCal();
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -7986,8 +7849,7 @@ function exportFinancialTableCsv(){
     const { data, view, totals } = _finLastPnl;
     const headers = [
       'periodo', 'vista_agregacion', 'fecha_desde', 'fecha_hasta', 'n_reservas', 'ingreso_bruto',
-      'ingreso_reserva', 'ingreso_aloj', 'ingreso_exp', 'ingreso_extra', 'descuentos',
-      'comisiones', 'ingreso_neto',
+      'ingreso_reserva', 'ingreso_aloj', 'ingreso_exp', 'ingreso_extra', 'comisiones', 'ingreso_neto',
       'costo_operacional', 'cv_aloj', 'cv_exp', 'cv_extra', 'costo_estructural',
       'marketing', 'resultado', 'margen_pct_sobre_bruto',
     ];
@@ -8002,7 +7864,6 @@ function exportFinancialTableCsv(){
         finCsvNum(row.ingreso_aloj),
         finCsvNum(row.ingreso_exp),
         finCsvNum(row.ingreso_extra),
-        finCsvNum(row.total_descuentos),
         finCsvNum(row.commission_deduction),
         finCsvNum(row.net_income),
         finCsvNum(row.costo_operacional),
@@ -8026,7 +7887,6 @@ function exportFinancialTableCsv(){
         finCsvNum(t.ingreso_aloj),
         finCsvNum(t.ingreso_exp),
         finCsvNum(t.ingreso_extra),
-        finCsvNum(t.total_descuentos),
         finCsvNum(t.commission_deduction),
         finCsvNum(t.net_income),
         finCsvNum(t.costo_operacional),
@@ -8081,20 +7941,25 @@ function exportFinancialTableCsv(){
       return;
     }
     const headers = [
-      'mes', 'tipo', 'reservas', 'real_ingresos', 'real_resultado',
-      'forecast_manual', 'sugerido', 'fuente_sugerido',
+      'mes', 'n_reservas', 'confirmadas', 'pendientes', 'ingreso_bruto', 'ingreso_neto', 'costo',
+      'resultado_forecast', 'presupuesto_ingreso', 'presupuesto_costos', 'presupuesto_marketing', 'vs_presupuesto_ingreso',
     ];
     const rows = [headers];
     _finLastForecast.forEach(m => {
-      const tipo = m.is_past ? 'pasado' : m.is_current ? 'actual' : 'futuro';
+      const b = m.budget || {};
       rows.push([
-        m.month || '', tipo,
-        finCsvNum(m.actual_bookings),
-        finCsvNum(m.actual_income),
-        finCsvNum(m.actual_result),
-        finCsvNum(m.manual_income),
-        finCsvNum(m.suggested_income),
-        m.suggested_source || '',
+        m.month || '',
+        finCsvNum(m.n_reservas),
+        finCsvNum(m.confirmed),
+        finCsvNum(m.pending),
+        finCsvNum(m.gross),
+        finCsvNum(m.net_income),
+        finCsvNum(m.costo),
+        finCsvNum(m.resultado_forecast),
+        finCsvNum(b.income_budget),
+        finCsvNum(b.costs_budget),
+        finCsvNum(b.marketing_budget),
+        finCsvNum(m.vs_budget),
       ]);
     });
     finDownloadCsv(`hotboat-forecast_${from}_${to}.csv`, rows);
@@ -8179,7 +8044,6 @@ function renderPnlKpis(t, periodDays, structure){
       {label:'Ingreso alojamientos',   value: fmtClp(t.ingreso_aloj||0),    color:'var(--text)'},
       {label:'Ingreso experiencias',   value: fmtClp(t.ingreso_exp||0),     color:'#5dade2'},
       {label:'Ingreso extras',         value: fmtClp(t.ingreso_extra||0),   color:'var(--muted)'},
-      {label:'Descuentos',              value: '-'+fmtClp(t.total_descuentos||0), color:'var(--red)'},
       {label:'C. var. aloj / exp / ext', value: '-'+fmtClp((t.cv_aloj||0)+(t.cv_exp||0)+(t.cv_extra||0)),
        color:'var(--red)', sub: `${fmtClp(t.cv_aloj||0)} · ${fmtClp(t.cv_exp||0)} · ${fmtClp(t.cv_extra||0)}`},
     ];
@@ -8191,7 +8055,6 @@ function _pnlRowTds(row, sm){
   const p = sm ? 'padding:.4rem .4rem;font-size:.74rem' : 'padding:.5rem .4rem';
   const margin = row.gross ? Math.round(row.resultado/row.gross*100) : 0;
   const v = (k)=> Math.round(Number(row[k])||0);
-  const desc = v('total_descuentos');
   return `
     <td style="${p};text-align:right;color:var(--muted)">${row.n_reservas}</td>
     <td style="${p};text-align:right">${fmtClp(row.gross)}</td>
@@ -8199,7 +8062,6 @@ function _pnlRowTds(row, sm){
     <td style="${p};text-align:right">${fmtClp(v('ingreso_aloj'))}</td>
     <td style="${p};text-align:right">${fmtClp(v('ingreso_exp'))}</td>
     <td style="${p};text-align:right">${fmtClp(v('ingreso_extra'))}</td>
-    <td style="${p};text-align:right;color:var(--red)">${desc ? '-'+fmtClp(desc) : '—'}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.commission_deduction)}</td>
     <td style="${p};text-align:right;color:var(--gold)">${fmtClp(row.net_income)}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.costo_operacional)}</td>
@@ -8215,7 +8077,7 @@ function _pnlRowTds(row, sm){
 function renderPnlTable(data, view, totals){
   const tbody = document.getElementById('fin-pnl-tbody');
   const tfoot = document.getElementById('fin-pnl-tfoot');
-  const COLSP = 18;
+  const COLSP = 17;
   tbody.innerHTML = '';
 
   data.forEach((row, idx) => {
@@ -8252,7 +8114,6 @@ function renderPnlTable(data, view, totals){
     const t = totals;
     const margin = t.gross ? Math.round(t.resultado/t.gross*100) : 0;
     const tv = (k)=> Math.round(Number(t[k])||0);
-    const tdesc = tv('total_descuentos');
     tfoot.innerHTML = `<tr style="background:var(--card);font-weight:600;font-size:.8rem;border-top:2px solid var(--border)">
       <td style="padding:.55rem .7rem">Σ período</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--muted)">${t.n_reservas}</td>
@@ -8261,7 +8122,6 @@ function renderPnlTable(data, view, totals){
       <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_aloj'))}</td>
       <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_exp'))}</td>
       <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_extra'))}</td>
-      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">${tdesc ? '-'+fmtClp(tdesc) : '—'}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.commission_deduction)}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--gold)">${fmtClp(t.net_income)}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.costo_operacional)}</td>
@@ -8459,68 +8319,20 @@ function showCfMethodDetail(method, field){
   };
   const title = `${_cfMethodLabel(method)} · ${fieldLabels[field] || 'Detalle'}`;
   const ordered = [...details].sort((a,b)=> Number(b?.[field] || 0) - Number(a?.[field] || 0));
-
-  const totalBruto = ordered.reduce((s,d)=>s+(d.inflow_bruto||0),0);
-  const totalCom   = ordered.reduce((s,d)=>s+(d.inflow_commission||0),0);
-  const totalNeto  = ordered.reduce((s,d)=>s+(d.inflow_neto||0),0);
-
-  const tableRows = ordered.map(d => {
-    const bookingId = d.booking_id != null ? `#${d.booking_id}` : '-';
-    const cliente   = (d.nombre_cliente || 'Sin nombre').replace(/</g,'&lt;');
-    const pDate     = d.payment_date || '-';
-    const bDate     = d.booking_date || '-';
-    const bruto     = fmtClp(d.inflow_bruto || 0);
-    const com       = fmtClp(d.inflow_commission || 0);
-    const neto      = fmtClp(d.inflow_neto || 0);
-    const mOrig     = (d.method_original || method).replace(/</g,'&lt;');
-    return `<tr>
-      <td>${bookingId}</td>
-      <td>${cliente}</td>
-      <td>${pDate}</td>
-      <td>${bDate}</td>
-      <td>${mOrig}</td>
-      <td style="text-align:right">${bruto}</td>
-      <td style="text-align:right;color:#dc2626">${com}</td>
-      <td style="text-align:right;font-weight:700">${neto}</td>
-    </tr>`;
-  }).join('');
-
-  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
-<title>${title.replace(/</g,'&lt;')}</title>
-<style>
-  body{font-family:system-ui,sans-serif;padding:1.5rem;background:#0f172a;color:#e2e8f0;margin:0}
-  h2{margin:0 0 1rem;font-size:1.1rem;color:#f8fafc}
-  table{width:100%;border-collapse:collapse;font-size:.85rem}
-  th{background:#1e293b;color:#94a3b8;font-weight:600;text-align:left;padding:.5rem .7rem;position:sticky;top:0}
-  th:nth-child(n+6){text-align:right}
-  td{padding:.45rem .7rem;border-bottom:1px solid #1e293b}
-  tr:hover td{background:#1e293b}
-  tfoot td{background:#1e293b;font-weight:700;padding:.55rem .7rem;border-top:2px solid #334155}
-  tfoot td:nth-child(n+6){text-align:right}
-  .count{color:#94a3b8;font-size:.8rem;margin-bottom:.6rem}
-</style>
-</head><body>
-<h2>${title.replace(/</g,'&lt;')}</h2>
-<p class="count">${ordered.length} pago${ordered.length!==1?'s':''}</p>
-<table>
-  <thead><tr>
-    <th>#Reserva</th><th>Cliente</th><th>Fecha pago</th><th>Fecha reserva</th>
-    <th>Método</th><th>Bruto</th><th>Comisión</th><th>Neto</th>
-  </tr></thead>
-  <tbody>${tableRows}</tbody>
-  <tfoot><tr>
-    <td colspan="5">TOTAL</td>
-    <td>${fmtClp(totalBruto)}</td>
-    <td style="color:#dc2626">${fmtClp(totalCom)}</td>
-    <td>${fmtClp(totalNeto)}</td>
-  </tr></tfoot>
-</table>
-</body></html>`;
-
-  const win = window.open('', '_blank');
-  if(!win){ alert('Permite popups para ver el detalle'); return; }
-  win.document.write(html);
-  win.document.close();
+  const lines = ordered.map(d => {
+    const bookingId = d.booking_id != null ? `#${d.booking_id}` : '(sin id)';
+    const cliente = d.nombre_cliente || 'Sin nombre';
+    const pDate = d.payment_date || '-';
+    const bDate = d.booking_date || '-';
+    const bruto = fmtClp(d.inflow_bruto || 0);
+    const com = fmtClp(d.inflow_commission || 0);
+    const neto = fmtClp(d.inflow_neto || 0);
+    const mOrig = d.method_original || method;
+    return `${bookingId} · ${cliente}\n` +
+      `Pago: ${pDate} · Reserva: ${bDate} · Método: ${mOrig}\n` +
+      `Bruto: ${bruto} · Comisión: ${com} · Neto: ${neto}`;
+  });
+  alert(`${title}\n\n${lines.join('\n\n')}`);
 }
 
 function renderCfKpis(data){
@@ -8665,248 +8477,60 @@ async function saveFinStructure(){
 }
 
 // ── Forecast ──────────────────────────────────────────────────
-const _FC_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-let _fcView = 'monthly';
-let _fcDateFrom = null, _fcDateTo = null;
-
-function fmtClpK(n){
-  const v = Math.abs(Math.round(Number(n)||0));
-  if(v >= 1000000) return '$'+(v/1000000).toFixed(1).replace('.0','')+'M';
-  if(v >= 1000)    return '$'+(v/1000).toFixed(0)+'K';
-  return '$'+v.toLocaleString('es-CL');
-}
-
-function setFcView(v){
-  _fcView = v;
-  const onCSS  = 'background:var(--gold);color:#000;border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;font-weight:600;cursor:pointer';
-  const offCSS = 'background:transparent;color:var(--muted);border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;cursor:pointer';
-  document.getElementById('fc-view-monthly').style.cssText = v==='monthly' ? onCSS : offCSS;
-  document.getElementById('fc-view-weekly').style.cssText  = v==='weekly'  ? onCSS : offCSS;
-  loadForecast(v);
-}
-
-async function loadForecast(view){
-  view = view || _fcView || 'monthly';
-  _fcView = view;
+async function loadForecast(){
   const el = document.getElementById('fin-fc-content');
   el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:.5rem">Cargando…</div>';
-  let params;
-  if(_fcDateFrom && _fcDateTo){
-    params = `view=${view}&date_from=${_fcDateFrom}&date_to=${_fcDateTo}`;
-  } else if(view === 'weekly'){
-    params = 'view=weekly&weeks_back=4&weeks_ahead=34';
-  } else {
-    params = 'view=monthly&months_back=3&months_ahead=9';
-  }
   try {
-    const r = await fetch(`/api/admin/financial/forecast-table?${params}`, {headers:{'x-admin-key':KEY}});
-    if(!r.ok) throw new Error(await r.text());
+    const r = await fetch('/api/admin/financial/forecast?months_ahead=3');
     const d = await r.json();
     _finLastForecast = d.data || [];
-    renderForecast(_finLastForecast, view);
+    renderForecast(_finLastForecast);
   } catch(e){
-    el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar: '+e.message+'</div>';
+    el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar</div>';
   }
 }
 
-function fcApplyRange(){
-  _fcDateFrom = document.getElementById('fc-date-from').value || null;
-  _fcDateTo   = document.getElementById('fc-date-to').value || null;
-  loadForecast(_fcView);
-}
-
-function fcSetPreset(months){
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const toMonth = new Date(now.getFullYear(), now.getMonth() + months - 1, 1);
-  const lastDay = new Date(toMonth.getFullYear(), toMonth.getMonth() + 1, 0);
-  const fmt = d => d.toISOString().split('T')[0];
-  _fcDateFrom = fmt(from);
-  _fcDateTo   = fmt(lastDay);
-  document.getElementById('fc-date-from').value = _fcDateFrom;
-  document.getElementById('fc-date-to').value   = _fcDateTo;
-  loadForecast(_fcView);
-}
-
-// Generic inline-edit cell helper
-function _fcInlineEdit(spanId, currentVal, onSave){
-  const span = document.getElementById(spanId);
-  if(!span) return false;
-  const input = document.createElement('input');
-  input.type='number'; input.value=currentVal||''; input.placeholder='0'; input.min='0';
-  input.style.cssText='width:105px;background:var(--card);border:1px solid var(--gold);color:var(--text);border-radius:5px;padding:.18rem .4rem;font-size:.8rem;text-align:right;outline:none';
-  let saved=false;
-  const doSave=async()=>{ if(saved)return; saved=true; await onSave(parseInt(input.value)||0); };
-  input.addEventListener('blur', doSave);
-  input.addEventListener('keydown', e=>{
-    if(e.key==='Enter') input.blur();
-    if(e.key==='Escape'){ saved=true; renderForecast(_finLastForecast,_fcView); }
-  });
-  span.replaceWith(input); input.focus(); input.select();
-  return true;
-}
-
-// Save to /api/admin/financial/plan-entry
-async function _fcSavePlan(type, key, amount){
-  await fetch('/api/admin/financial/plan-entry',{
-    method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
-    body: JSON.stringify({type, key, amount})
-  });
-}
-
-function renderForecast(data, view){
-  view = view || _fcView || 'monthly';
+function renderForecast(data){
   const el = document.getElementById('fin-fc-content');
-  if(!data||!data.length){ el.innerHTML='<div style="color:var(--muted);font-size:.82rem">Sin datos</div>'; return; }
-  const isWeekly = view === 'weekly';
-
-  let rows = '';
-  for(const m of data){
-    const isPast = m.is_past, isCurrent = m.is_current;
-    const rowBg = isCurrent ? 'rgba(250,204,21,.06)' : isPast ? 'rgba(255,255,255,.015)' : '';
-
-    // Period label
-    let periodLabel;
-    if(isWeekly){
-      periodLabel = m.week_label || m.month;
-    } else {
-      const [yr, mo] = m.month.split('-');
-      periodLabel = _FC_MONTHS[parseInt(mo)-1]+' '+yr;
-    }
-    const badge = isCurrent ? ' <span style="font-size:.62rem;color:var(--gold);font-weight:700">HOY</span>'
-                : isPast    ? ' <span style="font-size:.62rem;color:var(--muted)">✓</span>' : '';
-
-    // Real
-    let realHtml = '—';
-    if(m.actual_income !== null){
-      const col = isPast ? 'var(--green)' : 'var(--gold)';
-      realHtml = `<span style="font-weight:600;color:${col}">${fmtClp(m.actual_income)}</span>`;
-      if(isCurrent && !isWeekly) realHtml += `<br><span style="font-size:.63rem;color:var(--muted)">parcial</span>`;
-      if(m.actual_bookings) realHtml += `<br><span style="font-size:.63rem;color:var(--muted)">${m.actual_bookings} res.</span>`;
-    }
-
-    // ── Budget column (editable per week OR per month) ──────────────────────
-    let budgetHtml = '';
-    const budgetSpanId = `fc-b-${m.month}`;
-    if(isPast){
-      // Past: show value + delta vs real
-      if(m.manual_income){
-        const delta = m.actual_income !== null ? m.actual_income - m.manual_income : null;
-        budgetHtml = `<span style="color:var(--text)">${fmtClp(m.manual_income)}</span>`;
-        if(delta !== null) budgetHtml += `<br><span style="font-size:.63rem;color:${delta>=0?'var(--green)':'var(--red)'}">${delta>=0?'+':''}${fmtClpK(delta)}</span>`;
-      } else {
-        budgetHtml = `<span style="color:var(--muted);font-size:.75rem">—</span>`;
-      }
-    } else {
-      const bv = m.manual_income;
-      const isOverride = m.manual_is_override;
-      const hint = isWeekly && !isOverride && bv ? `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">del mensual</span>` : '';
-      budgetHtml = `<span id="${budgetSpanId}"
-        onclick="fcEditBudget('${m.month}','${m.month_key}',${bv||0},${isWeekly})"
-        style="cursor:pointer;display:inline-block;min-width:80px;text-align:right;padding:.18rem .45rem;
-               border-radius:5px;border:1px dashed ${bv?'var(--border)':'rgba(255,255,255,.12)'};
-               color:${bv?'var(--text)':'var(--muted)'};font-size:${bv?'.82rem':'.73rem'}"
-        title="Click para editar budget">${bv ? fmtClp(bv) : '+ añadir'}</span>${hint}`;
-    }
-
-    // ── Forecast column (manual value, suggested shown below) ────────────────
-    let forecastHtml = '';
-    const fcSpanId = `fc-f-${m.month}`;
-    const fcType = isWeekly ? 'week_forecast' : 'month_forecast';
-    const fcKey  = m.month;  // week key or month key
-    if(isPast){
-      // Past: show forecast if set, compare to real
-      if(m.forecast_income){
-        const delta = m.actual_income !== null ? m.actual_income - m.forecast_income : null;
-        forecastHtml = `<span style="color:var(--text)">${fmtClp(m.forecast_income)}</span>`;
-        if(delta !== null) forecastHtml += `<br><span style="font-size:.63rem;color:${delta>=0?'var(--green)':'var(--red)'}">${delta>=0?'+':''}${fmtClpK(delta)}</span>`;
-      } else {
-        forecastHtml = `<span style="color:var(--muted);font-size:.75rem">—</span>`;
-      }
-    } else {
-      const fv = m.forecast_income;
-      const sv = m.suggested_income;
-      const sugLabel = sv ? `<span style="font-size:.62rem;color:var(--muted);opacity:.75">sugerido: ${fmtClpK(sv)}${m.suggested_source?' ('+m.suggested_source+')':''}</span>` : '';
-      forecastHtml = `<span id="${fcSpanId}"
-        onclick="fcEditForecast('${fcKey}','${fcType}',${fv||0})"
-        style="cursor:pointer;display:inline-block;min-width:80px;text-align:right;padding:.18rem .45rem;
-               border-radius:5px;border:1px dashed ${fv?'var(--border)':'rgba(255,255,255,.12)'};
-               color:${fv?'var(--text)':'var(--muted)'};font-size:${fv?'.82rem':'.73rem'}"
-        title="Click para editar forecast">${fv ? fmtClp(fv) : '+ añadir'}</span>
-        ${sugLabel ? `<br>${sugLabel}` : ''}`;
-    }
-
-    // Δ: past = Real vs Forecast; future = Forecast vs Budget
-    let deltaHtml = '—';
-    if(isPast && m.forecast_income && m.actual_income !== null){
-      const d2 = m.actual_income - m.forecast_income;
-      deltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">real vs fc</span></span>`;
-    } else if(!isPast && m.forecast_income && m.manual_income){
-      const d2 = m.forecast_income - m.manual_income;
-      deltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">fc vs budget</span></span>`;
-    }
-
-    rows += `<tr style="background:${rowBg};border-bottom:1px solid var(--border)">
-      <td style="padding:.45rem .7rem;font-weight:${isCurrent?700:500}">${periodLabel}${badge}</td>
-      <td style="padding:.45rem .5rem;text-align:right">${realHtml}</td>
-      <td style="padding:.45rem .5rem;text-align:right">${budgetHtml}</td>
-      <td style="padding:.45rem .5rem;text-align:right">${forecastHtml}</td>
-      <td style="padding:.45rem .5rem;text-align:right">${deltaHtml}</td>
-    </tr>`;
+  if(!data||!data.length){
+    el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Sin reservas futuras</div>'; return;
   }
-
-  const periodHeader = isWeekly ? 'Semana' : 'Mes';
-  el.innerHTML = `<div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:.8rem">
-      <thead><tr style="background:var(--card);color:var(--muted);font-size:.67rem;text-transform:uppercase;letter-spacing:.04em">
-        <th style="padding:.5rem .7rem;text-align:left">${periodHeader}</th>
-        <th style="padding:.5rem .5rem;text-align:right">Real</th>
-        <th style="padding:.5rem .5rem;text-align:right">Budget</th>
-        <th style="padding:.5rem .5rem;text-align:right">Forecast</th>
-        <th style="padding:.5rem .5rem;text-align:right">Δ</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>`;
-}
-
-// Edit budget: weekly uses plan-entry (week_budget), monthly uses financial_budget table
-async function fcEditBudget(weekOrMonthKey, monthKey, currentVal, isWeekly){
-  const spanId = `fc-b-${weekOrMonthKey}`;
-  _fcInlineEdit(spanId, currentVal, async (val)=>{
-    try {
-      if(isWeekly){
-        await _fcSavePlan('week_budget', weekOrMonthKey, val);
-        const row = (_finLastForecast||[]).find(r=>r.month===weekOrMonthKey);
-        if(row){ row.manual_income = val||null; row.manual_is_override = true; }
-      } else {
-        const [yr, mo] = monthKey.split('-');
-        const row = (_finLastForecast||[]).find(r=>r.month===weekOrMonthKey);
-        await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`,{
-          method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
-          body: JSON.stringify({income_budget:val, costs_budget:(row&&row.manual_costs)||0,
-                                marketing_budget:(row&&row.manual_marketing)||0, notes:''})
-        });
-        if(row) row.manual_income = val||null;
-      }
-      renderForecast(_finLastForecast, _fcView);
-      showToast('✅ Budget guardado');
-    } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast, _fcView); }
-  });
-}
-
-// Edit forecast: always uses plan-entry
-async function fcEditForecast(key, type, currentVal){
-  const spanId = `fc-f-${key}`;
-  _fcInlineEdit(spanId, currentVal, async (val)=>{
-    try {
-      await _fcSavePlan(type, key, val);
-      const row = (_finLastForecast||[]).find(r=>r.month===key);
-      if(row) row.forecast_income = val||null;
-      renderForecast(_finLastForecast, _fcView);
-      showToast('✅ Forecast guardado');
-    } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast, _fcView); }
-  });
+  const MONTH_NAMES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  el.innerHTML = data.map(m=>{
+    const mo = parseInt(m.month.split('-')[1]);
+    const yr = m.month.split('-')[0];
+    const b = m.budget || {};
+    const incomeBudget = b.income_budget || 0;
+    const vs = m.vs_budget;
+    const vsColor = vs >= 0 ? 'var(--green)' : 'var(--red)';
+    const vsPct = incomeBudget ? Math.round(vs/incomeBudget*100) : null;
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:.8rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.8rem">
+        <div>
+          <div style="font-weight:600">${MONTH_NAMES[mo]} ${yr}</div>
+          <div style="color:var(--muted);font-size:.75rem">${m.n_reservas} reservas · ${m.confirmed} confirmadas · ${m.pending} pendientes</div>
+        </div>
+        <button onclick="openBudgetModal('${yr}','${mo}')" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.28rem .6rem;font-size:.75rem;cursor:pointer">
+          📋 Editar budget
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;font-size:.8rem">
+        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
+          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Ingreso Forecast</div>
+          <div style="font-weight:600;color:var(--gold)">${fmtClp(m.net_income)}</div>
+          ${incomeBudget ? `<div style="font-size:.7rem;color:${vsColor};margin-top:.15rem">${vs>=0?'+':''}${fmtClp(vs)} vs budget ${vsPct!==null?'('+vsPct+'%)':''}</div>` : ''}
+        </div>
+        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
+          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Budget Ingreso</div>
+          <div style="font-weight:600">${incomeBudget ? fmtClp(incomeBudget) : '<span style="color:var(--muted)">—</span>'}</div>
+        </div>
+        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
+          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Resultado Forecast</div>
+          <div style="font-weight:600;color:${colorNum(m.resultado_forecast)}">${fmtClp(m.resultado_forecast)}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── Commissions modal ─────────────────────────────────────────
@@ -9151,195 +8775,6 @@ function initLogsSection(){
   loadLogs();
   clearInterval(_logAutoRefresh);
   _logAutoRefresh = setInterval(loadLogs, 15000);
-}
-
-// ── Chatbot Admin ─────────────────────────────────────────────────────────────
-
-let _botResponses = [];
-
-async function loadBotResponses(){
-  const el = document.getElementById('bot-responses-list');
-  el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Cargando…</span>';
-  try {
-    const r = await fetch('/api/admin/bot/responses');
-    const d = await r.json();
-    _botResponses = d.responses || [];
-    // Populate keyword response select
-    const sel = document.getElementById('new-kw-key');
-    const prev = sel.value;
-    sel.innerHTML = '<option value="">— Respuesta —</option>' +
-      _botResponses.map(rs=>`<option value="${rs.response_key}">${rs.label||rs.response_key}</option>`).join('');
-    if(prev) sel.value = prev;
-    // Render response editors
-    el.innerHTML = '';
-    if(!_botResponses.length){ el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Sin respuestas configuradas.</span>'; return; }
-    _botResponses.forEach(rs => {
-      const safeKey = rs.response_key.replace(/[^a-z0-9_]/gi,'_');
-      const div = document.createElement('div');
-      const isActive = rs.active !== false;
-      div.style.cssText = `background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;display:flex;flex-direction:column;gap:.45rem;${isActive?'':'opacity:.55'}`;
-      div.innerHTML = `
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-          <span style="font-weight:600;font-size:.85rem">${rs.label||rs.response_key}</span>
-          <code style="font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.06);padding:.1rem .4rem;border-radius:4px">${rs.response_key}</code>
-          <span style="margin-left:auto;font-size:.7rem;color:var(--muted)">${rs.updated_at ? new Date(rs.updated_at).toLocaleDateString('es-CL') : ''}</span>
-        </div>
-        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-          <label style="font-size:.78rem;color:var(--muted);white-space:nowrap">Índice:</label>
-          <input id="br-opt-${safeKey}" type="number" min="0" max="99" placeholder="—"
-            value="${rs.menu_option ?? ''}"
-            style="width:55px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.82rem;outline:none;text-align:center">
-          <label style="font-size:.78rem;color:var(--muted);white-space:nowrap">Botón:</label>
-          <input id="br-lbl-${safeKey}" type="text" placeholder="🚤 HotBoat"
-            value="${escHtml(rs.button_label||'')}"
-            style="width:115px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.82rem;outline:none">
-          <label style="display:flex;align-items:center;gap:.28rem;cursor:pointer;user-select:none" title="Activo en botones del chat">
-            <input id="br-act-${safeKey}" type="checkbox" ${isActive?'checked':''} style="width:14px;height:14px;cursor:pointer;accent-color:var(--gold)">
-            <span style="font-size:.75rem;color:var(--muted)">Chat</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:.28rem;cursor:pointer;user-select:none" title="Aparece en el menú de bienvenida del chatbot">
-            <input id="br-sim-${safeKey}" type="checkbox" ${rs.show_in_menu?'checked':''} style="width:14px;height:14px;cursor:pointer;accent-color:#38bdf8">
-            <span style="font-size:.75rem;color:var(--muted)">Menú</span>
-          </label>
-        </div>
-        ${rs.show_in_menu ? `<div style="display:flex;flex-direction:column;gap:.3rem">
-          <div style="display:flex;gap:.4rem;align-items:center">
-            <label style="font-size:.76rem;color:var(--muted);white-space:nowrap;min-width:80px">Desc. menú ES:</label>
-            <input id="br-mdesc-${safeKey}" type="text" placeholder="Texto en la lista de bienvenida…"
-              value="${escHtml(rs.menu_description||'')}"
-              style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .6rem;font-size:.82rem;outline:none">
-          </div>
-          <div style="display:flex;gap:.4rem;align-items:center">
-            <label style="font-size:.76rem;color:var(--muted);white-space:nowrap;min-width:80px">Desc. menú EN:</label>
-            <input id="br-mdesc-en-${safeKey}" type="text" placeholder="Menu item text in English…"
-              value="${escHtml(rs.menu_description_en||'')}"
-              style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .6rem;font-size:.82rem;outline:none">
-          </div>
-          <div style="display:flex;gap:.4rem;align-items:center">
-            <label style="font-size:.76rem;color:var(--muted);white-space:nowrap;min-width:80px">Desc. menú PT:</label>
-            <input id="br-mdesc-pt-${safeKey}" type="text" placeholder="Texto do item de menu em português…"
-              value="${escHtml(rs.menu_description_pt||'')}"
-              style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .6rem;font-size:.82rem;outline:none">
-          </div>
-        </div>` : `<div id="br-mdesc-wrap-${safeKey}" style="display:none">
-          <input id="br-mdesc-${safeKey}" type="hidden" value="${escHtml(rs.menu_description||'')}">
-          <input id="br-mdesc-en-${safeKey}" type="hidden" value="${escHtml(rs.menu_description_en||'')}">
-          <input id="br-mdesc-pt-${safeKey}" type="hidden" value="${escHtml(rs.menu_description_pt||'')}">
-        </div>`}
-        <textarea id="br-es-${safeKey}" rows="3" placeholder="Español…"
-          style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.8rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_es||'')}</textarea>
-        <div style="display:flex;gap:.4rem">
-          <textarea id="br-en-${safeKey}" rows="2" placeholder="English…"
-            style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_en||'')}</textarea>
-          <textarea id="br-pt-${safeKey}" rows="2" placeholder="Português…"
-            style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none">${escHtml(rs.content_pt||'')}</textarea>
-        </div>
-        <div style="display:flex;justify-content:flex-end">
-          <button onclick="saveBotResponse('${rs.response_key}','${safeKey}')"
-            style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.3rem .8rem;font-size:.8rem;cursor:pointer;font-weight:600">Guardar</button>
-        </div>`;
-      el.appendChild(div);
-    });
-  } catch(e){
-    el.innerHTML = `<span style="color:var(--red);font-size:.83rem">Error: ${e.message}</span>`;
-  }
-}
-
-function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-async function saveBotResponse(key, safeKey){
-  const content_es = document.getElementById(`br-es-${safeKey}`)?.value || null;
-  const content_en = document.getElementById(`br-en-${safeKey}`)?.value || null;
-  const content_pt = document.getElementById(`br-pt-${safeKey}`)?.value || null;
-  const optVal = document.getElementById(`br-opt-${safeKey}`)?.value;
-  const menu_option = optVal !== '' && optVal !== undefined ? parseInt(optVal) : null;
-  const active = document.getElementById(`br-act-${safeKey}`)?.checked ?? true;
-  const button_label = document.getElementById(`br-lbl-${safeKey}`)?.value || null;
-  const show_in_menu = document.getElementById(`br-sim-${safeKey}`)?.checked ?? false;
-  const menu_description = document.getElementById(`br-mdesc-${safeKey}`)?.value || null;
-  const menu_description_en = document.getElementById(`br-mdesc-en-${safeKey}`)?.value || null;
-  const menu_description_pt = document.getElementById(`br-mdesc-pt-${safeKey}`)?.value || null;
-  try {
-    const r = await fetch(`/api/admin/bot/responses/${encodeURIComponent(key)}`, {
-      method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({content_es, content_en, content_pt, menu_option, active, button_label, show_in_menu, menu_description, menu_description_en, menu_description_pt})
-    });
-    if(!r.ok) throw new Error(await r.text());
-    showToast('✅ Guardado');
-    loadBotResponses();
-  } catch(e){ showToast('❌ '+e.message, true); }
-}
-
-async function rebuildWelcomeMenu(){
-  try {
-    const r = await fetch('/api/admin/bot/build-menu?lang=es');
-    if(!r.ok) throw new Error(await r.text());
-    const d = await r.json();
-    // Find the main_menu textarea and fill it
-    const ta = document.getElementById('br-es-main_menu');
-    if(ta){ ta.value = d.text; showToast('✅ Menú reconstruido — guarda para aplicar'); }
-    else { showToast('Abre la tarjeta "Mensaje de bienvenida" primero', true); }
-  } catch(e){ showToast('❌ '+e.message, true); }
-}
-
-async function loadBotKeywords(){
-  const tbody = document.getElementById('bot-kw-body');
-  tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted);padding:.5rem .6rem;font-size:.83rem">Cargando…</td></tr>';
-  try {
-    const r = await fetch('/api/admin/bot/keywords');
-    const d = await r.json();
-    const kws = d.keywords || [];
-    if(!kws.length){ tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted);padding:.5rem .6rem;font-size:.83rem">Sin keywords.</td></tr>'; return; }
-    tbody.innerHTML = kws.map(kw=>`
-      <tr>
-        <td style="padding:.35rem .6rem">${escHtml(kw.keyword)}</td>
-        <td style="padding:.35rem .6rem;color:var(--muted)">${escHtml(kw.response_key)}</td>
-        <td style="padding:.35rem .6rem;text-align:center">
-          <button onclick="deleteBotKeyword(${kw.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem" title="Eliminar">✕</button>
-        </td>
-      </tr>`).join('');
-  } catch(e){
-    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--red);font-size:.83rem;padding:.5rem .6rem">Error: ${e.message}</td></tr>`;
-  }
-}
-
-async function addBotKeyword(){
-  const kw = document.getElementById('new-kw-word').value.trim();
-  const rk = document.getElementById('new-kw-key').value;
-  if(!kw || !rk){ showToast('Ingresa keyword y respuesta', true); return; }
-  try {
-    const r = await fetch('/api/admin/bot/keywords', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({keyword: kw, response_key: rk})
-    });
-    if(!r.ok) throw new Error(await r.text());
-    document.getElementById('new-kw-word').value = '';
-    showToast('✅ Keyword agregada');
-    loadBotKeywords();
-  } catch(e){ showToast('❌ '+e.message, true); }
-}
-
-async function deleteBotKeyword(id){
-  if(!confirm('¿Eliminar esta keyword?')) return;
-  try {
-    const r = await fetch(`/api/admin/bot/keywords/${id}`, {method:'DELETE'});
-    if(!r.ok) throw new Error(await r.text());
-    showToast('Eliminada');
-    loadBotKeywords();
-  } catch(e){ showToast('❌ '+e.message, true); }
-}
-
-function showToast(msg, isErr=false){
-  let t = document.getElementById('_chatbot-toast');
-  if(!t){ t = document.createElement('div'); t.id='_chatbot-toast';
-    t.style.cssText='position:fixed;bottom:1.4rem;right:1.4rem;z-index:9999;padding:.5rem 1rem;border-radius:8px;font-size:.85rem;font-weight:600;pointer-events:none;transition:opacity .3s';
-    document.body.appendChild(t); }
-  t.textContent = msg;
-  t.style.background = isErr ? 'var(--red)' : '#166534';
-  t.style.color = '#fff';
-  t.style.opacity = '1';
-  clearTimeout(t._tid);
-  t._tid = setTimeout(()=>t.style.opacity='0', 2800);
 }
 </script>
 
