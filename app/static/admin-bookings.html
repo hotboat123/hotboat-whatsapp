@@ -1930,6 +1930,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               </div>
               <div id="sim-bono-preview" style="font-size:.73rem;color:#fbbf24;margin-top:.35rem;line-height:1.6;min-height:1.2em"></div>
             </div>
+
+            <!-- Grand total remuneraciones -->
+            <div id="sim-remu-total" style="margin-top:.55rem;padding:.4rem .55rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;font-size:.82rem"></div>
           </div>
 
           <!-- Marketing -->
@@ -2186,7 +2189,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const bonoActual        = bonoResTotal + bonoCalTotal;
         const remuner           = remuBase + bonoActual;
 
-        // ── Per-worker monthly total summary ──────────────────────────────
+        // ── Per-worker monthly breakdown ───────────────────────────────────
+        let grandTotal = 0;
         for(const wd of _wData){
           const formEl = document.getElementById(`sim-worker-form-${wd.w}`);
           if(!formEl) continue;
@@ -2194,17 +2198,32 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           if(!totalEl){
             totalEl = document.createElement('div');
             totalEl.id = `sim-w${wd.w}-total`;
-            totalEl.style.cssText = 'margin-top:.45rem;padding:.3rem .45rem;background:rgba(250,204,21,.06);border:1px solid rgba(250,204,21,.2);border-radius:6px;font-size:.78rem;line-height:1.65';
+            totalEl.style.cssText = 'margin-top:.45rem;padding:.38rem .5rem;background:rgba(250,204,21,.06);border:1px solid rgba(250,204,21,.2);border-radius:6px;font-size:.79rem';
             formEl.appendChild(totalEl);
           }
           const bonoCalW = (bonoCalidadCheck && wd.bonoCalOn) ? bonoCalidadMonto : 0;
           const totalW   = wd.sueldo + wd.bonoResW + bonoCalW;
-          const parts = [];
-          parts.push(`<span style="color:var(--muted)">Sueldo:</span> <b>${simFmt(wd.sueldo)}</b>`);
-          if(wd.bonoResW > 0) parts.push(`<span style="color:#fbbf24">+ Bono res.:</span> <b>${simFmt(wd.bonoResW)}</b>`);
-          if(bonoCalW > 0)    parts.push(`<span style="color:#fbbf24">+ Bono cal.:</span> <b>${simFmt(bonoCalW)}</b>`);
-          totalEl.innerHTML = parts.join(' &nbsp;') +
-            `<div style="margin-top:.18rem;font-weight:700;color:var(--text)">Total: ${simFmt(totalW)}</div>`;
+          grandTotal    += totalW;
+          const bonoResDetail = wd.bonoResOn && wd.bonoResW > 0
+            ? ` <span style="color:rgba(251,191,36,.6);font-size:.72rem">(${wd.extrasW} extra×${simFmtK(wd.bonoPorResW)})</span>` : '';
+          totalEl.innerHTML =
+            `<table style="width:100%;border-collapse:collapse;line-height:1.7">` +
+            `<tr><td style="color:var(--muted)">Sueldo base</td><td style="text-align:right">${simFmt(wd.sueldo)}</td></tr>` +
+            `<tr><td style="color:${wd.bonoResW>0?'#fbbf24':'var(--muted)'}">+ Bono reservas${bonoResDetail}</td><td style="text-align:right;color:${wd.bonoResW>0?'#fbbf24':'var(--muted)'}">${simFmt(wd.bonoResW)}</td></tr>` +
+            `<tr><td style="color:${bonoCalW>0?'#fbbf24':'var(--muted)'}">+ Bono calidad</td><td style="text-align:right;color:${bonoCalW>0?'#fbbf24':'var(--muted)'}">${simFmt(bonoCalW)}</td></tr>` +
+            `<tr style="border-top:1px solid rgba(250,204,21,.25)"><td style="font-weight:700;padding-top:.15rem">= Total mensual</td><td style="text-align:right;font-weight:700;padding-top:.15rem">${simFmt(totalW)}</td></tr>` +
+            `</table>`;
+        }
+
+        // ── Grand total remuneraciones ─────────────────────────────────────
+        const remuTotalEl = document.getElementById('sim-remu-total');
+        if(remuTotalEl && _wData.length > 0){
+          const trabLabel = _wData.length > 1 ? `${_wData.length} trabajadores` : _wData[0].name;
+          remuTotalEl.innerHTML =
+            `<div style="display:flex;justify-content:space-between;align-items:center">` +
+            `<span style="color:var(--muted)">Total remuneraciones <span style="font-size:.74rem">(${trabLabel})</span></span>` +
+            `<span style="font-weight:700;font-size:.88rem">${simFmt(grandTotal)}</span>` +
+            `</div>`;
         }
 
         const ingresoBase  = precio * personas * reservas;
