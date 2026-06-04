@@ -1651,9 +1651,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <span>/res</span>
                   </div>
                 </div>
-                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
-                  <input type="checkbox" id="sim-w1-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
-                </label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w1-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <span>&gt;</span>
+                    <input type="number" id="sim-w1-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>res</span>
+                  </div>
+                </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
                   <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
                     <input type="checkbox" id="sim-w1-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web
@@ -1673,12 +1680,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                       style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
                     <span>%</span>
                   </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)">
-                  <span>Cal/Ext si &gt;</span>
-                  <input type="number" id="sim-w1-umbral-act" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas para activar bono cal y ext"
-                    style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem">
-                  <span>res.</span>
                 </div>
               </div>
             </div>
@@ -1710,9 +1711,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <span>/res</span>
                   </div>
                 </div>
-                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
-                  <input type="checkbox" id="sim-w2-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
-                </label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w2-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <span>&gt;</span>
+                    <input type="number" id="sim-w2-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>res</span>
+                  </div>
+                </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
                   <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
                     <input type="checkbox" id="sim-w2-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web
@@ -1732,12 +1740,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                       style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
                     <span>%</span>
                   </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)">
-                  <span>Cal/Ext si &gt;</span>
-                  <input type="number" id="sim-w2-umbral-act" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas para activar bono cal y ext"
-                    style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem">
-                  <span>res.</span>
                 </div>
               </div>
             </div>
@@ -1769,9 +1771,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <span>/res</span>
                   </div>
                 </div>
-                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
-                  <input type="checkbox" id="sim-w3-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
-                </label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w3-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <span>&gt;</span>
+                    <input type="number" id="sim-w3-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>res</span>
+                  </div>
+                </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
                   <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
                     <input type="checkbox" id="sim-w3-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web
@@ -1791,12 +1800,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                       style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
                     <span>%</span>
                   </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)">
-                  <span>Cal/Ext si &gt;</span>
-                  <input type="number" id="sim-w3-umbral-act" value="0" step="1" min="0" oninput="simCalc()"
-                    style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem">
-                  <span>res.</span>
                 </div>
               </div>
             </div>
@@ -1828,9 +1831,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <span>/res</span>
                   </div>
                 </div>
-                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem">
-                  <input type="checkbox" id="sim-w4-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
-                </label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
+                  <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                    <input type="checkbox" id="sim-w4-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad
+                  </label>
+                  <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)">
+                    <span>&gt;</span>
+                    <input type="number" id="sim-w4-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+                    <span>res</span>
+                  </div>
+                </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem">
                   <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
                     <input type="checkbox" id="sim-w4-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web
@@ -1851,12 +1861,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <span>%</span>
                   </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)">
-                  <span>Cal/Ext si &gt;</span>
-                  <input type="number" id="sim-w4-umbral-act" value="0" step="1" min="0" oninput="simCalc()"
-                    style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem">
-                  <span>res.</span>
-                </div>
               </div>
             </div>
 
@@ -1871,10 +1875,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                   <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w5-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas</label>
                   <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w5-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res·$</span><input type="number" id="sim-w5-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono/reserva extra" style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>/res</span></div>
                 </div>
-                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w5-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w5-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w5-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w5-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w5-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w5-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w5-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w5-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
               </div>
             </div>
 
@@ -1889,10 +1892,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                   <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w6-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas</label>
                   <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w6-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res·$</span><input type="number" id="sim-w6-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono/reserva extra" style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>/res</span></div>
                 </div>
-                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w6-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w6-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w6-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w6-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w6-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w6-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w6-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w6-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
               </div>
             </div>
 
@@ -1907,10 +1909,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                   <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w7-bono-res" checked onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono reservas</label>
                   <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w7-bono-umbral" value="14" step="1" min="0" oninput="simCalc()" title="Umbral" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res·$</span><input type="number" id="sim-w7-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()" title="Bono/reserva extra" style="width:52px;text-align:right;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>/res</span></div>
                 </div>
-                <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w7-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w7-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w7-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w7-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w7-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w7-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w7-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w7-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
               </div>
             </div>
 
@@ -1928,7 +1929,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w8-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w8-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w8-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w8-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w8-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w8-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
               </div>
             </div>
 
@@ -1946,7 +1946,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w9-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w9-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w9-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w9-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w9-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w9-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
               </div>
             </div>
 
@@ -1964,7 +1963,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.81rem"><input type="checkbox" id="sim-w10-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w10-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w10-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w10-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><input type="number" id="sim-w10-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
-                <div style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);margin-top:.15rem;padding-top:.15rem;border-top:1px dashed rgba(255,255,255,.06)"><span>Cal/Ext si &gt;</span><input type="number" id="sim-w10-umbral-act" value="0" step="1" min="0" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.75rem"><span>res.</span></div>
               </div>
             </div>
 
