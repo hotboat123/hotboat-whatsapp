@@ -1681,6 +1681,23 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <input type="number" id="sim-admin-rem" value="0" step="50000" min="0" oninput="simCalc()">
               </div>
             </div>
+            <!-- Bonus system -->
+            <div style="margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)">
+              <div style="font-size:.72rem;font-weight:700;color:#fbbf24;margin-bottom:.5rem;letter-spacing:.03em">🎯 BONO POR RESERVAS</div>
+              <div class="sim-row">
+                <label>Umbral (reservas/mes)</label>
+                <input type="number" id="sim-bono-umbral" value="14" step="1" min="0"
+                  oninput="simCalc()"
+                  style="width:72px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:.2rem .4rem;font-size:.82rem">
+              </div>
+              <div class="sim-row">
+                <label>Bono por reserva extra</label>
+                <div class="sim-input-wrap"><span class="sim-prefix">$</span>
+                  <input type="number" id="sim-bono-por-res" value="9300" step="100" min="0" oninput="simCalc()">
+                </div>
+              </div>
+              <div id="sim-bono-preview" style="font-size:.73rem;color:#fbbf24;margin-top:.3rem;min-height:1.2em"></div>
+            </div>
           </div>
 
           <!-- Marketing -->
@@ -1725,6 +1742,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <tr class="sim-tr-section"><td colspan="2">COSTOS FIJOS</td></tr>
               <tr><td class="sim-td-label">Estructura operativa + otros</td><td class="sim-td-val sim-neg" id="sr-cfijo">—</td></tr>
               <tr><td class="sim-td-label">Remuneraciones</td><td class="sim-td-val sim-neg" id="sr-remu">—</td></tr>
+              <tr id="sr-bonos-row" style="display:none"><td class="sim-td-label" style="color:#fbbf24">↳ Bonos trabajadores</td><td class="sim-td-val sim-neg" id="sr-bonos" style="color:#fbbf24">—</td></tr>
               <tr><td class="sim-td-label">Marketing</td><td class="sim-td-val sim-neg" id="sr-mkt">—</td></tr>
               <tr class="sim-tr-total sim-result" id="sim-ebitda-row"><td>RESULTADO NETO</td><td id="sr-ebitda">—</td></tr>
             </table>
@@ -1755,6 +1773,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <div class="sim-kpi-card">
               <div class="sim-kpi-label">Ingresos anuales (est.)</div>
               <div class="sim-kpi-val" id="kpi-anual">—</div>
+            </div>
+            <div class="sim-kpi-card" id="kpi-bono-card" style="display:none;border-color:#fbbf2440">
+              <div class="sim-kpi-label" style="color:#fbbf24">🎯 Bono mes actual</div>
+              <div class="sim-kpi-val" id="kpi-bono" style="color:#fbbf24">—</div>
+            </div>
+            <div class="sim-kpi-card" id="kpi-bono-anual-card" style="display:none;border-color:#fbbf2440">
+              <div class="sim-kpi-label" style="color:#fbbf24">🎯 Bonos anuales (est.)</div>
+              <div class="sim-kpi-val" id="kpi-bono-anual" style="color:#fbbf24">—</div>
             </div>
           </div>
 
@@ -1833,15 +1859,22 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       function simColor(n){ return n >= 0 ? 'var(--green,#34d399)' : '#f87171'; }
 
       function simCalc(){
-        const precio   = simV('sim-precio');
-        const personas = simV('sim-personas');
-        const reservas = simV('sim-reservas');
-        const extras   = simV('sim-extras');
-        const cVar     = simV('sim-costo-res') + simV('sim-combustible');
-        const cFijo    = simV('sim-fijos') + simV('sim-mantenim') + simV('sim-otros-fijos');
-        const remuner  = simV('sim-capitan') + simV('sim-personal') + simV('sim-admin-rem');
-        const mkt      = simV('sim-mkt');
-        const mktPct   = simV('sim-mkt-pct') / 100;
+        const precio       = simV('sim-precio');
+        const personas     = simV('sim-personas');
+        const reservas     = simV('sim-reservas');
+        const extras       = simV('sim-extras');
+        const cVar         = simV('sim-costo-res') + simV('sim-combustible');
+        const cFijo        = simV('sim-fijos') + simV('sim-mantenim') + simV('sim-otros-fijos');
+        const remuBase     = simV('sim-capitan') + simV('sim-personal') + simV('sim-admin-rem');
+        const mkt          = simV('sim-mkt');
+        const mktPct       = simV('sim-mkt-pct') / 100;
+        const bonoUmbral   = simV('sim-bono-umbral');
+        const bonoPorRes   = simV('sim-bono-por-res');
+
+        // Bonus: fixed amount per reservation above the threshold
+        const extrasResActual = Math.max(0, reservas - bonoUmbral);
+        const bonoActual      = extrasResActual * bonoPorRes;
+        const remuner         = remuBase + bonoActual;
 
         const ingresoBase  = precio * personas * reservas;
         const ingresoExtra = extras * reservas;
@@ -1856,9 +1889,34 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const ingrMktRes   = precio * personas * (reservas * mktPct) + extras * (reservas * mktPct);
         const roi          = mkt > 0 ? (ingrMktRes / mkt * 100) : 0;
 
-        // break-even: reservas needed to cover all fixed costs
+        // break-even: reservas needed to cover all fixed costs (bonuses excluded — they kick in above threshold)
+        const fixedBelowThreshold = cFijo + remuBase + mkt;
         const margPorRes = ingrPerRes - cVar;
-        const be = margPorRes > 0 ? Math.ceil(totalFijo / margPorRes) : null;
+        const be = margPorRes > 0 ? Math.ceil(fixedBelowThreshold / margPorRes) : null;
+
+        // ── Bonus preview line ─────────────────────────────────────────────
+        const prevEl = document.getElementById('sim-bono-preview');
+        if(bonoPorRes > 0 && bonoUmbral > 0){
+          if(reservas <= bonoUmbral){
+            prevEl.textContent = `Sin bono (necesitas ${Math.ceil(bonoUmbral - reservas + 1)} reserva(s) más)`;
+          } else {
+            prevEl.textContent = `${extrasResActual} reservas extra × ${simFmtK(bonoPorRes)} = ${simFmtK(bonoActual)}`;
+          }
+        } else {
+          prevEl.textContent = '';
+        }
+
+        // ── Bonus KPI cards ────────────────────────────────────────────────
+        const bonoCardEl = document.getElementById('kpi-bono-card');
+        const bonoAnualCardEl = document.getElementById('kpi-bono-anual-card');
+        if(bonoPorRes > 0 && bonoUmbral > 0){
+          bonoCardEl.style.display = '';
+          document.getElementById('kpi-bono').textContent = bonoActual > 0
+            ? `${simFmtK(bonoActual)} (${extrasResActual} res. extra)`
+            : `$0 (umbral: ${bonoUmbral} res.)`;
+        } else {
+          bonoCardEl.style.display = 'none';
+        }
 
         // ── P&L table ─────────────────────────────────────────────────────
         document.getElementById('sr-base').textContent   = simFmt(ingresoBase);
@@ -1868,6 +1926,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         document.getElementById('sr-contrib').textContent= simFmt(contrib);
         document.getElementById('sr-cfijo').textContent  = '−' + simFmt(cFijo);
         document.getElementById('sr-remu').textContent   = '−' + simFmt(remuner);
+        const bonosRow = document.getElementById('sr-bonos-row');
+        if(bonoActual > 0){
+          bonosRow.style.display = '';
+          document.getElementById('sr-bonos').textContent = '−' + simFmt(bonoActual);
+        } else {
+          bonosRow.style.display = 'none';
+        }
         document.getElementById('sr-mkt').textContent    = '−' + simFmt(mkt);
 
         const eEl = document.getElementById('sr-ebitda');
@@ -1911,7 +1976,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         // ── 12-month forecast ─────────────────────────────────────────────
         const now = new Date();
         const startMonth = now.getMonth(); // 0-based
-        let totRev = 0, totRes = 0, totEbitda = 0;
+        let totRev = 0, totRes = 0, totEbitda = 0, totBonos = 0;
         const tbody = document.getElementById('sim-forecast-body');
         tbody.innerHTML = '';
         for(let i = 0; i < 12; i++){
@@ -1921,14 +1986,21 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const r = Math.round(reservas * f);
           const rev = ingresoGross * f;
           const varC = cVar * r;
-          const net = rev - varC - totalFijo;
-          totRev += rev; totRes += r; totEbitda += net;
+          // Bonus recalculated per month because reservas vary with seasonality
+          const bonoMes = Math.max(0, r - bonoUmbral) * bonoPorRes;
+          const remuMes = remuBase + bonoMes;
+          const totalFijoMes = cFijo + remuMes + mkt;
+          const net = rev - varC - totalFijoMes;
+          totRev += rev; totRes += r; totEbitda += net; totBonos += bonoMes;
           const tr = document.createElement('tr');
           const isCurrentMonth = (i === 0);
           if(isCurrentMonth) tr.style.fontWeight = '600';
+          const bonoTag = bonoMes > 0
+            ? `<span style="font-size:.68rem;color:#fbbf24;margin-left:.3rem">+${simFmtK(bonoMes)} bono</span>`
+            : '';
           tr.innerHTML = `<td>${SIM_MONTHS[mi]} ${yr}</td>` +
             `<td style="color:var(--muted)">${(f*100).toFixed(0)}%</td>` +
-            `<td>${r}</td>` +
+            `<td>${r}${bonoTag}</td>` +
             `<td>${simFmtK(rev)}</td>` +
             `<td style="color:${simColor(net)}">${net>=0?'':'-'}${simFmtK(Math.abs(net))}</td>`;
           tbody.appendChild(tr);
@@ -1937,6 +2009,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         tfoot.innerHTML = `<tr><td>TOTAL 12m</td><td></td><td>${totRes}</td>` +
           `<td>${simFmtK(totRev)}</td>` +
           `<td style="color:${simColor(totEbitda)}">${totEbitda>=0?'':'-'}${simFmtK(Math.abs(totEbitda))}</td></tr>`;
+
+        // Annual bonus KPI
+        if(bonoPorRes > 0 && bonoUmbral > 0 && totBonos > 0){
+          bonoAnualCardEl.style.display = '';
+          document.getElementById('kpi-bono-anual').textContent = simFmtK(totBonos);
+        } else {
+          bonoAnualCardEl.style.display = 'none';
+        }
       }
 
       async function simLoadActuals(){
@@ -1961,6 +2041,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             'sim-personal': sc.remuneracion_personal,
             'sim-admin-rem': sc.remuneracion_admin,
             'sim-mkt': sc.marketing_mensual,
+            'sim-bono-umbral': sc.bono_umbral_reservas,
+            'sim-bono-por-res': sc.bono_por_reserva_extra,
           };
           for(const [id, val] of Object.entries(map)){
             if(val != null){
@@ -2005,6 +2087,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           remuneracion_personal: simV('sim-personal'),
           remuneracion_admin: simV('sim-admin-rem'),
           marketing_mensual: simV('sim-mkt'),
+          bono_umbral_reservas: simV('sim-bono-umbral'),
+          bono_por_reserva_extra: simV('sim-bono-por-res'),
         };
         try {
           const r = await fetch('/api/admin/financial/simulator', {
