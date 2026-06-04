@@ -855,6 +855,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div class="form-group-adm"><label>Slug (identificador único)</label><input id="exp-slug" placeholder="rafting"></div>
           <div class="form-group-adm"><label>Icono</label><input id="exp-icon" placeholder="🚣" style="width:80px"></div>
           <div class="form-group-adm"><label>Descripción</label><input id="exp-desc" placeholder="Rio Trancura · Bajo o Alto"></div>
+          <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
+            <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
+            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .6rem">Si están vacías, la reserva web muestra el español. Solo afecta la página pública /booking.</p>
+            <div class="form-group-adm"><label>Nombre (English)</label><input id="exp-name-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Nombre (Português)</label><input id="exp-name-pt" placeholder="Opcional"></div>
+            <div class="form-group-adm"><label>Descripción (English)</label><input id="exp-desc-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Descripción (Português)</label><input id="exp-desc-pt" placeholder="Opcional"></div>
+          </details>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Precio/persona ($)</label><input id="exp-price" type="number" min="0" value="0"></div>
             <div class="form-group-adm"><label>Costo/persona ($)</label><input id="exp-cost" type="number" min="0" value="0"></div>
@@ -864,13 +872,20 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <label class="toggle-wrap"><input type="checkbox" id="exp-active" checked><span class="toggle-slider"></span></label>
             <span style="font-size:.85rem">Activa (visible en app y WhatsApp)</span>
           </div>
-          <div class="form-group-adm" id="exp-img-wrap" style="display:none">
-            <label>Foto actual</label>
-            <img id="exp-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
+          <!-- Multi-image manager -->
+          <div class="form-group-adm" style="margin-top:.8rem">
+            <label style="display:flex;justify-content:space-between;align-items:center">
+              <span>📸 Fotos <span style="font-weight:400;opacity:.6;font-size:.75rem">(arrastra para reordenar)</span></span>
+              <button type="button" onclick="expAddImageRow()" style="font-size:.75rem;padding:.2rem .6rem;background:var(--green);color:#fff;border:none;border-radius:6px;cursor:pointer">+ Agregar URL</button>
+            </label>
+            <div id="exp-images-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem"></div>
+            <small style="color:var(--muted);font-size:.72rem;margin-top:.3rem;display:block">
+              Sube a Hostinger y pega el link. La 1ª foto es la portada. Puedes subir archivos abajo.
+            </small>
           </div>
           <div class="form-group-adm">
-            <label>Subir nueva foto</label>
-            <input type="file" id="exp-img-file" accept="image/*">
+            <label>Subir archivo(s) <span style="font-weight:400;opacity:.65">(se pierde al reiniciar Railway — mejor usar URL)</span></label>
+            <input type="file" id="exp-img-file" accept="image/*" multiple>
           </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="saveExp()">Guardar</button>
@@ -900,6 +915,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <div class="form-group-adm"><label>Personas</label><input id="pack-personas" placeholder="2 personas"></div>
           </div>
           <div class="form-group-adm"><label>Descripción</label><input id="pack-desc" placeholder="Escapada romántica..."></div>
+          <details style="margin:.6rem 0;padding:.5rem;border:1px solid var(--border,#2a3f6f);border-radius:10px">
+            <summary style="cursor:pointer;font-weight:600;font-size:.88rem">Opcional · traducciones web (EN / PT)</summary>
+            <p style="color:var(--muted);font-size:.72rem;margin:.4rem 0 .6rem">Si están vacías, la reserva web muestra el español. Solo afecta la página pública /booking.</p>
+            <div class="form-group-adm"><label>Nombre (English)</label><input id="pack-name-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Nombre (Português)</label><input id="pack-name-pt" placeholder="Opcional"></div>
+            <div class="form-group-adm"><label>Descripción (English)</label><input id="pack-desc-en" placeholder="Optional"></div>
+            <div class="form-group-adm"><label>Descripción (Português)</label><input id="pack-desc-pt" placeholder="Opcional"></div>
+          </details>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Precio desde ($)</label><input id="pack-price" type="number" min="0" value="0"></div>
             <div class="form-group-adm"><label>Costo desde ($)</label><input id="pack-cost" type="number" min="0" value="0"></div>
@@ -912,13 +935,20 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <label class="toggle-wrap"><input type="checkbox" id="pack-active" checked><span class="toggle-slider"></span></label>
             <span style="font-size:.85rem">Activo (visible en app y WhatsApp)</span>
           </div>
-          <div class="form-group-adm" id="pack-img-wrap" style="display:none">
-            <label>Foto actual</label>
-            <img id="pack-img-preview" src="" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;margin-top:.4rem">
+          <!-- Multi-image manager -->
+          <div class="form-group-adm" style="margin-top:.8rem">
+            <label style="display:flex;justify-content:space-between;align-items:center">
+              <span>📸 Fotos <span style="font-weight:400;opacity:.6;font-size:.75rem">(arrastra para reordenar)</span></span>
+              <button type="button" onclick="packAddImageRow()" style="font-size:.75rem;padding:.2rem .6rem;background:var(--green);color:#fff;border:none;border-radius:6px;cursor:pointer">+ Agregar URL</button>
+            </label>
+            <div id="pack-images-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem"></div>
+            <small style="color:var(--muted);font-size:.72rem;margin-top:.3rem;display:block">
+              Sube a Hostinger y pega el link. La 1ª foto es la portada. Puedes subir archivos abajo.
+            </small>
           </div>
           <div class="form-group-adm">
-            <label>Subir nueva foto</label>
-            <input type="file" id="pack-img-file" accept="image/*">
+            <label>Subir archivo(s) <span style="font-weight:400;opacity:.65">(se pierde al reiniciar Railway — mejor usar URL)</span></label>
+            <input type="file" id="pack-img-file" accept="image/*" multiple>
           </div>
           <div style="display:flex;gap:.75rem;margin-top:1.25rem">
             <button class="sync-btn" style="background:var(--green);flex:1" onclick="savePack()">Guardar</button>
@@ -6022,6 +6052,54 @@ let _exps = [];
 // ═══════════════════════════════════════════════════════════════
 let _alojs = [];
 let _alojImagesList = [];  // ordered list of image URLs for the modal being edited
+let _expImagesList  = [];
+let _packImagesList = [];
+
+function renderExpImagesList(){
+  const container = document.getElementById('exp-images-list');
+  if(!container) return;
+  if(!_expImagesList.length){ container.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:.3rem 0">Sin fotos aún</div>'; return; }
+  container.innerHTML = _expImagesList.map((url, i) => `
+    <div style="display:flex;gap:.4rem;align-items:center">
+      <span style="color:var(--muted);font-size:.75rem;width:18px;text-align:right;flex-shrink:0">${i===0?'📌':(i+1)}</span>
+      ${url?`<img src="${url}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">` : ''}
+      <input type="url" value="${url}" placeholder="https://..."
+        style="flex:1;font-size:.78rem;padding:.3rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px"
+        oninput="_expImagesList[${i}]=this.value;renderExpImagesList()">
+      <button type="button" onclick="_expImagesList.splice(${i},1);renderExpImagesList()"
+        style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer;flex-shrink:0">✕</button>
+      ${i>0?`<button type="button" onclick="_expImagesList.splice(${i-1},0,_expImagesList.splice(${i},1)[0]);renderExpImagesList()"
+        style="background:var(--input);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.25rem .4rem;font-size:.75rem;cursor:pointer;flex-shrink:0" title="Subir">↑</button>`:''}
+    </div>`).join('');
+}
+function expAddImageRow(){
+  _expImagesList.push('');
+  renderExpImagesList();
+  setTimeout(()=>{ const inp = document.querySelectorAll('#exp-images-list input[type=url]'); if(inp.length) inp[inp.length-1].focus(); }, 50);
+}
+
+function renderPackImagesList(){
+  const container = document.getElementById('pack-images-list');
+  if(!container) return;
+  if(!_packImagesList.length){ container.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:.3rem 0">Sin fotos aún</div>'; return; }
+  container.innerHTML = _packImagesList.map((url, i) => `
+    <div style="display:flex;gap:.4rem;align-items:center">
+      <span style="color:var(--muted);font-size:.75rem;width:18px;text-align:right;flex-shrink:0">${i===0?'📌':(i+1)}</span>
+      ${url?`<img src="${url}" style="width:48px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">` : ''}
+      <input type="url" value="${url}" placeholder="https://..."
+        style="flex:1;font-size:.78rem;padding:.3rem .5rem;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px"
+        oninput="_packImagesList[${i}]=this.value;renderPackImagesList()">
+      <button type="button" onclick="_packImagesList.splice(${i},1);renderPackImagesList()"
+        style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer;flex-shrink:0">✕</button>
+      ${i>0?`<button type="button" onclick="_packImagesList.splice(${i-1},0,_packImagesList.splice(${i},1)[0]);renderPackImagesList()"
+        style="background:var(--input);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.25rem .4rem;font-size:.75rem;cursor:pointer;flex-shrink:0" title="Subir">↑</button>`:''}
+    </div>`).join('');
+}
+function packAddImageRow(){
+  _packImagesList.push('');
+  renderPackImagesList();
+  setTimeout(()=>{ const inp = document.querySelectorAll('#pack-images-list input[type=url]'); if(inp.length) inp[inp.length-1].focus(); }, 50);
+}
 
 function renderAlojImagesList(){
   const container = document.getElementById('aloj-images-list');
@@ -6380,13 +6458,19 @@ function openExpModal(id){
   document.getElementById('exp-slug').value = e ? e.slug : '';
   document.getElementById('exp-icon').value = e ? e.icon : '🚣';
   document.getElementById('exp-desc').value = e ? (e.description||'') : '';
+  document.getElementById('exp-name-en').value = e ? (e.name_en||'') : '';
+  document.getElementById('exp-name-pt').value = e ? (e.name_pt||'') : '';
+  document.getElementById('exp-desc-en').value = e ? (e.description_en||'') : '';
+  document.getElementById('exp-desc-pt').value = e ? (e.description_pt||'') : '';
   document.getElementById('exp-price').value = e ? e.price_per_person : 0;
   document.getElementById('exp-cost').value = e ? e.cost_per_person : 0;
   document.getElementById('exp-order').value = e ? e.display_order : 0;
   document.getElementById('exp-active').checked = e ? e.is_active : true;
-  const wrap = document.getElementById('exp-img-wrap');
-  if(e && e.image_path){ wrap.style.display=''; document.getElementById('exp-img-preview').src=e.image_path; }
-  else { wrap.style.display='none'; }
+  const allImgs = [];
+  if(e && e.image_path) allImgs.push(e.image_path);
+  if(e && e.extra_images){ const ex = typeof e.extra_images==='string'?JSON.parse(e.extra_images||'[]'):(e.extra_images||[]); ex.forEach(u=>{if(u&&!allImgs.includes(u))allImgs.push(u);}); }
+  _expImagesList = allImgs.slice();
+  renderExpImagesList();
   document.getElementById('exp-img-file').value='';
   document.getElementById('exp-modal').style.display='';
 }
@@ -6394,29 +6478,43 @@ function closeExpModal(){ document.getElementById('exp-modal').style.display='no
 
 async function saveExp(){
   const id = document.getElementById('exp-id').value;
+  const name = document.getElementById('exp-name').value.trim();
+  let slug = document.getElementById('exp-slug').value.trim();
+  if(!name){ showToast('El nombre es obligatorio'); return; }
+  if(!slug){ slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); document.getElementById('exp-slug').value=slug; }
   const body = {
-    slug: document.getElementById('exp-slug').value.trim(),
-    name: document.getElementById('exp-name').value.trim(),
+    slug,
+    name,
     icon: document.getElementById('exp-icon').value.trim()||'🚣',
     description: document.getElementById('exp-desc').value.trim(),
+    name_en: document.getElementById('exp-name-en').value.trim(),
+    name_pt: document.getElementById('exp-name-pt').value.trim(),
+    description_en: document.getElementById('exp-desc-en').value.trim(),
+    description_pt: document.getElementById('exp-desc-pt').value.trim(),
     price_per_person: +document.getElementById('exp-price').value||0,
     cost_per_person: +document.getElementById('exp-cost').value||0,
     display_order: +document.getElementById('exp-order').value||0,
     is_active: document.getElementById('exp-active').checked,
-    image_path: id ? (_exps.find(x=>x.id==id)?.image_path||null) : null,
+    image_path: _expImagesList[0] || null,
+    extra_images: _expImagesList.slice(1),
   };
-  if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
   try{
     const url = id ? `/api/admin/experiencias/${id}` : '/api/admin/experiencias';
     const method = id ? 'PUT' : 'POST';
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
     const d = await r.json();
     const savedId = id || d.id;
-    // Upload image if selected
-    const file = document.getElementById('exp-img-file').files[0];
-    if(file && savedId){
+    const files = document.getElementById('exp-img-file').files;
+    for(const file of files){
       const fd = new FormData(); fd.append('file',file);
-      await fetch(`/api/admin/experiencias/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+      const ur = await fetch(`/api/admin/experiencias/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+      const ud = await ur.json();
+      if(ud.image_path) _expImagesList.push(ud.image_path);
+    }
+    if(files.length){
+      body.image_path = _expImagesList[0]||null;
+      body.extra_images = _expImagesList.slice(1);
+      await fetch(`/api/admin/experiencias/${savedId}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
     }
     closeExpModal(); await loadExperiencias(); showToast('Experiencia guardada ✅');
   }catch(e){ showToast('Error: '+e.message); }
@@ -6481,14 +6579,20 @@ function openPackModal(id){
   document.getElementById('pack-icon').value = p ? p.icon : '🎁';
   document.getElementById('pack-personas').value = p ? p.personas : '2 personas';
   document.getElementById('pack-desc').value = p ? (p.description||'') : '';
+  document.getElementById('pack-name-en').value = p ? (p.name_en||'') : '';
+  document.getElementById('pack-name-pt').value = p ? (p.name_pt||'') : '';
+  document.getElementById('pack-desc-en').value = p ? (p.description_en||'') : '';
+  document.getElementById('pack-desc-pt').value = p ? (p.description_pt||'') : '';
   document.getElementById('pack-price').value = p ? p.price_from : 0;
   document.getElementById('pack-cost').value = p ? p.cost_from : 0;
   document.getElementById('pack-includes').value = p ? (p.includes||[]).join('\n') : '';
   document.getElementById('pack-order').value = p ? p.display_order : 0;
   document.getElementById('pack-active').checked = p ? p.is_active : true;
-  const wrap = document.getElementById('pack-img-wrap');
-  if(p && p.image_path){ wrap.style.display=''; document.getElementById('pack-img-preview').src=p.image_path; }
-  else { wrap.style.display='none'; }
+  const allImgs = [];
+  if(p && p.image_path) allImgs.push(p.image_path);
+  if(p && p.extra_images){ const ex = typeof p.extra_images==='string'?JSON.parse(p.extra_images||'[]'):(p.extra_images||[]); ex.forEach(u=>{if(u&&!allImgs.includes(u))allImgs.push(u);}); }
+  _packImagesList = allImgs.slice();
+  renderPackImagesList();
   document.getElementById('pack-img-file').value='';
   document.getElementById('pack-modal').style.display='';
 }
@@ -6496,32 +6600,46 @@ function closePackModal(){ document.getElementById('pack-modal').style.display='
 
 async function savePack(){
   const id = document.getElementById('pack-id').value;
-  const includesTxt = document.getElementById('pack-includes').value;
-  const includes = includesTxt.split('\n').map(s=>s.trim()).filter(Boolean);
+  const name = document.getElementById('pack-name').value.trim();
+  let slug = document.getElementById('pack-slug').value.trim();
+  if(!name){ showToast('El nombre es obligatorio'); return; }
+  if(!slug){ slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); document.getElementById('pack-slug').value=slug; }
+  const includes = document.getElementById('pack-includes').value.split('\n').map(s=>s.trim()).filter(Boolean);
   const body = {
-    slug: document.getElementById('pack-slug').value.trim(),
-    name: document.getElementById('pack-name').value.trim(),
+    slug,
+    name,
     icon: document.getElementById('pack-icon').value.trim()||'🎁',
     description: document.getElementById('pack-desc').value.trim(),
+    name_en: document.getElementById('pack-name-en').value.trim(),
+    name_pt: document.getElementById('pack-name-pt').value.trim(),
+    description_en: document.getElementById('pack-desc-en').value.trim(),
+    description_pt: document.getElementById('pack-desc-pt').value.trim(),
     personas: document.getElementById('pack-personas').value.trim()||'2 personas',
     price_from: +document.getElementById('pack-price').value||0,
     cost_from: +document.getElementById('pack-cost').value||0,
     display_order: +document.getElementById('pack-order').value||0,
     is_active: document.getElementById('pack-active').checked,
     includes,
-    image_path: id ? (_packs.find(x=>x.id==id)?.image_path||null) : null,
+    image_path: _packImagesList[0] || null,
+    extra_images: _packImagesList.slice(1),
   };
-  if(!body.name||!body.slug){ showToast('Nombre y slug son obligatorios'); return; }
   try{
     const url = id ? `/api/admin/packs/${id}` : '/api/admin/packs';
     const method = id ? 'PUT' : 'POST';
     const r = await fetch(url,{method,headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
     const d = await r.json();
     const savedId = id || d.id;
-    const file = document.getElementById('pack-img-file').files[0];
-    if(file && savedId){
+    const files = document.getElementById('pack-img-file').files;
+    for(const file of files){
       const fd = new FormData(); fd.append('file',file);
-      await fetch(`/api/admin/packs/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+      const ur = await fetch(`/api/admin/packs/${savedId}/image`,{method:'POST',headers:{'x-admin-key':getKey()},body:fd});
+      const ud = await ur.json();
+      if(ud.image_path) _packImagesList.push(ud.image_path);
+    }
+    if(files.length){
+      body.image_path = _packImagesList[0]||null;
+      body.extra_images = _packImagesList.slice(1);
+      await fetch(`/api/admin/packs/${savedId}`,{method:'PUT',headers:{'Content-Type':'application/json','x-admin-key':getKey()},body:JSON.stringify(body)});
     }
     closePackModal(); await loadPacksAdmin(); showToast('Pack guardado ✅');
   }catch(e){ showToast('Error: '+e.message); }
