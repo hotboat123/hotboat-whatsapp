@@ -1519,3 +1519,21 @@ async def save_simulator(request: Request, x_admin_key: str = Header("")):
         raise HTTPException(400, "JSON object expected")
     set_setting("financial_simulator", json.dumps(body))
     return body
+
+
+@financial_router.get("/api/admin/financial/simulator/scenarios")
+async def list_sim_scenarios(x_admin_key: str = Header("")):
+    raw = get_setting("financial_simulator_scenarios", "")
+    try:
+        return json.loads(raw) if raw else {"scenarios": []}
+    except Exception:
+        return {"scenarios": []}
+
+
+@financial_router.put("/api/admin/financial/simulator/scenarios")
+async def save_sim_scenarios(request: Request, x_admin_key: str = Header("")):
+    body = await request.json()
+    if not isinstance(body, dict) or "scenarios" not in body:
+        raise HTTPException(400, "Expected {scenarios: [...]}")
+    set_setting("financial_simulator_scenarios", json.dumps(body))
+    return body

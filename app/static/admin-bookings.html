@@ -1564,10 +1564,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <!-- ═══════════════════════════ SIMULATOR TAB ═══════════════════════════ -->
     <div id="section-simulator" class="section">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
-        <h2 style="margin:0;font-size:1.1rem;font-weight:700">🎯 Simulador Financiero</h2>
+        <div>
+          <h2 style="margin:0;font-size:1.1rem;font-weight:700">🎯 Simulador Financiero</h2>
+          <div id="sim-scenario-badge" style="font-size:.72rem;color:var(--muted);margin-top:.12rem">Sin guardar</div>
+        </div>
         <div style="display:flex;gap:.5rem;align-items:center">
+          <button onclick="openScenariosModal()" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">📋 Escenarios</button>
           <button onclick="simLoadActuals()" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↺ Cargar reales</button>
-          <button onclick="simSave()" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer">💾 Guardar escenario</button>
+          <button onclick="openSaveModal()" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer">💾 Guardar</button>
         </div>
       </div>
 
@@ -2148,38 +2152,210 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         } catch(e){ showToast('❌ '+e.message, true); }
       }
 
-      async function simSave(){
-        const body = {
-          precio_por_persona: simV('sim-precio'),
-          personas_promedio: simV('sim-personas'),
-          reservas_por_mes: simV('sim-reservas'),
+      // ── Scenario state ─────────────────────────────────────────────────────
+      let _simScenarioId   = null;
+      let _simScenarioName = null;
+
+      function _simGetData(){
+        return {
+          precio_por_persona:          simV('sim-precio'),
+          personas_promedio:           simV('sim-personas'),
+          reservas_por_mes:            simV('sim-reservas'),
           extras_promedio_por_reserva: simV('sim-extras'),
           costo_operativo_por_reserva: simV('sim-costo-res') + simV('sim-combustible'),
-          costos_fijos_mensuales: simV('sim-fijos'),
-          mantenimiento_seguros: simV('sim-mantenim'),
-          otros_fijos: simV('sim-otros-fijos'),
-          remuneracion_capitan: simV('sim-capitan'),
-          remuneracion_personal: simV('sim-personal'),
-          remuneracion_admin: simV('sim-admin-rem'),
-          marketing_mensual: simV('sim-mkt'),
-          bono_umbral_reservas: simV('sim-bono-umbral'),
-          bono_por_reserva_extra: simV('sim-bono-por-res'),
-          bono_num_trabajadores: parseInt(document.getElementById('sim-num-trab').value) || 1,
-          bono_calidad_activo: document.getElementById('sim-bono-calidad-check').checked,
-          bono_calidad_monto: simV('sim-bono-calidad-monto'),
+          costos_fijos_mensuales:      simV('sim-fijos'),
+          mantenimiento_seguros:       simV('sim-mantenim'),
+          otros_fijos:                 simV('sim-otros-fijos'),
+          remuneracion_capitan:        simV('sim-capitan'),
+          remuneracion_personal:       simV('sim-personal'),
+          remuneracion_admin:          simV('sim-admin-rem'),
+          marketing_mensual:           simV('sim-mkt'),
+          bono_umbral_reservas:        simV('sim-bono-umbral'),
+          bono_por_reserva_extra:      simV('sim-bono-por-res'),
+          bono_num_trabajadores:       parseInt(document.getElementById('sim-num-trab').value) || 1,
+          bono_calidad_activo:         document.getElementById('sim-bono-calidad-check').checked,
+          bono_calidad_monto:          simV('sim-bono-calidad-monto'),
         };
+      }
+
+      function _simSetBadge(name){
+        _simScenarioName = name;
+        const el = document.getElementById('sim-scenario-badge');
+        if(el) el.textContent = name || 'Sin guardar';
+      }
+
+      // ── Save modal ─────────────────────────────────────────────────────────
+      function openSaveModal(){
+        const modal = document.getElementById('sim-save-modal');
+        modal.style.display = 'flex';
+        const inp = document.getElementById('sim-save-name');
+        inp.value = _simScenarioName || '';
+        setTimeout(()=>inp.focus(), 50);
+      }
+      function closeSaveModal(){
+        document.getElementById('sim-save-modal').style.display = 'none';
+      }
+
+      async function confirmSaveScenario(){
+        const name = document.getElementById('sim-save-name').value.trim();
+        if(!name){ document.getElementById('sim-save-name').focus(); return; }
+        closeSaveModal();
         try {
-          const r = await fetch('/api/admin/financial/simulator', {
-            method:'PUT', headers:{'Content-Type':'application/json','x-admin-key': KEY||''},
-            body: JSON.stringify(body)
+          // Load existing list
+          const r0 = await fetch('/api/admin/financial/simulator/scenarios', {headers:{'x-admin-key':KEY||''}});
+          const existing = r0.ok ? await r0.json() : {scenarios:[]};
+          const list = existing.scenarios || [];
+
+          const data = _simGetData();
+          const now  = new Date().toISOString();
+
+          // Update in place if same name already exists OR same ID (rename)
+          const existingIdx = list.findIndex(s => s.id === _simScenarioId || s.name === name);
+          if(existingIdx >= 0){
+            list[existingIdx] = { ...list[existingIdx], ...data, name, updated_at: now };
+            _simScenarioId = list[existingIdx].id;
+          } else {
+            const newId = Date.now().toString();
+            _simScenarioId = newId;
+            list.unshift({ id: newId, name, created_at: now, updated_at: now, ...data });
+          }
+
+          const r1 = await fetch('/api/admin/financial/simulator/scenarios', {
+            method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY||''},
+            body: JSON.stringify({scenarios: list})
           });
-          if(!r.ok) throw new Error(await r.text());
-          showToast('💾 Escenario guardado');
+          if(!r1.ok) throw new Error(await r1.text());
+          _simSetBadge(name);
+          showToast('💾 "'+name+'" guardado');
         } catch(e){ showToast('❌ '+e.message, true); }
       }
 
+      // ── Scenarios list modal ───────────────────────────────────────────────
+      async function openScenariosModal(){
+        const modal = document.getElementById('sim-scenarios-modal');
+        modal.style.display = 'flex';
+        const listEl = document.getElementById('sim-scenarios-list');
+        listEl.innerHTML = '<div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1rem">Cargando…</div>';
+        try {
+          const r = await fetch('/api/admin/financial/simulator/scenarios', {headers:{'x-admin-key':KEY||''}});
+          const d = r.ok ? await r.json() : {scenarios:[]};
+          const list = d.scenarios || [];
+          if(!list.length){
+            listEl.innerHTML = '<div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1.5rem">No hay escenarios guardados.<br><span style="font-size:.75rem">Presiona 💾 Guardar para crear el primero.</span></div>';
+            return;
+          }
+          listEl.innerHTML = list.map(s => {
+            const date = s.updated_at ? new Date(s.updated_at).toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'numeric'}) : '';
+            const res  = s.reservas_por_mes ? `${s.reservas_por_mes} res./mes` : '';
+            const isActive = s.id === _simScenarioId;
+            return `<div style="display:flex;align-items:center;gap:.6rem;padding:.6rem .5rem;border-bottom:1px solid var(--border);border-radius:7px;${isActive?'background:rgba(250,204,21,.06)':''}">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:${isActive?700:500};font-size:.85rem;color:${isActive?'var(--gold)':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}${isActive?' ✓':''}</div>
+                <div style="font-size:.7rem;color:var(--muted)">${[date,res].filter(Boolean).join(' · ')}</div>
+              </div>
+              <button onclick="simLoadScenario(${JSON.stringify(s).replace(/"/g,'&quot;')})"
+                style="background:var(--gold);color:#000;border:none;border-radius:6px;padding:.25rem .65rem;font-size:.78rem;font-weight:600;cursor:pointer;white-space:nowrap">Cargar</button>
+              <button onclick="simDeleteScenario('${s.id}','${s.name.replace(/'/g,"\\'")}')"
+                style="background:none;border:1px solid rgba(248,113,113,.4);color:#f87171;border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer">🗑</button>
+            </div>`;
+          }).join('');
+        } catch(e){
+          listEl.innerHTML = `<div style="color:var(--red);font-size:.82rem;padding:.5rem">Error: ${e.message}</div>`;
+        }
+      }
+      function closeScenariosModal(){
+        document.getElementById('sim-scenarios-modal').style.display = 'none';
+      }
+
+      function simLoadScenario(s){
+        closeScenariosModal();
+        const map = {
+          'sim-precio':       s.precio_por_persona,
+          'sim-personas':     s.personas_promedio,
+          'sim-reservas':     s.reservas_por_mes,
+          'sim-extras':       s.extras_promedio_por_reserva,
+          'sim-costo-res':    s.costo_operativo_por_reserva,
+          'sim-fijos':        s.costos_fijos_mensuales,
+          'sim-mantenim':     s.mantenimiento_seguros,
+          'sim-otros-fijos':  s.otros_fijos,
+          'sim-capitan':      s.remuneracion_capitan,
+          'sim-personal':     s.remuneracion_personal,
+          'sim-admin-rem':    s.remuneracion_admin,
+          'sim-mkt':          s.marketing_mensual,
+          'sim-bono-umbral':  s.bono_umbral_reservas,
+          'sim-bono-por-res': s.bono_por_reserva_extra,
+          'sim-bono-calidad-monto': s.bono_calidad_monto,
+        };
+        for(const [id, val] of Object.entries(map)){
+          if(val != null){ const el = document.getElementById(id); if(el) el.value = val; }
+        }
+        ['sim-personas','sim-reservas'].forEach(id=>{
+          const sl = document.getElementById(id+'-slider'), inp = document.getElementById(id);
+          if(sl && inp) sl.value = inp.value;
+        });
+        if(s.bono_num_trabajadores) simSetTrab(s.bono_num_trabajadores);
+        const cal = document.getElementById('sim-bono-calidad-check');
+        if(cal && s.bono_calidad_activo != null) cal.checked = !!s.bono_calidad_activo;
+        _simScenarioId = s.id;
+        _simSetBadge(s.name);
+        simCalc();
+        showToast('📋 Escenario "'+s.name+'" cargado');
+      }
+
+      async function simDeleteScenario(id, name){
+        if(!confirm(`¿Eliminar escenario "${name}"?`)) return;
+        try {
+          const r0 = await fetch('/api/admin/financial/simulator/scenarios', {headers:{'x-admin-key':KEY||''}});
+          const d   = r0.ok ? await r0.json() : {scenarios:[]};
+          const list = (d.scenarios || []).filter(s => s.id !== id);
+          await fetch('/api/admin/financial/simulator/scenarios', {
+            method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY||''},
+            body: JSON.stringify({scenarios: list})
+          });
+          if(_simScenarioId === id){ _simScenarioId = null; _simSetBadge(null); }
+          await openScenariosModal(); // refresh list
+          showToast('🗑 Escenario eliminado');
+        } catch(e){ showToast('❌ '+e.message, true); }
+      }
+
+      // ── Legacy simSave (kept for backward compat) ──────────────────────────
+      async function simSave(){ openSaveModal(); }
+
       document.addEventListener('DOMContentLoaded', ()=>{ simCalc(); });
       </script>
+
+      <!-- ── Save scenario modal ───────────────────────────────────── -->
+      <div id="sim-save-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;align-items:center;justify-content:center"
+           onclick="if(event.target===this)closeSaveModal()">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.3rem 1.5rem;width:340px;max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+          <div style="font-weight:700;font-size:.95rem;margin-bottom:.9rem">💾 Guardar escenario</div>
+          <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Nombre</label>
+          <input id="sim-save-name" type="text" placeholder="Ej: Temporada alta 2026"
+            style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.45rem .65rem;font-size:.85rem;outline:none"
+            onkeydown="if(event.key==='Enter')confirmSaveScenario();if(event.key==='Escape')closeSaveModal()">
+          <div style="display:flex;gap:.5rem;margin-top:.9rem;justify-content:flex-end">
+            <button onclick="closeSaveModal()"
+              style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.32rem .8rem;font-size:.82rem;cursor:pointer">Cancelar</button>
+            <button onclick="confirmSaveScenario()"
+              style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.32rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer">Guardar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Scenarios list modal ──────────────────────────────────── -->
+      <div id="sim-scenarios-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;align-items:center;justify-content:center"
+           onclick="if(event.target===this)closeScenariosModal()">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;width:480px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+          <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:700;font-size:.95rem">📋 Escenarios guardados</span>
+            <button onclick="closeScenariosModal()"
+              style="background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;line-height:1">✕</button>
+          </div>
+          <div id="sim-scenarios-list" style="overflow-y:auto;padding:.7rem 1rem;flex:1;min-height:60px">
+            <div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1rem">Cargando…</div>
+          </div>
+        </div>
+      </div>
 
     </div><!-- /section-simulator -->
 
