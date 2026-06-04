@@ -2091,6 +2091,23 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
       const SIM_MAX_WORKERS = 10;
 
+      // Updates worker count button styles + hidden input WITHOUT calling simCalc.
+      // Use this when restoring a scenario so simCalc only runs once at the end.
+      function _simSetTrabCount(n){
+        document.getElementById('sim-num-trab').value = n;
+        const onCSS  = 'background:var(--gold);color:#000;border:none;border-radius:5px;width:24px;height:22px;font-size:.74rem;font-weight:700;cursor:pointer';
+        const off10  = 'background:var(--gold);color:#000;border:none;border-radius:5px;width:28px;height:22px;font-size:.72rem;font-weight:700;cursor:pointer';
+        const offCSS = 'background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:24px;height:22px;font-size:.74rem;cursor:pointer';
+        const off10b = 'background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:22px;font-size:.72rem;cursor:pointer';
+        for(let i = 1; i <= SIM_MAX_WORKERS; i++){
+          const btn = document.getElementById(`sim-trab-btn-${i}`);
+          if(!btn) continue;
+          if(i === n) btn.style.cssText = i === 10 ? off10  : onCSS;
+          else        btn.style.cssText = i === 10 ? off10b : offCSS;
+        }
+        if(_simActiveWorker > n) _simActiveWorker = n;
+      }
+
       function simSetTrab(n){
         document.getElementById('sim-num-trab').value = n;
         const onCSS  = 'background:var(--gold);color:#000;border:none;border-radius:5px;width:24px;height:22px;font-size:.74rem;font-weight:700;cursor:pointer';
@@ -2385,7 +2402,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           `<td style="color:${simColor(totEbitda)}">${totEbitda>=0?'':'-'}${simFmtK(Math.abs(totEbitda))}</td></tr>`;
 
         // Annual bonus KPI
-        if(bonoPorRes > 0 && bonoUmbral > 0 && totBonos > 0){
+        if(totBonos > 0){
           bonoAnualCardEl.style.display = '';
           document.getElementById('kpi-bono-anual').textContent = simFmtK(totBonos);
         } else {
@@ -2401,62 +2418,47 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const sc = d.scenario || {};
           const ac = d.actuals || {};
 
-          // Fill scenario inputs
-          const map = {
-            'sim-precio': sc.precio_por_persona,
-            'sim-personas': sc.personas_promedio,
-            'sim-reservas': sc.reservas_por_mes,
-            'sim-extras': sc.extras_promedio_por_reserva,
-            'sim-costo-res': sc.costo_operativo_por_reserva,
-            'sim-fijos': sc.costos_fijos_mensuales,
-            'sim-mantenim': sc.mantenimiento_seguros,
-            'sim-otros-fijos': sc.otros_fijos,
-            'sim-mkt': sc.marketing_mensual,
-            'sim-bono-umbral': sc.bono_umbral_reservas,
-            'sim-bono-por-res': sc.bono_por_reserva_extra,
-            'sim-bono-calidad-monto': sc.bono_calidad_monto,
-          };
-          for(const [id, val] of Object.entries(map)){
-            if(val != null){
-              const el = document.getElementById(id);
-              if(el){ el.value = val; }
-            }
-          }
-          // Sync sliders
-          ['sim-personas','sim-reservas'].forEach(id=>{
-            const sl = document.getElementById(id+'-slider');
-            const inp = document.getElementById(id);
+          // Reuse simLoadScenario logic for scenario fields (without toast/badge)
+          const setV = (id, val) => { if(val == null) return; const el = document.getElementById(id); if(el) el.value = val; };
+          setV('sim-precio',            sc.precio_por_persona);
+          setV('sim-personas',          sc.personas_promedio);
+          setV('sim-reservas',          sc.reservas_por_mes);
+          setV('sim-extras',            sc.extras_promedio_por_reserva);
+          setV('sim-costo-res',         sc.costo_por_salida ?? sc.costo_operativo_por_reserva);
+          setV('sim-combustible',       sc.combustible ?? 0);
+          setV('sim-fijos',             sc.costos_fijos_mensuales);
+          setV('sim-mantenim',          sc.mantenimiento_seguros);
+          setV('sim-otros-fijos',       sc.otros_fijos);
+          setV('sim-mkt',               sc.marketing_mensual);
+          setV('sim-mkt-pct',           sc.marketing_pct);
+          setV('sim-bono-calidad-monto',sc.bono_calidad_monto);
+          ['sim-personas','sim-reservas','sim-mkt-pct'].forEach(id => {
+            const sl = document.getElementById(id+'-slider'), inp = document.getElementById(id);
             if(sl && inp) sl.value = inp.value;
           });
-          // Restore workers (new format) or fall back to old fields
-          if(sc.workers && sc.workers.length){
-            simSetTrab(sc.workers.length);
-            sc.workers.forEach((w, idx) => {
-              const n = idx + 1;
-              const nameEl    = document.getElementById(`sim-w${n}-name`);
-              const sueldoEl  = document.getElementById(`sim-w${n}-sueldo`);
-              const bonoResEl = document.getElementById(`sim-w${n}-bono-res`);
-              const bonoCalEl = document.getElementById(`sim-w${n}-bono-cal`);
-              if(nameEl)    nameEl.value    = w.name   || `Trabajador ${n}`;
-              if(sueldoEl)  sueldoEl.value  = w.sueldo != null ? w.sueldo : 0;
-              if(bonoResEl) bonoResEl.checked = w.bono_res ?? true;
-              if(bonoCalEl) bonoCalEl.checked = w.bono_cal ?? false;
-              const bonoUmbralEl2 = document.getElementById(`sim-w${n}-bono-umbral`);
-              const bonoPorResEl2 = document.getElementById(`sim-w${n}-bono-por-res`);
-              if(bonoUmbralEl2) bonoUmbralEl2.value = w.bono_umbral ?? sc.bono_umbral_reservas ?? 14;
-              if(bonoPorResEl2) bonoPorResEl2.value = w.bono_por_res ?? sc.bono_por_reserva_extra ?? 9300;
-            });
-            simRenderWorkerTabs();
-          } else if(sc.bono_num_trabajadores){
-            simSetTrab(sc.bono_num_trabajadores);
-            const legacyTotal = (sc.remuneracion_capitan||0) + (sc.remuneracion_personal||0) + (sc.remuneracion_admin||0);
-            if(legacyTotal){ const el = document.getElementById('sim-w1-sueldo'); if(el) el.value = legacyTotal; }
-            if(sc.bono_umbral_reservas != null){ const el = document.getElementById('sim-w1-bono-umbral'); if(el) el.value = sc.bono_umbral_reservas; }
-            if(sc.bono_por_reserva_extra != null){ const el = document.getElementById('sim-w1-bono-por-res'); if(el) el.value = sc.bono_por_reserva_extra; }
-          }
-          // Restore quality bonus checkbox
           const calCheck = document.getElementById('sim-bono-calidad-check');
           if(calCheck && sc.bono_calidad_activo != null) calCheck.checked = !!sc.bono_calidad_activo;
+          if(sc.workers && sc.workers.length){
+            _simSetTrabCount(sc.workers.length);
+            sc.workers.forEach((w, idx) => {
+              const n = idx + 1;
+              setV(`sim-w${n}-name`,        w.name ?? `Trabajador ${n}`);
+              setV(`sim-w${n}-sueldo`,      w.sueldo ?? 0);
+              setV(`sim-w${n}-bono-umbral`, w.bono_umbral ?? sc.bono_umbral_reservas ?? 14);
+              setV(`sim-w${n}-bono-por-res`,w.bono_por_res ?? sc.bono_por_reserva_extra ?? 9300);
+              const bonoResEl = document.getElementById(`sim-w${n}-bono-res`);
+              const bonoCalEl = document.getElementById(`sim-w${n}-bono-cal`);
+              if(bonoResEl) bonoResEl.checked = w.bono_res ?? true;
+              if(bonoCalEl) bonoCalEl.checked = w.bono_cal ?? false;
+            });
+          } else if(sc.bono_num_trabajadores){
+            _simSetTrabCount(sc.bono_num_trabajadores);
+            const legacy = (sc.remuneracion_capitan||0)+(sc.remuneracion_personal||0)+(sc.remuneracion_admin||0);
+            setV('sim-w1-sueldo',      legacy || null);
+            setV('sim-w1-bono-umbral', sc.bono_umbral_reservas);
+            setV('sim-w1-bono-por-res',sc.bono_por_reserva_extra);
+          }
+          simRenderWorkerTabs();
 
           // Show actuals banner
           if(ac.n_bookings){
@@ -2466,7 +2468,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               `<strong>${ac.reservas_reales_mes}</strong> reservas/mes | ` +
               `<strong>$${Math.round(ac.ingreso_por_reserva_real).toLocaleString('es-CL')}</strong>/reserva | ` +
               `<strong>${ac.personas_promedio_real}</strong> personas prom.`;
-            // Optionally pre-fill with actuals if significantly different
           }
 
           simCalc();
@@ -2477,13 +2478,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       // ── Scenario state ─────────────────────────────────────────────────────
       let _simScenarioId   = null;
       let _simScenarioName = null;
+      let _simLoadedScenarios = []; // cache for modal list (avoids JSON in onclick)
 
       function _simGetData(){
         const n = parseInt(document.getElementById('sim-num-trab').value) || 1;
         const workers = [];
         for(let w = 1; w <= n; w++){
           workers.push({
-            name:         document.getElementById(`sim-w${w}-name`)?.value || `Trabajador ${w}`,
+            name:         document.getElementById(`sim-w${w}-name`)?.value ?? `Trabajador ${w}`,
             sueldo:       simV(`sim-w${w}-sueldo`),
             bono_res:     document.getElementById(`sim-w${w}-bono-res`)?.checked ?? true,
             bono_umbral:  simV(`sim-w${w}-bono-umbral`),
@@ -2496,14 +2498,17 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           personas_promedio:           simV('sim-personas'),
           reservas_por_mes:            simV('sim-reservas'),
           extras_promedio_por_reserva: simV('sim-extras'),
-          costo_operativo_por_reserva: simV('sim-costo-res') + simV('sim-combustible'),
+          costo_por_salida:            simV('sim-costo-res'),
+          combustible:                 simV('sim-combustible'),
+          costo_operativo_por_reserva: simV('sim-costo-res') + simV('sim-combustible'), // legacy compat
           costos_fijos_mensuales:      simV('sim-fijos'),
           mantenimiento_seguros:       simV('sim-mantenim'),
           otros_fijos:                 simV('sim-otros-fijos'),
           workers,
           marketing_mensual:           simV('sim-mkt'),
-          bono_umbral_reservas:        simV('sim-bono-umbral'),
-          bono_por_reserva_extra:      simV('sim-bono-por-res'),
+          marketing_pct:               simV('sim-mkt-pct'),
+          bono_umbral_reservas:        workers[0]?.bono_umbral ?? 14,  // legacy compat
+          bono_por_reserva_extra:      workers[0]?.bono_por_res ?? 9300, // legacy compat
           bono_calidad_activo:         document.getElementById('sim-bono-calidad-check').checked,
           bono_calidad_monto:          simV('sim-bono-calidad-monto'),
         };
@@ -2571,22 +2576,24 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const r = await fetch('/api/admin/financial/simulator/scenarios', {headers:{'x-admin-key':KEY||''}});
           const d = r.ok ? await r.json() : {scenarios:[]};
           const list = d.scenarios || [];
+          _simLoadedScenarios = list; // cache so load button can reference by index
           if(!list.length){
             listEl.innerHTML = '<div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1.5rem">No hay escenarios guardados.<br><span style="font-size:.75rem">Presiona 💾 Guardar para crear el primero.</span></div>';
             return;
           }
-          listEl.innerHTML = list.map(s => {
+          listEl.innerHTML = list.map((s, i) => {
             const date = s.updated_at ? new Date(s.updated_at).toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'numeric'}) : '';
+            const nTrab = s.workers ? `${s.workers.length} trab.` : '';
             const res  = s.reservas_por_mes ? `${s.reservas_por_mes} res./mes` : '';
             const isActive = s.id === _simScenarioId;
             return `<div style="display:flex;align-items:center;gap:.6rem;padding:.6rem .5rem;border-bottom:1px solid var(--border);border-radius:7px;${isActive?'background:rgba(250,204,21,.06)':''}">
               <div style="flex:1;min-width:0">
                 <div style="font-weight:${isActive?700:500};font-size:.85rem;color:${isActive?'var(--gold)':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}${isActive?' ✓':''}</div>
-                <div style="font-size:.7rem;color:var(--muted)">${[date,res].filter(Boolean).join(' · ')}</div>
+                <div style="font-size:.7rem;color:var(--muted)">${[date,res,nTrab].filter(Boolean).join(' · ')}</div>
               </div>
-              <button onclick="simLoadScenario(${JSON.stringify(s).replace(/"/g,'&quot;')})"
+              <button onclick="simLoadScenarioByIndex(${i})"
                 style="background:var(--gold);color:#000;border:none;border-radius:6px;padding:.25rem .65rem;font-size:.78rem;font-weight:600;cursor:pointer;white-space:nowrap">Cargar</button>
-              <button onclick="simDeleteScenario('${s.id}','${s.name.replace(/'/g,"\\'")}')"
+              <button onclick="simDeleteScenario('${s.id}','${(s.name||'').replace(/'/g,"\\'").replace(/\\/g,'\\\\')}')"
                 style="background:none;border:1px solid rgba(248,113,113,.4);color:#f87171;border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer">🗑</button>
             </div>`;
           }).join('');
@@ -2594,62 +2601,68 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           listEl.innerHTML = `<div style="color:var(--red);font-size:.82rem;padding:.5rem">Error: ${e.message}</div>`;
         }
       }
+
+      function simLoadScenarioByIndex(i){
+        const s = _simLoadedScenarios[i];
+        if(s) simLoadScenario(s);
+      }
       function closeScenariosModal(){
         document.getElementById('sim-scenarios-modal').style.display = 'none';
       }
 
       function simLoadScenario(s){
         closeScenariosModal();
-        const map = {
-          'sim-precio':       s.precio_por_persona,
-          'sim-personas':     s.personas_promedio,
-          'sim-reservas':     s.reservas_por_mes,
-          'sim-extras':       s.extras_promedio_por_reserva,
-          'sim-costo-res':    s.costo_operativo_por_reserva,
-          'sim-fijos':        s.costos_fijos_mensuales,
-          'sim-mantenim':     s.mantenimiento_seguros,
-          'sim-otros-fijos':  s.otros_fijos,
-          'sim-mkt':          s.marketing_mensual,
-          'sim-bono-umbral':  s.bono_umbral_reservas,
-          'sim-bono-por-res': s.bono_por_reserva_extra,
-          'sim-bono-calidad-monto': s.bono_calidad_monto,
-        };
-        for(const [id, val] of Object.entries(map)){
-          if(val != null){ const el = document.getElementById(id); if(el) el.value = val; }
-        }
-        ['sim-personas','sim-reservas'].forEach(id=>{
+
+        // 1. All scalar inputs — set value only when the field exists
+        const setV = (id, val) => { if(val == null) return; const el = document.getElementById(id); if(el) el.value = val; };
+        setV('sim-precio',            s.precio_por_persona);
+        setV('sim-personas',          s.personas_promedio);
+        setV('sim-reservas',          s.reservas_por_mes);
+        setV('sim-extras',            s.extras_promedio_por_reserva);
+        setV('sim-costo-res',         s.costo_por_salida ?? s.costo_operativo_por_reserva);
+        setV('sim-combustible',       s.combustible ?? 0);
+        setV('sim-fijos',             s.costos_fijos_mensuales);
+        setV('sim-mantenim',          s.mantenimiento_seguros);
+        setV('sim-otros-fijos',       s.otros_fijos);
+        setV('sim-mkt',               s.marketing_mensual);
+        setV('sim-mkt-pct',           s.marketing_pct);
+        setV('sim-bono-calidad-monto',s.bono_calidad_monto);
+
+        // 2. Sync all sliders
+        ['sim-personas','sim-reservas','sim-mkt-pct'].forEach(id => {
           const sl = document.getElementById(id+'-slider'), inp = document.getElementById(id);
           if(sl && inp) sl.value = inp.value;
         });
-        // Restore workers (new format)
-        if(s.workers && s.workers.length){
-          simSetTrab(s.workers.length);
-          s.workers.forEach((w, idx) => {
-            const n = idx + 1;
-            const nameEl     = document.getElementById(`sim-w${n}-name`);
-            const sueldoEl   = document.getElementById(`sim-w${n}-sueldo`);
-            const bonoResEl  = document.getElementById(`sim-w${n}-bono-res`);
-            const bonoCalEl  = document.getElementById(`sim-w${n}-bono-cal`);
-            if(nameEl)    nameEl.value    = w.name   || `Trabajador ${n}`;
-            if(sueldoEl)  sueldoEl.value  = w.sueldo != null ? w.sueldo : 0;
-            if(bonoResEl) bonoResEl.checked = w.bono_res ?? true;
-            if(bonoCalEl) bonoCalEl.checked = w.bono_cal ?? false;
-            const bonoUmbralEl  = document.getElementById(`sim-w${n}-bono-umbral`);
-            const bonoPorResEl  = document.getElementById(`sim-w${n}-bono-por-res`);
-            if(bonoUmbralEl) bonoUmbralEl.value = w.bono_umbral ?? s.bono_umbral_reservas ?? 14;
-            if(bonoPorResEl) bonoPorResEl.value = w.bono_por_res ?? s.bono_por_reserva_extra ?? 9300;
-          });
-          simRenderWorkerTabs();
-        } else if(s.bono_num_trabajadores){
-          // Backward compat: old format had remuneracion_capitan etc.
-          simSetTrab(s.bono_num_trabajadores);
-          const legacyTotal = (s.remuneracion_capitan||0) + (s.remuneracion_personal||0) + (s.remuneracion_admin||0);
-          if(legacyTotal){ const el = document.getElementById('sim-w1-sueldo'); if(el) el.value = legacyTotal; }
-          if(s.bono_umbral_reservas != null){ const el = document.getElementById('sim-w1-bono-umbral'); if(el) el.value = s.bono_umbral_reservas; }
-          if(s.bono_por_reserva_extra != null){ const el = document.getElementById('sim-w1-bono-por-res'); if(el) el.value = s.bono_por_reserva_extra; }
-        }
+
+        // 3. Quality bonus checkbox
         const cal = document.getElementById('sim-bono-calidad-check');
         if(cal && s.bono_calidad_activo != null) cal.checked = !!s.bono_calidad_activo;
+
+        // 4. Workers — set count WITHOUT triggering simCalc, then fill inputs
+        if(s.workers && s.workers.length){
+          _simSetTrabCount(s.workers.length);
+          s.workers.forEach((w, idx) => {
+            const n = idx + 1;
+            setV(`sim-w${n}-name`,        w.name ?? `Trabajador ${n}`);
+            setV(`sim-w${n}-sueldo`,      w.sueldo ?? 0);
+            setV(`sim-w${n}-bono-umbral`, w.bono_umbral ?? s.bono_umbral_reservas ?? 14);
+            setV(`sim-w${n}-bono-por-res`,w.bono_por_res ?? s.bono_por_reserva_extra ?? 9300);
+            const bonoResEl = document.getElementById(`sim-w${n}-bono-res`);
+            const bonoCalEl = document.getElementById(`sim-w${n}-bono-cal`);
+            if(bonoResEl) bonoResEl.checked = w.bono_res ?? true;
+            if(bonoCalEl) bonoCalEl.checked = w.bono_cal ?? false;
+          });
+        } else if(s.bono_num_trabajadores){
+          // Backward compat: old format stored a flat salary total
+          _simSetTrabCount(s.bono_num_trabajadores);
+          const legacy = (s.remuneracion_capitan||0) + (s.remuneracion_personal||0) + (s.remuneracion_admin||0);
+          setV('sim-w1-sueldo',      legacy || null);
+          setV('sim-w1-bono-umbral', s.bono_umbral_reservas);
+          setV('sim-w1-bono-por-res',s.bono_por_reserva_extra);
+        }
+
+        // 5. Update tab display, then compute — ONE simCalc at the end
+        simRenderWorkerTabs();
         _simScenarioId = s.id;
         _simSetBadge(s.name);
         simCalc();
