@@ -10330,31 +10330,46 @@ function calcGastosIva(){
 }
 
 // ── AI Scan ─────────────────────────────────────────
+function _compressForScan(b64, mime){
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 800;
+      let w = img.width, h = img.height;
+      if(w > MAX || h > MAX){
+        if(w >= h){ h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', 0.55).split(',')[1]);
+    };
+    img.onerror = () => resolve(b64);
+    img.src = 'data:' + mime + ';base64,' + b64;
+  });
+}
+
 async function scanGastosReceipt(){
   if(!_gastosImgBase64){ showToast('Seleccioná una imagen primero'); return; }
   const btn = document.getElementById('gastos-scan-btn');
   btn.textContent = '⏳ Escaneando…'; btn.disabled = true;
   try {
+    const scanB64 = await _compressForScan(_gastosImgBase64, _gastosImgMime);
     const res = await api('/api/admin/gastos/scan', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({imagen_base64: _gastosImgBase64, mime_type: _gastosImgMime})
+      body: JSON.stringify({imagen_base64: scanB64, mime_type: 'image/jpeg'})
     });
-    if(res.ok){
-      if(res.monto)    document.getElementById('gastos-monto').value    = res.monto;
-      if(res.comercio) document.getElementById('gastos-comercio').value = res.comercio;
-      if(res.fecha)    document.getElementById('gastos-fecha').value    = res.fecha;
-      if(res.categoria1_id){
-        document.getElementById('gastos-cat1').value = res.categoria1_id;
-        loadGastosCat2();
-      }
-      calcGastosIva();
-      showToast('✅ Escaneado con IA — revisá los campos');
-    } else {
-      const msg = res.detail || 'sin respuesta';
-      const is429 = msg.includes('429') || msg.includes('Límite');
-      showToast(is429 ? '⏳ Límite de escaneos alcanzado — esperá unos segundos e intentá de nuevo' : '⚠️ ' + msg, is429 ? 5000 : 3000);
+    if(res.monto)    document.getElementById('gastos-monto').value    = res.monto;
+    if(res.comercio) document.getElementById('gastos-comercio').value = res.comercio;
+    if(res.fecha)    document.getElementById('gastos-fecha').value    = res.fecha;
+    if(res.categoria1_id){
+      document.getElementById('gastos-cat1').value = res.categoria1_id;
+      loadGastosCat2();
     }
+    calcGastosIva();
+    showToast('✅ Escaneado con IA — revisá los campos');
   } catch(e){
     showToast('⚠️ Error de escaneo: ' + e.message);
   } finally {
