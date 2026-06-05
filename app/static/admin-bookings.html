@@ -2224,10 +2224,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       let _wUtilCfg = {}; // {w: {on, pct, income:{...}, costs:{...}}}
 
       function _getWUtilCfg(w){
-        if(!_wUtilCfg[w]) _wUtilCfg[w] = {on:false, pct:5, income:{..._UTIL_DEFAULT_INCOME}, costs:{..._UTIL_DEFAULT_COSTS}, remuWorkers:{}};
+        if(!_wUtilCfg[w]) _wUtilCfg[w] = {on:false, pct:5, umbralUtil:0, income:{..._UTIL_DEFAULT_INCOME}, costs:{..._UTIL_DEFAULT_COSTS}, remuWorkers:{}};
         const cfg = _wUtilCfg[w];
         if(!cfg.income) cfg.income = {..._UTIL_DEFAULT_INCOME};
         if(!cfg.remuWorkers) cfg.remuWorkers = {};
+        if(cfg.umbralUtil == null) cfg.umbralUtil = 0;
         // migrate legacy remuo boolean → empty remuWorkers (all excluded)
         if('remuo' in cfg.costs) { delete cfg.costs.remuo; }
         return cfg;
@@ -2250,6 +2251,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const extrasWebAmt  = simV('sim-extras-web')  * reservas;
         const extrasPresAmt = simV('sim-extras-pres') * reservas;
         const fmtS = v => '$'+Math.round(v).toLocaleString('es-CL');
+        const ic = cfg.income || _UTIL_DEFAULT_INCOME;
+        const ingrDisp = simV('sim-precio') * simV('sim-personas') * reservas +
+                         (ic.extrasWeb  ? extrasWebAmt  : 0) +
+                         (ic.extrasPres ? extrasPresAmt : 0);
+        const remuoDisp = Object.entries(cfg.remuWorkers||{}).reduce((s,[ww,on])=> on ? s+simV(`sim-w${ww}-sueldo`) : s, 0);
+        const deducDisp = (cfg.costs.cvar?costAmts.cvar:0)+(cfg.costs.comb?costAmts.comb:0)+
+                          (cfg.costs.fijos?costAmts.fijos:0)+(cfg.costs.mant?costAmts.mant:0)+
+                          (cfg.costs.otros?costAmts.otros:0)+(cfg.costs.mkt?costAmts.mkt:0)+remuoDisp;
+        const utilBaseDisp = Math.max(0, ingrDisp - deducDisp);
+        const umbralMet = reservas > (cfg.umbralUtil||0);
         const incomeRow = (key, label, amt) => `
           <label style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;padding:.14rem 0;cursor:pointer">
             <span style="display:flex;align-items:center;gap:.3rem">
@@ -2278,6 +2289,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         }
         const panelHtml = cfg.on ? `
           <div style="margin-top:.3rem;padding:.45rem .55rem;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.18);border-radius:6px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem;padding-bottom:.25rem;border-bottom:1px solid rgba(16,185,129,.2)">
+              <span style="font-size:.71rem;color:rgba(16,185,129,.7);font-weight:600">Utilidad operativa</span>
+              <span id="sim-w${w}-util-base-disp" style="font-size:.75rem;font-weight:700;color:${umbralMet&&utilBaseDisp>0?'#10b981':'var(--muted)'}">${fmtS(utilBaseDisp)}</span>
+            </div>
             <div style="font-size:.69rem;color:rgba(16,185,129,.75);font-weight:700;margin-bottom:.25rem;letter-spacing:.03em">INGRESOS INCLUIDOS</div>
             ${incomeRow('extrasWeb',  'Extras web',        extrasWebAmt)}
             ${incomeRow('extrasPres', 'Extras presencial', extrasPresAmt)}
@@ -2299,6 +2314,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <input type="checkbox" ${cfg.on?'checked':''} onchange="_getWUtilCfg(${w}).on=this.checked;simRenderUtilCosts(${w});simCalc()"
                 style="accent-color:#10b981;width:13px;height:13px">Bono utilidad
             </label>
+            <div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted);opacity:${cfg.on?'1':'.4'}">
+              <span>&gt;</span>
+              <input type="number" value="${cfg.umbralUtil||0}" step="1" min="0" ${cfg.on?'':'disabled'}
+                oninput="_getWUtilCfg(${w}).umbralUtil=+this.value;simCalc()" title="Mín. reservas"
+                style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+              <span>res</span>
+            </div>
             <div style="display:flex;align-items:center;gap:.2rem;opacity:${cfg.on?'1':'.4'}">
               <input type="number" value="${cfg.pct}" min="0" max="100" step="0.5" ${cfg.on?'':'disabled'}
                 oninput="_getWUtilCfg(${w}).pct=+this.value;simCalc()"
@@ -2689,8 +2711,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                             (c.mkt   ? mkt : 0) +
                             remuoAmt;
           wd.utilidadBase = Math.max(0, ingrW - deduccion);
-          wd.bonoUtilW    = wd.utilidadBase * ucfg.pct / 100;
+          const umbralUtilMet = reservas > (ucfg.umbralUtil || 0);
+          wd.bonoUtilW    = umbralUtilMet ? wd.utilidadBase * ucfg.pct / 100 : 0;
           bonoUtilTotal  += wd.bonoUtilW;
+          const baseDispEl = document.getElementById(`sim-w${wd.w}-util-base-disp`);
+          if(baseDispEl){
+            baseDispEl.style.color = umbralUtilMet && wd.utilidadBase > 0 ? '#10b981' : 'var(--muted)';
+            baseDispEl.textContent = '$'+Math.round(wd.utilidadBase).toLocaleString('es-CL');
+          }
           // Keep cost-amount spans current
           const costAmtsU = { cvar: simV('sim-costo-res')*reservas, comb: simV('sim-combustible')*reservas,
                               fijos: simV('sim-fijos'), mant: simV('sim-mantenim'),
@@ -3344,7 +3372,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           // Utilidad bonus
           const ucfg = _getWUtilCfg(w);
           let bonoUtilW = 0;
-          if(ucfg.on){
+          if(ucfg.on && reservas > (ucfg.umbralUtil||0)){
             const ic = ucfg.income || _UTIL_DEFAULT_INCOME;
             const ingrBrutoVW = (parseFloat(document.getElementById('sim-precio')?.value)||0) *
                                 (parseFloat(document.getElementById('sim-personas')?.value)||1) * reservas +
@@ -3376,6 +3404,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               tierNote = `<span style="font-size:.7rem;opacity:.65">${sorted.length} tramos · ${reservas} res</span>`;
             }
           }
+
+          // Util bonus note
+          const utilNote = ucfg.on && (ucfg.umbralUtil||0) > 0 && reservas <= (ucfg.umbralUtil||0)
+            ? `<span style="font-size:.7rem;opacity:.4">umbral: ${ucfg.umbralUtil} res (faltan ${(ucfg.umbralUtil||0)-reservas})</span>`
+            : '';
 
           // Quality bonus note
           let calNote = '';
@@ -3419,7 +3452,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                   bonoExtPresW > 0 ? '+'+fmt(bonoExtPresW) : fmt(0),
                   bonoExtPresW === 0 && umbralExtPres > 0 && !extPresMet ? `<span style="font-size:.7rem;opacity:.4">umbral: ${umbralExtPres} res</span>` : '') : ''}
               ${ucfg.on ? bonusRow(bonoUtilW > 0, '#10b981', `+ Bono utilidad (${ucfg.pct}% UO)`,
-                  bonoUtilW > 0 ? '+'+fmt(bonoUtilW) : fmt(0)) : ''}
+                  bonoUtilW > 0 ? '+'+fmt(bonoUtilW) : fmt(0), utilNote) : ''}
               <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0 .1rem">
                 <span style="font-weight:700;font-size:.82rem;color:var(--muted);letter-spacing:.03em">TOTAL ESTIMADO</span>
                 <span style="font-weight:800;font-size:1.1rem;color:#fbbf24">${fmt(total)}</span>
