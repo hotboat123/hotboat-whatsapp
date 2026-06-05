@@ -7177,13 +7177,13 @@ async function sendPaymentLink(id){
   }
 }
 
-function showToast(msg){
+function showToast(msg, duration=3000){
   let t=document.getElementById('_toast');
   if(!t){ t=document.createElement('div'); t.id='_toast';
     t.style.cssText='position:fixed;bottom:1.5rem;right:1.5rem;background:#222;color:#fff;padding:.7rem 1.2rem;border-radius:8px;font-size:.85rem;z-index:999;transition:opacity .3s';
     document.body.appendChild(t); }
   t.textContent=msg; t.style.opacity='1';
-  clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity='0',3000);
+  clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity='0', duration);
 }
 
 // helper: return current admin key (KEY is set by doLogin)
@@ -10348,12 +10348,15 @@ async function scanGastosReceipt(){
         document.getElementById('gastos-cat1').value = res.categoria1_id;
         loadGastosCat2();
       }
+      calcGastosIva();
       showToast('✅ Escaneado con IA — revisá los campos');
     } else {
-      showToast('Error al escanear: ' + (res.detail || 'sin respuesta'));
+      const msg = res.detail || 'sin respuesta';
+      const is429 = msg.includes('429') || msg.includes('Límite');
+      showToast(is429 ? '⏳ Límite de escaneos alcanzado — esperá unos segundos e intentá de nuevo' : '⚠️ ' + msg, is429 ? 5000 : 3000);
     }
   } catch(e){
-    showToast('Error de escaneo: ' + e.message);
+    showToast('⚠️ Error de escaneo: ' + e.message);
   } finally {
     btn.textContent = '🤖 Escanear con IA — auto-completar monto y categoría';
     btn.disabled = false;

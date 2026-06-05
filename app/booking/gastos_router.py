@@ -1,4 +1,5 @@
 """Gastos (expenses) router — receipt tracking with AI scan via Gemini Flash."""
+import asyncio
 import base64
 import json
 import logging
@@ -241,17 +242,37 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         "https://generativelanguage.googleapis.com/v1beta/models/"
         f"gemini-2.0-flash:generateContent?key={api_key}"
     )
-    try:
-        async with httpx.AsyncClient(timeout=25) as client:
-            resp = await client.post(url, json=payload)
-        resp.raise_for_status()
-        raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        if raw_text.startswith("```"):
-            raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        extracted = json.loads(raw_text)
-    except Exception as e:
-        logger.error(f"Gemini scan error: {e}")
-        raise HTTPException(status_code=502, detail=f"Error al escanear la boleta: {e}")
+    extracted = None
+    last_err: Exception | None = None
+    async with httpx.AsyncClient(timeout=25) as client:
+        for attempt in range(3):  # up to 3 tries on 429
+            try:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 429:
+                    wait = 4 * (attempt + 1)  # 4s, 8s, 12s
+                    logger.warning(f"Gemini 429 – esperando {wait}s (intento {attempt+1})")
+                    await asyncio.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if raw_text.startswith("```"):
+                    raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+                extracted = json.loads(raw_text)
+                break
+            except (json.JSONDecodeError, KeyError, httpx.HTTPStatusError) as e:
+                last_err = e
+                break
+            except httpx.HTTPError as e:
+                last_err = e
+                break
+    if extracted is None:
+        logger.error(f"Gemini scan error: {last_err}")
+        if last_err and "429" in str(last_err):
+            raise HTTPException(
+                status_code=429,
+                detail="Límite de Gemini alcanzado (15 req/min en tier gratuito). Esperá unos segundos e intentá de nuevo."
+            )
+        raise HTTPException(status_code=502, detail=f"Error al escanear la boleta: {last_err}")
 
     # Keyword-based category matching
     with get_connection() as conn:
