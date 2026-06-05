@@ -121,7 +121,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "label_date":   "📅 \u00a0Fecha",
         "label_time":   "⏰ \u00a0Hora",
         "label_people": "👥 \u00a0Personas",
-        "label_paid":           "✅ \u00a0Pagado (50%)",
+        "label_paid":           "✅ \u00a0Pagado",
         "label_deposit_due":    "💳 \u00a0Depósito a pagar (50%)",
         "label_total":  "💰 \u00a0Total",
         "hrs":          "hrs",

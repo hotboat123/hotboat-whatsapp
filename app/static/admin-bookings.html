@@ -3782,7 +3782,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       <!-- Add / Edit form (hidden by default) -->
       <div id="gastos-form-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.2rem;margin-bottom:.9rem">
         <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.9rem">
-          <span style="font-weight:700;font-size:.95rem">🧾 Nuevo Gasto</span>
+          <span id="gastos-form-title" style="font-weight:700;font-size:.95rem">🧾 Nuevo Gasto</span>
           <button onclick="closeGastoForm()" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer">✕</button>
         </div>
 
@@ -3905,7 +3905,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
 
         <div style="display:flex;gap:.6rem;margin-top:.9rem">
-          <button onclick="saveGasto()" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:.5rem 1.4rem;font-size:.88rem;cursor:pointer;font-weight:600;flex:1">Guardar Gasto</button>
+          <button id="gastos-save-btn" onclick="saveGasto()" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:.5rem 1.4rem;font-size:.88rem;cursor:pointer;font-weight:600;flex:1">Guardar Gasto</button>
           <button onclick="closeGastoForm()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.5rem 1rem;font-size:.88rem;cursor:pointer">Cancelar</button>
         </div>
       </div>
@@ -10100,6 +10100,8 @@ function initLogsSection(){
 let _gastosCategorias = [];  // all categories loaded once
 let _gastosImgBase64  = '';  // current image base64 (no prefix)
 let _gastosImgMime    = 'image/jpeg';
+let _editingGastoId   = null; // null = new, number = editing existing
+let _lastGastos       = [];  // last loaded gastos for edit lookup
 
 // ── Init year selector ──────────────────────────────
 (function _initGastosYear(){
@@ -10126,7 +10128,8 @@ async function loadGastos(){
       api('/api/admin/gastos/categorias')
     ]);
     _gastosCategorias = cRes.categorias || [];
-    renderGastosTable(gRes.gastos || []);
+    _lastGastos = gRes.gastos || [];
+    renderGastosTable(_lastGastos);
     renderGastosKpis(gRes.gastos || []);
     renderGastosConfig();
     populateGastosSelects();
@@ -10225,7 +10228,8 @@ function renderGastosTable(gastos){
       <td style="padding:.45rem .7rem;text-align:right;font-weight:700;color:${excluido?'var(--muted)':'#4ade80'}">${neto}</td>
       <td style="padding:.45rem .7rem;text-align:right">${ivaC}</td>
       <td style="padding:.45rem .7rem;text-align:center">${fotoBtn}</td>
-      <td style="padding:.45rem .7rem;text-align:center">
+      <td style="padding:.45rem .7rem;text-align:center;white-space:nowrap">
+        <button onclick="openEditGasto(${g.id})" title="Editar" style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:.85rem;margin-right:.2rem">✏️</button>
         <button onclick="deleteGasto(${g.id})" title="Eliminar" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem">🗑️</button>
       </td>
     </tr>`;
@@ -10338,6 +10342,9 @@ async function createCat2Inline(){
 
 // ── Form open/close ─────────────────────────────────
 function openGastoForm(){
+  _editingGastoId = null;
+  document.getElementById('gastos-save-btn').textContent = 'Guardar Gasto';
+  document.getElementById('gastos-form-title').textContent = '🧾 Nuevo Gasto';
   document.getElementById('gastos-form-panel').style.display = 'block';
   // Default today
   const today = new Date().toISOString().slice(0,10);
@@ -10358,8 +10365,47 @@ function openGastoForm(){
 }
 
 function closeGastoForm(){
+  _editingGastoId = null;
+  document.getElementById('gastos-save-btn').textContent = 'Guardar Gasto';
   document.getElementById('gastos-form-panel').style.display = 'none';
   clearGastoImage();
+}
+
+function openEditGasto(id){
+  const g = (_lastGastos || []).find(x => x.id === id);
+  if(!g){ showToast('Gasto no encontrado'); return; }
+  _editingGastoId = id;
+  openGastoForm();
+  document.getElementById('gastos-form-title').textContent = '✏️ Editar Gasto';
+  // Fill fields after populateGastosSelects runs
+  requestAnimationFrame(() => {
+    document.getElementById('gastos-fecha').value    = g.fecha ? g.fecha.slice(0,10) : '';
+    document.getElementById('gastos-monto').value    = g.monto || '';
+    document.getElementById('gastos-comercio').value = g.comercio || '';
+    document.getElementById('gastos-notas').value    = g.notas || '';
+    document.getElementById('gastos-tipo-doc').value = g.tipo_documento || 'boleta';
+    const utilChk = document.getElementById('gastos-incluir-utilidad');
+    if(utilChk) utilChk.checked = g.incluir_en_utilidad !== false;
+    calcGastosIva();
+    if(g.categoria1_id){
+      document.getElementById('gastos-cat1').value = g.categoria1_id;
+      loadGastosCat2();
+      requestAnimationFrame(() => {
+        if(g.categoria2_id) document.getElementById('gastos-cat2').value = g.categoria2_id;
+      });
+    }
+    if(g.imagen_path){
+      const prev = document.getElementById('gastos-img-preview');
+      const img  = document.getElementById('gastos-preview-img');
+      const hint = document.getElementById('gastos-drop-hint');
+      const bar  = document.getElementById('gastos-scan-bar');
+      if(prev) prev.style.display = 'block';
+      if(img)  img.src = g.imagen_path;
+      if(hint) hint.style.display = 'none';
+      if(bar)  bar.style.display  = 'block';
+    }
+    document.getElementById('gastos-save-btn').textContent = 'Guardar cambios';
+  });
 }
 
 // ── Image handling ──────────────────────────────────
@@ -10485,21 +10531,20 @@ async function saveGasto(){
   if(!fecha){ showToast('Ingresá la fecha'); return; }
   if(!monto){ showToast('Ingresá el monto'); return; }
   try {
-    const tipo_documento     = document.getElementById('gastos-tipo-doc')?.value || 'boleta';
+    const tipo_documento      = document.getElementById('gastos-tipo-doc')?.value || 'boleta';
     const incluir_en_utilidad = document.getElementById('gastos-incluir-utilidad')?.checked ?? true;
-    const res = await api('/api/admin/gastos', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        fecha, monto, comercio, notas, tipo_documento, incluir_en_utilidad,
-        imagen_base64: _gastosImgBase64,
-        imagen_mime:   _gastosImgMime,
-        categoria1_id: cat1 ? parseInt(cat1) : null,
-        categoria2_id: cat2 ? parseInt(cat2) : null,
-      })
-    });
+    const payload = {
+      fecha, monto, comercio, notas, tipo_documento, incluir_en_utilidad,
+      imagen_base64: _gastosImgBase64,
+      imagen_mime:   _gastosImgMime,
+      categoria1_id: cat1 ? parseInt(cat1) : null,
+      categoria2_id: cat2 ? parseInt(cat2) : null,
+    };
+    const url    = _editingGastoId ? `/api/admin/gastos/${_editingGastoId}` : '/api/admin/gastos';
+    const method = _editingGastoId ? 'PUT' : 'POST';
+    const res = await api(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     if(res.ok){
-      showToast('✅ Gasto guardado');
+      showToast(_editingGastoId ? '✅ Gasto actualizado' : '✅ Gasto guardado');
       closeGastoForm();
       loadGastos();
     } else {

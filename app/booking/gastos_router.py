@@ -478,6 +478,48 @@ async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
     return {"ok": True, "id": new_id, "imagen_path": imagen_path}
 
 
+@gastos_router.put("/api/admin/gastos/{gasto_id}")
+async def update_gasto(gasto_id: int, body: GastoCreate, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    imagen_path = None
+    if body.imagen_base64:
+        try:
+            os.makedirs(GASTOS_IMG_DIR, exist_ok=True)
+            img_data = base64.b64decode(body.imagen_base64)
+            ext = ".png" if "png" in body.imagen_mime else ".jpg"
+            filename = f"gasto_{int(time.time() * 1000)}{ext}"
+            with open(os.path.join(GASTOS_IMG_DIR, filename), "wb") as fh:
+                fh.write(img_data)
+            imagen_path = f"/static/images/gastos/{filename}"
+        except Exception as e:
+            logger.error(f"Error saving gasto image: {e}")
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            if imagen_path:
+                cur.execute(
+                    "UPDATE gastos SET fecha=%s, monto=%s, descripcion=%s, comercio=%s, "
+                    "imagen_path=%s, categoria1_id=%s, categoria2_id=%s, "
+                    "tipo_documento=%s, incluir_en_utilidad=%s, notas=%s, updated_at=NOW() "
+                    "WHERE id=%s",
+                    (body.fecha, body.monto, body.descripcion, body.comercio,
+                     imagen_path, body.categoria1_id, body.categoria2_id,
+                     body.tipo_documento, body.incluir_en_utilidad, body.notas, gasto_id),
+                )
+            else:
+                cur.execute(
+                    "UPDATE gastos SET fecha=%s, monto=%s, descripcion=%s, comercio=%s, "
+                    "categoria1_id=%s, categoria2_id=%s, "
+                    "tipo_documento=%s, incluir_en_utilidad=%s, notas=%s, updated_at=NOW() "
+                    "WHERE id=%s",
+                    (body.fecha, body.monto, body.descripcion, body.comercio,
+                     body.categoria1_id, body.categoria2_id,
+                     body.tipo_documento, body.incluir_en_utilidad, body.notas, gasto_id),
+                )
+        conn.commit()
+    return {"ok": True}
+
+
 @gastos_router.delete("/api/admin/gastos/{gasto_id}")
 async def delete_gasto(gasto_id: int, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
