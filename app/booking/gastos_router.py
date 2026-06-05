@@ -56,6 +56,8 @@ def _ensure_tables():
     ALTER TABLE gastos ADD COLUMN IF NOT EXISTS incluir_en_utilidad BOOLEAN DEFAULT TRUE;
     CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
     CREATE INDEX IF NOT EXISTS idx_gastos_cat1 ON gastos(categoria1_id);
+    ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS boletado BOOLEAN DEFAULT FALSE;
+    ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS incluir_en_utilidad BOOLEAN DEFAULT TRUE;
     """
     try:
         with get_connection() as conn:
