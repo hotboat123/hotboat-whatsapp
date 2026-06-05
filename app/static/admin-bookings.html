@@ -10314,26 +10314,34 @@ async function createCat2Inline(){
 }
 
 // ── Form open/close ─────────────────────────────────
-function openGastoForm(){
+async function openGastoForm(){
   _editingGastoId = null;
   document.getElementById('gastos-save-btn').textContent = 'Guardar Gasto';
   document.getElementById('gastos-form-title').textContent = '🧾 Nuevo Gasto';
   document.getElementById('gastos-form-panel').style.display = 'block';
-  // Default today
   const today = new Date().toISOString().slice(0,10);
   document.getElementById('gastos-fecha').value = today;
   document.getElementById('gastos-monto').value = '';
   document.getElementById('gastos-comercio').value = '';
   document.getElementById('gastos-notas').value = '';
-  document.getElementById('gastos-cat1').value = '';
-  document.getElementById('gastos-cat2').innerHTML = '<option value="">— Sin subcategoría —</option>';
   document.getElementById('gastos-tipo-doc').value = 'boleta';
   document.getElementById('gastos-iva-info').textContent = '';
+  const nc1 = document.getElementById('gastos-new-cat1-form');
+  const nc2 = document.getElementById('gastos-new-cat2-form');
+  if(nc1) nc1.style.display = 'none';
+  if(nc2) nc2.style.display = 'none';
   const utilChk = document.getElementById('gastos-incluir-utilidad');
   const utilLbl = document.getElementById('gastos-util-label');
   if(utilChk){ utilChk.checked = true; }
   if(utilLbl){ utilLbl.style.background='rgba(16,185,129,.08)'; utilLbl.style.borderColor='rgba(16,185,129,.3)'; utilLbl.style.color='#4ade80'; }
   clearGastoImage();
+  // Always ensure categories are loaded before populating selects
+  if(!_gastosCategorias.length){
+    try{ const r = await api('/api/admin/gastos/categorias'); _gastosCategorias = r.categorias||[]; }catch(_){}
+  }
+  populateGastosSelects();
+  document.getElementById('gastos-cat1').value = '';
+  loadGastosCat2();
   document.getElementById('gastos-form-panel').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
@@ -10344,41 +10352,37 @@ function closeGastoForm(){
   clearGastoImage();
 }
 
-function openEditGasto(id){
+async function openEditGasto(id){
   const g = (_lastGastos || []).find(x => x.id === id);
   if(!g){ showToast('Gasto no encontrado'); return; }
   _editingGastoId = id;
-  openGastoForm();
+  await openGastoForm(); // wait for categories to be loaded and selects populated
   document.getElementById('gastos-form-title').textContent = '✏️ Editar Gasto';
-  // Fill fields after populateGastosSelects runs
-  requestAnimationFrame(() => {
-    document.getElementById('gastos-fecha').value    = g.fecha ? g.fecha.slice(0,10) : '';
-    document.getElementById('gastos-monto').value    = g.monto || '';
-    document.getElementById('gastos-comercio').value = g.comercio || '';
-    document.getElementById('gastos-notas').value    = g.notas || '';
-    document.getElementById('gastos-tipo-doc').value = g.tipo_documento || 'boleta';
-    const utilChk = document.getElementById('gastos-incluir-utilidad');
-    if(utilChk) utilChk.checked = g.incluir_en_utilidad !== false;
-    calcGastosIva();
-    if(g.categoria1_id){
-      document.getElementById('gastos-cat1').value = g.categoria1_id;
-      loadGastosCat2();
-      requestAnimationFrame(() => {
-        if(g.categoria2_id) document.getElementById('gastos-cat2').value = g.categoria2_id;
-      });
-    }
-    if(g.imagen_path){
-      const prev = document.getElementById('gastos-img-preview');
-      const img  = document.getElementById('gastos-preview-img');
-      const hint = document.getElementById('gastos-drop-hint');
-      const bar  = document.getElementById('gastos-scan-bar');
-      if(prev) prev.style.display = 'block';
-      if(img)  img.src = g.imagen_path;
-      if(hint) hint.style.display = 'none';
-      if(bar)  bar.style.display  = 'block';
-    }
-    document.getElementById('gastos-save-btn').textContent = 'Guardar cambios';
-  });
+  document.getElementById('gastos-save-btn').textContent   = 'Guardar cambios';
+  document.getElementById('gastos-fecha').value    = g.fecha ? g.fecha.slice(0,10) : '';
+  document.getElementById('gastos-monto').value    = g.monto || '';
+  document.getElementById('gastos-comercio').value = g.comercio || '';
+  document.getElementById('gastos-notas').value    = g.notas || '';
+  document.getElementById('gastos-tipo-doc').value = g.tipo_documento || 'boleta';
+  const utilChk = document.getElementById('gastos-incluir-utilidad');
+  if(utilChk) utilChk.checked = g.incluir_en_utilidad !== false;
+  calcGastosIva();
+  if(g.categoria1_id){
+    document.getElementById('gastos-cat1').value = g.categoria1_id;
+    loadGastosCat2();
+    await new Promise(r => requestAnimationFrame(r));
+    if(g.categoria2_id) document.getElementById('gastos-cat2').value = g.categoria2_id;
+  }
+  if(g.imagen_path){
+    const prev = document.getElementById('gastos-img-preview');
+    const img  = document.getElementById('gastos-preview-img');
+    const hint = document.getElementById('gastos-drop-hint');
+    const bar  = document.getElementById('gastos-scan-bar');
+    if(prev) prev.style.display = 'block';
+    if(img)  img.src = g.imagen_path;
+    if(hint) hint.style.display = 'none';
+    if(bar)  bar.style.display  = 'block';
+  }
 }
 
 // ── Image handling ──────────────────────────────────
