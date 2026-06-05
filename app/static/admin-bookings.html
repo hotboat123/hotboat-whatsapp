@@ -10478,8 +10478,10 @@ async function saveGasto(){
   const monto   = parseInt(document.getElementById('gastos-monto').value) || 0;
   const comercio= document.getElementById('gastos-comercio').value.trim();
   const notas   = document.getElementById('gastos-notas').value.trim();
-  const cat1    = document.getElementById('gastos-cat1').value || null;
-  const cat2    = document.getElementById('gastos-cat2').value || null;
+  const _c1raw  = document.getElementById('gastos-cat1').value;
+  const _c2raw  = document.getElementById('gastos-cat2').value;
+  const cat1    = (_c1raw && _c1raw !== '__new__') ? _c1raw : null;
+  const cat2    = (_c2raw && _c2raw !== '__new__') ? _c2raw : null;
   if(!fecha){ showToast('Ingresá la fecha'); return; }
   if(!monto){ showToast('Ingresá el monto'); return; }
   try {
