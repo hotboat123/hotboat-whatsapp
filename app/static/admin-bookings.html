@@ -4427,19 +4427,19 @@ async function openModal(id){
           <label>Precio experiencia
             <span id="e-precio-hint" style="color:var(--muted);font-size:.7rem;font-weight:400;margin-left:.4rem"></span>
           </label>
-          <input id="e-ingreso_reserva" value="${r.ingreso_reserva||0}"></div>
+          <input id="e-ingreso_reserva" value="${r.ingreso_reserva||0}" inputmode="numeric" oninput="syncFlexTotal()"></div>
         <div class="form-group"><label>Ingreso extras</label>
-          <input id="e-ingreso_extras" value="${r.ingreso_extras||0}"></div>
+          <input id="e-ingreso_extras" value="${r.ingreso_extras||0}" readonly style="opacity:.7;cursor:default"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Total ingresos</label>
-          <input id="e-ingreso_total" value="${r.ingreso_total||0}" style="color:var(--gold);font-weight:700"
-            oninput="syncCostoTotal();syncPagoFaltante()"></div>
+          <input id="e-ingreso_total" value="${r.ingreso_total||0}" style="color:var(--gold);font-weight:700" inputmode="numeric"
+            oninput="syncPagoFaltante()"></div>
       </div>
       <input type="hidden" id="e-costo_operativo_fijo" value="${r.costo_operativo_fijo??0}">
       <div class="form-row">
         <div class="form-group"><label>Costos extra</label>
-          <input id="e-costo_operativo_variable" value="${r.costo_operativo_variable||0}" oninput="syncCostoTotal()"></div>
+          <input id="e-costo_operativo_variable" value="${r.costo_operativo_variable||0}" inputmode="numeric" oninput="syncCostoTotal()"></div>
         <div class="form-group"><label>Costo operativo total</label>
           <input id="e-costo_operativo_total" value="${r.costo_operativo_total||0}" style="color:var(--orange)" readonly></div>
       </div>
@@ -6639,9 +6639,13 @@ function syncFlexTotal(){
   const flexAmt = hasFlex ? Math.round(reserva * 0.1) : 0;
   if(displayEl) displayEl.textContent = hasFlex ? '('+fmtMoney(flexAmt)+')' : '';
   if(totalEl){
-    const extras = _extrasItems ? _extrasItems.reduce((s,e)=>s+(+e.qty||0)*(+e.unit_price||0),0) : 0;
-    const descs = _descuentos ? _descuentos.reduce((s,d)=>s+(+d.amount||0),0) : 0;
-    totalEl.value = reserva + extras + flexAmt - descs;
+    const extrasSum = (_extrasItems||[]).reduce((s,e)=>s+(+e.qty||0)*(+e.unit_price||0),0);
+    const alojSum   = (_alojAddon ||[]).reduce((s,a)=>s+(+a.nights||1)*(+a.unit_price||0),0);
+    const expSum    = (_expAddon  ||[]).reduce((s,a)=>s+(+a.qty||1)*(+a.unit_price||0),0);
+    const addons    = extrasSum + alojSum + expSum;
+    const descs     = (_descuentos||[]).reduce((s,d)=>s+(+d.amount||0),0)
+                    + (_appliedCoupon?.discount_amount||0);
+    totalEl.value = reserva + addons + flexAmt - descs;
     syncPagoFaltante();
   }
 }
@@ -6878,14 +6882,17 @@ function updateExtrasTotals(){
   const addonsTotal = extrasTotal + alojTotal + expTotal;
   const descTotal   = (_descuentos||[]).reduce((s,d)=>s+(+d.amount||0),0)
                     + (_appliedCoupon?.discount_amount||0);
+  const hasFlex  = document.getElementById('e-has_flex')?.checked || false;
+  const resEl    = document.getElementById('e-ingreso_reserva');
+  const reserva  = resEl ? +resEl.value||0 : 0;
+  const flexAmt  = hasFlex ? Math.round(reserva * 0.1) : 0;
   const lbl = document.getElementById('extras-total-label');
   if(lbl) lbl.textContent = extrasTotal>0 ? fmtMoney(extrasTotal) : '';
   const extEl  = document.getElementById('e-ingreso_extras');
   const totEl  = document.getElementById('e-ingreso_total');
-  const resEl  = document.getElementById('e-ingreso_reserva');
   const varEl  = document.getElementById('e-costo_operativo_variable');
   if(extEl) extEl.value = addonsTotal;
-  if(totEl && resEl) totEl.value = (+resEl.value||0) + addonsTotal - descTotal;
+  if(totEl) totEl.value = reserva + addonsTotal + flexAmt - descTotal;
   if(varEl && costoTotal > 0){ varEl.value = costoTotal; syncCostoTotal(); }
   syncPagoFaltante();
 }
