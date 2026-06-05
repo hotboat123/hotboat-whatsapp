@@ -3155,6 +3155,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               if(bonoExtWebEl)  bonoExtWebEl.checked  = w.bono_ext_web  ?? w.bono_ext ?? false;
               if(bonoExtPresEl) bonoExtPresEl.checked = w.bono_ext_pres ?? false;
             });
+            // Normalize remuWorkers: if a worker has bono_util ON but empty remuWorkers, include all other workers
+            { const nW = parseInt(document.getElementById('sim-num-trab')?.value)||1;
+              for(let ww=1;ww<=nW;ww++){const cfg=_wUtilCfg[ww];if(!cfg||!cfg.on)continue;
+                if(Object.keys(cfg.remuWorkers).length===0){for(let ow=1;ow<=nW;ow++){if(ow!==ww)cfg.remuWorkers[ow]=true;}
+                simRenderUtilCosts(ww);}}}
           } else if(sc.bono_num_trabajadores){
             _simSetTrabCount(sc.bono_num_trabajadores);
             const legacy = (sc.remuneracion_capitan||0)+(sc.remuneracion_personal||0)+(sc.remuneracion_admin||0);
@@ -3396,6 +3401,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             if(bonoExtWebEl)  bonoExtWebEl.checked  = w.bono_ext_web  ?? w.bono_ext ?? false;
             if(bonoExtPresEl) bonoExtPresEl.checked = w.bono_ext_pres ?? false;
           });
+          // Normalize remuWorkers: if a worker has bono_util ON but empty remuWorkers, include all other workers
+          { const nW = parseInt(document.getElementById('sim-num-trab')?.value)||1;
+            for(let ww=1;ww<=nW;ww++){const cfg=_wUtilCfg[ww];if(!cfg||!cfg.on)continue;
+              if(Object.keys(cfg.remuWorkers).length===0){for(let ow=1;ow<=nW;ow++){if(ow!==ww)cfg.remuWorkers[ow]=true;}
+              simRenderUtilCosts(ww);}}}
         } else if(s.bono_num_trabajadores){
           // Backward compat: old format stored a flat salary total
           _simSetTrabCount(s.bono_num_trabajadores);
@@ -3442,6 +3452,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const bonoCalMonto  = parseFloat(document.getElementById('sim-bono-calidad-monto')?.value) || 0;
         const fmt = v => '$' + Math.round(v).toLocaleString('es-CL');
 
+        // Compute and display ingreso por reserva
+        const precioSim   = parseFloat(document.getElementById('sim-precio')?.value) || 0;
+        const personasSim = parseFloat(document.getElementById('sim-personas')?.value) || 1;
+        const ingresoRes  = precioSim * personasSim + extrasWeb + extrasPres;
+        const ingresoResEl = document.getElementById('wv-ingreso-res');
+        if(ingresoResEl) ingresoResEl.textContent = '$' + Math.round(ingresoRes).toLocaleString('es-CL');
+
         const container = document.getElementById('wv-cards');
         if(!container) return;
 
@@ -3471,25 +3488,58 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           // Utilidad bonus (tiered)
           const ucfg = _getWUtilCfg(w);
           let bonoUtilW = 0, sueldoUtil = null, activeTramoVW = null;
+          let _utilProjHtml = '';
           if(ucfg.on){
             const ic = ucfg.income || _UTIL_DEFAULT_INCOME;
-            const ingrBrutoVW = (parseFloat(document.getElementById('sim-precio')?.value)||0) *
-                                (parseFloat(document.getElementById('sim-personas')?.value)||1) * reservas +
-                                (ic.extrasWeb  ? extrasWeb  * reservas : 0) +
-                                (ic.extrasPres ? extrasPres * reservas : 0);
             const c = ucfg.costs;
+            const simPrecio   = parseFloat(document.getElementById('sim-precio')?.value)||0;
+            const simPersonas = parseFloat(document.getElementById('sim-personas')?.value)||1;
             const remuoVW = Object.entries(ucfg.remuWorkers||{}).reduce((s,[ww,on])=> on ? s+(parseFloat(document.getElementById(`sim-w${ww}-sueldo`)?.value)||0) : s, 0);
-            const dedVW = (c.cvar?(parseFloat(document.getElementById('sim-costo-res')?.value)||0)*reservas:0) +
-                          (c.comb?(parseFloat(document.getElementById('sim-combustible')?.value)||0)*reservas:0) +
-                          (c.fijos?parseFloat(document.getElementById('sim-fijos')?.value)||0:0) +
-                          (c.mant?parseFloat(document.getElementById('sim-mantenim')?.value)||0:0) +
-                          (c.otros?parseFloat(document.getElementById('sim-otros-fijos')?.value)||0:0) +
-                          (c.mkt?parseFloat(document.getElementById('sim-mkt')?.value)||0:0) +
-                          remuoVW;
-            const utilBaseVW = Math.max(0, ingrBrutoVW - dedVW);
+            const ingrPerResVW = simPrecio * simPersonas +
+                                 (ic.extrasWeb  ? extrasWeb  : 0) +
+                                 (ic.extrasPres ? extrasPres : 0);
+            const dedVarPerRes = (c.cvar?(parseFloat(document.getElementById('sim-costo-res')?.value)||0):0) +
+                                 (c.comb?(parseFloat(document.getElementById('sim-combustible')?.value)||0):0);
+            const dedFixed = (c.fijos?parseFloat(document.getElementById('sim-fijos')?.value)||0:0) +
+                             (c.mant?parseFloat(document.getElementById('sim-mantenim')?.value)||0:0) +
+                             (c.otros?parseFloat(document.getElementById('sim-otros-fijos')?.value)||0:0) +
+                             (c.mkt?parseFloat(document.getElementById('sim-mkt')?.value)||0:0) +
+                             remuoVW;
+
+            const utilBaseVW = Math.max(0, ingrPerResVW * reservas - dedVarPerRes * reservas - dedFixed);
             activeTramoVW = _getActiveTramo(ucfg.tramos, reservas, utilBaseVW);
             sueldoUtil = activeTramoVW.sueldoFijo;
             bonoUtilW = activeTramoVW.pctUtil * utilBaseVW / 100;
+
+            // Build util projection table
+            const projLevels = [15, 20, 30, 40, 50, 70, 100, 120, 130];
+            let projRows = '';
+            for(const pr of projLevels){
+              const utilP = Math.max(0, (ingrPerResVW - dedVarPerRes) * pr - dedFixed);
+              const tramoP = _getActiveTramo(ucfg.tramos, pr, utilP);
+              const sueldoP = tramoP.sueldoFijo || sueldo;
+              const bonoP   = tramoP.pctUtil * utilP / 100;
+              const totalP  = sueldoP + bonoP;
+              const isCur   = pr === reservas;
+              projRows += `<tr style="background:${isCur?'rgba(16,185,129,.15)':''}">
+                <td style="padding:.11rem .25rem;${isCur?'font-weight:700':'opacity:.75'}">${pr}</td>
+                <td style="text-align:right;padding:.11rem .25rem;color:${bonoP>0?'#10b981':'var(--muted)'};${isCur?'font-weight:700':''}">${bonoP>0?'+'+fmt(bonoP):'—'}</td>
+                <td style="text-align:right;padding:.11rem .25rem;${isCur?'font-weight:800;color:#fbbf24':'opacity:.8'}">${fmt(totalP)}</td>
+              </tr>`;
+            }
+            _utilProjHtml = `
+              <div style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.55rem">
+                <div style="font-size:.71rem;font-weight:700;color:#10b981;letter-spacing:.04em;margin-bottom:.35rem">PROYECCIÓN BONO UTILIDAD</div>
+                <table style="width:100%;font-size:.75rem;border-collapse:collapse">
+                  <thead><tr style="color:var(--muted);font-size:.68rem">
+                    <th style="text-align:left;padding:.1rem .25rem;font-weight:600">Res</th>
+                    <th style="text-align:right;padding:.1rem .25rem;font-weight:600">Bono util</th>
+                    <th style="text-align:right;padding:.1rem .25rem;font-weight:600">Total*</th>
+                  </tr></thead>
+                  <tbody>${projRows}</tbody>
+                </table>
+                <div style="font-size:.66rem;color:var(--muted);margin-top:.3rem">* sueldo + bono util (sin bono reservas ni extras)</div>
+              </div>`;
           }
           const sueldoEfW = sueldoUtil ?? sueldo;
           const total = sueldoEfW + bonoResW + bonoCalW + bonoExtWebW + bonoExtPresW + bonoUtilW;
@@ -3561,6 +3611,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <span style="font-weight:700;font-size:.82rem;color:var(--muted);letter-spacing:.03em">TOTAL ESTIMADO</span>
                 <span style="font-weight:800;font-size:1.1rem;color:#fbbf24">${fmt(total)}</span>
               </div>
+              ${_utilProjHtml}
             </div>`;
         }
 
@@ -3617,11 +3668,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Reservas del mes</label>
             <div style="display:flex;align-items:center;gap:.5rem">
-              <input type="range" id="wv-reservas-slider" min="0" max="80" value="20"
+              <input type="range" id="wv-reservas-slider" min="0" max="130" value="20"
                 oninput="document.getElementById('wv-reservas').value=this.value;calcWorkersView()"
                 style="flex:1;accent-color:#fbbf24">
               <input type="number" id="wv-reservas" value="20" min="0" max="999" step="1"
-                oninput="document.getElementById('wv-reservas-slider').value=Math.min(80,+this.value||0);calcWorkersView()"
+                oninput="document.getElementById('wv-reservas-slider').value=Math.min(130,+this.value||0);calcWorkersView()"
                 style="width:55px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .4rem;font-size:.9rem;text-align:center;font-weight:700;outline:none">
             </div>
           </div>
@@ -3649,6 +3700,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <input type="checkbox" id="wv-calidad" onchange="calcWorkersView()" style="accent-color:#fbbf24;width:15px;height:15px">
               <span style="font-size:.85rem">Objetivo cumplido</span>
             </label>
+          </div>
+
+          <!-- Ingreso por reserva (computed) -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Ingreso promedio / reserva</label>
+            <div id="wv-ingreso-res" style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.32rem .6rem;font-size:.92rem;font-weight:700;color:var(--gold)">$0</div>
+            <div style="font-size:.68rem;color:var(--muted);margin-top:.2rem">precio × personas + extras</div>
           </div>
         </div>
         <div style="margin-top:.75rem;font-size:.74rem;color:var(--muted);line-height:1.5">
