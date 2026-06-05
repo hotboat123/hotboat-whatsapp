@@ -46,10 +46,12 @@ def _ensure_tables():
         imagen_path TEXT DEFAULT '',
         categoria1_id INTEGER REFERENCES gastos_categorias(id) ON DELETE SET NULL,
         categoria2_id INTEGER REFERENCES gastos_categorias(id) ON DELETE SET NULL,
+        tipo_documento VARCHAR(20) DEFAULT 'boleta',
         notas TEXT DEFAULT '',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE gastos ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(20) DEFAULT 'boleta';
     CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
     CREATE INDEX IF NOT EXISTS idx_gastos_cat1 ON gastos(categoria1_id);
     """
@@ -106,6 +108,15 @@ def _match_category(text: str, categorias: list) -> Optional[int]:
 
 # ── Models ─────────────────────────────────────────────────────────────────────
 
+IVA = 1.19
+
+def monto_neto(monto: int, tipo_documento: str) -> int:
+    """Net amount after IVA. Facturas give IVA credit → neto = monto/1.19. Boleta/sin doc: neto = monto."""
+    if tipo_documento == "factura":
+        return round(monto / IVA)
+    return monto
+
+
 class GastoCreate(BaseModel):
     fecha: str
     monto: int
@@ -115,6 +126,7 @@ class GastoCreate(BaseModel):
     imagen_mime: str = "image/jpeg"
     categoria1_id: Optional[int] = None
     categoria2_id: Optional[int] = None
+    tipo_documento: str = "boleta"  # boleta | factura | sin_documento
     notas: str = ""
 
 
@@ -271,7 +283,7 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
         SELECT g.id, g.fecha, g.monto, g.descripcion, g.comercio, g.imagen_path,
                g.categoria1_id, c1.nombre, c1.color, c1.icono,
                g.categoria2_id, c2.nombre, c2.color, c2.icono,
-               g.notas, g.created_at
+               g.notas, g.created_at, COALESCE(g.tipo_documento, 'boleta')
         FROM gastos g
         LEFT JOIN gastos_categorias c1 ON g.categoria1_id = c1.id
         LEFT JOIN gastos_categorias c2 ON g.categoria2_id = c2.id
@@ -282,9 +294,16 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
         with conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
-    return {"ok": True, "gastos": [
-        {
-            "id": r[0], "fecha": str(r[1]), "monto": r[2],
+
+    def _build_row(r):
+        m = r[2] or 0
+        tdoc = r[16] or "boleta"
+        neto = monto_neto(m, tdoc)
+        return {
+            "id": r[0], "fecha": str(r[1]), "monto": m,
+            "monto_neto": neto,
+            "iva_credito": (m - neto) if tdoc == "factura" else 0,
+            "tipo_documento": tdoc,
             "descripcion": r[3] or "", "comercio": r[4] or "",
             "imagen_path": r[5] or "",
             "categoria1_id": r[6],
@@ -298,8 +317,8 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
             "notas": r[14] or "",
             "created_at": r[15].isoformat() if r[15] else "",
         }
-        for r in rows
-    ]}
+
+    return {"ok": True, "gastos": [_build_row(r) for r in rows]}
 
 
 @gastos_router.post("/api/admin/gastos")
@@ -322,9 +341,9 @@ async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO gastos (fecha, monto, descripcion, comercio, imagen_path, "
-                "categoria1_id, categoria2_id, notas) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                "categoria1_id, categoria2_id, tipo_documento, notas) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
                 (body.fecha, body.monto, body.descripcion, body.comercio,
-                 imagen_path, body.categoria1_id, body.categoria2_id, body.notas),
+                 imagen_path, body.categoria1_id, body.categoria2_id, body.tipo_documento, body.notas),
             )
             (new_id,) = cur.fetchone()
         conn.commit()

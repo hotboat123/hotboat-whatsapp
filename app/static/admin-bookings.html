@@ -3819,7 +3819,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Monto (CLP) *</label>
-            <input type="number" id="gastos-monto" placeholder="12500" min="0" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+            <input type="number" id="gastos-monto" placeholder="12500" min="0" oninput="calcGastosIva()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Comercio / Descripción</label>
@@ -3836,6 +3836,15 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <select id="gastos-cat2" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
               <option value="">— Sin subcategoría —</option>
             </select>
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Tipo de documento</label>
+            <select id="gastos-tipo-doc" onchange="calcGastosIva()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+              <option value="boleta">🧾 Boleta (IVA no recuperable)</option>
+              <option value="factura">🏢 Factura (IVA crédito fiscal)</option>
+              <option value="sin_documento">💵 Sin documento</option>
+            </select>
+            <div id="gastos-iva-info" style="font-size:.72rem;color:var(--muted);margin-top:.3rem;line-height:1.5"></div>
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Notas</label>
@@ -3892,8 +3901,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.5rem .7rem;text-align:left;color:var(--muted);font-weight:600;white-space:nowrap">Fecha</th>
                 <th style="padding:.5rem .7rem;text-align:left;color:var(--muted);font-weight:600">Comercio / Descripción</th>
                 <th style="padding:.5rem .7rem;text-align:left;color:var(--muted);font-weight:600">Cat. 1</th>
-                <th style="padding:.5rem .7rem;text-align:left;color:var(--muted);font-weight:600">Cat. 2</th>
-                <th style="padding:.5rem .7rem;text-align:right;color:var(--muted);font-weight:600">Monto</th>
+                <th style="padding:.5rem .7rem;text-align:left;color:var(--muted);font-weight:600">Documento</th>
+                <th style="padding:.5rem .7rem;text-align:right;color:var(--muted);font-weight:600">Bruto</th>
+                <th style="padding:.5rem .7rem;text-align:right;color:#4ade80;font-weight:600">Neto</th>
+                <th style="padding:.5rem .7rem;text-align:right;color:#60a5fa;font-weight:600" title="IVA crédito fiscal (solo facturas)">IVA crédito</th>
                 <th style="padding:.5rem .7rem;text-align:center;color:var(--muted);font-weight:600">Foto</th>
                 <th style="padding:.5rem .7rem;text-align:center;color:var(--muted);font-weight:600"></th>
               </tr>
@@ -4585,7 +4596,26 @@ async function openModal(id){
       <div class="form-row">
         <div class="form-group"><label>Total ingresos</label>
           <input id="e-ingreso_total" value="${r.ingreso_total||0}" style="color:var(--gold);font-weight:700"
-            oninput="syncCostoTotal();syncPagoFaltante()"></div>
+            oninput="syncCostoTotal();syncPagoFaltante();calcIvaVenta()"></div>
+        <div class="form-group">
+          <label>IVA / Facturación</label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;
+                        background:${r.boletado?'rgba(16,185,129,.12)':'rgba(255,255,255,.04)'};
+                        border:1px solid ${r.boletado?'rgba(16,185,129,.4)':'var(--border)'};
+                        border-radius:8px;padding:.38rem .7rem;font-size:.82rem;
+                        color:${r.boletado?'#4ade80':'var(--muted)'};font-weight:600;transition:.2s"
+                 id="e-boletado-label">
+            <input type="checkbox" id="e-boletado" ${r.boletado?'checked':''}
+              style="accent-color:#4ade80"
+              onchange="calcIvaVenta();
+                const lbl=document.getElementById('e-boletado-label');
+                lbl.style.background=this.checked?'rgba(16,185,129,.12)':'rgba(255,255,255,.04)';
+                lbl.style.borderColor=this.checked?'rgba(16,185,129,.4)':'var(--border)';
+                lbl.style.color=this.checked?'#4ade80':'var(--muted)'">
+            🧾 Boletada
+          </label>
+          <div id="e-iva-venta-info" style="font-size:.72rem;color:var(--muted);margin-top:.3rem;line-height:1.5"></div>
+        </div>
       </div>
       <input type="hidden" id="e-costo_operativo_fijo" value="${r.costo_operativo_fijo??0}">
       <div class="form-row">
@@ -5091,6 +5121,7 @@ async function saveModal(id){
     medio_contacto:g('e-medio_contacto')||null,
     has_flex:hasFlex,
     flex_amount:flexAmt,
+    boletado: document.getElementById('e-boletado')?.checked ?? false,
     num_personas: g('e-num_personas') ? +g('e-num_personas') : null,
     num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
     num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,
@@ -5113,7 +5144,7 @@ async function saveModal(id){
   body.coupon_code = _appliedCoupon ? _appliedCoupon.code : null;
   body.coupon_discount = _appliedCoupon ? (_appliedCoupon.discount_amount || 0) : 0;
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount']);
+  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount','boletado']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -6795,6 +6826,20 @@ function syncFlexTotal(){
     totalEl.value = reserva + extras + flexAmt - descs;
     syncPagoFaltante();
   }
+}
+
+function calcIvaVenta(){
+  const total   = +(document.getElementById('e-ingreso_total')?.value || 0);
+  const boletado = document.getElementById('e-boletado')?.checked || false;
+  const info    = document.getElementById('e-iva-venta-info');
+  if(!info) return;
+  if(!boletado || !total){
+    info.textContent = boletado ? 'Ingresá el total para ver el desglose.' : 'Sin boleta — ingreso contabilizado sin IVA.';
+    return;
+  }
+  const neto  = Math.round(total / 1.19);
+  const iva   = total - neto;
+  info.innerHTML = `Neto: <strong style="color:#4ade80">${fmtMoney(neto)}</strong> &nbsp;|&nbsp; IVA débito (19%): <strong style="color:#f87171">${fmtMoney(iva)}</strong>`;
 }
 
 // ── Extras catalog & editor ────────────────────────────────────────────────────
@@ -10024,31 +10069,41 @@ async function loadGastos(){
 function fmtCLP(v){ return '$' + Math.round(v).toLocaleString('es-CL'); }
 
 function renderGastosKpis(gastos){
-  const total = gastos.reduce((s,g) => s + (g.monto||0), 0);
+  const totalBruto = gastos.reduce((s,g) => s + (g.monto||0), 0);
+  const totalNeto  = gastos.reduce((s,g) => s + (g.monto_neto ?? g.monto ?? 0), 0);
+  const ivaCredito = gastos.reduce((s,g) => s + (g.iva_credito||0), 0);
   // Group by cat1
   const byCat = {};
   gastos.forEach(g => {
     const k = g.categoria1_nombre || 'Sin categoría';
     const c = g.categoria1_color  || '#6b7280';
     const i = g.categoria1_icono  || '📌';
-    if(!byCat[k]) byCat[k] = {total:0, color:c, icono:i};
+    if(!byCat[k]) byCat[k] = {total:0, neto:0, color:c, icono:i};
     byCat[k].total += g.monto || 0;
+    byCat[k].neto  += g.monto_neto ?? g.monto ?? 0;
   });
-  const sorted = Object.entries(byCat).sort((a,b)=>b[1].total - a[1].total).slice(0,5);
+  const sorted = Object.entries(byCat).sort((a,b)=>b[1].neto - a[1].neto).slice(0,4);
 
   const el = document.getElementById('gastos-kpis');
   if(!el) return;
-  let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.6rem .9rem;min-width:130px">
-    <div style="font-size:.72rem;color:var(--muted);margin-bottom:.2rem">Total período</div>
-    <div style="font-size:1.05rem;font-weight:800;color:var(--red)">${fmtCLP(total)}</div>
-    <div style="font-size:.72rem;color:var(--muted)">${gastos.length} gastos</div>
+  let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.6rem .9rem;min-width:140px">
+    <div style="font-size:.72rem;color:var(--muted);margin-bottom:.15rem">Gasto neto período</div>
+    <div style="font-size:1.05rem;font-weight:800;color:#f87171">${fmtCLP(totalNeto)}</div>
+    <div style="font-size:.7rem;color:var(--muted)">${gastos.length} gastos · bruto ${fmtCLP(totalBruto)}</div>
   </div>`;
+  if(ivaCredito > 0){
+    html += `<div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.3);border-radius:10px;padding:.6rem .9rem;min-width:130px">
+      <div style="font-size:.72rem;color:#60a5fa;margin-bottom:.15rem">IVA crédito fiscal</div>
+      <div style="font-size:1.05rem;font-weight:800;color:#60a5fa">${fmtCLP(ivaCredito)}</div>
+      <div style="font-size:.7rem;color:var(--muted)">recuperable ante SII</div>
+    </div>`;
+  }
   sorted.forEach(([nombre, d]) => {
-    const pct = total > 0 ? Math.round(d.total / total * 100) : 0;
+    const pct = totalNeto > 0 ? Math.round(d.neto / totalNeto * 100) : 0;
     html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.6rem .9rem;min-width:120px">
-      <div style="font-size:.72rem;color:var(--muted);margin-bottom:.2rem">${d.icono} ${nombre}</div>
-      <div style="font-size:.95rem;font-weight:700;color:var(--text)">${fmtCLP(d.total)}</div>
-      <div style="font-size:.7rem;color:var(--muted)">${pct}% del total</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:.15rem">${d.icono} ${nombre}</div>
+      <div style="font-size:.95rem;font-weight:700;color:var(--text)">${fmtCLP(d.neto)}</div>
+      <div style="font-size:.7rem;color:var(--muted)">${pct}% del neto</div>
     </div>`;
   });
   el.innerHTML = html;
@@ -10066,15 +10121,17 @@ function renderGastosTable(gastos){
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin gastos registrados en este período</td></tr>';
     return;
   }
+  const TDOC_LABEL = {boleta:'🧾 Boleta', factura:'🏢 Factura', sin_documento:'💵 Sin doc'};
   tbody.innerHTML = gastos.map(g => {
-    const fecha = g.fecha ? g.fecha.slice(0,10) : '—';
-    const monto = fmtCLP(g.monto);
+    const fecha   = g.fecha ? g.fecha.slice(0,10) : '—';
+    const bruto   = fmtCLP(g.monto);
+    const neto    = fmtCLP(g.monto_neto ?? g.monto);
+    const ivaC    = g.iva_credito > 0 ? `<span style="color:#60a5fa;font-weight:600">${fmtCLP(g.iva_credito)}</span>` : '<span style="color:var(--muted);font-size:.75rem">—</span>';
+    const tdoc    = g.tipo_documento || 'boleta';
+    const tdocBadge = `<span style="font-size:.75rem;color:${tdoc==='factura'?'#60a5fa':tdoc==='boleta'?'var(--muted)':'#a3a3a3'}">${TDOC_LABEL[tdoc]||tdoc}</span>`;
     const comercio = g.comercio || g.descripcion || '—';
     const cat1 = g.categoria1_nombre
       ? `<span style="background:${g.categoria1_color}22;color:${g.categoria1_color};padding:.15rem .45rem;border-radius:6px;font-size:.78rem;font-weight:600">${g.categoria1_icono} ${g.categoria1_nombre}</span>`
-      : '<span style="color:var(--muted);font-size:.78rem">—</span>';
-    const cat2 = g.categoria2_nombre
-      ? `<span style="background:${g.categoria2_color}22;color:${g.categoria2_color};padding:.15rem .45rem;border-radius:6px;font-size:.78rem">${g.categoria2_icono} ${g.categoria2_nombre}</span>`
       : '<span style="color:var(--muted);font-size:.78rem">—</span>';
     const fotoBtn = g.imagen_path
       ? `<a href="${g.imagen_path}" target="_blank" style="color:var(--gold);font-size:.85rem" title="Ver boleta">🧾</a>`
@@ -10084,8 +10141,10 @@ function renderGastosTable(gastos){
       <td style="padding:.45rem .7rem;white-space:nowrap">${fecha}</td>
       <td style="padding:.45rem .7rem">${comercio}${notas}</td>
       <td style="padding:.45rem .7rem">${cat1}</td>
-      <td style="padding:.45rem .7rem">${cat2}</td>
-      <td style="padding:.45rem .7rem;text-align:right;font-weight:700;color:var(--red)">${monto}</td>
+      <td style="padding:.45rem .7rem">${tdocBadge}</td>
+      <td style="padding:.45rem .7rem;text-align:right;color:var(--muted)">${bruto}</td>
+      <td style="padding:.45rem .7rem;text-align:right;font-weight:700;color:#4ade80">${neto}</td>
+      <td style="padding:.45rem .7rem;text-align:right">${ivaC}</td>
       <td style="padding:.45rem .7rem;text-align:center">${fotoBtn}</td>
       <td style="padding:.45rem .7rem;text-align:center">
         <button onclick="deleteGasto(${g.id})" title="Eliminar" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem">🗑️</button>
@@ -10138,6 +10197,8 @@ function openGastoForm(){
   document.getElementById('gastos-notas').value = '';
   document.getElementById('gastos-cat1').value = '';
   document.getElementById('gastos-cat2').innerHTML = '<option value="">— Sin subcategoría —</option>';
+  document.getElementById('gastos-tipo-doc').value = 'boleta';
+  document.getElementById('gastos-iva-info').textContent = '';
   clearGastoImage();
   document.getElementById('gastos-form-panel').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -10189,6 +10250,24 @@ function clearGastoImage(){
   document.getElementById('gastos-file-input').value = '';
 }
 
+// ── IVA calculator (live preview) ──────────────────
+function calcGastosIva(){
+  const monto = +(document.getElementById('gastos-monto')?.value || 0);
+  const tdoc  = document.getElementById('gastos-tipo-doc')?.value || 'boleta';
+  const info  = document.getElementById('gastos-iva-info');
+  if(!info) return;
+  if(!monto){ info.textContent = ''; return; }
+  if(tdoc === 'factura'){
+    const neto = Math.round(monto / 1.19);
+    const iva  = monto - neto;
+    info.innerHTML = `Neto: <strong style="color:#4ade80">${fmtCLP(neto)}</strong> &nbsp;|&nbsp; IVA crédito: <strong style="color:#60a5fa">${fmtCLP(iva)}</strong>`;
+  } else if(tdoc === 'boleta'){
+    info.innerHTML = `Gasto neto: <strong style="color:#f87171">${fmtCLP(monto)}</strong> — IVA incluido no recuperable`;
+  } else {
+    info.innerHTML = `Gasto neto: <strong style="color:#f87171">${fmtCLP(monto)}</strong>`;
+  }
+}
+
 // ── AI Scan ─────────────────────────────────────────
 async function scanGastosReceipt(){
   if(!_gastosImgBase64){ showToast('Seleccioná una imagen primero'); return; }
@@ -10231,11 +10310,12 @@ async function saveGasto(){
   if(!fecha){ showToast('Ingresá la fecha'); return; }
   if(!monto){ showToast('Ingresá el monto'); return; }
   try {
+    const tipo_documento = document.getElementById('gastos-tipo-doc')?.value || 'boleta';
     const res = await api('/api/admin/gastos', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        fecha, monto, comercio, notas,
+        fecha, monto, comercio, notas, tipo_documento,
         imagen_base64: _gastosImgBase64,
         imagen_mime:   _gastosImgMime,
         categoria1_id: cat1 ? parseInt(cat1) : null,
