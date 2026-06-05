@@ -238,41 +238,69 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         "generationConfig": {"temperature": 0.1, "maxOutputTokens": 300},
     }
 
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.0-flash:generateContent?key={api_key}"
-    )
+    # Re-compress image to ≤800px JPEG before sending — keeps token count low
+    try:
+        from PIL import Image as PilImage
+        import io
+        img_bytes = base64.b64decode(body.imagen_base64)
+        pil_img = PilImage.open(io.BytesIO(img_bytes)).convert("RGB")
+        MAX_SCAN_PX = 800
+        w, h = pil_img.size
+        if w > MAX_SCAN_PX or h > MAX_SCAN_PX:
+            scale = MAX_SCAN_PX / max(w, h)
+            pil_img = pil_img.resize((int(w * scale), int(h * scale)), PilImage.LANCZOS)
+        buf = io.BytesIO()
+        pil_img.save(buf, format="JPEG", quality=60, optimize=True)
+        scan_b64 = base64.b64encode(buf.getvalue()).decode()
+        scan_mime = "image/jpeg"
+    except Exception:
+        scan_b64 = body.imagen_base64
+        scan_mime = body.mime_type
+
+    payload["contents"][0]["parts"][0] = {"inline_data": {"mime_type": scan_mime, "data": scan_b64}}
+
+    # Try models in order; fall back on 429 or 404
+    MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash-8b"]
     extracted = None
-    last_err: Exception | None = None
-    async with httpx.AsyncClient(timeout=25) as client:
-        for attempt in range(3):  # up to 3 tries on 429
+    last_status = None
+    last_body = ""
+    async with httpx.AsyncClient(timeout=30) as client:
+        for model in MODELS:
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{model}:generateContent?key={api_key}"
+            )
             try:
                 resp = await client.post(url, json=payload)
-                if resp.status_code == 429:
-                    wait = 4 * (attempt + 1)  # 4s, 8s, 12s
-                    logger.warning(f"Gemini 429 – esperando {wait}s (intento {attempt+1})")
-                    await asyncio.sleep(wait)
-                    continue
+                last_status = resp.status_code
+                last_body = resp.text[:400]
+                if resp.status_code in (429, 404, 503):
+                    logger.warning(f"Gemini {model} → {resp.status_code}: {last_body[:120]}")
+                    if resp.status_code == 429:
+                        await asyncio.sleep(3)
+                    continue  # try next model
                 resp.raise_for_status()
                 raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                 if raw_text.startswith("```"):
                     raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
                 extracted = json.loads(raw_text)
+                logger.info(f"Gemini scan OK via {model}")
                 break
-            except (json.JSONDecodeError, KeyError, httpx.HTTPStatusError) as e:
-                last_err = e
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.error(f"Gemini {model} parse error: {e}")
                 break
             except httpx.HTTPError as e:
-                last_err = e
+                logger.error(f"Gemini {model} http error: {e}")
                 break
+
     if extracted is None:
-        logger.error(f"Gemini scan error: {last_err}")
-        if last_err and "429" in str(last_err):
+        logger.error(f"Gemini all models failed – last status={last_status} body={last_body}")
+        if last_status == 429:
             raise HTTPException(
                 status_code=429,
-                detail="Límite de Gemini alcanzado (15 req/min en tier gratuito). Esperá unos segundos e intentá de nuevo."
+                detail="Cuota de Gemini agotada. Revisá tu API key en aistudio.google.com → límites del proyecto.",
             )
-        raise HTTPException(status_code=502, detail=f"Error al escanear la boleta: {last_err}")
+        raise HTTPException(status_code=502, detail=f"No se pudo escanear (status={last_status}). Detalle: {last_body[:200]}")
 
     # Keyword-based category matching
     with get_connection() as conn:
