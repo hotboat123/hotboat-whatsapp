@@ -1685,6 +1685,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <span>%</span>
                   </div>
                 </div>
+                <div id="sim-w1-util-container"></div>
               </div>
             </div>
 
@@ -1743,6 +1744,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <span>%</span>
                   </div>
                 </div>
+                <div id="sim-w2-util-container"></div>
               </div>
             </div>
 
@@ -1801,6 +1803,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <span>%</span>
                   </div>
                 </div>
+                <div id="sim-w3-util-container"></div>
               </div>
             </div>
 
@@ -1859,6 +1862,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <span>%</span>
                   </div>
                 </div>
+                <div id="sim-w4-util-container"></div>
               </div>
             </div>
 
@@ -1876,6 +1880,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w5-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w5-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w5-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w5-umbral-ext-web" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w5-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w5-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w5-umbral-ext-pres" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w5-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
+                <div id="sim-w5-util-container"></div>
               </div>
             </div>
 
@@ -1893,6 +1898,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w6-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w6-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w6-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w6-umbral-ext-web" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w6-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w6-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w6-umbral-ext-pres" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w6-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
+                <div id="sim-w6-util-container"></div>
               </div>
             </div>
 
@@ -1910,6 +1916,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w7-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w7-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w7-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w7-umbral-ext-web" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w7-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w7-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w7-umbral-ext-pres" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w7-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
+                <div id="sim-w7-util-container"></div>
               </div>
             </div>
 
@@ -1927,6 +1934,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w8-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w8-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w8-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w8-umbral-ext-web" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w8-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w8-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w8-umbral-ext-pres" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w8-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
+                <div id="sim-w8-util-container"></div>
               </div>
             </div>
 
@@ -1944,6 +1952,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w9-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w9-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w9-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w9-umbral-ext-web" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w9-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w9-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w9-umbral-ext-pres" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w9-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
+                <div id="sim-w9-util-container"></div>
               </div>
             </div>
 
@@ -1961,6 +1970,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w10-bono-cal" onchange="simCalc()" style="accent-color:#fbbf24;width:13px;height:13px">Bono calidad</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w10-umbral-cal" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w10-bono-ext-web" onchange="simCalc()" style="accent-color:#60a5fa;width:13px;height:13px">Ext. web</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w10-umbral-ext-web" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w10-bono-ext-web-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem"><label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0"><input type="checkbox" id="sim-w10-bono-ext-pres" onchange="simCalc()" style="accent-color:#818cf8;width:13px;height:13px">Ext. presencial</label><div style="display:flex;align-items:center;gap:.15rem;font-size:.76rem;color:var(--muted)"><span>&gt;</span><input type="number" id="sim-w10-umbral-ext-pres" value="0" step="1" min="0" oninput="simCalc()" title="Mín. reservas" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>res</span><input type="number" id="sim-w10-bono-ext-pres-pct" value="10" step="1" min="0" max="100" oninput="simCalc()" style="width:38px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem"><span>%</span></div></div>
+                <div id="sim-w10-util-container"></div>
               </div>
             </div>
 
@@ -2200,6 +2210,76 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         return _wTiers[w];
       }
 
+      // ── Utilidad operativa bonus ──────────────────────────────────────────────────
+      const _UTIL_COSTS = [
+        { key:'cvar',  label:'Costo operativo / salida', sub:'× reservas' },
+        { key:'comb',  label:'Combustible adicional',    sub:'× reservas' },
+        { key:'fijos', label:'Estructura operativa',     sub:'arriendo…'  },
+        { key:'mant',  label:'Mantenimiento y seguros',  sub:''           },
+        { key:'otros', label:'Otros costos fijos',       sub:''           },
+        { key:'mkt',   label:'Marketing',                sub:''           },
+        { key:'remuo', label:'Sueldos otros trabajadores', sub:'base'     },
+      ];
+      const _UTIL_DEFAULT_COSTS = {cvar:true, comb:true, fijos:true, mant:true, otros:true, mkt:true, remuo:false};
+      let _wUtilCfg = {}; // {w: {on, pct, costs:{...}}}
+
+      function _getWUtilCfg(w){
+        if(!_wUtilCfg[w]) _wUtilCfg[w] = {on:false, pct:5, costs:{..._UTIL_DEFAULT_COSTS}};
+        return _wUtilCfg[w];
+      }
+
+      function simRenderUtilCosts(w){
+        const container = document.getElementById(`sim-w${w}-util-container`);
+        if(!container) return;
+        const cfg = _getWUtilCfg(w);
+        const numTrab = parseInt(document.getElementById('sim-num-trab')?.value) || 1;
+        let remuoAmt = 0;
+        for(let ww=1;ww<=numTrab;ww++) if(ww!==w) remuoAmt += simV(`sim-w${ww}-sueldo`);
+        const reservas = simV('sim-reservas');
+        const costAmts = {
+          cvar:  simV('sim-costo-res') * reservas,
+          comb:  simV('sim-combustible') * reservas,
+          fijos: simV('sim-fijos'),
+          mant:  simV('sim-mantenim'),
+          otros: simV('sim-otros-fijos'),
+          mkt:   simV('sim-mkt'),
+          remuo: remuoAmt,
+        };
+        const fmtS = v => '$'+Math.round(v).toLocaleString('es-CL');
+        const panelHtml = cfg.on ? `
+          <div style="margin-top:.3rem;padding:.45rem .55rem;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.18);border-radius:6px">
+            <div style="font-size:.69rem;color:rgba(16,185,129,.75);font-weight:700;margin-bottom:.3rem;letter-spacing:.03em">COSTOS DEDUCIDOS</div>
+            ${_UTIL_COSTS.map(c=>`
+              <label style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;padding:.14rem 0;cursor:pointer">
+                <span style="display:flex;align-items:center;gap:.3rem">
+                  <input type="checkbox" ${cfg.costs[c.key]?'checked':''} onchange="simToggleUtil(${w},'${c.key}',this.checked)"
+                    style="accent-color:#10b981;width:12px;height:12px;flex-shrink:0">
+                  <span style="font-size:.75rem;color:${costAmts[c.key]>0?'var(--text)':'var(--muted)'}">${c.label}${c.sub?` <span style="opacity:.5">(${c.sub})</span>`:''}</span>
+                </span>
+                <span id="sim-w${w}-util-${c.key}-amt" style="font-size:.72rem;color:var(--muted);white-space:nowrap">${fmtS(costAmts[c.key])}</span>
+              </label>`).join('')}
+          </div>` : '';
+        container.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem;margin-top:.05rem">
+            <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;flex-shrink:0">
+              <input type="checkbox" ${cfg.on?'checked':''} onchange="_getWUtilCfg(${w}).on=this.checked;simRenderUtilCosts(${w});simCalc()"
+                style="accent-color:#10b981;width:13px;height:13px">Bono utilidad
+            </label>
+            <div style="display:flex;align-items:center;gap:.2rem;opacity:${cfg.on?'1':'.4'}">
+              <input type="number" value="${cfg.pct}" min="0" max="100" step="0.5" ${cfg.on?'':'disabled'}
+                oninput="_getWUtilCfg(${w}).pct=+this.value;simCalc()"
+                style="width:42px;text-align:center;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:.08rem .15rem;font-size:.76rem">
+              <span style="font-size:.76rem;color:var(--muted)">% util.</span>
+            </div>
+          </div>
+          ${panelHtml}`;
+      }
+
+      function simToggleUtil(w, key, checked){
+        _getWUtilCfg(w).costs[key] = checked;
+        simCalc();
+      }
+
       function calcBonoResW(reservas, tiers){
         if(!tiers || !tiers.length) return 0;
         const sorted = [...tiers].sort((a,b)=>a.desde-b.desde);
@@ -2309,7 +2389,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             const f = document.getElementById(`sim-worker-form-${w}`);
             if(f) f.style.display = w === 1 ? '' : 'none';
           }
-          simRenderWTiers(1);
+          simRenderWTiers(1); simRenderUtilCosts(1);
           return;
         }
         tabsEl.style.display = 'flex';
@@ -2330,7 +2410,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const f = document.getElementById(`sim-worker-form-${w}`);
           if(f) f.style.display = (w === _simActiveWorker && w <= n) ? '' : 'none';
         }
-        for(let w = 1; w <= n; w++) simRenderWTiers(w);
+        for(let w = 1; w <= n; w++){ simRenderWTiers(w); simRenderUtilCosts(w); }
       }
 
       function simSelectWorker(w){
@@ -2553,6 +2633,34 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const bonoActual        = bonoResTotal + bonoCalTotal + bonoExtTotal;
         const remuner           = remuBase + bonoActual;
 
+        // ── Utilidad operativa bonus (second pass, needs remuBase) ────────────
+        const _ingresoGrossPre = (precio * personas + extras) * reservas;
+        let bonoUtilTotal = 0;
+        for(const wd of _wData){
+          const ucfg = _getWUtilCfg(wd.w);
+          if(!ucfg.on){ wd.bonoUtilW = 0; wd.utilidadBase = 0; continue; }
+          const c = ucfg.costs;
+          const remuoAmt = remuBase - wd.sueldo;
+          const deduccion = (c.cvar  ? simV('sim-costo-res') * reservas : 0) +
+                            (c.comb  ? simV('sim-combustible') * reservas : 0) +
+                            (c.fijos ? simV('sim-fijos')  : 0) +
+                            (c.mant  ? simV('sim-mantenim') : 0) +
+                            (c.otros ? simV('sim-otros-fijos') : 0) +
+                            (c.mkt   ? mkt : 0) +
+                            (c.remuo ? remuoAmt : 0);
+          wd.utilidadBase = Math.max(0, _ingresoGrossPre - deduccion);
+          wd.bonoUtilW    = wd.utilidadBase * ucfg.pct / 100;
+          bonoUtilTotal  += wd.bonoUtilW;
+          // Keep cost-amount spans current
+          const costAmtsU = { cvar: simV('sim-costo-res')*reservas, comb: simV('sim-combustible')*reservas,
+                              fijos: simV('sim-fijos'), mant: simV('sim-mantenim'),
+                              otros: simV('sim-otros-fijos'), mkt, remuo: remuoAmt };
+          _UTIL_COSTS.forEach(uc => {
+            const el = document.getElementById(`sim-w${wd.w}-util-${uc.key}-amt`);
+            if(el) el.textContent = '$'+Math.round(costAmtsU[uc.key]).toLocaleString('es-CL');
+          });
+        }
+
         // ── Per-worker monthly breakdown ───────────────────────────────────
         let grandTotal = 0;
         for(const wd of _wData){
@@ -2566,7 +2674,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             formEl.appendChild(totalEl);
           }
           const bonoCalW = (bonoCalidadCheck && wd.bonoCalOn && wd.umbralCalMet) ? bonoCalidadMonto : 0;
-          const totalW   = wd.sueldo + wd.bonoResW + bonoCalW + wd.bonoExtW;
+          const bonoUtilW = wd.bonoUtilW || 0;
+          const totalW   = wd.sueldo + wd.bonoResW + bonoCalW + wd.bonoExtW + bonoUtilW;
           grandTotal    += totalW;
           const bonoResDetail = wd.bonoResOn && wd.bonoResW > 0 && wd.tiers?.length
             ? ` <span style="color:rgba(251,191,36,.6);font-size:.72rem">(${wd.tiers.length > 1 ? 'escalonado' : `>${wd.tiers[0]?.desde}r·${simFmtK(wd.tiers[0]?.rate)}`})</span>` : '';
@@ -2580,6 +2689,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             (wd.bonoExtPresOn && wd.umbralExtPresW > 0 && !wd.umbralExtPresMet) ? `⚠ Ext.pres inactivo (mín. ${wd.umbralExtPresW} res.)` : '',
           ].filter(Boolean);
           const umbralNote = _umbralNotes.map(n => `<tr><td colspan="2" style="font-size:.69rem;color:#f87171;padding-top:.1rem">${n}</td></tr>`).join('');
+          const utilCfg = _getWUtilCfg(wd.w);
+          const utilRow = utilCfg.on
+            ? `<tr><td style="color:${bonoUtilW>0?'#10b981':'var(--muted)'}">+ Bono utilidad <span style="opacity:.6;font-size:.72rem">(${utilCfg.pct}% UO)</span></td><td style="text-align:right;color:${bonoUtilW>0?'#10b981':'var(--muted)'}">${simFmt(bonoUtilW)}</td></tr>` : '';
           totalEl.innerHTML =
             `<table style="width:100%;border-collapse:collapse;line-height:1.7">` +
             `<tr><td style="color:var(--muted)">Sueldo base</td><td style="text-align:right">${simFmt(wd.sueldo)}</td></tr>` +
@@ -2587,7 +2699,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             `<tr><td style="color:${bonoCalW>0?'#fbbf24':'var(--muted)'}">+ Bono calidad</td><td style="text-align:right;color:${bonoCalW>0?'#fbbf24':'var(--muted)'}">${simFmt(bonoCalW)}</td></tr>` +
             `<tr><td style="color:${wd.bonoExtWebW>0?'#60a5fa':'var(--muted)'}">+ Ext. web${bonoExtWebDetail}</td><td style="text-align:right;color:${wd.bonoExtWebW>0?'#60a5fa':'var(--muted)'}">${simFmt(wd.bonoExtWebW)}</td></tr>` +
             `<tr><td style="color:${wd.bonoExtPresW>0?'#818cf8':'var(--muted)'}">+ Ext. presencial${bonoExtPresDetail}</td><td style="text-align:right;color:${wd.bonoExtPresW>0?'#818cf8':'var(--muted)'}">${simFmt(wd.bonoExtPresW)}</td></tr>` +
-            umbralNote +
+            utilRow + umbralNote +
             `<tr style="border-top:1px solid rgba(250,204,21,.25)"><td style="font-weight:700;padding-top:.15rem">= Total mensual</td><td style="text-align:right;font-weight:700;padding-top:.15rem">${simFmt(totalW)}</td></tr>` +
             `</table>`;
         }
@@ -2601,7 +2713,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const ingresoGross = ingresoBase + ingresoExtra;
         const costoVar     = cVar * reservas;
         const contrib      = ingresoGross - costoVar;
-        const totalFijo    = cFijo + remuner + mkt;
+        const totalFijo    = cFijo + remuner + mkt + bonoUtilTotal;
         const ebitda       = contrib - totalFijo;
         const margenPct    = ingresoGross > 0 ? (ebitda / ingresoGross * 100) : 0;
         const ingrPerRes   = reservas > 0 ? ingresoGross / reservas : 0;
@@ -2618,9 +2730,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const prevEl = document.getElementById('sim-bono-preview');
         if(prevEl && _wData.length > 0){
           let rows = '';
+          const anyUtil = _wData.some(wd => _getWUtilCfg(wd.w).on);
           for(const wd of _wData){
-            const bonoCalW = (bonoCalidadCheck && wd.bonoCalOn && wd.umbralCalMet) ? bonoCalidadMonto : 0;
-            const totalW   = wd.sueldo + wd.bonoResW + bonoCalW + wd.bonoExtW;
+            const bonoCalW  = (bonoCalidadCheck && wd.bonoCalOn && wd.umbralCalMet) ? bonoCalidadMonto : 0;
+            const bonoUtilW = wd.bonoUtilW || 0;
+            const totalW    = wd.sueldo + wd.bonoResW + bonoCalW + wd.bonoExtW + bonoUtilW;
             const _firstTier = wd.tiers?.[0];
             const resCell  = wd.bonoResOn && wd.tiers?.length
               ? (wd.bonoResW > 0
@@ -2633,12 +2747,17 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             const extCell  = wd.bonoExtW > 0
               ? `<span style="color:#60a5fa">${simFmt(wd.bonoExtW)}</span><br><span style="font-size:.68rem;color:rgba(96,165,250,.55)">${wd.bonoExtWebW>0?`w:${(wd.bonoExtWebPct*100).toFixed(0)}%`:''}${wd.bonoExtWebW>0&&wd.bonoExtPresW>0?' ':''}${wd.bonoExtPresW>0?`p:${(wd.bonoExtPresPct*100).toFixed(0)}%`:''}</span>`
               : `<span style="color:var(--muted)">—</span>`;
+            const utilCell = anyUtil
+              ? (bonoUtilW > 0
+                  ? `<span style="color:#10b981">${simFmt(bonoUtilW)}</span><br><span style="font-size:.68rem;color:rgba(16,185,129,.5)">${_getWUtilCfg(wd.w).pct}%</span>`
+                  : `<span style="color:var(--muted)">—</span>`) : '';
             rows += `<tr style="border-top:1px solid rgba(255,255,255,.05)">
               <td style="padding:.28rem .3rem;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px">${wd.name}</td>
               <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;white-space:nowrap">${simFmt(wd.sueldo)}</td>
               <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;line-height:1.3">${resCell}</td>
               <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem">${calCell}</td>
               <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;line-height:1.3">${extCell}</td>
+              ${anyUtil ? `<td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;line-height:1.3">${utilCell}</td>` : ''}
               <td style="padding:.28rem .3rem;text-align:right;font-size:.78rem;font-weight:700;white-space:nowrap">${simFmt(totalW)}</td>
             </tr>`;
           }
@@ -2650,12 +2769,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="text-align:right;padding:.15rem .3rem;font-weight:400">B.res.</th>
                 <th style="text-align:right;padding:.15rem .3rem;font-weight:400">B.cal.</th>
                 <th style="text-align:right;padding:.15rem .3rem;font-weight:400">B.ext.</th>
+                ${anyUtil ? `<th style="text-align:right;padding:.15rem .3rem;font-weight:400;color:#10b981">B.util.</th>` : ''}
                 <th style="text-align:right;padding:.15rem .3rem;font-weight:400">Total</th>
               </tr></thead>
               <tbody>${rows}</tbody>
               <tfoot><tr style="border-top:2px solid rgba(255,255,255,.15);font-weight:700;font-size:.8rem">
                 <td style="padding:.3rem .3rem;color:var(--muted)">Total (${_wData.length} trab.)</td>
-                <td colspan="4"></td>
+                <td colspan="${anyUtil ? 5 : 4}"></td>
                 <td style="text-align:right;padding:.3rem .3rem">${simFmt(grandTotal)}</td>
               </tr></tfoot>
             </table>`;
@@ -2755,16 +2875,26 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const rev = ingresoGross * f;
           const varC = cVar * r;
           // Bonus recalculated per month — each worker has own umbral + rate
-          let bonoResMes = 0, bonoExtMes = 0;
+          let bonoResMes = 0, bonoExtMes = 0, bonoUtilMes = 0;
           let trabConBonoCalMes = 0;
+          const revMes = (precio * personas + extras) * r;
           for(const wd of _wData){
             if(wd.bonoResOn && wd.tiers?.length) bonoResMes += calcBonoResW(r, wd.tiers);
             if(wd.bonoExtWebOn  && wd.bonoExtWebPct  > 0 && r > wd.umbralExtWebW)  bonoExtMes += extrasWeb  * r * wd.bonoExtWebPct;
             if(wd.bonoExtPresOn && wd.bonoExtPresPct > 0 && r > wd.umbralExtPresW) bonoExtMes += extrasPres * r * wd.bonoExtPresPct;
             if(wd.bonoCalOn && r > wd.umbralCalW) trabConBonoCalMes++;
+            const ucfg = _getWUtilCfg(wd.w);
+            if(ucfg.on){
+              const c = ucfg.costs;
+              const remuoMes = remuBase - wd.sueldo;
+              const dedMes = (c.cvar?simV('sim-costo-res')*r:0)+(c.comb?simV('sim-combustible')*r:0)+
+                             (c.fijos?simV('sim-fijos'):0)+(c.mant?simV('sim-mantenim'):0)+
+                             (c.otros?simV('sim-otros-fijos'):0)+(c.mkt?mkt:0)+(c.remuo?remuoMes:0);
+              bonoUtilMes += Math.max(0, revMes - dedMes) * ucfg.pct / 100;
+            }
           }
           const bonoCalMes = bonoCalidadCheck ? bonoCalidadMonto * trabConBonoCalMes : 0;
-          const bonoMes    = bonoResMes + bonoCalMes + bonoExtMes;
+          const bonoMes    = bonoResMes + bonoCalMes + bonoExtMes + bonoUtilMes;
           const remuMes    = remuBase + bonoMes;
           const totalFijoMes = cFijo + remuMes + mkt;
           const net = rev - varC - totalFijoMes;
@@ -2848,6 +2978,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                                rate:  w.bono_por_res ?? sc.bono_por_reserva_extra ?? 9300}];
               }
               simRenderWTiers(n);
+              if(w.bono_util) _wUtilCfg[n] = {on: !!w.bono_util.on, pct: w.bono_util.pct ?? 5,
+                                               costs: {..._UTIL_DEFAULT_COSTS, ...(w.bono_util.costs||{})}};
+              simRenderUtilCosts(n);
               setV(`sim-w${n}-bono-ext-web-pct`,  w.bono_ext_web_pct  ?? w.bono_ext_pct ?? 10);
               setV(`sim-w${n}-bono-ext-pres-pct`, w.bono_ext_pres_pct ?? 10);
               const bonoResEl    = document.getElementById(`sim-w${n}-bono-res`);
@@ -2906,6 +3039,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             umbral_cal:       simV(`sim-w${w}-umbral-cal`),
             umbral_ext_web:   simV(`sim-w${w}-umbral-ext-web`),
             umbral_ext_pres:  simV(`sim-w${w}-umbral-ext-pres`),
+            bono_util:        {..._getWUtilCfg(w)},
           });
         }
         return {
@@ -3073,6 +3207,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                              rate:  w.bono_por_res ?? s.bono_por_reserva_extra ?? 9300}];
             }
             simRenderWTiers(n);
+            if(w.bono_util) _wUtilCfg[n] = {on: !!w.bono_util.on, pct: w.bono_util.pct ?? 5,
+                                             costs: {..._UTIL_DEFAULT_COSTS, ...(w.bono_util.costs||{})}};
+            simRenderUtilCosts(n);
             setV(`sim-w${n}-bono-ext-web-pct`,  w.bono_ext_web_pct  ?? w.bono_ext_pct ?? 10);
             setV(`sim-w${n}-bono-ext-pres-pct`, w.bono_ext_pres_pct ?? 10);
             setV(`sim-w${n}-umbral-cal`,      w.umbral_cal      ?? w.umbral_act ?? 0);
@@ -3159,7 +3296,26 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const bonoCalW  = (bonoCalGlobal && bonoCalOn && calidadOk && calMet) ? bonoCalMonto : 0;
           const bonoExtWebW  = (bonoExtWebOn  && extWebMet  && extrasWeb  > 0) ? extrasWeb  * reservas * extWebPct  / 100 : 0;
           const bonoExtPresW = (bonoExtPresOn && extPresMet && extrasPres > 0) ? extrasPres * reservas * extPresPct / 100 : 0;
-          const total = sueldo + bonoResW + bonoCalW + bonoExtWebW + bonoExtPresW;
+          // Utilidad bonus
+          const ucfg = _getWUtilCfg(w);
+          let bonoUtilW = 0;
+          if(ucfg.on){
+            const totalN = parseInt(document.getElementById('sim-num-trab')?.value) || 1;
+            let remuoVW = 0; for(let ww=1;ww<=totalN;ww++) if(ww!==w) remuoVW += parseFloat(document.getElementById(`sim-w${ww}-sueldo`)?.value)||0;
+            const ingrBrutoVW = (parseFloat(document.getElementById('sim-precio')?.value)||0) *
+                                (parseFloat(document.getElementById('sim-personas')?.value)||1) * reservas +
+                                (extrasWeb + extrasPres) * reservas;
+            const c = ucfg.costs;
+            const dedVW = (c.cvar?(parseFloat(document.getElementById('sim-costo-res')?.value)||0)*reservas:0) +
+                          (c.comb?(parseFloat(document.getElementById('sim-combustible')?.value)||0)*reservas:0) +
+                          (c.fijos?parseFloat(document.getElementById('sim-fijos')?.value)||0:0) +
+                          (c.mant?parseFloat(document.getElementById('sim-mantenim')?.value)||0:0) +
+                          (c.otros?parseFloat(document.getElementById('sim-otros-fijos')?.value)||0:0) +
+                          (c.mkt?parseFloat(document.getElementById('sim-mkt')?.value)||0:0) +
+                          (c.remuo?remuoVW:0);
+            bonoUtilW = Math.max(0, ingrBrutoVW - dedVW) * ucfg.pct / 100;
+          }
+          const total = sueldo + bonoResW + bonoCalW + bonoExtWebW + bonoExtPresW + bonoUtilW;
 
           // Tier detail for reservation bonus
           let tierNote = '';
@@ -3216,6 +3372,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               ${bonoExtPresOn ? bonusRow(bonoExtPresW > 0, '#60a5fa', `+ Ext. presencial (${extPresPct}%)`,
                   bonoExtPresW > 0 ? '+'+fmt(bonoExtPresW) : fmt(0),
                   bonoExtPresW === 0 && umbralExtPres > 0 && !extPresMet ? `<span style="font-size:.7rem;opacity:.4">umbral: ${umbralExtPres} res</span>` : '') : ''}
+              ${ucfg.on ? bonusRow(bonoUtilW > 0, '#10b981', `+ Bono utilidad (${ucfg.pct}% UO)`,
+                  bonoUtilW > 0 ? '+'+fmt(bonoUtilW) : fmt(0)) : ''}
               <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0 .1rem">
                 <span style="font-weight:700;font-size:.82rem;color:var(--muted);letter-spacing:.03em">TOTAL ESTIMADO</span>
                 <span style="font-weight:800;font-size:1.1rem;color:#fbbf24">${fmt(total)}</span>
