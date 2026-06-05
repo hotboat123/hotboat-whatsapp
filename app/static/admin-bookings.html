@@ -389,6 +389,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('simulator')" id="nav-simulator">
       <span class="ni">🎯</span> Simulador
     </div>
+    <div class="nav-item" onclick="showSection('sueldos');calcWorkersView()" id="nav-sueldos">
+      <span class="ni">👷</span> Sueldos
+    </div>
     <div class="nav-item" onclick="showSection('payment-test')" id="nav-payment-test">
       <span class="ni">💳</span> Test Pagos
     </div>
@@ -3119,6 +3122,110 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       // ── Legacy simSave (kept for backward compat) ──────────────────────────
       async function simSave(){ openSaveModal(); }
 
+      // ── Vista sueldos por trabajador ────────────────────────────────────────
+      function calcWorkersView(){
+        const n = parseInt(document.getElementById('sim-num-trab')?.value) || 1;
+        const reservas = parseInt(document.getElementById('wv-reservas')?.value) || 0;
+        const extrasWeb = parseFloat(document.getElementById('wv-extras-web')?.value) || 0;
+        const extrasPres = parseFloat(document.getElementById('wv-extras-pres')?.value) || 0;
+        const calidadOk = document.getElementById('wv-calidad')?.checked ?? false;
+        const bonoCalGlobal = document.getElementById('sim-bono-calidad-check')?.checked ?? false;
+        const bonoCalMonto  = parseFloat(document.getElementById('sim-bono-calidad-monto')?.value) || 0;
+        const fmt = v => '$' + Math.round(v).toLocaleString('es-CL');
+
+        const container = document.getElementById('wv-cards');
+        if(!container) return;
+
+        let html = '';
+        for(let w = 1; w <= n; w++){
+          const name = document.getElementById(`sim-w${w}-name`)?.value || `Trabajador ${w}`;
+          const sueldo       = parseFloat(document.getElementById(`sim-w${w}-sueldo`)?.value) || 0;
+          const bonoResOn    = document.getElementById(`sim-w${w}-bono-res`)?.checked ?? true;
+          const bonoCalOn    = document.getElementById(`sim-w${w}-bono-cal`)?.checked ?? false;
+          const bonoExtWebOn = document.getElementById(`sim-w${w}-bono-ext-web`)?.checked ?? false;
+          const bonoExtPresOn= document.getElementById(`sim-w${w}-bono-ext-pres`)?.checked ?? false;
+          const extWebPct    = parseFloat(document.getElementById(`sim-w${w}-bono-ext-web-pct`)?.value)  || 0;
+          const extPresPct   = parseFloat(document.getElementById(`sim-w${w}-bono-ext-pres-pct`)?.value) || 0;
+          const umbralCal    = parseFloat(document.getElementById(`sim-w${w}-umbral-cal`)?.value)     || 0;
+          const umbralExtWeb = parseFloat(document.getElementById(`sim-w${w}-umbral-ext-web`)?.value) || 0;
+          const umbralExtPres= parseFloat(document.getElementById(`sim-w${w}-umbral-ext-pres`)?.value)|| 0;
+          const tiers = _getWTiers(w);
+
+          const calMet     = reservas > umbralCal;
+          const extWebMet  = reservas > umbralExtWeb;
+          const extPresMet = reservas > umbralExtPres;
+
+          const bonoResW  = bonoResOn ? calcBonoResW(reservas, tiers) : 0;
+          const bonoCalW  = (bonoCalGlobal && bonoCalOn && calidadOk && calMet) ? bonoCalMonto : 0;
+          const bonoExtWebW  = (bonoExtWebOn  && extWebMet  && extrasWeb  > 0) ? extrasWeb  * reservas * extWebPct  / 100 : 0;
+          const bonoExtPresW = (bonoExtPresOn && extPresMet && extrasPres > 0) ? extrasPres * reservas * extPresPct / 100 : 0;
+          const total = sueldo + bonoResW + bonoCalW + bonoExtWebW + bonoExtPresW;
+
+          // Tier detail for reservation bonus
+          let tierNote = '';
+          if(bonoResOn){
+            const sorted = [...tiers].sort((a,b)=>a.desde-b.desde);
+            if(sorted.length === 1){
+              const t = sorted[0];
+              tierNote = reservas > t.desde
+                ? `<span style="font-size:.7rem;opacity:.65">${reservas - t.desde} res × ${fmt(t.rate)}</span>`
+                : `<span style="font-size:.7rem;opacity:.45">umbral: ${t.desde} res (faltan ${t.desde - reservas})</span>`;
+            } else {
+              tierNote = `<span style="font-size:.7rem;opacity:.65">${sorted.length} tramos · ${reservas} res</span>`;
+            }
+          }
+
+          // Quality bonus note
+          let calNote = '';
+          if(bonoCalOn){
+            if(!bonoCalGlobal)        calNote = `<span style="font-size:.7rem;opacity:.4">bono calidad no activo</span>`;
+            else if(!calidadOk)       calNote = `<span style="font-size:.7rem;opacity:.4">meta no cumplida</span>`;
+            else if(!calMet && umbralCal > 0) calNote = `<span style="font-size:.7rem;opacity:.4">umbral: ${umbralCal} res</span>`;
+            else                      calNote = `<span style="font-size:.7rem;opacity:.65">${fmt(bonoCalMonto)}</span>`;
+          }
+
+          const row = (active, label, val, note='') => `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.35rem 0;border-bottom:1px solid var(--border);opacity:${active?'1':'.45'}">
+              <div style="line-height:1.4">
+                <div style="font-size:.82rem;color:var(--muted)">${label}</div>
+                ${note ? `<div style="margin-top:.05rem">${note}</div>` : ''}
+              </div>
+              <span style="font-weight:700;font-size:.88rem;color:${active?'var(--text)':'var(--muted)'};white-space:nowrap;padding-left:.5rem">${val}</span>
+            </div>`;
+
+          const bonusRow = (active, color, label, val, note='') => `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.35rem 0;border-bottom:1px solid var(--border);opacity:${active?'1':'.4'}">
+              <div style="line-height:1.4">
+                <div style="font-size:.82rem;color:${active?color:'var(--muted)'}">${label}</div>
+                ${note ? `<div style="margin-top:.05rem">${note}</div>` : ''}
+              </div>
+              <span style="font-weight:700;font-size:.88rem;color:${active?color:'var(--muted)'};white-space:nowrap;padding-left:.5rem">${val}</span>
+            </div>`;
+
+          html += `
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem 1.15rem">
+              <div style="font-weight:700;font-size:.93rem;margin-bottom:.65rem;display:flex;align-items:center;gap:.35rem">
+                <span>👤</span> ${name}
+              </div>
+              ${row(true, 'Sueldo base', fmt(sueldo))}
+              ${bonoResOn  ? bonusRow(bonoResW > 0,  '#fbbf24', '+ Bono reservas',        bonoResW > 0  ? '+'+fmt(bonoResW)  : fmt(0), tierNote) : ''}
+              ${bonoCalOn  ? bonusRow(bonoCalW > 0,  '#fbbf24', '+ Bono calidad',          bonoCalW > 0  ? '+'+fmt(bonoCalW)  : fmt(0), calNote) : ''}
+              ${bonoExtWebOn  ? bonusRow(bonoExtWebW > 0,  '#60a5fa', `+ Ext. web (${extWebPct}%)`,
+                  bonoExtWebW > 0 ? '+'+fmt(bonoExtWebW) : fmt(0),
+                  bonoExtWebW === 0 && umbralExtWeb > 0 && !extWebMet ? `<span style="font-size:.7rem;opacity:.4">umbral: ${umbralExtWeb} res</span>` : '') : ''}
+              ${bonoExtPresOn ? bonusRow(bonoExtPresW > 0, '#60a5fa', `+ Ext. presencial (${extPresPct}%)`,
+                  bonoExtPresW > 0 ? '+'+fmt(bonoExtPresW) : fmt(0),
+                  bonoExtPresW === 0 && umbralExtPres > 0 && !extPresMet ? `<span style="font-size:.7rem;opacity:.4">umbral: ${umbralExtPres} res</span>` : '') : ''}
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0 .1rem">
+                <span style="font-weight:700;font-size:.82rem;color:var(--muted);letter-spacing:.03em">TOTAL ESTIMADO</span>
+                <span style="font-weight:800;font-size:1.1rem;color:#fbbf24">${fmt(total)}</span>
+              </div>
+            </div>`;
+        }
+
+        container.innerHTML = html || `<div style="color:var(--muted);font-size:.85rem">No hay trabajadores configurados en el Simulador.</div>`;
+      }
+
       document.addEventListener('DOMContentLoaded', ()=>{ simRenderWorkerTabs(); simCalc(); });
       </script>
 
@@ -3156,6 +3263,62 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
 
     </div><!-- /section-simulator -->
+
+    <!-- ══ SUELDOS SECTION ══════════════════════════════════════════════════ -->
+    <div id="section-sueldos" class="section">
+
+      <!-- Inputs panel -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+        <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.9rem">📊 PARÁMETROS DEL MES</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.9rem;align-items:end">
+
+          <!-- Reservas slider -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Reservas del mes</label>
+            <div style="display:flex;align-items:center;gap:.5rem">
+              <input type="range" id="wv-reservas-slider" min="0" max="80" value="20"
+                oninput="document.getElementById('wv-reservas').value=this.value;calcWorkersView()"
+                style="flex:1;accent-color:#fbbf24">
+              <input type="number" id="wv-reservas" value="20" min="0" max="999" step="1"
+                oninput="document.getElementById('wv-reservas-slider').value=Math.min(80,+this.value||0);calcWorkersView()"
+                style="width:55px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .4rem;font-size:.9rem;text-align:center;font-weight:700;outline:none">
+            </div>
+          </div>
+
+          <!-- Extras web -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Extras web ($ / reserva)</label>
+            <input type="number" id="wv-extras-web" value="0" min="0" step="1000"
+              oninput="calcWorkersView()"
+              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
+          </div>
+
+          <!-- Extras presencial -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Extras presencial ($ / reserva)</label>
+            <input type="number" id="wv-extras-pres" value="0" min="0" step="1000"
+              oninput="calcWorkersView()"
+              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
+          </div>
+
+          <!-- Meta calidad -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.4rem">Meta de calidad</label>
+            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+              <input type="checkbox" id="wv-calidad" onchange="calcWorkersView()" style="accent-color:#fbbf24;width:15px;height:15px">
+              <span style="font-size:.85rem">Objetivo cumplido</span>
+            </label>
+          </div>
+        </div>
+        <div style="margin-top:.75rem;font-size:.74rem;color:var(--muted);line-height:1.5">
+          Los tramos de bono, umbrales y porcentajes se configuran en la pestaña <strong>Simulador</strong>.
+        </div>
+      </div>
+
+      <!-- Worker cards grid -->
+      <div id="wv-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.9rem"></div>
+
+    </div><!-- /section-sueldos -->
 
     <!-- ══ TEST PAGOS SECTION ════════════════════════════════════════════════ -->
     <div id="section-payment-test" class="section">
@@ -3330,7 +3493,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',logs:'Logs del servidor'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',logs:'Logs del servidor'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
