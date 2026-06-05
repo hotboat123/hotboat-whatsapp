@@ -32,6 +32,9 @@ class Settings(BaseSettings):
 
     # AI Vision — Google Gemini Flash (free tier: 1500 req/day)
     gemini_api_key: str = ""
+
+    # AI Vision — Anthropic Claude (receipt scanning)
+    anthropic_api_key: str = ""
     
     # Bot
     bot_name: str = "Capitan HotBoat"

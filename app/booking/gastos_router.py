@@ -217,9 +217,9 @@ async def delete_categoria(cat_id: int, x_admin_key: str = Header("")):
 async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     settings = get_settings()
-    api_key = settings.gemini_api_key
+    api_key = settings.anthropic_api_key
     if not api_key:
-        raise HTTPException(status_code=503, detail="GEMINI_API_KEY no configurado")
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY no configurado en Railway")
 
     prompt = (
         "Analiza esta boleta o ticket de Chile. Extrae: "
@@ -229,14 +229,6 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         "Responde SOLO con JSON válido sin texto ni comillas adicionales: "
         '{"monto": 12500, "comercio": "Copec Av. Principal", "fecha": "2024-01-15"}'
     )
-
-    payload = {
-        "contents": [{"parts": [
-            {"inline_data": {"mime_type": body.mime_type, "data": body.imagen_base64}},
-            {"text": prompt},
-        ]}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 300},
-    }
 
     # Re-compress image to ≤800px JPEG before sending — keeps token count low
     try:
@@ -252,60 +244,58 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         buf = io.BytesIO()
         pil_img.save(buf, format="JPEG", quality=60, optimize=True)
         scan_b64 = base64.b64encode(buf.getvalue()).decode()
-        scan_mime = "image/jpeg"
     except Exception:
         scan_b64 = body.imagen_base64
-        scan_mime = body.mime_type
 
-    payload["contents"][0]["parts"][0] = {"inline_data": {"mime_type": scan_mime, "data": scan_b64}}
+    payload = {
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 300,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/jpeg", "data": scan_b64},
+                },
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    }
 
-    # 2.x models are on v1beta; 1.5 models are on v1 (stable)
-    MODELS = [
-        ("gemini-2.0-flash-lite", "v1beta"),
-        ("gemini-2.0-flash",      "v1beta"),
-        ("gemini-1.5-flash",      "v1"),
-        ("gemini-1.5-pro",        "v1"),
-    ]
     extracted = None
-    last_status = None
     last_body = ""
-    async with httpx.AsyncClient(timeout=30) as client:
-        for model, api_ver in MODELS:
-            url = (
-                f"https://generativelanguage.googleapis.com/{api_ver}/models/"
-                f"{model}:generateContent?key={api_key}"
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                json=payload,
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
             )
-            try:
-                resp = await client.post(url, json=payload)
-                last_status = resp.status_code
-                last_body = resp.text[:400]
-                if resp.status_code in (429, 404, 503):
-                    logger.warning(f"Gemini {model} → {resp.status_code}: {last_body[:120]}")
-                    if resp.status_code == 429:
-                        await asyncio.sleep(3)
-                    continue  # try next model
-                resp.raise_for_status()
-                raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                if raw_text.startswith("```"):
-                    raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-                extracted = json.loads(raw_text)
-                logger.info(f"Gemini scan OK via {model}")
-                break
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.error(f"Gemini {model} parse error: {e}")
-                break
-            except httpx.HTTPError as e:
-                logger.error(f"Gemini {model} http error: {e}")
-                break
-
-    if extracted is None:
-        logger.error(f"Gemini all models failed – last status={last_status} body={last_body}")
-        if last_status == 429:
-            raise HTTPException(
-                status_code=429,
-                detail="Cuota de Gemini agotada. Revisá tu API key en aistudio.google.com → límites del proyecto.",
-            )
-        raise HTTPException(status_code=502, detail=f"No se pudo escanear (status={last_status}). Detalle: {last_body[:200]}")
+            last_body = resp.text[:400]
+            resp.raise_for_status()
+            raw_text = resp.json()["content"][0]["text"].strip()
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            extracted = json.loads(raw_text)
+            logger.info("Claude scan OK")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Claude API error {e.response.status_code}: {last_body}")
+        status = e.response.status_code
+        if status == 401:
+            raise HTTPException(status_code=502, detail="ANTHROPIC_API_KEY inválida — verificá la key en Railway")
+        if status == 429:
+            raise HTTPException(status_code=429, detail="Límite de Claude alcanzado — intentá en unos segundos")
+        raise HTTPException(status_code=502, detail=f"Error de Claude ({status}): {last_body[:200]}")
+    except (json.JSONDecodeError, KeyError, IndexError) as e:
+        logger.error(f"Claude parse error: {e} — raw: {last_body[:200]}")
+        raise HTTPException(status_code=502, detail="Claude respondió en formato inesperado")
+    except httpx.HTTPError as e:
+        logger.error(f"Claude http error: {e}")
+        raise HTTPException(status_code=502, detail=f"Error de red al conectar con Claude: {e}")
 
     # Keyword-based category matching
     with get_connection() as conn:
