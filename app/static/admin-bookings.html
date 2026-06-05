@@ -2218,14 +2218,19 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         { key:'mant',  label:'Mantenimiento y seguros',  sub:''           },
         { key:'otros', label:'Otros costos fijos',       sub:''           },
         { key:'mkt',   label:'Marketing',                sub:''           },
-        { key:'remuo', label:'Sueldos otros trabajadores', sub:'base'     },
       ];
-      const _UTIL_DEFAULT_COSTS = {cvar:true, comb:true, fijos:true, mant:true, otros:true, mkt:true, remuo:false};
-      let _wUtilCfg = {}; // {w: {on, pct, costs:{...}}}
+      const _UTIL_DEFAULT_COSTS  = {cvar:true, comb:true, fijos:true, mant:true, otros:true, mkt:true};
+      const _UTIL_DEFAULT_INCOME = {extrasWeb:true, extrasPres:true};
+      let _wUtilCfg = {}; // {w: {on, pct, income:{...}, costs:{...}}}
 
       function _getWUtilCfg(w){
-        if(!_wUtilCfg[w]) _wUtilCfg[w] = {on:false, pct:5, costs:{..._UTIL_DEFAULT_COSTS}};
-        return _wUtilCfg[w];
+        if(!_wUtilCfg[w]) _wUtilCfg[w] = {on:false, pct:5, income:{..._UTIL_DEFAULT_INCOME}, costs:{..._UTIL_DEFAULT_COSTS}, remuWorkers:{}};
+        const cfg = _wUtilCfg[w];
+        if(!cfg.income) cfg.income = {..._UTIL_DEFAULT_INCOME};
+        if(!cfg.remuWorkers) cfg.remuWorkers = {};
+        // migrate legacy remuo boolean → empty remuWorkers (all excluded)
+        if('remuo' in cfg.costs) { delete cfg.costs.remuo; }
+        return cfg;
       }
 
       function simRenderUtilCosts(w){
@@ -2233,8 +2238,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         if(!container) return;
         const cfg = _getWUtilCfg(w);
         const numTrab = parseInt(document.getElementById('sim-num-trab')?.value) || 1;
-        let remuoAmt = 0;
-        for(let ww=1;ww<=numTrab;ww++) if(ww!==w) remuoAmt += simV(`sim-w${ww}-sueldo`);
         const reservas = simV('sim-reservas');
         const costAmts = {
           cvar:  simV('sim-costo-res') * reservas,
@@ -2243,12 +2246,42 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           mant:  simV('sim-mantenim'),
           otros: simV('sim-otros-fijos'),
           mkt:   simV('sim-mkt'),
-          remuo: remuoAmt,
         };
+        const extrasWebAmt  = simV('sim-extras-web')  * reservas;
+        const extrasPresAmt = simV('sim-extras-pres') * reservas;
         const fmtS = v => '$'+Math.round(v).toLocaleString('es-CL');
+        const incomeRow = (key, label, amt) => `
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;padding:.14rem 0;cursor:pointer">
+            <span style="display:flex;align-items:center;gap:.3rem">
+              <input type="checkbox" ${cfg.income[key]?'checked':''} onchange="simToggleUtil(${w},'inc_${key}',this.checked)"
+                style="accent-color:#10b981;width:12px;height:12px;flex-shrink:0">
+              <span style="font-size:.75rem;color:${amt>0?'var(--text)':'var(--muted)'}">${label}</span>
+            </span>
+            <span style="font-size:.72rem;color:var(--muted);white-space:nowrap">${fmtS(amt)}</span>
+          </label>`;
+        // Per-worker salary rows (all workers except self)
+        let workerSalaryRows = '';
+        for(let ww=1;ww<=numTrab;ww++){
+          if(ww===w) continue;
+          const wName = document.getElementById(`sim-w${ww}-name`)?.value || `Trab. ${ww}`;
+          const wSueldo = simV(`sim-w${ww}-sueldo`);
+          const isOn = !!(cfg.remuWorkers[ww]);
+          workerSalaryRows += `
+            <label style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;padding:.14rem 0;cursor:pointer;padding-left:.5rem">
+              <span style="display:flex;align-items:center;gap:.3rem">
+                <input type="checkbox" ${isOn?'checked':''} onchange="simToggleUtil(${w},'remuw_${ww}',this.checked)"
+                  style="accent-color:#10b981;width:12px;height:12px;flex-shrink:0">
+                <span style="font-size:.75rem;color:${wSueldo>0?'var(--text)':'var(--muted)'}">Sueldo ${wName}</span>
+              </span>
+              <span style="font-size:.72rem;color:var(--muted);white-space:nowrap">${fmtS(wSueldo)}</span>
+            </label>`;
+        }
         const panelHtml = cfg.on ? `
           <div style="margin-top:.3rem;padding:.45rem .55rem;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.18);border-radius:6px">
-            <div style="font-size:.69rem;color:rgba(16,185,129,.75);font-weight:700;margin-bottom:.3rem;letter-spacing:.03em">COSTOS DEDUCIDOS</div>
+            <div style="font-size:.69rem;color:rgba(16,185,129,.75);font-weight:700;margin-bottom:.25rem;letter-spacing:.03em">INGRESOS INCLUIDOS</div>
+            ${incomeRow('extrasWeb',  'Extras web',        extrasWebAmt)}
+            ${incomeRow('extrasPres', 'Extras presencial', extrasPresAmt)}
+            <div style="font-size:.69rem;color:rgba(16,185,129,.75);font-weight:700;margin:.35rem 0 .25rem;letter-spacing:.03em">COSTOS DEDUCIDOS</div>
             ${_UTIL_COSTS.map(c=>`
               <label style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;padding:.14rem 0;cursor:pointer">
                 <span style="display:flex;align-items:center;gap:.3rem">
@@ -2258,6 +2291,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 </span>
                 <span id="sim-w${w}-util-${c.key}-amt" style="font-size:.72rem;color:var(--muted);white-space:nowrap">${fmtS(costAmts[c.key])}</span>
               </label>`).join('')}
+            ${numTrab > 1 ? `<div style="font-size:.69rem;color:rgba(16,185,129,.6);font-weight:600;margin:.3rem 0 .15rem .0rem;letter-spacing:.02em">Sueldos de otros trabajadores</div>${workerSalaryRows}` : ''}
           </div>` : '';
         container.innerHTML = `
           <div style="display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-size:.81rem;margin-top:.05rem">
@@ -2276,7 +2310,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       }
 
       function simToggleUtil(w, key, checked){
-        _getWUtilCfg(w).costs[key] = checked;
+        const cfg = _getWUtilCfg(w);
+        if(key.startsWith('inc_'))   cfg.income[key.slice(4)] = checked;
+        else if(key.startsWith('remuw_')) cfg.remuWorkers[+key.slice(6)] = checked;
+        else cfg.costs[key] = checked;
         simCalc();
       }
 
@@ -2634,21 +2671,24 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         const remuner           = remuBase + bonoActual;
 
         // ── Utilidad operativa bonus (second pass, needs remuBase) ────────────
-        const _ingresoGrossPre = (precio * personas + extras) * reservas;
         let bonoUtilTotal = 0;
         for(const wd of _wData){
           const ucfg = _getWUtilCfg(wd.w);
           if(!ucfg.on){ wd.bonoUtilW = 0; wd.utilidadBase = 0; continue; }
+          const ic = ucfg.income || _UTIL_DEFAULT_INCOME;
+          const ingrW = precio * personas * reservas +
+                        (ic.extrasWeb  ? extrasWeb  * reservas : 0) +
+                        (ic.extrasPres ? extrasPres * reservas : 0);
           const c = ucfg.costs;
-          const remuoAmt = remuBase - wd.sueldo;
+          const remuoAmt = Object.entries(ucfg.remuWorkers||{}).reduce((s,[ww,on])=> on ? s + simV(`sim-w${ww}-sueldo`) : s, 0);
           const deduccion = (c.cvar  ? simV('sim-costo-res') * reservas : 0) +
                             (c.comb  ? simV('sim-combustible') * reservas : 0) +
                             (c.fijos ? simV('sim-fijos')  : 0) +
                             (c.mant  ? simV('sim-mantenim') : 0) +
                             (c.otros ? simV('sim-otros-fijos') : 0) +
                             (c.mkt   ? mkt : 0) +
-                            (c.remuo ? remuoAmt : 0);
-          wd.utilidadBase = Math.max(0, _ingresoGrossPre - deduccion);
+                            remuoAmt;
+          wd.utilidadBase = Math.max(0, ingrW - deduccion);
           wd.bonoUtilW    = wd.utilidadBase * ucfg.pct / 100;
           bonoUtilTotal  += wd.bonoUtilW;
           // Keep cost-amount spans current
@@ -2877,7 +2917,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           // Bonus recalculated per month — each worker has own umbral + rate
           let bonoResMes = 0, bonoExtMes = 0, bonoUtilMes = 0;
           let trabConBonoCalMes = 0;
-          const revMes = (precio * personas + extras) * r;
           for(const wd of _wData){
             if(wd.bonoResOn && wd.tiers?.length) bonoResMes += calcBonoResW(r, wd.tiers);
             if(wd.bonoExtWebOn  && wd.bonoExtWebPct  > 0 && r > wd.umbralExtWebW)  bonoExtMes += extrasWeb  * r * wd.bonoExtWebPct;
@@ -2885,12 +2924,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             if(wd.bonoCalOn && r > wd.umbralCalW) trabConBonoCalMes++;
             const ucfg = _getWUtilCfg(wd.w);
             if(ucfg.on){
+              const ic = ucfg.income || _UTIL_DEFAULT_INCOME;
+              const revW = precio * personas * r +
+                           (ic.extrasWeb  ? extrasWeb  * r : 0) +
+                           (ic.extrasPres ? extrasPres * r : 0);
               const c = ucfg.costs;
-              const remuoMes = remuBase - wd.sueldo;
+              const remuoMes = Object.entries(ucfg.remuWorkers||{}).reduce((s,[ww,on])=> on ? s + simV(`sim-w${ww}-sueldo`) : s, 0);
               const dedMes = (c.cvar?simV('sim-costo-res')*r:0)+(c.comb?simV('sim-combustible')*r:0)+
                              (c.fijos?simV('sim-fijos'):0)+(c.mant?simV('sim-mantenim'):0)+
-                             (c.otros?simV('sim-otros-fijos'):0)+(c.mkt?mkt:0)+(c.remuo?remuoMes:0);
-              bonoUtilMes += Math.max(0, revMes - dedMes) * ucfg.pct / 100;
+                             (c.otros?simV('sim-otros-fijos'):0)+(c.mkt?mkt:0)+remuoMes;
+              bonoUtilMes += Math.max(0, revW - dedMes) * ucfg.pct / 100;
             }
           }
           const bonoCalMes = bonoCalidadCheck ? bonoCalidadMonto * trabConBonoCalMes : 0;
@@ -2979,7 +3022,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               }
               simRenderWTiers(n);
               if(w.bono_util) _wUtilCfg[n] = {on: !!w.bono_util.on, pct: w.bono_util.pct ?? 5,
-                                               costs: {..._UTIL_DEFAULT_COSTS, ...(w.bono_util.costs||{})}};
+                                               income:      {..._UTIL_DEFAULT_INCOME, ...(w.bono_util.income||{})},
+                                               costs:       {..._UTIL_DEFAULT_COSTS,  ...(w.bono_util.costs ||{})},
+                                               remuWorkers: {...(w.bono_util.remuWorkers||{})}};
               simRenderUtilCosts(n);
               setV(`sim-w${n}-bono-ext-web-pct`,  w.bono_ext_web_pct  ?? w.bono_ext_pct ?? 10);
               setV(`sim-w${n}-bono-ext-pres-pct`, w.bono_ext_pres_pct ?? 10);
@@ -3039,7 +3084,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             umbral_cal:       simV(`sim-w${w}-umbral-cal`),
             umbral_ext_web:   simV(`sim-w${w}-umbral-ext-web`),
             umbral_ext_pres:  simV(`sim-w${w}-umbral-ext-pres`),
-            bono_util:        {..._getWUtilCfg(w)},
+            bono_util:        (cfg=>({...cfg, income:{...cfg.income}, costs:{...cfg.costs}, remuWorkers:{...cfg.remuWorkers}}))(_getWUtilCfg(w)),
           });
         }
         return {
@@ -3300,19 +3345,20 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const ucfg = _getWUtilCfg(w);
           let bonoUtilW = 0;
           if(ucfg.on){
-            const totalN = parseInt(document.getElementById('sim-num-trab')?.value) || 1;
-            let remuoVW = 0; for(let ww=1;ww<=totalN;ww++) if(ww!==w) remuoVW += parseFloat(document.getElementById(`sim-w${ww}-sueldo`)?.value)||0;
+            const ic = ucfg.income || _UTIL_DEFAULT_INCOME;
             const ingrBrutoVW = (parseFloat(document.getElementById('sim-precio')?.value)||0) *
                                 (parseFloat(document.getElementById('sim-personas')?.value)||1) * reservas +
-                                (extrasWeb + extrasPres) * reservas;
+                                (ic.extrasWeb  ? extrasWeb  * reservas : 0) +
+                                (ic.extrasPres ? extrasPres * reservas : 0);
             const c = ucfg.costs;
+            const remuoVW = Object.entries(ucfg.remuWorkers||{}).reduce((s,[ww,on])=> on ? s+(parseFloat(document.getElementById(`sim-w${ww}-sueldo`)?.value)||0) : s, 0);
             const dedVW = (c.cvar?(parseFloat(document.getElementById('sim-costo-res')?.value)||0)*reservas:0) +
                           (c.comb?(parseFloat(document.getElementById('sim-combustible')?.value)||0)*reservas:0) +
                           (c.fijos?parseFloat(document.getElementById('sim-fijos')?.value)||0:0) +
                           (c.mant?parseFloat(document.getElementById('sim-mantenim')?.value)||0:0) +
                           (c.otros?parseFloat(document.getElementById('sim-otros-fijos')?.value)||0:0) +
                           (c.mkt?parseFloat(document.getElementById('sim-mkt')?.value)||0:0) +
-                          (c.remuo?remuoVW:0);
+                          remuoVW;
             bonoUtilW = Math.max(0, ingrBrutoVW - dedVW) * ucfg.pct / 100;
           }
           const total = sueldo + bonoResW + bonoCalW + bonoExtWebW + bonoExtPresW + bonoUtilW;
