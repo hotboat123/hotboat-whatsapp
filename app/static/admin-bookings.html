@@ -392,6 +392,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('sueldos');calcWorkersView()" id="nav-sueldos">
       <span class="ni">👷</span> Sueldos
     </div>
+    <div class="nav-item" onclick="showSection('gastos');loadGastos()" id="nav-gastos">
+      <span class="ni">🧾</span> Gastos
+    </div>
     <div class="nav-item" onclick="showSection('payment-test')" id="nav-payment-test">
       <span class="ni">💳</span> Test Pagos
     </div>
@@ -3756,6 +3759,154 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
     </div>
 
+    <!-- ══ GASTOS SECTION ════════════════════════════════════════════════════ -->
+    <div id="section-gastos" class="section">
+
+      <!-- Filter + action bar -->
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.9rem">
+        <select id="gastos-year" onchange="loadGastos()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.85rem;outline:none"></select>
+        <select id="gastos-month" onchange="loadGastos()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.85rem;outline:none">
+          <option value="0">Todos los meses</option>
+          <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+          <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+          <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+          <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+        </select>
+        <button onclick="openGastoForm()" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:.4rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600;margin-left:auto">+ Agregar Gasto</button>
+        <button onclick="toggleGastosConfig()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.4rem .8rem;font-size:.85rem;cursor:pointer">⚙️ Categorías</button>
+      </div>
+
+      <!-- Summary KPIs -->
+      <div id="gastos-kpis" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.9rem"></div>
+
+      <!-- Add / Edit form (hidden by default) -->
+      <div id="gastos-form-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.2rem;margin-bottom:.9rem">
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.9rem">
+          <span style="font-weight:700;font-size:.95rem">🧾 Nuevo Gasto</span>
+          <button onclick="closeGastoForm()" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer">✕</button>
+        </div>
+
+        <!-- Image upload area -->
+        <div id="gastos-drop-zone"
+             onclick="document.getElementById('gastos-file-input').click()"
+             ondragover="event.preventDefault();this.style.borderColor='var(--gold)'"
+             ondragleave="this.style.borderColor='var(--border)'"
+             ondrop="handleGastosDrop(event)"
+             style="border:2px dashed var(--border);border-radius:10px;padding:1.2rem;text-align:center;cursor:pointer;margin-bottom:.8rem;transition:border-color .2s">
+          <div id="gastos-img-preview" style="display:none;position:relative">
+            <img id="gastos-preview-img" style="max-height:160px;border-radius:8px;max-width:100%" src="" alt="preview">
+            <button onclick="event.stopPropagation();clearGastoImage()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.75rem;line-height:1">✕</button>
+          </div>
+          <div id="gastos-drop-hint" style="color:var(--muted);font-size:.83rem">
+            📷 Toca para sacar foto o subir imagen de la boleta
+          </div>
+        </div>
+        <input type="file" id="gastos-file-input" accept="image/*" capture="environment" style="display:none" onchange="handleGastosFile(this.files[0])">
+
+        <!-- Scan button -->
+        <div id="gastos-scan-bar" style="display:none;margin-bottom:.8rem">
+          <button onclick="scanGastosReceipt()" id="gastos-scan-btn"
+            style="background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.4);border-radius:8px;padding:.45rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600;width:100%">
+            🤖 Escanear con IA — auto-completar monto y categoría
+          </button>
+        </div>
+
+        <!-- Form fields -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Fecha *</label>
+            <input type="date" id="gastos-fecha" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Monto (CLP) *</label>
+            <input type="number" id="gastos-monto" placeholder="12500" min="0" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Comercio / Descripción</label>
+            <input type="text" id="gastos-comercio" placeholder="Copec, Jumbo…" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría 1</label>
+            <select id="gastos-cat1" onchange="loadGastosCat2()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+              <option value="">— Sin categoría —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría 2</label>
+            <select id="gastos-cat2" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+              <option value="">— Sin subcategoría —</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Notas</label>
+            <input type="text" id="gastos-notas" placeholder="Notas opcionales…" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:.6rem;margin-top:.9rem">
+          <button onclick="saveGasto()" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:.5rem 1.4rem;font-size:.88rem;cursor:pointer;font-weight:600;flex:1">Guardar Gasto</button>
+          <button onclick="closeGastoForm()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.5rem 1rem;font-size:.88rem;cursor:pointer">Cancelar</button>
+        </div>
+      </div>
+
+      <!-- Categories config panel (hidden by default) -->
+      <div id="gastos-config-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.2rem;margin-bottom:.9rem">
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.9rem">
+          <span style="font-weight:700;font-size:.95rem">⚙️ Configurar Categorías</span>
+          <button onclick="toggleGastosConfig()" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer">✕</button>
+        </div>
+        <div id="gastos-cat-list" style="margin-bottom:.8rem"></div>
+        <div style="border-top:1px solid var(--border);padding-top:.8rem">
+          <div style="font-size:.8rem;font-weight:600;color:var(--muted);margin-bottom:.5rem">Nueva categoría</div>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
+            <input type="text" id="new-cat-icono" value="📌" maxlength="4" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .5rem;font-size:1.1rem;width:48px;text-align:center;outline:none">
+            <input type="text" id="new-cat-nombre" placeholder="Nombre" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.85rem;flex:1;min-width:120px;outline:none">
+            <input type="color" id="new-cat-color" value="#6b7280" title="Color" style="height:36px;width:44px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--card);padding:2px">
+            <select id="new-cat-nivel" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.83rem;outline:none">
+              <option value="1">Categoría 1</option>
+              <option value="2">Categoría 2</option>
+            </select>
+            <select id="new-cat-parent" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.83rem;outline:none;display:none">
+              <option value="">— Padre (Cat 1) —</option>
+            </select>
+            <button onclick="createGastoCategoria()" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:.38rem .9rem;font-size:.83rem;cursor:pointer;font-weight:600">+ Agregar</button>
+          </div>
+          <div style="margin-top:.5rem">
+            <label style="font-size:.75rem;color:var(--muted)">Palabras clave (separadas por coma):</label>
+            <input type="text" id="new-cat-keywords" placeholder="copec, shell, bencina…" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.33rem .7rem;font-size:.83rem;width:100%;margin-top:.25rem;outline:none;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+
+      <!-- Gastos table -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+        <div style="padding:.8rem 1.1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.5rem">
+          <span style="font-weight:600;font-size:.9rem">Registro de Gastos</span>
+          <span id="gastos-count" style="font-size:.78rem;color:var(--muted);margin-left:.3rem"></span>
+          <div style="margin-left:auto;font-size:.9rem;font-weight:700;color:var(--red)" id="gastos-total-badge"></div>
+        </div>
+        <div id="gastos-table-wrap" style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+            <thead>
+              <tr style="background:var(--card)">
+                <th style="padding:.5rem .7rem;text-align:left;color:var(--muted);font-weight:600;white-space:nowrap">Fecha</th>
+                <th style="padding:.5rem .7rem;text-align:left;color:var(--muted);font-weight:600">Comercio / Descripción</th>
+                <th style="padding:.5rem .7rem;text-align:left;color:var(--muted);font-weight:600">Cat. 1</th>
+                <th style="padding:.5rem .7rem;text-align:left;color:var(--muted);font-weight:600">Cat. 2</th>
+                <th style="padding:.5rem .7rem;text-align:right;color:var(--muted);font-weight:600">Monto</th>
+                <th style="padding:.5rem .7rem;text-align:center;color:var(--muted);font-weight:600">Foto</th>
+                <th style="padding:.5rem .7rem;text-align:center;color:var(--muted);font-weight:600"></th>
+              </tr>
+            </thead>
+            <tbody id="gastos-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /section-gastos -->
+
     <!-- ══ LOGS SECTION ══════════════════════════════════════════════════════ -->
     <div id="section-logs" class="section">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
@@ -3892,7 +4043,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',logs:'Logs del servidor'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',logs:'Logs del servidor'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
@@ -9827,6 +9978,376 @@ function initLogsSection(){
   loadLogs();
   clearInterval(_logAutoRefresh);
   _logAutoRefresh = setInterval(loadLogs, 15000);
+}
+
+// ══════════════════════════════════════════════════════
+// GASTOS — expense tracking
+// ══════════════════════════════════════════════════════
+let _gastosCategorias = [];  // all categories loaded once
+let _gastosImgBase64  = '';  // current image base64 (no prefix)
+let _gastosImgMime    = 'image/jpeg';
+
+// ── Init year selector ──────────────────────────────
+(function _initGastosYear(){
+  const sel = document.getElementById('gastos-year');
+  if(!sel) return;
+  const now = new Date().getFullYear();
+  for(let y = now; y >= now - 3; y--){
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    sel.appendChild(o);
+  }
+  // default current month
+  const msel = document.getElementById('gastos-month');
+  if(msel) msel.value = new Date().getMonth() + 1;
+})();
+
+// ── Load & render ───────────────────────────────────
+async function loadGastos(){
+  const year  = document.getElementById('gastos-year')?.value  || 0;
+  const month = document.getElementById('gastos-month')?.value || 0;
+  try {
+    const [gRes, cRes] = await Promise.all([
+      api(`/api/admin/gastos?year=${year}&month=${month}`),
+      api('/api/admin/gastos/categorias')
+    ]);
+    _gastosCategorias = cRes.categorias || [];
+    renderGastosTable(gRes.gastos || []);
+    renderGastosKpis(gRes.gastos || []);
+    renderGastosConfig();
+    populateGastosSelects();
+  } catch(e) {
+    showToast('Error cargando gastos: ' + e.message);
+  }
+}
+
+function fmtCLP(v){ return '$' + Math.round(v).toLocaleString('es-CL'); }
+
+function renderGastosKpis(gastos){
+  const total = gastos.reduce((s,g) => s + (g.monto||0), 0);
+  // Group by cat1
+  const byCat = {};
+  gastos.forEach(g => {
+    const k = g.categoria1_nombre || 'Sin categoría';
+    const c = g.categoria1_color  || '#6b7280';
+    const i = g.categoria1_icono  || '📌';
+    if(!byCat[k]) byCat[k] = {total:0, color:c, icono:i};
+    byCat[k].total += g.monto || 0;
+  });
+  const sorted = Object.entries(byCat).sort((a,b)=>b[1].total - a[1].total).slice(0,5);
+
+  const el = document.getElementById('gastos-kpis');
+  if(!el) return;
+  let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.6rem .9rem;min-width:130px">
+    <div style="font-size:.72rem;color:var(--muted);margin-bottom:.2rem">Total período</div>
+    <div style="font-size:1.05rem;font-weight:800;color:var(--red)">${fmtCLP(total)}</div>
+    <div style="font-size:.72rem;color:var(--muted)">${gastos.length} gastos</div>
+  </div>`;
+  sorted.forEach(([nombre, d]) => {
+    const pct = total > 0 ? Math.round(d.total / total * 100) : 0;
+    html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.6rem .9rem;min-width:120px">
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:.2rem">${d.icono} ${nombre}</div>
+      <div style="font-size:.95rem;font-weight:700;color:var(--text)">${fmtCLP(d.total)}</div>
+      <div style="font-size:.7rem;color:var(--muted)">${pct}% del total</div>
+    </div>`;
+  });
+  el.innerHTML = html;
+
+  const badge = document.getElementById('gastos-total-badge');
+  if(badge) badge.textContent = gastos.length ? fmtCLP(total) : '';
+  const cnt = document.getElementById('gastos-count');
+  if(cnt) cnt.textContent = gastos.length ? `(${gastos.length})` : '';
+}
+
+function renderGastosTable(gastos){
+  const tbody = document.getElementById('gastos-tbody');
+  if(!tbody) return;
+  if(!gastos.length){
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Sin gastos registrados en este período</td></tr>';
+    return;
+  }
+  tbody.innerHTML = gastos.map(g => {
+    const fecha = g.fecha ? g.fecha.slice(0,10) : '—';
+    const monto = fmtCLP(g.monto);
+    const comercio = g.comercio || g.descripcion || '—';
+    const cat1 = g.categoria1_nombre
+      ? `<span style="background:${g.categoria1_color}22;color:${g.categoria1_color};padding:.15rem .45rem;border-radius:6px;font-size:.78rem;font-weight:600">${g.categoria1_icono} ${g.categoria1_nombre}</span>`
+      : '<span style="color:var(--muted);font-size:.78rem">—</span>';
+    const cat2 = g.categoria2_nombre
+      ? `<span style="background:${g.categoria2_color}22;color:${g.categoria2_color};padding:.15rem .45rem;border-radius:6px;font-size:.78rem">${g.categoria2_icono} ${g.categoria2_nombre}</span>`
+      : '<span style="color:var(--muted);font-size:.78rem">—</span>';
+    const fotoBtn = g.imagen_path
+      ? `<a href="${g.imagen_path}" target="_blank" style="color:var(--gold);font-size:.85rem" title="Ver boleta">🧾</a>`
+      : '<span style="color:var(--muted);font-size:.75rem">—</span>';
+    const notas = g.notas ? `<div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">${g.notas}</div>` : '';
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.45rem .7rem;white-space:nowrap">${fecha}</td>
+      <td style="padding:.45rem .7rem">${comercio}${notas}</td>
+      <td style="padding:.45rem .7rem">${cat1}</td>
+      <td style="padding:.45rem .7rem">${cat2}</td>
+      <td style="padding:.45rem .7rem;text-align:right;font-weight:700;color:var(--red)">${monto}</td>
+      <td style="padding:.45rem .7rem;text-align:center">${fotoBtn}</td>
+      <td style="padding:.45rem .7rem;text-align:center">
+        <button onclick="deleteGasto(${g.id})" title="Eliminar" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Category selects ────────────────────────────────
+function populateGastosSelects(){
+  const sel1 = document.getElementById('gastos-cat1');
+  if(!sel1) return;
+  const cats1 = _gastosCategorias.filter(c => c.nivel === 1);
+  const cur1 = sel1.value;
+  sel1.innerHTML = '<option value="">— Sin categoría —</option>';
+  cats1.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = `${c.icono} ${c.nombre}`;
+    sel1.appendChild(o);
+  });
+  if(cur1) sel1.value = cur1;
+  loadGastosCat2();
+}
+
+function loadGastosCat2(){
+  const sel2 = document.getElementById('gastos-cat2');
+  const cat1Val = document.getElementById('gastos-cat1')?.value;
+  if(!sel2) return;
+  const cats2 = _gastosCategorias.filter(c => c.nivel === 2 && String(c.parent_id) === String(cat1Val));
+  if(!cats2.length){
+    sel2.innerHTML = '<option value="">— Sin subcategoría —</option>';
+    return;
+  }
+  sel2.innerHTML = '<option value="">— Sin subcategoría —</option>';
+  cats2.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = `${c.icono} ${c.nombre}`;
+    sel2.appendChild(o);
+  });
+}
+
+// ── Form open/close ─────────────────────────────────
+function openGastoForm(){
+  document.getElementById('gastos-form-panel').style.display = 'block';
+  // Default today
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('gastos-fecha').value = today;
+  document.getElementById('gastos-monto').value = '';
+  document.getElementById('gastos-comercio').value = '';
+  document.getElementById('gastos-notas').value = '';
+  document.getElementById('gastos-cat1').value = '';
+  document.getElementById('gastos-cat2').innerHTML = '<option value="">— Sin subcategoría —</option>';
+  clearGastoImage();
+  document.getElementById('gastos-form-panel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function closeGastoForm(){
+  document.getElementById('gastos-form-panel').style.display = 'none';
+  clearGastoImage();
+}
+
+// ── Image handling ──────────────────────────────────
+function handleGastosDrop(ev){
+  ev.preventDefault();
+  ev.currentTarget.style.borderColor = 'var(--border)';
+  const file = ev.dataTransfer.files[0];
+  if(file && file.type.startsWith('image/')) handleGastosFile(file);
+}
+
+function handleGastosFile(file){
+  if(!file) return;
+  _gastosImgMime = file.type || 'image/jpeg';
+  const MAX_W = 1200, QUALITY = 0.78;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if(w > MAX_W){ h = Math.round(h * MAX_W / w); w = MAX_W; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL(_gastosImgMime.includes('png') ? 'image/png' : 'image/jpeg', QUALITY);
+      _gastosImgBase64 = dataUrl.split(',')[1];
+      document.getElementById('gastos-preview-img').src = dataUrl;
+      document.getElementById('gastos-img-preview').style.display = 'block';
+      document.getElementById('gastos-drop-hint').style.display = 'none';
+      document.getElementById('gastos-scan-bar').style.display = 'block';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearGastoImage(){
+  _gastosImgBase64 = '';
+  _gastosImgMime = 'image/jpeg';
+  document.getElementById('gastos-img-preview').style.display = 'none';
+  document.getElementById('gastos-drop-hint').style.display = 'block';
+  document.getElementById('gastos-scan-bar').style.display = 'none';
+  document.getElementById('gastos-file-input').value = '';
+}
+
+// ── AI Scan ─────────────────────────────────────────
+async function scanGastosReceipt(){
+  if(!_gastosImgBase64){ showToast('Seleccioná una imagen primero'); return; }
+  const btn = document.getElementById('gastos-scan-btn');
+  btn.textContent = '⏳ Escaneando…'; btn.disabled = true;
+  try {
+    const res = await api('/api/admin/gastos/scan', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({imagen_base64: _gastosImgBase64, mime_type: _gastosImgMime})
+    });
+    if(res.ok){
+      if(res.monto)    document.getElementById('gastos-monto').value    = res.monto;
+      if(res.comercio) document.getElementById('gastos-comercio').value = res.comercio;
+      if(res.fecha)    document.getElementById('gastos-fecha').value    = res.fecha;
+      if(res.categoria1_id){
+        document.getElementById('gastos-cat1').value = res.categoria1_id;
+        loadGastosCat2();
+      }
+      showToast('✅ Escaneado con IA — revisá los campos');
+    } else {
+      showToast('Error al escanear: ' + (res.detail || 'sin respuesta'));
+    }
+  } catch(e){
+    showToast('Error de escaneo: ' + e.message);
+  } finally {
+    btn.textContent = '🤖 Escanear con IA — auto-completar monto y categoría';
+    btn.disabled = false;
+  }
+}
+
+// ── Save gasto ──────────────────────────────────────
+async function saveGasto(){
+  const fecha   = document.getElementById('gastos-fecha').value;
+  const monto   = parseInt(document.getElementById('gastos-monto').value) || 0;
+  const comercio= document.getElementById('gastos-comercio').value.trim();
+  const notas   = document.getElementById('gastos-notas').value.trim();
+  const cat1    = document.getElementById('gastos-cat1').value || null;
+  const cat2    = document.getElementById('gastos-cat2').value || null;
+  if(!fecha){ showToast('Ingresá la fecha'); return; }
+  if(!monto){ showToast('Ingresá el monto'); return; }
+  try {
+    const res = await api('/api/admin/gastos', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        fecha, monto, comercio, notas,
+        imagen_base64: _gastosImgBase64,
+        imagen_mime:   _gastosImgMime,
+        categoria1_id: cat1 ? parseInt(cat1) : null,
+        categoria2_id: cat2 ? parseInt(cat2) : null,
+      })
+    });
+    if(res.ok){
+      showToast('✅ Gasto guardado');
+      closeGastoForm();
+      loadGastos();
+    } else {
+      showToast('Error al guardar');
+    }
+  } catch(e){
+    showToast('Error: ' + e.message);
+  }
+}
+
+// ── Delete gasto ────────────────────────────────────
+async function deleteGasto(id){
+  if(!confirm('¿Eliminar este gasto?')) return;
+  try {
+    const res = await api(`/api/admin/gastos/${id}`, {method:'DELETE'});
+    if(res.ok){ showToast('Gasto eliminado'); loadGastos(); }
+    else showToast('Error al eliminar');
+  } catch(e){ showToast('Error: ' + e.message); }
+}
+
+// ── Categories config panel ─────────────────────────
+function toggleGastosConfig(){
+  const panel = document.getElementById('gastos-config-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if(panel.style.display === 'block') renderGastosConfig();
+}
+
+document.getElementById('new-cat-nivel')?.addEventListener('change', function(){
+  const parentSel = document.getElementById('new-cat-parent');
+  if(this.value === '2'){
+    parentSel.style.display = '';
+    // populate parent options
+    parentSel.innerHTML = '<option value="">— Padre (Cat 1) —</option>';
+    _gastosCategorias.filter(c=>c.nivel===1).forEach(c=>{
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = `${c.icono} ${c.nombre}`;
+      parentSel.appendChild(o);
+    });
+  } else {
+    parentSel.style.display = 'none';
+    parentSel.value = '';
+  }
+});
+
+function renderGastosConfig(){
+  const el = document.getElementById('gastos-cat-list');
+  if(!el) return;
+  const cats1 = _gastosCategorias.filter(c=>c.nivel===1);
+  const cats2 = _gastosCategorias.filter(c=>c.nivel===2);
+  if(!cats1.length){ el.innerHTML = '<div style="color:var(--muted);font-size:.83rem">Sin categorías aún</div>'; return; }
+  let html = '';
+  cats1.forEach(c => {
+    const kws = (c.keywords||[]).join(', ');
+    html += `<div style="display:flex;align-items:center;gap:.4rem;padding:.35rem 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:1rem">${c.icono}</span>
+      <span style="font-weight:600;color:${c.color};flex:1">${c.nombre}</span>
+      <span style="font-size:.73rem;color:var(--muted);flex:2">${kws||'sin keywords'}</span>
+      <button onclick="deleteGastoCategoria(${c.id})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem" title="Eliminar">🗑️</button>
+    </div>`;
+    // subcats
+    cats2.filter(s=>s.parent_id===c.id).forEach(s=>{
+      html += `<div style="display:flex;align-items:center;gap:.4rem;padding:.28rem 0 .28rem 1.2rem;border-bottom:1px solid var(--border);opacity:.85">
+        <span style="font-size:.9rem">${s.icono}</span>
+        <span style="color:${s.color};flex:1;font-size:.85rem">↳ ${s.nombre}</span>
+        <span style="font-size:.73rem;color:var(--muted);flex:2">${(s.keywords||[]).join(', ')||'sin keywords'}</span>
+        <button onclick="deleteGastoCategoria(${s.id})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem">🗑️</button>
+      </div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+
+async function createGastoCategoria(){
+  const nombre  = document.getElementById('new-cat-nombre').value.trim();
+  const icono   = document.getElementById('new-cat-icono').value.trim() || '📌';
+  const color   = document.getElementById('new-cat-color').value || '#6b7280';
+  const nivel   = parseInt(document.getElementById('new-cat-nivel').value) || 1;
+  const parent  = document.getElementById('new-cat-parent').value || null;
+  const kwsRaw  = document.getElementById('new-cat-keywords').value;
+  const keywords= kwsRaw.split(',').map(k=>k.trim()).filter(Boolean);
+  if(!nombre){ showToast('Ingresá el nombre'); return; }
+  try {
+    const res = await api('/api/admin/gastos/categorias', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({nombre, nivel, parent_id: parent ? parseInt(parent) : null, keywords, color, icono})
+    });
+    if(res.ok){
+      showToast('✅ Categoría creada');
+      document.getElementById('new-cat-nombre').value = '';
+      document.getElementById('new-cat-keywords').value = '';
+      await loadGastos();
+      renderGastosConfig();
+    } else showToast('Error al crear categoría');
+  } catch(e){ showToast('Error: ' + e.message); }
+}
+
+async function deleteGastoCategoria(id){
+  if(!confirm('¿Eliminar esta categoría?')) return;
+  try {
+    const res = await api(`/api/admin/gastos/categorias/${id}`, {method:'DELETE'});
+    if(res.ok){ showToast('Categoría eliminada'); await loadGastos(); renderGastosConfig(); }
+    else showToast('Error al eliminar');
+  } catch(e){ showToast('Error: ' + e.message); }
 }
 </script>
 
