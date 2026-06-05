@@ -259,15 +259,20 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
 
     payload["contents"][0]["parts"][0] = {"inline_data": {"mime_type": scan_mime, "data": scan_b64}}
 
-    # Try models in order; fall back on 429 or 404
-    MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
+    # 2.x models are on v1beta; 1.5 models are on v1 (stable)
+    MODELS = [
+        ("gemini-2.0-flash-lite", "v1beta"),
+        ("gemini-2.0-flash",      "v1beta"),
+        ("gemini-1.5-flash",      "v1"),
+        ("gemini-1.5-pro",        "v1"),
+    ]
     extracted = None
     last_status = None
     last_body = ""
     async with httpx.AsyncClient(timeout=30) as client:
-        for model in MODELS:
+        for model, api_ver in MODELS:
             url = (
-                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"https://generativelanguage.googleapis.com/{api_ver}/models/"
                 f"{model}:generateContent?key={api_key}"
             )
             try:
