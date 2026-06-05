@@ -3837,15 +3837,37 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría 1</label>
-            <select id="gastos-cat1" onchange="loadGastosCat2()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+            <select id="gastos-cat1" onchange="loadGastosCat2();handleNewCat1()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
               <option value="">— Sin categoría —</option>
             </select>
+            <div id="gastos-new-cat1-form" style="display:none;margin-top:.5rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem;display:none">
+              <div style="font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:.4rem">Nueva categoría</div>
+              <div style="display:grid;grid-template-columns:2.5rem 1fr;gap:.4rem;margin-bottom:.4rem">
+                <input id="nc1-icono" value="📌" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .3rem;font-size:1.1rem;text-align:center;outline:none">
+                <input id="nc1-nombre" placeholder="Nombre de la categoría" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .6rem;font-size:.85rem;outline:none;width:100%;box-sizing:border-box">
+              </div>
+              <div style="display:flex;gap:.4rem">
+                <button onclick="createCat1Inline()" style="flex:1;background:var(--gold);color:#000;border:none;border-radius:6px;padding:.32rem;font-size:.82rem;font-weight:600;cursor:pointer">Guardar</button>
+                <button onclick="cancelNewCat1()" style="background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.32rem .6rem;font-size:.82rem;cursor:pointer">✕</button>
+              </div>
+            </div>
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría 2</label>
-            <select id="gastos-cat2" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+            <select id="gastos-cat2" onchange="handleNewCat2()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
               <option value="">— Sin subcategoría —</option>
             </select>
+            <div id="gastos-new-cat2-form" style="display:none;margin-top:.5rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem">
+              <div style="font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:.4rem">Nueva subcategoría</div>
+              <div style="display:grid;grid-template-columns:2.5rem 1fr;gap:.4rem;margin-bottom:.4rem">
+                <input id="nc2-icono" value="📌" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .3rem;font-size:1.1rem;text-align:center;outline:none">
+                <input id="nc2-nombre" placeholder="Nombre de la subcategoría" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .6rem;font-size:.85rem;outline:none;width:100%;box-sizing:border-box">
+              </div>
+              <div style="display:flex;gap:.4rem">
+                <button onclick="createCat2Inline()" style="flex:1;background:var(--gold);color:#000;border:none;border-radius:6px;padding:.32rem;font-size:.82rem;font-weight:600;cursor:pointer">Guardar</button>
+                <button onclick="cancelNewCat2()" style="background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.32rem .6rem;font-size:.82rem;cursor:pointer">✕</button>
+              </div>
+            </div>
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Tipo de documento</label>
@@ -10221,7 +10243,8 @@ function populateGastosSelects(){
     o.value = c.id; o.textContent = `${c.icono} ${c.nombre}`;
     sel1.appendChild(o);
   });
-  if(cur1) sel1.value = cur1;
+  sel1.insertAdjacentHTML('beforeend', '<option value="__new__">➕ Nueva categoría…</option>');
+  if(cur1 && cur1 !== '__new__') sel1.value = cur1;
   loadGastosCat2();
 }
 
@@ -10230,16 +10253,88 @@ function loadGastosCat2(){
   const cat1Val = document.getElementById('gastos-cat1')?.value;
   if(!sel2) return;
   const cats2 = _gastosCategorias.filter(c => c.nivel === 2 && String(c.parent_id) === String(cat1Val));
-  if(!cats2.length){
-    sel2.innerHTML = '<option value="">— Sin subcategoría —</option>';
-    return;
-  }
   sel2.innerHTML = '<option value="">— Sin subcategoría —</option>';
   cats2.forEach(c => {
     const o = document.createElement('option');
     o.value = c.id; o.textContent = `${c.icono} ${c.nombre}`;
     sel2.appendChild(o);
   });
+  if(cat1Val && cat1Val !== '__new__')
+    sel2.insertAdjacentHTML('beforeend', '<option value="__new__">➕ Nueva subcategoría…</option>');
+}
+
+function handleNewCat1(){
+  const v = document.getElementById('gastos-cat1')?.value;
+  const form = document.getElementById('gastos-new-cat1-form');
+  if(v === '__new__'){
+    form.style.display = 'block';
+    document.getElementById('nc1-nombre').focus();
+  } else {
+    form.style.display = 'none';
+  }
+}
+
+function cancelNewCat1(){
+  document.getElementById('gastos-new-cat1-form').style.display = 'none';
+  document.getElementById('gastos-cat1').value = '';
+  loadGastosCat2();
+}
+
+async function createCat1Inline(){
+  const nombre = document.getElementById('nc1-nombre').value.trim();
+  const icono  = document.getElementById('nc1-icono').value.trim() || '📌';
+  if(!nombre){ showToast('Ingresá un nombre'); return; }
+  try{
+    const res = await api('/api/admin/gastos/categorias', {
+      method:'POST',
+      body: JSON.stringify({nombre, nivel:1, icono, color:'#6b7280', keywords:[]})
+    });
+    const cRes = await api('/api/admin/gastos/categorias');
+    _gastosCategorias = cRes.categorias || [];
+    document.getElementById('gastos-new-cat1-form').style.display = 'none';
+    document.getElementById('nc1-nombre').value = '';
+    populateGastosSelects();
+    document.getElementById('gastos-cat1').value = res.id;
+    loadGastosCat2();
+    showToast('Categoría creada ✓');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function handleNewCat2(){
+  const v = document.getElementById('gastos-cat2')?.value;
+  const form = document.getElementById('gastos-new-cat2-form');
+  if(v === '__new__'){
+    form.style.display = 'block';
+    document.getElementById('nc2-nombre').focus();
+  } else {
+    form.style.display = 'none';
+  }
+}
+
+function cancelNewCat2(){
+  document.getElementById('gastos-new-cat2-form').style.display = 'none';
+  document.getElementById('gastos-cat2').value = '';
+}
+
+async function createCat2Inline(){
+  const nombre   = document.getElementById('nc2-nombre').value.trim();
+  const icono    = document.getElementById('nc2-icono').value.trim() || '📌';
+  const parentId = parseInt(document.getElementById('gastos-cat1')?.value) || null;
+  if(!nombre){ showToast('Ingresá un nombre'); return; }
+  if(!parentId){ showToast('Seleccioná primero una categoría 1'); return; }
+  try{
+    const res = await api('/api/admin/gastos/categorias', {
+      method:'POST',
+      body: JSON.stringify({nombre, nivel:2, parent_id:parentId, icono, color:'#6b7280', keywords:[]})
+    });
+    const cRes = await api('/api/admin/gastos/categorias');
+    _gastosCategorias = cRes.categorias || [];
+    document.getElementById('gastos-new-cat2-form').style.display = 'none';
+    document.getElementById('nc2-nombre').value = '';
+    loadGastosCat2();
+    document.getElementById('gastos-cat2').value = res.id;
+    showToast('Subcategoría creada ✓');
+  }catch(e){ showToast('Error: '+e.message); }
 }
 
 // ── Form open/close ─────────────────────────────────

@@ -71,27 +71,102 @@ def _ensure_tables():
 
 
 def _seed_default_categories():
-    defaults = [
-        ("Combustible",  1, "#ef4444", "⛽", ["bencina", "combustible", "copec", "shell", "petrobras", "axion", "gasolinera"]),
-        ("Mantenimiento",1, "#f97316", "🔧", ["mantención", "reparación", "taller", "repuesto", "ferretería", "herramienta"]),
-        ("Marketing",    1, "#8b5cf6", "📣", ["publicidad", "instagram", "facebook", "google", "meta", "diseño", "imprenta", "flyer"]),
-        ("Alimentación", 1, "#22c55e", "🍽️", ["supermercado", "restaurant", "comida", "almuerzo", "jumbo", "lider", "unimarc", "santa isabel", "colación"]),
-        ("Servicios",    1, "#0ea5e9", "💡", ["agua", "luz", "electricidad", "internet", "teléfono", "básico", "sanitario"]),
-        ("Suministros",  1, "#f59e0b", "🛒", ["materiales", "insumos", "limpieza", "útiles", "papelería", "producto"]),
-        ("Otros",        1, "#6b7280", "📌", []),
+    # nivel=1 categories: (nombre, color, icono, keywords)
+    LEVEL1 = [
+        ("Combustible",    "#ef4444", "⛽", ["bencina", "combustible", "copec", "shell", "petrobras", "axion", "gasolinera", "diésel", "diesel", "lubricante", "aceite motor"]),
+        ("Mantenimiento",  "#f97316", "🔧", ["mantención", "reparación", "taller", "repuesto", "ferretería", "herramienta", "pintura", "antifouling", "impeller", "filtro"]),
+        ("Marketing",      "#8b5cf6", "📣", ["publicidad", "instagram", "facebook", "google", "meta", "diseño", "imprenta", "flyer", "fotografía", "video", "drone"]),
+        ("Alimentación",   "#22c55e", "🍽️", ["supermercado", "restaurant", "comida", "almuerzo", "jumbo", "lider", "unimarc", "santa isabel", "colación", "provisiones", "snack"]),
+        ("Servicios",      "#0ea5e9", "💡", ["agua", "luz", "electricidad", "internet", "teléfono", "básico", "sanitario", "enel", "entel", "movistar", "aguas andinas", "esval"]),
+        ("Suministros",    "#f59e0b", "🛒", ["materiales", "insumos", "limpieza", "útiles", "papelería", "producto", "chaleco", "extintor", "botiquín"]),
+        ("Remuneraciones", "#ec4899", "👥", ["sueldo", "salario", "honorario", "gratificación", "remuneración", "liquidación", "bono personal", "finiquito"]),
+        ("Arriendo/Marina","#14b8a6", "⚓", ["arriendo", "muelle", "marina", "bodega", "oficina", "puerto", "molo", "boya", "fondeo"]),
+        ("Seguros",        "#6366f1", "🛡️", ["seguro", "póliza", "responsabilidad civil", "seguro embarcación", "seguro náutico", "hull"]),
+        ("Bancario",       "#84cc16", "💳", ["comisión", "transbank", "mercadopago", "banco", "cuota bancaria", "mantención cuenta", "cargo bancario"]),
+        ("Otros",          "#6b7280", "📌", []),
     ]
+    # nivel=2 subcategories: {parent_nombre: [(nombre, color, icono, keywords)]}
+    LEVEL2: dict = {
+        "Combustible": [
+            ("Bencina",           "#ef4444", "⛽", ["bencina", "95", "97", "gasolina"]),
+            ("Diésel",            "#dc2626", "⛽", ["diésel", "diesel"]),
+            ("Aceite/Lubricante", "#f97316", "🛢️", ["aceite", "lubricante", "grasa"]),
+        ],
+        "Mantenimiento": [
+            ("Motor",          "#f97316", "⚙️", ["motor", "impeller", "banda", "filtro", "bujía"]),
+            ("Casco/Pintura",  "#f97316", "🎨", ["casco", "pintura", "antifouling", "fibra"]),
+            ("Equipamiento",   "#f97316", "⚓", ["ancla", "cadena", "manguera", "cuerda", "amarre"]),
+            ("Electrónica",    "#f97316", "📡", ["gps", "radio", "batería", "alternador", "fusible"]),
+        ],
+        "Marketing": [
+            ("Redes Sociales",  "#8b5cf6", "📱", ["instagram", "facebook", "meta ads", "tiktok"]),
+            ("Google Ads",      "#8b5cf6", "🔍", ["google ads", "google"]),
+            ("Fotografía/Video","#8b5cf6", "📸", ["fotografía", "video", "drone", "fotógrafo"]),
+            ("Impreso",         "#8b5cf6", "🖨️", ["imprenta", "flyer", "banner", "tarjeta"]),
+        ],
+        "Alimentación": [
+            ("Colación personal", "#22c55e", "🍱", ["colación", "almuerzo personal"]),
+            ("Provisiones viaje", "#22c55e", "🧃", ["provisiones", "snack", "bebida", "agua pasajeros"]),
+        ],
+        "Servicios": [
+            ("Electricidad",      "#0ea5e9", "⚡", ["luz", "electricidad", "enel", "chilectra"]),
+            ("Agua",              "#0ea5e9", "💧", ["agua", "aguas andinas", "esval"]),
+            ("Internet/Telefonía","#0ea5e9", "📶", ["internet", "teléfono", "celular", "entel", "movistar", "wom"]),
+        ],
+        "Suministros": [
+            ("Limpieza",           "#f59e0b", "🧹", ["limpieza", "cloro", "detergente", "escoba"]),
+            ("Seguridad náutica",  "#f59e0b", "🧤", ["chaleco", "extintor", "botiquín", "bengala"]),
+            ("Papelería",          "#f59e0b", "📋", ["papelería", "papel", "tinta", "útiles oficina"]),
+        ],
+        "Remuneraciones": [
+            ("Sueldo base",    "#ec4899", "💵", ["sueldo", "salario"]),
+            ("Honorarios",     "#ec4899", "📄", ["honorario", "boleta honorarios"]),
+            ("Gratificaciones","#ec4899", "🎁", ["gratificación", "aguinaldo", "finiquito"]),
+        ],
+        "Arriendo/Marina": [
+            ("Muelle/Marina",  "#14b8a6", "⚓", ["muelle", "marina", "boya", "fondeo", "puerto"]),
+            ("Bodega/Oficina", "#14b8a6", "🏠", ["bodega", "oficina", "arriendo local"]),
+        ],
+        "Seguros": [
+            ("Seguro embarcación","#6366f1", "⛵", ["seguro bote", "seguro embarcación"]),
+            ("Resp. Civil",       "#6366f1", "🤝", ["responsabilidad civil", "rc", "seguro pasajeros"]),
+        ],
+        "Bancario": [
+            ("Transbank",   "#84cc16", "💳", ["transbank"]),
+            ("MercadoPago", "#84cc16", "💳", ["mercadopago", "mp"]),
+            ("Banco",       "#84cc16", "🏦", ["banco", "cuota bancaria", "mantención cuenta"]),
+        ],
+    }
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM gastos_categorias WHERE nivel=1")
-                (count,) = cur.fetchone()
-                if count > 0:
-                    return
-                for nombre, nivel, color, icono, kws in defaults:
-                    cur.execute(
-                        "INSERT INTO gastos_categorias (nombre, nivel, color, icono, keywords) VALUES (%s,%s,%s,%s,%s)",
-                        (nombre, nivel, color, icono, json.dumps(kws, ensure_ascii=False)),
-                    )
+                # Get existing names to avoid duplicates
+                cur.execute("SELECT nombre, id, nivel FROM gastos_categorias")
+                existing = {(r[0], r[2]): r[1] for r in cur.fetchall()}
+
+                # Insert missing nivel=1
+                for nombre, color, icono, kws in LEVEL1:
+                    if (nombre, 1) not in existing:
+                        cur.execute(
+                            "INSERT INTO gastos_categorias (nombre, nivel, color, icono, keywords) "
+                            "VALUES (%s,%s,%s,%s,%s) RETURNING id",
+                            (nombre, 1, color, icono, json.dumps(kws, ensure_ascii=False)),
+                        )
+                        existing[(nombre, 1)] = cur.fetchone()[0]
+
+                # Insert missing nivel=2
+                for parent_nombre, subs in LEVEL2.items():
+                    parent_id = existing.get((parent_nombre, 1))
+                    if not parent_id:
+                        continue
+                    for nombre, color, icono, kws in subs:
+                        if (nombre, 2) not in existing:
+                            cur.execute(
+                                "INSERT INTO gastos_categorias (nombre, nivel, parent_id, color, icono, keywords) "
+                                "VALUES (%s,%s,%s,%s,%s,%s)",
+                                (nombre, 2, parent_id, color, icono, json.dumps(kws, ensure_ascii=False)),
+                            )
+                            existing[(nombre, 2)] = -1  # mark as inserted
             conn.commit()
     except Exception as e:
         logger.error(f"gastos seed categories: {e}")
