@@ -239,6 +239,7 @@ class UpdateReservaRequest(BaseModel):
     coupon_discount: Optional[float] = None
     coupon_extra_benefit: Optional[str] = None
     boletado: Optional[bool] = None
+    incluir_en_utilidad: Optional[bool] = None
 
 
 @admin_router.put("/api/admin/reservas/{rid}")
@@ -265,6 +266,8 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
         updates['flex_amount'] = body.flex_amount or 0
     if 'boletado' in body.model_fields_set:
         updates['boletado'] = body.boletado
+    if 'incluir_en_utilidad' in body.model_fields_set:
+        updates['incluir_en_utilidad'] = body.incluir_en_utilidad
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
     try:

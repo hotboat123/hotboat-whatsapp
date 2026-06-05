@@ -47,11 +47,13 @@ def _ensure_tables():
         categoria1_id INTEGER REFERENCES gastos_categorias(id) ON DELETE SET NULL,
         categoria2_id INTEGER REFERENCES gastos_categorias(id) ON DELETE SET NULL,
         tipo_documento VARCHAR(20) DEFAULT 'boleta',
+        incluir_en_utilidad BOOLEAN DEFAULT TRUE,
         notas TEXT DEFAULT '',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
     );
     ALTER TABLE gastos ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(20) DEFAULT 'boleta';
+    ALTER TABLE gastos ADD COLUMN IF NOT EXISTS incluir_en_utilidad BOOLEAN DEFAULT TRUE;
     CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
     CREATE INDEX IF NOT EXISTS idx_gastos_cat1 ON gastos(categoria1_id);
     """
@@ -127,6 +129,7 @@ class GastoCreate(BaseModel):
     categoria1_id: Optional[int] = None
     categoria2_id: Optional[int] = None
     tipo_documento: str = "boleta"  # boleta | factura | sin_documento
+    incluir_en_utilidad: bool = True
     notas: str = ""
 
 
@@ -283,7 +286,8 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
         SELECT g.id, g.fecha, g.monto, g.descripcion, g.comercio, g.imagen_path,
                g.categoria1_id, c1.nombre, c1.color, c1.icono,
                g.categoria2_id, c2.nombre, c2.color, c2.icono,
-               g.notas, g.created_at, COALESCE(g.tipo_documento, 'boleta')
+               g.notas, g.created_at, COALESCE(g.tipo_documento, 'boleta'),
+               COALESCE(g.incluir_en_utilidad, TRUE)
         FROM gastos g
         LEFT JOIN gastos_categorias c1 ON g.categoria1_id = c1.id
         LEFT JOIN gastos_categorias c2 ON g.categoria2_id = c2.id
@@ -304,6 +308,7 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
             "monto_neto": neto,
             "iva_credito": (m - neto) if tdoc == "factura" else 0,
             "tipo_documento": tdoc,
+            "incluir_en_utilidad": r[17] if r[17] is not None else True,
             "descripcion": r[3] or "", "comercio": r[4] or "",
             "imagen_path": r[5] or "",
             "categoria1_id": r[6],
@@ -341,9 +346,11 @@ async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO gastos (fecha, monto, descripcion, comercio, imagen_path, "
-                "categoria1_id, categoria2_id, tipo_documento, notas) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                "categoria1_id, categoria2_id, tipo_documento, incluir_en_utilidad, notas) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
                 (body.fecha, body.monto, body.descripcion, body.comercio,
-                 imagen_path, body.categoria1_id, body.categoria2_id, body.tipo_documento, body.notas),
+                 imagen_path, body.categoria1_id, body.categoria2_id,
+                 body.tipo_documento, body.incluir_en_utilidad, body.notas),
             )
             (new_id,) = cur.fetchone()
         conn.commit()

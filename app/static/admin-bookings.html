@@ -3846,6 +3846,25 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             </select>
             <div id="gastos-iva-info" style="font-size:.72rem;color:var(--muted);margin-top:.3rem;line-height:1.5"></div>
           </div>
+          <div style="display:flex;align-items:flex-end">
+            <div style="width:100%">
+              <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Utilidad bono</label>
+              <label id="gastos-util-label"
+                     style="display:flex;align-items:center;gap:.4rem;cursor:pointer;
+                            background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);
+                            border-radius:8px;padding:.4rem .7rem;font-size:.84rem;
+                            color:#4ade80;font-weight:600;transition:.2s;width:100%;box-sizing:border-box">
+                <input type="checkbox" id="gastos-incluir-utilidad" checked
+                  style="accent-color:#4ade80"
+                  onchange="const lbl=document.getElementById('gastos-util-label');
+                    lbl.style.background=this.checked?'rgba(16,185,129,.08)':'rgba(251,191,36,.08)';
+                    lbl.style.borderColor=this.checked?'rgba(16,185,129,.3)':'rgba(251,191,36,.35)';
+                    lbl.style.color=this.checked?'#4ade80':'#fbbf24'">
+                📊 Incluir en utilidad bono
+              </label>
+              <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem">Activo = resta de la utilidad de Axel y Néstor</div>
+            </div>
+          </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Notas</label>
             <input type="text" id="gastos-notas" placeholder="Notas opcionales…" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
@@ -4599,21 +4618,37 @@ async function openModal(id){
             oninput="syncCostoTotal();syncPagoFaltante();calcIvaVenta()"></div>
         <div class="form-group">
           <label>IVA / Facturación</label>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;
-                        background:${r.boletado?'rgba(16,185,129,.12)':'rgba(255,255,255,.04)'};
-                        border:1px solid ${r.boletado?'rgba(16,185,129,.4)':'var(--border)'};
-                        border-radius:8px;padding:.38rem .7rem;font-size:.82rem;
-                        color:${r.boletado?'#4ade80':'var(--muted)'};font-weight:600;transition:.2s"
-                 id="e-boletado-label">
-            <input type="checkbox" id="e-boletado" ${r.boletado?'checked':''}
-              style="accent-color:#4ade80"
-              onchange="calcIvaVenta();
-                const lbl=document.getElementById('e-boletado-label');
-                lbl.style.background=this.checked?'rgba(16,185,129,.12)':'rgba(255,255,255,.04)';
-                lbl.style.borderColor=this.checked?'rgba(16,185,129,.4)':'var(--border)';
-                lbl.style.color=this.checked?'#4ade80':'var(--muted)'">
-            🧾 Boletada
-          </label>
+          <div style="display:flex;flex-direction:column;gap:.35rem">
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;
+                          background:${r.boletado?'rgba(16,185,129,.12)':'rgba(255,255,255,.04)'};
+                          border:1px solid ${r.boletado?'rgba(16,185,129,.4)':'var(--border)'};
+                          border-radius:8px;padding:.32rem .7rem;font-size:.82rem;
+                          color:${r.boletado?'#4ade80':'var(--muted)'};font-weight:600;transition:.2s"
+                   id="e-boletado-label">
+              <input type="checkbox" id="e-boletado" ${r.boletado?'checked':''}
+                style="accent-color:#4ade80"
+                onchange="calcIvaVenta();
+                  const lbl=document.getElementById('e-boletado-label');
+                  lbl.style.background=this.checked?'rgba(16,185,129,.12)':'rgba(255,255,255,.04)';
+                  lbl.style.borderColor=this.checked?'rgba(16,185,129,.4)':'var(--border)';
+                  lbl.style.color=this.checked?'#4ade80':'var(--muted)'">
+              🧾 Boletada
+            </label>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;
+                          background:${r.incluir_en_utilidad===false?'rgba(251,191,36,.08)':'rgba(16,185,129,.08)'};
+                          border:1px solid ${r.incluir_en_utilidad===false?'rgba(251,191,36,.35)':'rgba(16,185,129,.3)'};
+                          border-radius:8px;padding:.32rem .7rem;font-size:.82rem;
+                          color:${r.incluir_en_utilidad===false?'#fbbf24':'#4ade80'};font-weight:600;transition:.2s"
+                   id="e-util-label">
+              <input type="checkbox" id="e-incluir-utilidad" ${r.incluir_en_utilidad===false?'':'checked'}
+                style="accent-color:#4ade80"
+                onchange="const lbl=document.getElementById('e-util-label');
+                  lbl.style.background=this.checked?'rgba(16,185,129,.08)':'rgba(251,191,36,.08)';
+                  lbl.style.borderColor=this.checked?'rgba(16,185,129,.3)':'rgba(251,191,36,.35)';
+                  lbl.style.color=this.checked?'#4ade80':'#fbbf24'">
+              📊 Utilidad bono
+            </label>
+          </div>
           <div id="e-iva-venta-info" style="font-size:.72rem;color:var(--muted);margin-top:.3rem;line-height:1.5"></div>
         </div>
       </div>
@@ -5122,6 +5157,7 @@ async function saveModal(id){
     has_flex:hasFlex,
     flex_amount:flexAmt,
     boletado: document.getElementById('e-boletado')?.checked ?? false,
+    incluir_en_utilidad: document.getElementById('e-incluir-utilidad')?.checked ?? true,
     num_personas: g('e-num_personas') ? +g('e-num_personas') : null,
     num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
     num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,
@@ -5144,7 +5180,7 @@ async function saveModal(id){
   body.coupon_code = _appliedCoupon ? _appliedCoupon.code : null;
   body.coupon_discount = _appliedCoupon ? (_appliedCoupon.discount_amount || 0) : 0;
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount','boletado']);
+  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount','boletado','incluir_en_utilidad']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -10069,9 +10105,10 @@ async function loadGastos(){
 function fmtCLP(v){ return '$' + Math.round(v).toLocaleString('es-CL'); }
 
 function renderGastosKpis(gastos){
-  const totalBruto = gastos.reduce((s,g) => s + (g.monto||0), 0);
-  const totalNeto  = gastos.reduce((s,g) => s + (g.monto_neto ?? g.monto ?? 0), 0);
-  const ivaCredito = gastos.reduce((s,g) => s + (g.iva_credito||0), 0);
+  const totalBruto  = gastos.reduce((s,g) => s + (g.monto||0), 0);
+  const totalNeto   = gastos.reduce((s,g) => s + (g.monto_neto ?? g.monto ?? 0), 0);
+  const ivaCredito  = gastos.reduce((s,g) => s + (g.iva_credito||0), 0);
+  const baseUtil    = gastos.reduce((s,g) => g.incluir_en_utilidad !== false ? s + (g.monto_neto ?? g.monto ?? 0) : s, 0);
   // Group by cat1
   const byCat = {};
   gastos.forEach(g => {
@@ -10090,6 +10127,11 @@ function renderGastosKpis(gastos){
     <div style="font-size:.72rem;color:var(--muted);margin-bottom:.15rem">Gasto neto período</div>
     <div style="font-size:1.05rem;font-weight:800;color:#f87171">${fmtCLP(totalNeto)}</div>
     <div style="font-size:.7rem;color:var(--muted)">${gastos.length} gastos · bruto ${fmtCLP(totalBruto)}</div>
+  </div>
+  <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:10px;padding:.6rem .9rem;min-width:140px">
+    <div style="font-size:.72rem;color:#fbbf24;margin-bottom:.15rem">📊 Base utilidad bono</div>
+    <div style="font-size:1.05rem;font-weight:800;color:#fbbf24">${fmtCLP(baseUtil)}</div>
+    <div style="font-size:.7rem;color:var(--muted)">gastos que restan al bono A+N</div>
   </div>`;
   if(ivaCredito > 0){
     html += `<div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.3);border-radius:10px;padding:.6rem .9rem;min-width:130px">
@@ -10129,6 +10171,7 @@ function renderGastosTable(gastos){
     const ivaC    = g.iva_credito > 0 ? `<span style="color:#60a5fa;font-weight:600">${fmtCLP(g.iva_credito)}</span>` : '<span style="color:var(--muted);font-size:.75rem">—</span>';
     const tdoc    = g.tipo_documento || 'boleta';
     const tdocBadge = `<span style="font-size:.75rem;color:${tdoc==='factura'?'#60a5fa':tdoc==='boleta'?'var(--muted)':'#a3a3a3'}">${TDOC_LABEL[tdoc]||tdoc}</span>`;
+    const excluido = g.incluir_en_utilidad === false;
     const comercio = g.comercio || g.descripcion || '—';
     const cat1 = g.categoria1_nombre
       ? `<span style="background:${g.categoria1_color}22;color:${g.categoria1_color};padding:.15rem .45rem;border-radius:6px;font-size:.78rem;font-weight:600">${g.categoria1_icono} ${g.categoria1_nombre}</span>`
@@ -10136,14 +10179,17 @@ function renderGastosTable(gastos){
     const fotoBtn = g.imagen_path
       ? `<a href="${g.imagen_path}" target="_blank" style="color:var(--gold);font-size:.85rem" title="Ver boleta">🧾</a>`
       : '<span style="color:var(--muted);font-size:.75rem">—</span>';
+    const utilBadge = excluido
+      ? '<span style="font-size:.7rem;color:#fbbf24;white-space:nowrap">⚠ excluido bono</span>'
+      : '';
     const notas = g.notas ? `<div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">${g.notas}</div>` : '';
-    return `<tr style="border-top:1px solid var(--border)">
+    return `<tr style="border-top:1px solid var(--border);${excluido?'opacity:.7':''}">
       <td style="padding:.45rem .7rem;white-space:nowrap">${fecha}</td>
-      <td style="padding:.45rem .7rem">${comercio}${notas}</td>
+      <td style="padding:.45rem .7rem">${comercio}${notas}${utilBadge?'<br>'+utilBadge:''}</td>
       <td style="padding:.45rem .7rem">${cat1}</td>
       <td style="padding:.45rem .7rem">${tdocBadge}</td>
       <td style="padding:.45rem .7rem;text-align:right;color:var(--muted)">${bruto}</td>
-      <td style="padding:.45rem .7rem;text-align:right;font-weight:700;color:#4ade80">${neto}</td>
+      <td style="padding:.45rem .7rem;text-align:right;font-weight:700;color:${excluido?'var(--muted)':'#4ade80'}">${neto}</td>
       <td style="padding:.45rem .7rem;text-align:right">${ivaC}</td>
       <td style="padding:.45rem .7rem;text-align:center">${fotoBtn}</td>
       <td style="padding:.45rem .7rem;text-align:center">
@@ -10199,6 +10245,10 @@ function openGastoForm(){
   document.getElementById('gastos-cat2').innerHTML = '<option value="">— Sin subcategoría —</option>';
   document.getElementById('gastos-tipo-doc').value = 'boleta';
   document.getElementById('gastos-iva-info').textContent = '';
+  const utilChk = document.getElementById('gastos-incluir-utilidad');
+  const utilLbl = document.getElementById('gastos-util-label');
+  if(utilChk){ utilChk.checked = true; }
+  if(utilLbl){ utilLbl.style.background='rgba(16,185,129,.08)'; utilLbl.style.borderColor='rgba(16,185,129,.3)'; utilLbl.style.color='#4ade80'; }
   clearGastoImage();
   document.getElementById('gastos-form-panel').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -10310,12 +10360,13 @@ async function saveGasto(){
   if(!fecha){ showToast('Ingresá la fecha'); return; }
   if(!monto){ showToast('Ingresá el monto'); return; }
   try {
-    const tipo_documento = document.getElementById('gastos-tipo-doc')?.value || 'boleta';
+    const tipo_documento     = document.getElementById('gastos-tipo-doc')?.value || 'boleta';
+    const incluir_en_utilidad = document.getElementById('gastos-incluir-utilidad')?.checked ?? true;
     const res = await api('/api/admin/gastos', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        fecha, monto, comercio, notas, tipo_documento,
+        fecha, monto, comercio, notas, tipo_documento, incluir_en_utilidad,
         imagen_base64: _gastosImgBase64,
         imagen_mime:   _gastosImgMime,
         categoria1_id: cat1 ? parseInt(cat1) : null,
