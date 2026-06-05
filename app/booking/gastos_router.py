@@ -260,7 +260,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     payload["contents"][0]["parts"][0] = {"inline_data": {"mime_type": scan_mime, "data": scan_b64}}
 
     # Try models in order; fall back on 429 or 404
-    MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash-8b"]
+    MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
     extracted = None
     last_status = None
     last_body = ""
