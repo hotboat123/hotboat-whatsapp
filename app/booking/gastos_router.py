@@ -237,7 +237,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
 
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-1.5-flash:generateContent?key={api_key}"
+        f"gemini-2.0-flash:generateContent?key={api_key}"
     )
     try:
         async with httpx.AsyncClient(timeout=25) as client:
