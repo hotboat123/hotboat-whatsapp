@@ -3788,20 +3788,30 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
         <!-- Image upload area -->
         <div id="gastos-drop-zone"
-             onclick="document.getElementById('gastos-file-input').click()"
              ondragover="event.preventDefault();this.style.borderColor='var(--gold)'"
              ondragleave="this.style.borderColor='var(--border)'"
              ondrop="handleGastosDrop(event)"
-             style="border:2px dashed var(--border);border-radius:10px;padding:1.2rem;text-align:center;cursor:pointer;margin-bottom:.8rem;transition:border-color .2s">
-          <div id="gastos-img-preview" style="display:none;position:relative">
+             style="border:2px dashed var(--border);border-radius:10px;padding:1rem;text-align:center;margin-bottom:.8rem;transition:border-color .2s">
+          <div id="gastos-img-preview" style="display:none;position:relative;margin-bottom:.6rem">
             <img id="gastos-preview-img" style="max-height:160px;border-radius:8px;max-width:100%" src="" alt="preview">
-            <button onclick="event.stopPropagation();clearGastoImage()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.75rem;line-height:1">✕</button>
+            <button onclick="clearGastoImage()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.75rem;line-height:1">✕</button>
           </div>
-          <div id="gastos-drop-hint" style="color:var(--muted);font-size:.83rem">
-            📷 Toca para sacar foto o subir imagen de la boleta
+          <div id="gastos-drop-hint" style="display:flex;flex-direction:column;align-items:center;gap:.5rem">
+            <div style="font-size:.75rem;color:var(--muted)">Arrastrá una imagen o elegí:</div>
+            <div style="display:flex;gap:.6rem;justify-content:center">
+              <button type="button" onclick="document.getElementById('gastos-file-camera').click()"
+                style="background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.35);border-radius:8px;padding:.4rem .85rem;font-size:.85rem;cursor:pointer;font-weight:600">
+                📷 Sacar foto
+              </button>
+              <button type="button" onclick="document.getElementById('gastos-file-gallery').click()"
+                style="background:rgba(96,165,250,.12);color:#60a5fa;border:1px solid rgba(96,165,250,.35);border-radius:8px;padding:.4rem .85rem;font-size:.85rem;cursor:pointer;font-weight:600">
+                🖼️ Galería
+              </button>
+            </div>
           </div>
         </div>
-        <input type="file" id="gastos-file-input" accept="image/*" capture="environment" style="display:none" onchange="handleGastosFile(this.files[0])">
+        <input type="file" id="gastos-file-camera"  accept="image/*" capture="environment" style="display:none" onchange="handleGastosFile(this.files[0])">
+        <input type="file" id="gastos-file-gallery" accept="image/*" style="display:none" onchange="handleGastosFile(this.files[0])">
 
         <!-- Scan button -->
         <div id="gastos-scan-bar" style="display:none;margin-bottom:.8rem">
@@ -10295,9 +10305,10 @@ function clearGastoImage(){
   _gastosImgBase64 = '';
   _gastosImgMime = 'image/jpeg';
   document.getElementById('gastos-img-preview').style.display = 'none';
-  document.getElementById('gastos-drop-hint').style.display = 'block';
+  document.getElementById('gastos-drop-hint').style.display = 'flex';
   document.getElementById('gastos-scan-bar').style.display = 'none';
-  document.getElementById('gastos-file-input').value = '';
+  document.getElementById('gastos-file-camera').value  = '';
+  document.getElementById('gastos-file-gallery').value = '';
 }
 
 // ── IVA calculator (live preview) ──────────────────
@@ -10419,32 +10430,86 @@ document.getElementById('new-cat-nivel')?.addEventListener('change', function(){
   }
 });
 
+let _editingCatId = null;
+
 function renderGastosConfig(){
   const el = document.getElementById('gastos-cat-list');
   if(!el) return;
   const cats1 = _gastosCategorias.filter(c=>c.nivel===1);
   const cats2 = _gastosCategorias.filter(c=>c.nivel===2);
   if(!cats1.length){ el.innerHTML = '<div style="color:var(--muted);font-size:.83rem">Sin categorías aún</div>'; return; }
+
+  const rowStyle    = 'border-bottom:1px solid var(--border);';
+  const inputStyle  = 'background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.28rem .5rem;font-size:.82rem;outline:none';
+
+  function catRow(c, indent){
+    const kws = (c.keywords||[]).join(', ');
+    const pad  = indent ? 'padding:.28rem 0 .28rem 1.2rem;' : 'padding:.35rem 0;';
+    const prefix = indent ? '↳ ' : '';
+    if(_editingCatId === c.id){
+      return `<div style="${rowStyle}${pad}">
+        <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;margin-bottom:.4rem">
+          <input id="ecat-icono" value="${c.icono}" maxlength="4"
+            style="${inputStyle};width:40px;text-align:center;font-size:1rem">
+          <input id="ecat-nombre" value="${c.nombre}"
+            style="${inputStyle};flex:1;min-width:100px;font-weight:600;color:${c.color}">
+          <input type="color" id="ecat-color" value="${c.color}" title="Color"
+            style="height:32px;width:40px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--card);padding:2px">
+        </div>
+        <div style="margin-bottom:.4rem">
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:.2rem">Palabras clave (separadas por coma):</div>
+          <input id="ecat-kws" value="${kws}"
+            style="${inputStyle};width:100%;box-sizing:border-box" placeholder="copec, shell, bencina…">
+        </div>
+        <div style="display:flex;gap:.4rem">
+          <button onclick="saveEditCat(${c.id})"
+            style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;cursor:pointer;font-weight:600">Guardar</button>
+          <button onclick="_editingCatId=null;renderGastosConfig()"
+            style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.3rem .7rem;font-size:.8rem;cursor:pointer">Cancelar</button>
+        </div>
+      </div>`;
+    }
+    return `<div style="display:flex;align-items:center;gap:.4rem;${rowStyle}${pad}">
+      <span style="font-size:${indent?'.9':'1'}rem">${c.icono}</span>
+      <span style="font-weight:600;color:${c.color};flex:1;font-size:${indent?'.85':'1'}rem">${prefix}${c.nombre}</span>
+      <span style="font-size:.73rem;color:var(--muted);flex:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kws||'sin keywords'}</span>
+      <button onclick="_editingCatId=${c.id};renderGastosConfig()"
+        style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;flex-shrink:0" title="Editar">✏️</button>
+      <button onclick="deleteGastoCategoria(${c.id})"
+        style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;flex-shrink:0" title="Eliminar">🗑️</button>
+    </div>`;
+  }
+
   let html = '';
   cats1.forEach(c => {
-    const kws = (c.keywords||[]).join(', ');
-    html += `<div style="display:flex;align-items:center;gap:.4rem;padding:.35rem 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:1rem">${c.icono}</span>
-      <span style="font-weight:600;color:${c.color};flex:1">${c.nombre}</span>
-      <span style="font-size:.73rem;color:var(--muted);flex:2">${kws||'sin keywords'}</span>
-      <button onclick="deleteGastoCategoria(${c.id})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem" title="Eliminar">🗑️</button>
-    </div>`;
-    // subcats
-    cats2.filter(s=>s.parent_id===c.id).forEach(s=>{
-      html += `<div style="display:flex;align-items:center;gap:.4rem;padding:.28rem 0 .28rem 1.2rem;border-bottom:1px solid var(--border);opacity:.85">
-        <span style="font-size:.9rem">${s.icono}</span>
-        <span style="color:${s.color};flex:1;font-size:.85rem">↳ ${s.nombre}</span>
-        <span style="font-size:.73rem;color:var(--muted);flex:2">${(s.keywords||[]).join(', ')||'sin keywords'}</span>
-        <button onclick="deleteGastoCategoria(${s.id})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem">🗑️</button>
-      </div>`;
-    });
+    html += catRow(c, false);
+    cats2.filter(s=>s.parent_id===c.id).forEach(s=>{ html += catRow(s, true); });
   });
   el.innerHTML = html;
+}
+
+async function saveEditCat(id){
+  const cat     = _gastosCategorias.find(c=>c.id===id);
+  if(!cat) return;
+  const nombre  = document.getElementById('ecat-nombre')?.value.trim();
+  const icono   = document.getElementById('ecat-icono')?.value.trim()  || '📌';
+  const color   = document.getElementById('ecat-color')?.value         || '#6b7280';
+  const kwsRaw  = document.getElementById('ecat-kws')?.value           || '';
+  const keywords = kwsRaw.split(',').map(k=>k.trim()).filter(Boolean);
+  if(!nombre){ showToast('Ingresá el nombre'); return; }
+  try {
+    const res = await api(`/api/admin/gastos/categorias/${id}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({nombre, icono, color, keywords, nivel: cat.nivel, parent_id: cat.parent_id||null})
+    });
+    if(res.ok){
+      _editingCatId = null;
+      showToast('✅ Categoría actualizada');
+      await loadGastos();
+      renderGastosConfig();
+    } else showToast('Error al guardar');
+  } catch(e){ showToast('Error: '+e.message); }
 }
 
 async function createGastoCategoria(){
