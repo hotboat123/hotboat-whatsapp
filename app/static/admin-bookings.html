@@ -3523,11 +3523,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               const sueldoP = tramoP.sueldoFijo || sueldo;
               const bonoP   = tramoP.pctUtil * utilP / 100;
               const totalP  = sueldoP + bonoP;
+              const perRes  = pr > 0 ? Math.round(totalP / pr) : 0;
               const isCur   = pr === reservas;
               projRows += `<tr style="background:${isCur?'rgba(16,185,129,.15)':''}">
                 <td style="padding:.11rem .25rem;${isCur?'font-weight:700':'opacity:.75'}">${pr}</td>
                 <td style="text-align:right;padding:.11rem .25rem;color:${bonoP>0?'#10b981':'var(--muted)'};${isCur?'font-weight:700':''}">${bonoP>0?'+'+fmt(bonoP):'—'}</td>
                 <td style="text-align:right;padding:.11rem .25rem;${isCur?'font-weight:800;color:#fbbf24':'opacity:.8'}">${fmt(totalP)}</td>
+                <td style="text-align:right;padding:.11rem .25rem;color:#60a5fa;${isCur?'font-weight:700':'opacity:.7'}">${fmt(perRes)}</td>
               </tr>`;
             }
             _utilProjHtml = `
@@ -3538,10 +3540,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                     <th style="text-align:left;padding:.1rem .25rem;font-weight:600">Res</th>
                     <th style="text-align:right;padding:.1rem .25rem;font-weight:600">Bono util</th>
                     <th style="text-align:right;padding:.1rem .25rem;font-weight:600">Total*</th>
+                    <th style="text-align:right;padding:.1rem .25rem;font-weight:600;color:#60a5fa">$/res</th>
                   </tr></thead>
                   <tbody>${projRows}</tbody>
                 </table>
-                <div style="font-size:.66rem;color:var(--muted);margin-top:.3rem">* sueldo + bono util (sin bono reservas ni extras)</div>
+                <div style="font-size:.66rem;color:var(--muted);margin-top:.3rem">* sueldo + bono util (sin bono reservas ni extras) &nbsp;·&nbsp; $/res = total ÷ reservas</div>
               </div>`;
           }
           const sueldoEfW = sueldoUtil ?? sueldo;
