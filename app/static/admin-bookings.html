@@ -3854,9 +3854,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría 2</label>
-            <select id="gastos-cat2" onchange="handleNewCat2()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+            <select id="gastos-cat2" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
               <option value="">— Sin subcategoría —</option>
             </select>
+            <button id="gastos-new-cat2-btn" onclick="showNewCat2Form()" style="display:none;margin-top:.35rem;width:100%;background:transparent;color:var(--gold);border:1px dashed var(--gold);border-radius:6px;padding:.3rem;font-size:.82rem;cursor:pointer;text-align:center">➕ Nueva subcategoría</button>
             <div id="gastos-new-cat2-form" style="display:none;margin-top:.5rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem">
               <div style="font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:.4rem">Nueva subcategoría</div>
               <div style="display:grid;grid-template-columns:2.5rem 1fr;gap:.4rem;margin-bottom:.4rem">
@@ -10259,8 +10260,8 @@ function loadGastosCat2(){
     o.value = c.id; o.textContent = `${c.icono} ${c.nombre}`;
     sel2.appendChild(o);
   });
-  if(cat1Val && cat1Val !== '__new__')
-    sel2.insertAdjacentHTML('beforeend', '<option value="__new__">➕ Nueva subcategoría…</option>');
+  const btn2 = document.getElementById('gastos-new-cat2-btn');
+  if(btn2) btn2.style.display = (cat1Val && cat1Val !== '__new__') ? 'block' : 'none';
 }
 
 function handleNewCat1(){
@@ -10300,20 +10301,18 @@ async function createCat1Inline(){
   }catch(e){ showToast('Error: '+e.message); }
 }
 
-function handleNewCat2(){
-  const v = document.getElementById('gastos-cat2')?.value;
-  const form = document.getElementById('gastos-new-cat2-form');
-  if(v === '__new__'){
-    form.style.display = 'block';
-    document.getElementById('nc2-nombre').focus();
-  } else {
-    form.style.display = 'none';
-  }
+function showNewCat2Form(){
+  document.getElementById('gastos-new-cat2-form').style.display = 'block';
+  document.getElementById('gastos-new-cat2-btn').style.display = 'none';
+  document.getElementById('nc2-nombre').focus();
 }
 
 function cancelNewCat2(){
   document.getElementById('gastos-new-cat2-form').style.display = 'none';
   document.getElementById('gastos-cat2').value = '';
+  const cat1Val = document.getElementById('gastos-cat1')?.value;
+  const btn2 = document.getElementById('gastos-new-cat2-btn');
+  if(btn2) btn2.style.display = (cat1Val && cat1Val !== '__new__') ? 'block' : 'none';
 }
 
 async function createCat2Inline(){
