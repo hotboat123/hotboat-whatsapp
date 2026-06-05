@@ -4651,38 +4651,7 @@ async function openModal(id){
             oninput="syncCostoTotal();syncPagoFaltante();calcIvaVenta()"></div>
         <div class="form-group">
           <label>IVA / Facturación</label>
-          <div style="display:flex;flex-direction:column;gap:.35rem">
-            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;
-                          background:${r.boletado?'rgba(16,185,129,.12)':'rgba(255,255,255,.04)'};
-                          border:1px solid ${r.boletado?'rgba(16,185,129,.4)':'var(--border)'};
-                          border-radius:8px;padding:.32rem .7rem;font-size:.82rem;
-                          color:${r.boletado?'#4ade80':'var(--muted)'};font-weight:600;transition:.2s"
-                   id="e-boletado-label">
-              <input type="checkbox" id="e-boletado" ${r.boletado?'checked':''}
-                style="accent-color:#4ade80"
-                onchange="calcIvaVenta();
-                  const lbl=document.getElementById('e-boletado-label');
-                  lbl.style.background=this.checked?'rgba(16,185,129,.12)':'rgba(255,255,255,.04)';
-                  lbl.style.borderColor=this.checked?'rgba(16,185,129,.4)':'var(--border)';
-                  lbl.style.color=this.checked?'#4ade80':'var(--muted)'">
-              🧾 Boletada
-            </label>
-            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;
-                          background:${r.incluir_en_utilidad===false?'rgba(251,191,36,.08)':'rgba(16,185,129,.08)'};
-                          border:1px solid ${r.incluir_en_utilidad===false?'rgba(251,191,36,.35)':'rgba(16,185,129,.3)'};
-                          border-radius:8px;padding:.32rem .7rem;font-size:.82rem;
-                          color:${r.incluir_en_utilidad===false?'#fbbf24':'#4ade80'};font-weight:600;transition:.2s"
-                   id="e-util-label">
-              <input type="checkbox" id="e-incluir-utilidad" ${r.incluir_en_utilidad===false?'':'checked'}
-                style="accent-color:#4ade80"
-                onchange="const lbl=document.getElementById('e-util-label');
-                  lbl.style.background=this.checked?'rgba(16,185,129,.08)':'rgba(251,191,36,.08)';
-                  lbl.style.borderColor=this.checked?'rgba(16,185,129,.3)':'rgba(251,191,36,.35)';
-                  lbl.style.color=this.checked?'#4ade80':'#fbbf24'">
-              📊 Utilidad bono
-            </label>
-          </div>
-          <div id="e-iva-venta-info" style="font-size:.72rem;color:var(--muted);margin-top:.3rem;line-height:1.5"></div>
+          <div id="e-iva-venta-info" style="font-size:.72rem;color:var(--muted);line-height:1.5;padding:.3rem 0">Sin pagos boletados aún.</div>
         </div>
       </div>
       <input type="hidden" id="e-costo_operativo_fijo" value="${r.costo_operativo_fijo??0}">
@@ -5189,8 +5158,8 @@ async function saveModal(id){
     medio_contacto:g('e-medio_contacto')||null,
     has_flex:hasFlex,
     flex_amount:flexAmt,
-    boletado: document.getElementById('e-boletado')?.checked ?? false,
-    incluir_en_utilidad: document.getElementById('e-incluir-utilidad')?.checked ?? true,
+    boletado: _pagos.some(p => p.boletado),
+    incluir_en_utilidad: true,
     num_personas: g('e-num_personas') ? +g('e-num_personas') : null,
     num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
     num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,
@@ -6294,7 +6263,7 @@ function renderPagos(){
   list.innerHTML = _pagos.map((p,i)=>`
     <div class="pago-row">
       <input class="p-amount" type="number" value="${p.amount||''}" placeholder="Monto $"
-        oninput="_pagos[${i}].amount=+this.value;renderPagosTotal()">
+        oninput="_pagos[${i}].amount=+this.value;renderPagosTotal();calcIvaVenta()">
       <select class="p-method" onchange="_pagos[${i}].method=this.value"
         style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none;flex:1">
         ${METODOS.map(m=>`<option value="${m}"${p.method===m?' selected':''}>${m}</option>`).join('')}
@@ -6302,7 +6271,12 @@ function renderPagos(){
       <input class="pago-fecha-native" type="date" value="${normalizePagoDate(p.date)}" data-pago-idx="${i}" autocomplete="off"
         style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .6rem;font-size:.83rem;outline:none;min-width:9.5rem"
         onchange="_pagos[${i}].date=normalizePagoDate(this.value)||''">
-      <button class="p-del" onclick="_pagos.splice(${i},1);renderPagos()" title="Eliminar">✕</button>
+      <label title="Boleta emitida" style="display:flex;align-items:center;gap:.25rem;cursor:pointer;font-size:.78rem;color:${p.boletado?'#4ade80':'var(--muted)'};white-space:nowrap;border:1px solid ${p.boletado?'rgba(16,185,129,.4)':'var(--border)'};border-radius:6px;padding:.3rem .45rem;background:${p.boletado?'rgba(16,185,129,.08)':'transparent'};transition:.15s">
+        <input type="checkbox" ${p.boletado?'checked':''} style="accent-color:#4ade80;margin:0"
+          onchange="_pagos[${i}].boletado=this.checked;const lbl=this.closest('label');lbl.style.color=this.checked?'#4ade80':'var(--muted)';lbl.style.borderColor=this.checked?'rgba(16,185,129,.4)':'var(--border)';lbl.style.background=this.checked?'rgba(16,185,129,.08)':'transparent';calcIvaVenta()">
+        🧾
+      </label>
+      <button class="p-del" onclick="_pagos.splice(${i},1);renderPagos();calcIvaVenta()" title="Eliminar">✕</button>
     </div>`).join('');
 }
 
@@ -6336,7 +6310,7 @@ function todayLocalISO(){
 }
 
 function addPago(){
-  _pagos.push({amount:'',method:'transferencia',date:todayLocalISO()});
+  _pagos.push({amount:'',method:'transferencia',date:todayLocalISO(),boletado:false});
   renderPagos();
 }
 
@@ -6898,17 +6872,16 @@ function syncFlexTotal(){
 }
 
 function calcIvaVenta(){
-  const total   = +(document.getElementById('e-ingreso_total')?.value || 0);
-  const boletado = document.getElementById('e-boletado')?.checked || false;
-  const info    = document.getElementById('e-iva-venta-info');
+  const info = document.getElementById('e-iva-venta-info');
   if(!info) return;
-  if(!boletado || !total){
-    info.textContent = boletado ? 'Ingresá el total para ver el desglose.' : 'Sin boleta — ingreso contabilizado sin IVA.';
+  const boletadoAmt = _pagos.filter(p => p.boletado).reduce((s,p) => s + (+p.amount||0), 0);
+  if(!boletadoAmt){
+    info.textContent = 'Sin pagos boletados.';
     return;
   }
-  const neto  = Math.round(total / 1.19);
-  const iva   = total - neto;
-  info.innerHTML = `Neto: <strong style="color:#4ade80">${fmtMoney(neto)}</strong> &nbsp;|&nbsp; IVA débito (19%): <strong style="color:#f87171">${fmtMoney(iva)}</strong>`;
+  const neto = Math.round(boletadoAmt / 1.19);
+  const iva  = boletadoAmt - neto;
+  info.innerHTML = `Boletado: <strong style="color:#4ade80">${fmtMoney(boletadoAmt)}</strong> · Neto: <strong style="color:#4ade80">${fmtMoney(neto)}</strong> · IVA: <strong style="color:#f87171">${fmtMoney(iva)}</strong>`;
 }
 
 // ── Extras catalog & editor ────────────────────────────────────────────────────
