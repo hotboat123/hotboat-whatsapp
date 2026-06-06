@@ -2645,11 +2645,28 @@ function goExtras(){
   renderExtras();
 }
 
+function _isTablaExtra(e){ return e.id === 'tabla_de_picoteo' || (e.id||'').includes('picoteo'); }
+
 function renderExtras(){
   const items = EXTRAS_CATALOG.map(e=>{
     const qty = S.extras[e.id] || 0;
     const sel = qty > 0;
-    const totalPrice = e.price * (qty || 1);
+    if(_isTablaExtra(e)){
+      return `
+      <div class="extra-item ${sel?'selected':''}" style="cursor:pointer;gap:.5rem" onclick="toggleTablaExtra('${e.id}')">
+        <div style="flex:1;min-width:0">
+          <div class="extra-name">${e.icon} ${e.name}</div>
+          ${sel
+            ? `<div style="font-size:.75rem;color:var(--gold);margin-top:.25rem;font-weight:600">✓ Elegirás los ingredientes al finalizar la reserva</div>`
+            : `<div style="font-size:.75rem;color:var(--muted);margin-top:.15rem">Elige tipo e ingredientes en el siguiente paso</div>`
+          }
+        </div>
+        <div style="display:flex;align-items:center;gap:.35rem;flex-shrink:0">
+          <span style="width:26px;height:26px;border-radius:50%;border:none;background:${sel?'rgba(255,200,0,.25)':'rgba(255,200,0,.1)'};color:var(--gold);font-size:1rem;line-height:26px;text-align:center;display:inline-block">${sel?'✓':'+'}</span>
+          <span class="extra-price" style="min-width:5rem;text-align:right">+$${e.price.toLocaleString('es-CL')}</span>
+        </div>
+      </div>`;
+    }
     const priceStr = e.price > 0 ? `+$${(e.price*(sel?qty:1)).toLocaleString('es-CL')}` : '+$0';
     return `
     <div class="extra-item ${sel?'selected':''}" style="cursor:default;gap:.5rem">
@@ -2700,6 +2717,10 @@ function addExtra(id){
 function removeExtra(id){
   if((S.extras[id] || 0) <= 1) delete S.extras[id];
   else S.extras[id]--;
+  renderExtras();
+}
+function toggleTablaExtra(id){
+  if(S.extras[id]) delete S.extras[id]; else S.extras[id] = 1;
   renderExtras();
 }
 function toggleFlex(){
@@ -3176,6 +3197,13 @@ async function submitBooking(){
     }
 
     _trackEvent('booking_completed', S.selectedDate);
+    // If tabla extra was selected, redirect through tabla selection flow before payment
+    const _tablaExt = EXTRAS_CATALOG.find(e => _isTablaExtra(e));
+    if(_tablaExt && (S.extras[_tablaExt.id]||0) > 0){
+      const nextUrl = S.paymentUrl || (location.origin + '/');
+      window.location.href = `/tabla/${encodeURIComponent(S.bookingRef)}?next=${encodeURIComponent(nextUrl)}`;
+      return;
+    }
     renderPayment();
   }catch(e){
     _pendingAlojBooking = null;

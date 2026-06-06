@@ -190,6 +190,15 @@ def _seed_tabla_products() -> None:
                     """,
                     (name.lower(), name, cost, icon),
                 )
+            # Seed the master "Tabla de picoteo" booking extra (show_in_booking=True, price $25k default)
+            cur.execute(
+                """
+                INSERT INTO extras_visibility
+                    (extra_name_lower, name, show_in_booking, costo, precio_venta, icon, sort_order, updated_at)
+                VALUES ('tabla_de_picoteo', 'Tabla de picoteo', true, 0, 25000, '🧺', 80, NOW())
+                ON CONFLICT (extra_name_lower) DO NOTHING
+                """,
+            )
         conn.commit()
     logger.info("Tabla ingredients seeded into extras_visibility (%d products)", len(_TABLA_INGREDIENTS))
 

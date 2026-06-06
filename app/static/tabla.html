@@ -176,7 +176,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   <div id="success">
     <div class="check-circle">✓</div>
     <h2>¡Tabla confirmada!</h2>
-    <p>Tu selección fue guardada. Nos vemos a bordo 🛥</p>
+    <p id="success-msg">Tu selección fue guardada. Nos vemos a bordo 🛥</p>
   </div>
 
   <!-- Step bar (shared) -->
@@ -264,6 +264,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 
 <script>
 const bookingRef = location.pathname.split('/tabla/')[1] || '';
+const _nextUrl = new URLSearchParams(location.search).get('next') || null;
 let catalog = {};
 let defaultPrice = 25000;
 let sel = { type: null, tier1: null, tier2: [], tier3: [] };
@@ -322,6 +323,13 @@ function showExistingDone(ex) {
     </div>`;
   document.getElementById('done-summary').innerHTML = html;
   showScreen('already-done');
+  if(_nextUrl){
+    const btn = document.createElement('a');
+    btn.href = _nextUrl;
+    btn.style.cssText = 'display:block;margin-top:1.2rem;padding:.85rem;background:var(--blue);color:#fff;border-radius:12px;text-align:center;text-decoration:none;font-weight:700;font-size:.95rem';
+    btn.textContent = 'Continuar al pago →';
+    document.getElementById('already-done').appendChild(btn);
+  }
 }
 
 function renderTypeGrid() {
@@ -488,6 +496,10 @@ async function confirmTabla() {
     document.getElementById('step-bar').style.display = 'none';
     [1,2,3,4,5].forEach(n => { const el = document.getElementById('step-'+n); if(el) el.classList.remove('active'); });
     showScreen('success');
+    if(_nextUrl){
+      document.getElementById('success-msg').textContent = 'Tu selección fue guardada. Redirigiendo al pago...';
+      setTimeout(() => { window.location.href = _nextUrl; }, 2000);
+    }
   } catch(e) {
     showToast(e.message);
     btn.disabled = false;
