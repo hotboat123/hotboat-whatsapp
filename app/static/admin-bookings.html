@@ -250,12 +250,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .extras-hdr{display:grid;grid-template-columns:1fr 64px 90px 80px 28px;gap:.4rem;
   font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding-bottom:.3rem}
 .extras-add-row{display:flex;gap:.5rem;margin-top:.5rem;align-items:center}
-.extras-add-row select{flex:1;background:var(--surface);border:1px solid var(--border);color:#60a5fa;
-  border-radius:8px;padding:.4rem .7rem;font-size:.82rem;outline:none;cursor:pointer;
+.extras-add-row input[list]{flex:1;background:var(--surface);border:1px solid var(--border);color:#fff;
+  border-radius:8px;padding:.4rem .7rem;font-size:.82rem;outline:none;
   transition:border-color .15s,box-shadow .15s}
-.extras-add-row select:focus{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(96,165,250,.2)}
-.extras-add-row select option{color:#60a5fa;background:var(--surface)}
-.extras-add-row select option:first-child{color:var(--muted)}
+.extras-add-row input[list]:focus{border-color:#60a5fa;box-shadow:0 0 0 2px rgba(96,165,250,.2)}
+.extras-add-row input[list]::placeholder{color:var(--muted)}
 .addon-sel{flex:2;min-width:150px;font-size:.8rem;padding:.38rem .55rem;
   background:var(--surface);border:1px solid var(--border);color:#60a5fa;
   border-radius:8px;outline:none;cursor:pointer;transition:border-color .15s,box-shadow .15s}
@@ -5050,9 +5049,11 @@ async function openModal(id){
         </div>
         <div id="extras-list"></div>
         <div class="extras-add-row">
-          <select id="extras-catalog-sel">
-            <option value="">— Seleccionar del catálogo —</option>
-          </select>
+          <input id="extras-catalog-sel" list="extras-catalog-list"
+            placeholder="Buscar extra..."
+            autocomplete="off"
+            onkeydown="if(event.key==='Enter')addExtraFromSelect()">
+          <datalist id="extras-catalog-list"></datalist>
           <button type="button" onclick="addExtraFromSelect()">+ Agregar</button>
         </div>
         <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap">
@@ -7583,10 +7584,9 @@ function initExtrasEditor(extrasJson){
 }
 
 function populateCatalogSelect(){
-  const sel = document.getElementById('extras-catalog-sel');
-  if(!sel) return;
-  sel.innerHTML = '<option value="">— Seleccionar del catálogo —</option>' +
-    EXTRAS_CATALOG.map(e=>`<option value="${e.key}" data-price="${e.price}">${e.name} — ${fmtMoney(e.price)}</option>`).join('');
+  const dl = document.getElementById('extras-catalog-list');
+  if(!dl) return;
+  dl.innerHTML = EXTRAS_CATALOG.map(e=>`<option value="${escHtml(e.name)} — ${fmtMoney(e.price)}">`).join('');
 }
 
 function _renderTablaRow(item, i){
@@ -7667,26 +7667,26 @@ function removeExtraItem(i){
 }
 
 function addExtraFromSelect(){
-  const sel = document.getElementById('extras-catalog-sel');
-  if(!sel||!sel.value) return;
-  const key = sel.value;
-  const opt = sel.options[sel.selectedIndex];
-  const price = +(opt.dataset.price||0);
-  const cat = EXTRAS_CATALOG.find(e=>e.key===key);
-  // Check if already in list
-  const existing = _extrasItems.find(e=>e.key===key);
+  const inp = document.getElementById('extras-catalog-sel');
+  if(!inp||!inp.value.trim()) return;
+  // Value may be "Name — $price" or just the name; extract name part
+  const rawVal = inp.value.trim();
+  const namePart = rawVal.includes(' — ') ? rawVal.split(' — ')[0].trim() : rawVal;
+  const cat = EXTRAS_CATALOG.find(e=>e.name===namePart);
+  if(!cat){ showToast('Selecciona un extra válido de la lista'); inp.value=''; return; }
+  const existing = _extrasItems.find(e=>e.key===cat.key);
   if(existing){
     existing.qty += 1;
   } else {
     _extrasItems.push({
-      key,
-      name: cat ? cat.name : key.replace(/_/g,' '),
+      key: cat.key,
+      name: cat.name,
       qty: 1,
-      unit_price: price,
-      unit_cost: cat ? (cat.cost||0) : 0,
+      unit_price: cat.price||0,
+      unit_cost: cat.cost||0,
     });
   }
-  sel.value='';
+  inp.value='';
   renderExtrasEditor();
 }
 
