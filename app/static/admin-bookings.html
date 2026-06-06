@@ -5339,6 +5339,8 @@ async function loadTablasCatalogAdmin(){
   if(!grid) return;
   grid.innerHTML='<div style="color:var(--muted);font-size:.85rem">Cargando...</div>';
   try{
+    // Ensure extras catalog is loaded so selects are populated
+    if(!_extrasCatData.length) await loadExtrasCat();
     const d = await api('/api/admin/tabla/catalog');
     _tablasCatItems = d.items||[];
     _tablasCatMeta  = d.types_meta||{};
@@ -5368,9 +5370,14 @@ function renderTablasCatalogAdmin(){
         <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.3rem">${tierLabel[tier]}</div>
         <div id="tci-chips-${t}-${tier}">${chips||'<span style="font-size:.75rem;color:var(--muted)">Sin ingredientes</span>'}</div>
         <div style="display:flex;gap:.4rem;margin-top:.4rem">
-          <input id="tci-inp-${t}-${tier}" placeholder="Nuevo ingrediente..." type="text"
-            onkeydown="if(event.key==='Enter')tciAdd('${t}',${tier})"
+          <select id="tci-inp-${t}-${tier}"
             style="flex:1;font-size:.8rem;padding:.3rem .6rem;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:7px;outline:none">
+            <option value="">— Seleccionar ingrediente —</option>
+            ${(_extrasCatData.length?_extrasCatData:EXTRAS_CATALOG)
+              .filter(e=>!items.some(it=>it.ingredient===e.name))
+              .map(e=>`<option value="${escHtml(e.name)}">${escHtml(e.name)}</option>`)
+              .join('')}
+          </select>
           <button onclick="tciAdd('${t}',${tier})"
             style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.3rem .7rem;font-size:.82rem;font-weight:700;cursor:pointer">+</button>
         </div>
