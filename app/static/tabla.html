@@ -268,6 +268,7 @@ const _nextUrl = new URLSearchParams(location.search).get('next') || null;
 let catalog = {};
 let defaultPrice = 25000;
 let sel = { type: null, tier1: null, tier2: [], tier3: [] };
+let _isDemo = false;
 
 async function init() {
   if (!bookingRef) { showScreen('not-found'); return; }
@@ -277,10 +278,13 @@ async function init() {
 
     catalog = d.catalog;
     defaultPrice = d.default_price || 25000;
+    _isDemo = !!d.is_demo;
 
-    document.getElementById('badge-name').textContent = d.customer_name || 'Cliente';
-    document.getElementById('badge-date').textContent = fmtDate(d.booking_date) + (d.booking_time ? ' · ' + d.booking_time : '');
-    document.getElementById('booking-badge').style.display = 'inline-flex';
+    if(!_isDemo){
+      document.getElementById('badge-name').textContent = d.customer_name || 'Cliente';
+      document.getElementById('badge-date').textContent = fmtDate(d.booking_date) + (d.booking_time ? ' · ' + d.booking_time : '');
+      document.getElementById('booking-badge').style.display = 'inline-flex';
+    }
 
     if (d.existing && d.existing.completed_at) {
       showExistingDone(d.existing);
@@ -468,6 +472,10 @@ function renderSummary() {
       <span class="sr-items">${sel.tier3.join('<br>')}</span>
     </div>`;
   document.getElementById('summary-price').textContent = '$' + defaultPrice.toLocaleString('es-CL');
+  if(_isDemo){
+    document.getElementById('btn-confirm-txt').textContent = '¡Me gusta esta tabla! 🍽';
+    document.getElementById('btn-confirm').style.background = 'var(--blue)';
+  }
 }
 
 async function confirmTabla() {
@@ -496,7 +504,9 @@ async function confirmTabla() {
     document.getElementById('step-bar').style.display = 'none';
     [1,2,3,4,5].forEach(n => { const el = document.getElementById('step-'+n); if(el) el.classList.remove('active'); });
     showScreen('success');
-    if(_nextUrl){
+    if(_isDemo){
+      document.getElementById('success-msg').textContent = '¡Perfecto! Cuando hagas tu reserva, podrás elegir esta misma tabla 🎉';
+    } else if(_nextUrl){
       document.getElementById('success-msg').textContent = 'Tu selección fue guardada. Redirigiendo al pago...';
       setTimeout(() => { window.location.href = _nextUrl; }, 2000);
     }

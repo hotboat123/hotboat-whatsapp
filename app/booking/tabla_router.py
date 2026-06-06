@@ -292,6 +292,18 @@ async def get_tabla_catalog():
 async def get_tabla_info(booking_ref: str):
     from app.db.connection import get_connection
 
+    if booking_ref.lower() == "demo":
+        return {
+            "booking_ref": "demo",
+            "customer_name": None,
+            "booking_date": None,
+            "booking_time": None,
+            "catalog": _get_catalog_from_db(),
+            "default_price": DEFAULT_PRICE,
+            "existing": None,
+            "is_demo": True,
+        }
+
     booking = _resolve_booking(booking_ref)
     if not booking:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
@@ -327,6 +339,9 @@ async def get_tabla_info(booking_ref: str):
 @tabla_router.post("/api/tabla/{booking_ref}")
 async def submit_tabla(booking_ref: str, payload: TablaPayload):
     from app.db.connection import get_connection
+
+    if booking_ref.lower() == "demo":
+        return {"status": "ok", "demo": True}
 
     booking = _resolve_booking(booking_ref)
     if not booking:
