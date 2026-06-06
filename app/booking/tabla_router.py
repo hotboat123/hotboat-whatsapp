@@ -51,6 +51,34 @@ TABLA_CATALOG = {
 
 DEFAULT_PRICE = 25000
 
+# All unique ingredients across all tabla types with their purchase cost (CLP)
+# Prices from supplier catalog. show_in_booking=False so they don't appear
+# in the regular booking extras dropdown — only used in tabla flow + stock.
+_TABLA_INGREDIENTS = [
+    ("Aceitunas drvillanas 200gr",          3090, "🫒"),
+    ("Aceitunas sevillanas 200gr",          3090, "🫒"),
+    ("Hummus Buka 220g",                    2595, "🥙"),
+    ("Papas Lay's 150g",                    2499, "🍟"),
+    ("Galletas Chip Choco 150gr",           2599, "🍪"),
+    ("Chocolate sahnenuss 90gr",            2495, "🍫"),
+    ("Jamón serrano",                       2100, "🥩"),
+    ("Jamón serrano 60gr",                  2100, "🥩"),
+    ("Salame premium",                      2100, "🍖"),
+    ("Cajú premium",                        2100, "🥜"),
+    ("Queso crema + mermelada pimentón",    2000, "🧀"),
+    ("Cranberries 150gr",                   1990, "🫐"),
+    ("Pepinillos 200gr",                    1799, "🥒"),
+    ("Queso crema + soya y sésamo",         1750, "🧀"),
+    ("Grisines",                            1690, "🥖"),
+    ("Grisines 120gr",                      1690, "🥖"),
+    ("Chocolate vegano 140gr",              1248, "🍫"),
+    ("Maní 150gr",                           999, "🥜"),
+    ("Galletas obsesión",                    999, "🍪"),
+    ("Alfajor entrelagos",                   998, "🍬"),
+    ("Crackers 90gr",                        799, "🍘"),
+    ("Super 8",                              399, "🍫"),
+]
+
 
 def _ensure_tabla_table() -> None:
     """Create tabla_selections table if it doesn't exist yet (idempotent)."""
@@ -72,6 +100,33 @@ def _ensure_tabla_table() -> None:
                 CREATE INDEX IF NOT EXISTS idx_tabla_booking_ref ON tabla_selections(booking_ref);
             """)
             conn.commit()
+
+
+def _seed_tabla_products() -> None:
+    """Insert tabla ingredients into extras_visibility with their purchase cost.
+    Uses ON CONFLICT DO NOTHING — never overwrites admin edits.
+    show_in_booking=False so they don't appear in the regular extras dropdown.
+    """
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Ensure required columns exist first
+            for col_def in ["costo INTEGER", "icon TEXT", "precio_venta INTEGER",
+                            "name TEXT", "description TEXT"]:
+                cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
+            for name, cost, icon in _TABLA_INGREDIENTS:
+                cur.execute(
+                    """
+                    INSERT INTO extras_visibility
+                        (extra_name_lower, name, show_in_booking, costo, precio_venta, icon, sort_order, updated_at)
+                    VALUES (%s, %s, false, %s, 0, %s, 900, NOW())
+                    ON CONFLICT (extra_name_lower) DO NOTHING
+                    """,
+                    (name.lower(), name, cost, icon),
+                )
+        conn.commit()
+    logger.info("Tabla ingredients seeded into extras_visibility (%d products)", len(_TABLA_INGREDIENTS))
 
 
 def _tabla_html() -> str:
