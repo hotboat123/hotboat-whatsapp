@@ -362,6 +362,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('stock')" id="nav-stock">
       <span class="ni">📦</span> Control de Stock
     </div>
+    <div class="nav-item" onclick="showSection('tablas-admin');loadTablasCatalogAdmin()" id="nav-tablas-admin">
+      <span class="ni">🍽</span> Tablas
+    </div>
     <div class="nav-item" onclick="showSection('coupons')" id="nav-coupons">
       <span class="ni">🎟️</span> Cupones
     </div>
@@ -579,6 +582,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th>Nombre extra</th>
               <th>Descripción (app)</th>
               <th style="text-align:center">Mostrar en<br>reservas</th>
+              <th style="text-align:center" title="Incluir en control de stock">Stock</th>
               <th style="text-align:right">Precio venta</th>
               <th style="text-align:right">Costo</th>
               <th style="text-align:right">Utilidad</th>
@@ -660,6 +664,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
 
     </div><!-- /section-stock -->
+
+    <!-- TABLAS ADMIN -->
+    <div id="section-tablas-admin" class="section">
+      <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:1.2rem;flex-wrap:wrap">
+        <div style="font-size:.8rem;color:var(--muted)">Edita los ingredientes de cada tipo y tier. Los cambios afectan la página del cliente en tiempo real.</div>
+      </div>
+      <div id="tablas-cat-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem"></div>
+    </div><!-- /section-tablas-admin -->
 
     <!-- CUPONES -->
     <div id="section-coupons" class="section">
@@ -4313,7 +4325,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',logs:'Logs del servidor'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',logs:'Logs del servidor'};
   document.getElementById('section-title').textContent = titles[name]||name;
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
@@ -5294,6 +5306,20 @@ function copyFirmaLink(bookingRef){
     prompt('Copia este link:', url);
   });
 }
+async function toggleExtraStock(extraId, stockProductId){
+  try{
+    if(stockProductId){
+      if(!confirm('¿Quitar este producto del control de stock? Se mantiene el historial.')) return;
+      await api(`/api/admin/precios-extras/${encodeURIComponent(extraId)}/link-stock`,{method:'DELETE'});
+      showToast('Producto quitado del stock');
+    } else {
+      await api(`/api/admin/precios-extras/${encodeURIComponent(extraId)}/link-stock`,{method:'POST'});
+      showToast('✓ Producto agregado al stock con BOM automático');
+    }
+    await loadExtrasCat();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
 function copyTablaLink(bookingRef){
   if(!bookingRef){ showToast('Sin booking_ref'); return; }
   const url = `${location.origin}/tabla/${bookingRef}`;
@@ -5302,6 +5328,118 @@ function copyTablaLink(bookingRef){
   }).catch(()=>{
     prompt('Copia este link:', url);
   });
+}
+
+// ── Tablas Catalog Admin ──────────────────────────────────────────────────────
+let _tablasCatItems = [];
+let _tablasCatMeta  = {};
+
+async function loadTablasCatalogAdmin(){
+  const grid = document.getElementById('tablas-cat-grid');
+  if(!grid) return;
+  grid.innerHTML='<div style="color:var(--muted);font-size:.85rem">Cargando...</div>';
+  try{
+    const d = await api('/api/admin/tabla/catalog');
+    _tablasCatItems = d.items||[];
+    _tablasCatMeta  = d.types_meta||{};
+    renderTablasCatalogAdmin();
+  }catch(e){ grid.innerHTML=`<div style="color:var(--red)">${e.message}</div>`; }
+}
+
+function renderTablasCatalogAdmin(){
+  const grid = document.getElementById('tablas-cat-grid');
+  if(!grid) return;
+  const types = Object.keys(TABLA_CATALOG);
+  const tierLabel = {1:'⭐ Tier 1 — Elige 1 (premium)', 2:'🎯 Tier 2 — Elige 2 (medios)', 3:'✨ Tier 3 — Elige 3 (extras)'};
+  grid.innerHTML = types.map(t=>{
+    const meta = _tablasCatMeta[t]||TABLA_CATALOG[t]||{};
+    const tiersHtml = [1,2,3].map(tier=>{
+      const items = _tablasCatItems.filter(x=>x.tabla_type===t&&x.tier===tier);
+      const chips = items.map(it=>`
+        <div style="display:inline-flex;align-items:center;gap:.3rem;background:var(--surface);
+          border:1px solid var(--border);border-radius:20px;padding:.22rem .5rem .22rem .7rem;font-size:.78rem;margin:.2rem">
+          <span>${escHtml(it.ingredient)}</span>
+          <button onclick="tciMove(${it.id},'${t}',${tier})" title="Mover a otro tipo/tier"
+            style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:0 .1rem;line-height:1">⇄</button>
+          <button onclick="tciDelete(${it.id})" title="Eliminar"
+            style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;padding:0 .2rem;line-height:1">✕</button>
+        </div>`).join('');
+      return `<div style="margin-bottom:.75rem">
+        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.3rem">${tierLabel[tier]}</div>
+        <div id="tci-chips-${t}-${tier}">${chips||'<span style="font-size:.75rem;color:var(--muted)">Sin ingredientes</span>'}</div>
+        <div style="display:flex;gap:.4rem;margin-top:.4rem">
+          <input id="tci-inp-${t}-${tier}" placeholder="Nuevo ingrediente..." type="text"
+            onkeydown="if(event.key==='Enter')tciAdd('${t}',${tier})"
+            style="flex:1;font-size:.8rem;padding:.3rem .6rem;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:7px;outline:none">
+          <button onclick="tciAdd('${t}',${tier})"
+            style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.3rem .7rem;font-size:.82rem;font-weight:700;cursor:pointer">+</button>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.1rem">
+      <div style="font-size:.95rem;font-weight:700;margin-bottom:.9rem">${meta.emoji||'🍽'} ${meta.label||t}</div>
+      ${tiersHtml}
+    </div>`;
+  }).join('');
+}
+
+async function tciAdd(tablaType, tier){
+  const inp = document.getElementById(`tci-inp-${tablaType}-${tier}`);
+  const ingredient = inp?.value.trim();
+  if(!ingredient){ showToast('Escribe el nombre del ingrediente'); return; }
+  try{
+    await api('/api/admin/tabla/catalog/item',{method:'POST',body:JSON.stringify({tabla_type:tablaType,tier,ingredient})});
+    inp.value='';
+    await loadTablasCatalogAdmin();
+    showToast('✓ Ingrediente agregado');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function tciDelete(itemId){
+  if(!confirm('¿Eliminar este ingrediente del catálogo?')) return;
+  try{
+    await api(`/api/admin/tabla/catalog/item/${itemId}`,{method:'DELETE'});
+    await loadTablasCatalogAdmin();
+    showToast('Ingrediente eliminado');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function tciMove(itemId, currentType, currentTier){
+  const types = Object.keys(TABLA_CATALOG);
+  const typeOpts = types.map(t=>`<option value="${t}" ${t===currentType?'selected':''}>${TABLA_CATALOG[t]?.emoji||''} ${TABLA_CATALOG[t]?.label||t}</option>`).join('');
+  const tierOpts = [1,2,3].map(n=>`<option value="${n}" ${n===currentTier?'selected':''}>Tier ${n}</option>`).join('');
+  document.body.insertAdjacentHTML('beforeend',`
+    <div id="tci-move-overlay" onclick="if(event.target===this)this.remove()"
+      style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10001;display:flex;align-items:center;justify-content:center;padding:1rem">
+      <div style="background:var(--card);border-radius:14px;padding:1.4rem;width:100%;max-width:340px">
+        <div style="font-weight:700;margin-bottom:1rem">⇄ Mover ingrediente</div>
+        <div style="margin-bottom:.6rem">
+          <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.3rem">Tabla</label>
+          <select id="tci-move-type" style="width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem">${typeOpts}</select>
+        </div>
+        <div style="margin-bottom:1rem">
+          <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.3rem">Tier</label>
+          <select id="tci-move-tier" style="width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem">${tierOpts}</select>
+        </div>
+        <div style="display:flex;gap:.6rem">
+          <button onclick="document.getElementById('tci-move-overlay').remove()"
+            style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.6rem;cursor:pointer">Cancelar</button>
+          <button onclick="_tciMoveConfirm(${itemId})"
+            style="flex:2;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.6rem;font-weight:700;cursor:pointer">Mover</button>
+        </div>
+      </div>
+    </div>`);
+}
+
+async function _tciMoveConfirm(itemId){
+  const tablaType = document.getElementById('tci-move-type')?.value;
+  const tier = +document.getElementById('tci-move-tier')?.value;
+  document.getElementById('tci-move-overlay')?.remove();
+  try{
+    await api(`/api/admin/tabla/catalog/item/${itemId}`,{method:'PUT',body:JSON.stringify({tabla_type:tablaType,tier})});
+    await loadTablasCatalogAdmin();
+    showToast('Ingrediente movido');
+  }catch(e){ showToast('Error: '+e.message); }
 }
 
 // ── Tabla config modal ────────────────────────────────────────────────────────
@@ -6826,6 +6964,20 @@ function renderExtrasCat(list){
             onchange="saveExtraVisibility('${e.id}', this.checked)">
           <span class="toggle-slider"></span>
         </label>
+      </td>
+      <td style="text-align:center">
+        ${e.stock_product_id
+          ? `<button onclick="toggleExtraStock('${e.id}',${e.stock_product_id})"
+               title="En stock — clic para quitar"
+               style="background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.4);border-radius:6px;padding:.22rem .5rem;font-size:.78rem;cursor:pointer;font-weight:700;white-space:nowrap">
+               📦 ✓
+             </button>`
+          : `<button onclick="toggleExtraStock('${e.id}',null)"
+               title="Agregar a control de stock"
+               style="background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.22rem .5rem;font-size:.78rem;cursor:pointer;white-space:nowrap">
+               📦 +
+             </button>`
+        }
       </td>
       <td>
         <input class="ec-input" type="number" min="0" value="${e.price||0}"

@@ -1,11 +1,11 @@
-"""Client-facing endpoints for tabla (food board) selection per reservation."""
+"""Client-facing + admin endpoints for tabla (food board) feature."""
 import json as _json
 import logging
 import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -100,6 +100,71 @@ def _ensure_tabla_table() -> None:
                 CREATE INDEX IF NOT EXISTS idx_tabla_booking_ref ON tabla_selections(booking_ref);
             """)
             conn.commit()
+
+
+def _ensure_catalog_table() -> None:
+    """Create tabla_catalog_items table if not exists (idempotent)."""
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tabla_catalog_items (
+                  id          SERIAL PRIMARY KEY,
+                  tabla_type  VARCHAR(50) NOT NULL,
+                  tier        INTEGER NOT NULL CHECK (tier IN (1, 2, 3)),
+                  ingredient  TEXT NOT NULL,
+                  sort_order  INTEGER DEFAULT 0,
+                  UNIQUE (tabla_type, tier, ingredient)
+                );
+                CREATE INDEX IF NOT EXISTS idx_tci_type ON tabla_catalog_items(tabla_type, tier);
+            """)
+            conn.commit()
+
+
+def _seed_catalog_defaults() -> None:
+    """Seed the DB catalog from hardcoded TABLA_CATALOG defaults (ON CONFLICT DO NOTHING)."""
+    from app.db.connection import get_connection
+
+    rows = []
+    for t_type, cat in TABLA_CATALOG.items():
+        for tier_num, key in ((1, "tier1"), (2, "tier2"), (3, "tier3")):
+            for i, ing in enumerate(cat[key]):
+                rows.append((t_type, tier_num, ing, i))
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for t_type, tier_num, ing, sort_order in rows:
+                cur.execute(
+                    """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order)
+                       VALUES (%s, %s, %s, %s)
+                       ON CONFLICT (tabla_type, tier, ingredient) DO NOTHING""",
+                    (t_type, tier_num, ing, sort_order),
+                )
+        conn.commit()
+
+
+def _get_catalog_from_db() -> dict:
+    """Return catalog in same format as TABLA_CATALOG, reading from DB.
+    Falls back to hardcoded TABLA_CATALOG if DB not ready."""
+    from app.db.connection import get_connection
+
+    result = {k: {**v, "tier1": [], "tier2": [], "tier3": []} for k, v in TABLA_CATALOG.items()}
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT tabla_type, tier, ingredient FROM tabla_catalog_items ORDER BY tabla_type, tier, sort_order, ingredient"
+                )
+                rows = cur.fetchall()
+        if rows:
+            for t_type, tier_num, ing in rows:
+                if t_type in result:
+                    result[t_type][f"tier{tier_num}"].append(ing)
+    except Exception as e:
+        logger.warning("_get_catalog_from_db fallback to hardcoded: %s", e)
+        return {k: {**v} for k, v in TABLA_CATALOG.items()}
+    return result
 
 
 def _seed_tabla_products() -> None:
@@ -211,7 +276,7 @@ async def serve_tabla_form(booking_ref: str):
 
 @tabla_router.get("/api/tabla/catalog")
 async def get_tabla_catalog():
-    return {"catalog": TABLA_CATALOG, "default_price": DEFAULT_PRICE}
+    return {"catalog": _get_catalog_from_db(), "default_price": DEFAULT_PRICE}
 
 
 @tabla_router.get("/api/tabla/{booking_ref}/info")
@@ -244,7 +309,7 @@ async def get_tabla_info(booking_ref: str):
         "customer_name": booking["customer_name"],
         "booking_date": booking["booking_date"],
         "booking_time": booking["booking_time"],
-        "catalog": TABLA_CATALOG,
+        "catalog": _get_catalog_from_db(),
         "default_price": DEFAULT_PRICE,
         "existing": existing,
     }
@@ -258,10 +323,11 @@ async def submit_tabla(booking_ref: str, payload: TablaPayload):
     if not booking:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
-    if payload.tabla_type not in TABLA_CATALOG:
+    live_catalog = _get_catalog_from_db()
+    if payload.tabla_type not in live_catalog:
         raise HTTPException(status_code=400, detail="Tipo de tabla inválido")
 
-    cat = TABLA_CATALOG[payload.tabla_type]
+    cat = live_catalog[payload.tabla_type]
     if payload.elige_1 not in cat["tier1"]:
         raise HTTPException(status_code=400, detail="Ingrediente tier 1 inválido")
     if len(payload.elige_2) != 2 or not all(i in cat["tier2"] for i in payload.elige_2):
@@ -329,3 +395,100 @@ async def submit_tabla(booking_ref: str, payload: TablaPayload):
         conn.commit()
 
     return {"ok": True, "tabla_type": payload.tabla_type}
+
+
+# ── Admin: Tabla Catalog CRUD ─────────────────────────────────────────────────
+
+@tabla_router.get("/api/admin/tabla/catalog")
+async def admin_get_catalog():
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, tabla_type, tier, ingredient, sort_order
+                FROM tabla_catalog_items
+                ORDER BY tabla_type, tier, sort_order, ingredient
+            """)
+            rows = [{"id": r[0], "tabla_type": r[1], "tier": r[2], "ingredient": r[3], "sort_order": r[4]}
+                    for r in cur.fetchall()]
+    # Also return labels/emojis from hardcoded TABLA_CATALOG
+    types_meta = {k: {"label": v["label"], "emoji": v["emoji"]} for k, v in TABLA_CATALOG.items()}
+    return {"items": rows, "types_meta": types_meta}
+
+
+@tabla_router.post("/api/admin/tabla/catalog/item")
+async def admin_add_catalog_item(request: Request):
+    from app.db.connection import get_connection
+
+    body = await request.json()
+    tabla_type = (body.get("tabla_type") or "").strip()
+    tier = int(body.get("tier") or 0)
+    ingredient = (body.get("ingredient") or "").strip()
+
+    if tabla_type not in TABLA_CATALOG:
+        raise HTTPException(status_code=400, detail="Tipo de tabla inválido")
+    if tier not in (1, 2, 3):
+        raise HTTPException(status_code=400, detail="Tier debe ser 1, 2 o 3")
+    if not ingredient:
+        raise HTTPException(status_code=400, detail="Ingrediente requerido")
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order)
+                   VALUES (%s, %s, %s,
+                     COALESCE((SELECT MAX(sort_order)+1 FROM tabla_catalog_items
+                               WHERE tabla_type=%s AND tier=%s), 0))
+                   ON CONFLICT (tabla_type, tier, ingredient) DO NOTHING
+                   RETURNING id""",
+                (tabla_type, tier, ingredient, tabla_type, tier),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    return {"ok": True, "id": row[0] if row else None}
+
+
+@tabla_router.delete("/api/admin/tabla/catalog/item/{item_id}")
+async def admin_delete_catalog_item(item_id: int):
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM tabla_catalog_items WHERE id=%s", (item_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+@tabla_router.put("/api/admin/tabla/catalog/item/{item_id}")
+async def admin_move_catalog_item(item_id: int, request: Request):
+    """Move ingredient to a different tabla_type or tier."""
+    from app.db.connection import get_connection
+
+    body = await request.json()
+    tabla_type = (body.get("tabla_type") or "").strip()
+    tier = int(body.get("tier") or 0)
+
+    if tabla_type and tabla_type not in TABLA_CATALOG:
+        raise HTTPException(status_code=400, detail="Tipo de tabla inválido")
+    if tier and tier not in (1, 2, 3):
+        raise HTTPException(status_code=400, detail="Tier inválido")
+
+    sets = []
+    vals = []
+    if tabla_type:
+        sets.append("tabla_type=%s"); vals.append(tabla_type)
+    if tier:
+        sets.append("tier=%s"); vals.append(tier)
+    if not sets:
+        raise HTTPException(status_code=400, detail="Nada que actualizar")
+
+    vals.append(item_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE tabla_catalog_items SET {', '.join(sets)} WHERE id=%s",
+                vals,
+            )
+        conn.commit()
+    return {"ok": True}

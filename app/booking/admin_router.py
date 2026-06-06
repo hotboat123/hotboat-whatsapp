@@ -1570,6 +1570,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                     "name_pt TEXT",
                     "description_en TEXT",
                     "description_pt TEXT",
+                    "stock_product_id INTEGER",
                 ]:
                     cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
                 conn.commit()
@@ -1586,14 +1587,16 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                            COALESCE(name_en, '')       AS name_en,
                            COALESCE(name_pt, '')       AS name_pt,
                            COALESCE(description_en, '') AS description_en,
-                           COALESCE(description_pt, '') AS description_pt
+                           COALESCE(description_pt, '') AS description_pt,
+                           stock_product_id
                     FROM extras_visibility
                     ORDER BY sort_order, extra_name_lower
                 """)
                 extras = []
                 for (name_lower, name, show_in_booking, sort_order,
                      description, price, cost, icon,
-                     name_en, name_pt, description_en, description_pt) in cur.fetchall():
+                     name_en, name_pt, description_en, description_pt,
+                     stock_product_id) in cur.fetchall():
                     display_name = name or name_lower
                     extras.append({
                         "id": name_lower,
@@ -1609,6 +1612,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                         "description_pt": description_pt or "",
                         "show_in_booking": bool(show_in_booking),
                         "sort_order": int(sort_order),
+                        "stock_product_id": stock_product_id,
                     })
         return {"extras": extras}
     except Exception as e:
@@ -1789,6 +1793,91 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
         return {"ok": True}
     except Exception as e:
         logger.error(f"Error deleting extra {extra_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.post("/api/admin/precios-extras/{extra_id}/link-stock")
+async def link_extra_to_stock(extra_id: str, x_admin_key: str = Header("")):
+    """Create a stock_products entry for this extra and link it via extras_visibility.stock_product_id.
+    Also creates a 1-unit BOM so stock is deducted when the extra is consumed.
+    Idempotent: if already linked, returns existing stock_product_id."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Get the extra
+                cur.execute(
+                    "SELECT name, COALESCE(costo,0), stock_product_id FROM extras_visibility WHERE extra_name_lower=%s",
+                    (extra_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Extra no encontrado")
+                name, cost, existing_spid = row
+
+                if existing_spid:
+                    return {"ok": True, "stock_product_id": existing_spid, "created": False}
+
+                # Create stock_products entry
+                cur.execute(
+                    """INSERT INTO stock_products (name, category, unit, current_stock, min_stock, cost_per_unit, notes, is_active)
+                       VALUES (%s, 'Tablas', 'unidad', 0, 0, %s, '', TRUE)
+                       RETURNING id""",
+                    (name, cost),
+                )
+                spid = cur.fetchone()[0]
+
+                # Create BOM: 1 unit of this stock product per extra serving
+                slug = _slugify_extra(name)
+                cur.execute(
+                    """INSERT INTO extras_bom (extra_slug, product_id, quantity, is_variant, variant_label)
+                       VALUES (%s, %s, 1, FALSE, '')
+                       ON CONFLICT DO NOTHING""",
+                    (slug, spid),
+                )
+
+                # Link back to extras_visibility
+                cur.execute(
+                    "UPDATE extras_visibility SET stock_product_id=%s WHERE extra_name_lower=%s",
+                    (spid, extra_id),
+                )
+                conn.commit()
+        return {"ok": True, "stock_product_id": spid, "created": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error linking extra {extra_id} to stock: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.delete("/api/admin/precios-extras/{extra_id}/link-stock")
+async def unlink_extra_from_stock(extra_id: str, x_admin_key: str = Header("")):
+    """Unlink an extra from its stock product (sets stock_product_id=NULL, removes BOM).
+    Does NOT delete the stock_products entry to preserve history."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT name, stock_product_id FROM extras_visibility WHERE extra_name_lower=%s",
+                    (extra_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Extra no encontrado")
+                name, spid = row
+                slug = _slugify_extra(name or extra_id)
+                cur.execute("DELETE FROM extras_bom WHERE extra_slug=%s AND product_id=%s", (slug, spid))
+                cur.execute(
+                    "UPDATE extras_visibility SET stock_product_id=NULL WHERE extra_name_lower=%s",
+                    (extra_id,),
+                )
+                conn.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unlinking extra {extra_id} from stock: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
