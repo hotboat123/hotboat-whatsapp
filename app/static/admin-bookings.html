@@ -5316,7 +5316,10 @@ async function toggleExtraStock(extraId, stockProductId){
       await api(`/api/admin/precios-extras/${encodeURIComponent(extraId)}/link-stock`,{method:'POST'});
       showToast('✓ Producto agregado al stock con BOM automático');
     }
+    const scroll = document.getElementById('section-precios-extras')?.scrollTop ?? window.scrollY;
     await loadExtrasCat();
+    const sec = document.getElementById('section-precios-extras');
+    if(sec) sec.scrollTop = scroll; else window.scrollTo(0, scroll);
   }catch(e){ showToast('Error: '+e.message); }
 }
 
