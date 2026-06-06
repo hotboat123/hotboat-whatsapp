@@ -2151,6 +2151,12 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
               <input type="checkbox" id="sim-chart-mkt" onchange="simDrawChart()">
               <span style="color:#a78bfa">– Marketing</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-nestor" checked onchange="simDrawChart()">
+              <span style="color:#f472b6">● Néstor</span></label>
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="sim-chart-ebitda" checked onchange="simDrawChart()">
+              <span style="color:#a3e635">● EBITDA (c/util)</span></label>
           </div>
         </div>
         <canvas id="sim-chart-canvas" style="width:100%;display:block;border-radius:6px" height="220"></canvas>
@@ -2187,6 +2193,56 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       // ── Seasonality factors (Jan=1 … Dec=12) ─────────────────────────────
       const SIM_SEASON = [0.55,0.6,0.7,0.85,0.9,1.0,1.15,1.2,1.0,0.9,0.95,0.85];
       const SIM_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+      // ── Preset scenarios (base Jan 2025 config) ───────────────────────────
+      const _BASE_WORKERS = [
+        {name:"Trini",sueldo:150000,bono_res:true,bono_tiers:[{desde:20,rate:4000}],bono_umbral:20,bono_por_res:4000,bono_cal:false,bono_ext_web:false,bono_ext_web_pct:10,bono_ext_pres:false,bono_ext_pres_pct:10,umbral_cal:0,umbral_ext_web:0,umbral_ext_pres:0,bono_util:{on:false,income:{extrasWeb:true,extrasPres:true},costs:{cvar:true,comb:true,fijos:true,mant:true,otros:true,mkt:true},remuWorkers:{},tramos:[{sueldoFijo:0,pctUtil:5,umbralRes:0,umbralUtil:0}]}},
+        {name:"Apli",sueldo:100000,bono_res:true,bono_tiers:[{desde:15,rate:3000}],bono_umbral:15,bono_por_res:3000,bono_cal:false,bono_ext_web:true,bono_ext_web_pct:5,bono_ext_pres:false,bono_ext_pres_pct:10,umbral_cal:25,umbral_ext_web:25,umbral_ext_pres:25,bono_util:{on:false,income:{extrasWeb:true,extrasPres:true},costs:{cvar:true,comb:true,fijos:true,mant:true,otros:true,mkt:true},remuWorkers:{},tramos:[{sueldoFijo:0,pctUtil:5,umbralRes:0,umbralUtil:0}]}},
+        {name:"Tom",sueldo:530000,bono_res:false,bono_tiers:[{desde:16,rate:9300},{desde:26,rate:14000}],bono_umbral:16,bono_por_res:9300,bono_cal:false,bono_ext_web:false,bono_ext_web_pct:5,bono_ext_pres:false,bono_ext_pres_pct:5,umbral_cal:25,umbral_ext_web:25,umbral_ext_pres:25,bono_util:{on:true,income:{extrasWeb:true,extrasPres:true},costs:{cvar:true,comb:true,fijos:true,mant:true,otros:true,mkt:true},remuWorkers:{"1":true,"2":true,"4":true,"5":true},tramos:[{sueldoFijo:249000,pctUtil:9,umbralRes:0,umbralUtil:0},{sueldoFijo:0,pctUtil:9,umbralRes:75,umbralUtil:0}]}},
+        {name:"Axel",sueldo:269000,bono_res:false,bono_tiers:[{desde:16,rate:9300},{desde:26,rate:140000}],bono_umbral:16,bono_por_res:9300,bono_cal:false,bono_ext_web:false,bono_ext_web_pct:10,bono_ext_pres:false,bono_ext_pres_pct:5,umbral_cal:25,umbral_ext_web:25,umbral_ext_pres:25,bono_util:{on:true,income:{extrasWeb:true,extrasPres:true},costs:{cvar:true,comb:true,fijos:true,mant:true,otros:true,mkt:true},remuWorkers:{"1":true,"2":false,"3":true,"5":true},tramos:[{sueldoFijo:269000,pctUtil:9,umbralRes:0,umbralUtil:0},{sueldoFijo:0,pctUtil:12,umbralRes:75,umbralUtil:0}]}},
+        {name:"Néstor",sueldo:269000,bono_res:false,bono_tiers:[{desde:16,rate:9300},{desde:26,rate:14000}],bono_umbral:16,bono_por_res:9300,bono_cal:false,bono_ext_web:false,bono_ext_web_pct:0,bono_ext_pres:false,bono_ext_pres_pct:5,umbral_cal:25,umbral_ext_web:25,umbral_ext_pres:25,bono_util:{on:true,income:{extrasWeb:true,extrasPres:true},costs:{cvar:true,comb:true,fijos:true,mant:true,otros:true,mkt:true},remuWorkers:{"1":true,"3":true,"4":true},tramos:[{sueldoFijo:269000,pctUtil:9,umbralRes:0,umbralUtil:0},{sueldoFijo:0,pctUtil:12,umbralRes:75,umbralUtil:0}]}}
+      ];
+      const _BASE_SEASON = [2.3333333333333335,4,1.1666666666666667,1.3333333333333333,1,1,2,1.1666666666666667,1.3333333333333333,1,1,1];
+      const _BASE_CFG = {
+        precio_por_persona:40000, personas_promedio:4, reservas_por_mes:30,
+        extras_web_por_reserva:10000, extras_pres_por_reserva:10000, extras_promedio_por_reserva:20000,
+        costo_por_salida:18000, combustible:0, costo_operativo_por_reserva:18000,
+        costos_fijos_mensuales:451000, mantenimiento_seguros:150000, otros_fijos:0,
+        marketing_mensual:600000, marketing_pct:40,
+        bono_umbral_reservas:20, bono_por_reserva_extra:4000,
+        bono_calidad_activo:true, bono_calidad_monto:30000,
+      };
+      const SIM_PRESETS = [
+        { label:'🏖 Base (30 res)', desc:'Config actual, mes normal',
+          data:{..._BASE_CFG, reservas_por_mes:30, season_factors:[..._BASE_SEASON], workers:_BASE_WORKERS.map(w=>({...w,bono_tiers:[...w.bono_tiers],bono_util:{...w.bono_util,tramos:[...w.bono_util.tramos]}})) }},
+        { label:'🌊 Temporada Media (60 res)', desc:'Factor ×2 — Enero / Julio',
+          data:{..._BASE_CFG, reservas_por_mes:60, season_factors:[..._BASE_SEASON], workers:_BASE_WORKERS.map(w=>({...w,bono_tiers:[...w.bono_tiers],bono_util:{...w.bono_util,tramos:[...w.bono_util.tramos]}})) }},
+        { label:'🔥 Temporada Alta - Feb (120 res)', desc:'Factor ×4 — Febrero peak',
+          data:{..._BASE_CFG, reservas_por_mes:120, season_factors:[..._BASE_SEASON], workers:_BASE_WORKERS.map(w=>({...w,bono_tiers:[...w.bono_tiers],bono_util:{...w.bono_util,tramos:[...w.bono_util.tramos]}})) }},
+        { label:'📈 Crecimiento moderado (40 res)', desc:'+33% respecto al base',
+          data:{..._BASE_CFG, reservas_por_mes:40, season_factors:[..._BASE_SEASON], workers:_BASE_WORKERS.map(w=>({...w,bono_tiers:[...w.bono_tiers],bono_util:{...w.bono_util,tramos:[...w.bono_util.tramos]}})) }},
+        { label:'💰 Precio $45k (30 res)', desc:'Mismo volumen, precio +12.5%',
+          data:{..._BASE_CFG, precio_por_persona:45000, reservas_por_mes:30, season_factors:[..._BASE_SEASON], workers:_BASE_WORKERS.map(w=>({...w,bono_tiers:[...w.bono_tiers],bono_util:{...w.bono_util,tramos:[...w.bono_util.tramos]}})) }},
+        { label:'📅 Axel fd semana → Néstor +$268k', desc:'Axel $30k/día fd · Néstor sube a $537k · misma utilidad',
+          data:{..._BASE_CFG, reservas_por_mes:30, season_factors:[..._BASE_SEASON], workers:[
+            // Trini: sin cambios
+            {..._BASE_WORKERS[0], bono_tiers:[..._BASE_WORKERS[0].bono_tiers], bono_util:{..._BASE_WORKERS[0].bono_util, tramos:[..._BASE_WORKERS[0].bono_util.tramos]}},
+            // Apli: sin cambios
+            {..._BASE_WORKERS[1], bono_tiers:[..._BASE_WORKERS[1].bono_tiers], bono_util:{..._BASE_WORKERS[1].bono_util, tramos:[..._BASE_WORKERS[1].bono_util.tramos]}},
+            // Tom: sin cambios
+            {..._BASE_WORKERS[2], bono_tiers:[..._BASE_WORKERS[2].bono_tiers], bono_util:{..._BASE_WORKERS[2].bono_util, tramos:[..._BASE_WORKERS[2].bono_util.tramos]}},
+            // Axel: solo fines de semana — 4 fds × 2 días × $30.000 = $240.000, sin bono util
+            {..._BASE_WORKERS[3], sueldo:240000,
+              bono_tiers:[..._BASE_WORKERS[3].bono_tiers],
+              bono_util:{..._BASE_WORKERS[3].bono_util, on:false, tramos:[..._BASE_WORKERS[3].bono_util.tramos]}},
+            // Néstor: sueldo sube a $537.000 (tramo0 sueldoFijo = 537k), misma utilidad empresa
+            {..._BASE_WORKERS[4], sueldo:537000,
+              bono_tiers:[..._BASE_WORKERS[4].bono_tiers],
+              bono_util:{..._BASE_WORKERS[4].bono_util,
+                tramos:[{sueldoFijo:537000, pctUtil:9, umbralRes:0, umbralUtil:0},
+                        {sueldoFijo:0,      pctUtil:12, umbralRes:75, umbralUtil:0}]}},
+          ]}},
+      ];
       let _simSeasonFactors = [...SIM_SEASON]; // editable copy
 
       function simSetSeasonPct(mi, val){
@@ -2589,13 +2645,101 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         function getCostoTotal(r) { return getCostoVar(r) + getCostoFijo() + getRemu(r) + getMkt(); }
         function getResultado(r)  { return getIngreso(r) - getCostoTotal(r); }
 
+        // ── Per-worker full pay at arbitrary R (includes util bonus) ──────
+        function _workerPayAtR(wIdx, r){
+          const wd = d.wData.find(x => x.w === wIdx);
+          if(!wd) return 0;
+          const ucfg = d.utilCfgs[wIdx] || {};
+          let sueldoEf = wd.sueldo, bonoUtilW = 0;
+          if(ucfg.on){
+            const ic = ucfg.income || {};
+            const ingrW = d.precio * d.personas * r
+                        + (ic.extrasWeb  ? d.extrasWeb  * r : 0)
+                        + (ic.extrasPres ? d.extrasPres * r : 0);
+            const c = ucfg.costs || {};
+            const remuoAmt = Object.entries(ucfg.remuWorkers || {}).reduce((s,[ww,on]) =>
+              on ? s + (d.wData.find(x=>x.w===+ww)?.sueldo || 0) : s, 0);
+            const ded = (c.cvar  ? d.costoRes   * r : 0)
+                      + (c.comb  ? d.comb        * r : 0)
+                      + (c.fijos ? d.cfijosOnly      : 0)
+                      + (c.mant  ? d.mantenim        : 0)
+                      + (c.otros ? d.otros            : 0)
+                      + (c.mkt   ? d.mkt              : 0)
+                      + remuoAmt;
+            const utilBase = Math.max(0, ingrW - ded);
+            const tramo = _getActiveTramo(ucfg.tramos, r, utilBase);
+            sueldoEf  = tramo.sueldoFijo;
+            bonoUtilW = tramo.pctUtil * utilBase / 100;
+          }
+          const bonoResW    = wd.bonoResOn ? calcBonoResW(r, wd.tiers || []) : 0;
+          const bonoExtWebW = (wd.bonoExtWebOn  && r > wd.umbralExtWebW)  ? d.extrasWeb  * r * wd.bonoExtWebPct  : 0;
+          const bonoExtPresW= (wd.bonoExtPresOn && r > wd.umbralExtPresW) ? d.extrasPres * r * wd.bonoExtPresPct : 0;
+          const bonoCalW    = (d.bonoCalidadCheck && wd.bonoCalOn && r > wd.umbralCalW) ? d.bonoCalidadMonto : 0;
+          return sueldoEf + bonoResW + bonoCalW + bonoExtWebW + bonoExtPresW + bonoUtilW;
+        }
+
+        const _nestorWd = d.wData.find(x => /n[eé]s?tor/i.test(x.name));
+        function getNestorPay(r){ return _nestorWd ? _workerPayAtR(_nestorWd.w, r) : 0; }
+
+        function _bonoUtilTotal(r){
+          let t = 0;
+          for(const wd of d.wData){
+            const ucfg = d.utilCfgs[wd.w] || {};
+            if(!ucfg.on) continue;
+            const ic = ucfg.income || {};
+            const ingrW = d.precio * d.personas * r
+                        + (ic.extrasWeb  ? d.extrasWeb  * r : 0)
+                        + (ic.extrasPres ? d.extrasPres * r : 0);
+            const c = ucfg.costs || {};
+            const remuoAmt = Object.entries(ucfg.remuWorkers || {}).reduce((s,[ww,on]) =>
+              on ? s + (d.wData.find(x=>x.w===+ww)?.sueldo || 0) : s, 0);
+            const ded = (c.cvar  ? d.costoRes   * r : 0)
+                      + (c.comb  ? d.comb        * r : 0)
+                      + (c.fijos ? d.cfijosOnly      : 0)
+                      + (c.mant  ? d.mantenim        : 0)
+                      + (c.otros ? d.otros            : 0)
+                      + (c.mkt   ? d.mkt              : 0)
+                      + remuoAmt;
+            const utilBase = Math.max(0, ingrW - ded);
+            const tramo = _getActiveTramo(ucfg.tramos, r, utilBase);
+            t += tramo.pctUtil * utilBase / 100;
+          }
+          return t;
+        }
+        function _sueldoUtilAdj(r){
+          let adj = 0;
+          for(const wd of d.wData){
+            const ucfg = d.utilCfgs[wd.w] || {};
+            if(!ucfg.on) continue;
+            const ic = ucfg.income || {};
+            const ingrW = d.precio * d.personas * r
+                        + (ic.extrasWeb  ? d.extrasWeb  * r : 0)
+                        + (ic.extrasPres ? d.extrasPres * r : 0);
+            const c = ucfg.costs || {};
+            const remuoAmt = Object.entries(ucfg.remuWorkers || {}).reduce((s,[ww,on]) =>
+              on ? s + (d.wData.find(x=>x.w===+ww)?.sueldo || 0) : s, 0);
+            const ded = (c.cvar  ? d.costoRes   * r : 0)
+                      + (c.comb  ? d.comb        * r : 0)
+                      + (c.fijos ? d.cfijosOnly      : 0)
+                      + (c.mant  ? d.mantenim        : 0)
+                      + (c.otros ? d.otros            : 0)
+                      + (c.mkt   ? d.mkt              : 0)
+                      + remuoAmt;
+            const utilBase = Math.max(0, ingrW - ded);
+            const tramo = _getActiveTramo(ucfg.tramos, r, utilBase);
+            adj += tramo.sueldoFijo - wd.sueldo;
+          }
+          return adj;
+        }
+        function getEbitda(r){ return getIngreso(r) - getCostoTotal(r) - _sueldoUtilAdj(r) - _bonoUtilTotal(r); }
+
         // Y range
         const steps = 80;
         let yMax = 0, yMin = 0;
         for(let i = 0; i <= steps; i++){
           const r = maxR * i / steps;
-          yMax = Math.max(yMax, getIngreso(r), getCostoTotal(r), getCostoVar(r), getCostoFijo(), getRemu(r), getMkt());
-          yMin = Math.min(yMin, getResultado(r));
+          yMax = Math.max(yMax, getIngreso(r), getCostoTotal(r), getCostoVar(r), getCostoFijo(), getRemu(r), getMkt(), getNestorPay(r));
+          yMin = Math.min(yMin, getResultado(r), getEbitda(r));
         }
         yMax = yMax * 1.08;
         yMin = yMin < 0 ? yMin * 1.12 : 0;
@@ -2652,6 +2796,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           { id:'sim-chart-costo-total', fn: r=>getCostoTotal(r), color:'#f87171', dash:[],    w:2   },
           { id:'sim-chart-resultado',   fn: r=>getResultado(r),  color:'#60a5fa', dash:[],    w:2   },
           { id:'sim-chart-ingreso',     fn: r=>getIngreso(r),    color:'#34d399', dash:[],    w:2   },
+          { id:'sim-chart-nestor',      fn: r=>getNestorPay(r),  color:'#f472b6', dash:[],    w:2.5 },
+          { id:'sim-chart-ebitda',      fn: r=>getEbitda(r),     color:'#a3e635', dash:[3,2], w:2   },
         ];
         for(const s of series){
           if(!document.getElementById(s.id)?.checked) continue;
@@ -3089,6 +3235,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           reservas, bonoCalidadCheck, bonoCalidadMonto, trabConBonoCal,
           wData: _wData,
           be: be !== null ? be : 0,
+          extrasWeb: simV('sim-extras-web'),
+          extrasPres: simV('sim-extras-pres'),
+          costoRes: simV('sim-costo-res'),
+          comb: simV('sim-combustible'),
+          cfijosOnly: simV('sim-fijos'),
+          mantenim: simV('sim-mantenim'),
+          otros: simV('sim-otros-fijos'),
+          utilCfgs: Object.fromEntries(
+            Array.from({length: numTrab}, (_, i) => i + 1).map(w => [w, JSON.parse(JSON.stringify(_getWUtilCfg(w)))])
+          ),
         };
         simDrawChart();
       }
@@ -3290,9 +3446,31 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       }
 
       // ── Scenarios list modal ───────────────────────────────────────────────
+      function _renderSimPresets(){
+        const el = document.getElementById('sim-presets-list');
+        if(!el) return;
+        el.innerHTML = SIM_PRESETS.map((p, i) => `
+          <div style="display:flex;align-items:center;gap:.6rem;padding:.45rem .3rem;border-bottom:1px solid var(--border)">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:500;font-size:.83rem;color:var(--text)">${p.label}</div>
+              <div style="font-size:.7rem;color:var(--muted)">${p.desc}</div>
+            </div>
+            <button onclick="simLoadPreset(${i})"
+              style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.22rem .6rem;font-size:.78rem;cursor:pointer;white-space:nowrap">Cargar</button>
+          </div>`).join('');
+      }
+
+      function simLoadPreset(i){
+        const p = SIM_PRESETS[i];
+        if(!p) return;
+        simLoadScenario({...p.data, id: null, name: p.label});
+        showToast('📋 Preset "'+p.label+'" cargado');
+      }
+
       async function openScenariosModal(){
         const modal = document.getElementById('sim-scenarios-modal');
         modal.style.display = 'flex';
+        _renderSimPresets();
         const listEl = document.getElementById('sim-scenarios-list');
         listEl.innerHTML = '<div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1rem">Cargando…</div>';
         try {
@@ -3654,7 +3832,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <button onclick="closeScenariosModal()"
               style="background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;line-height:1">✕</button>
           </div>
-          <div id="sim-scenarios-list" style="overflow-y:auto;padding:.7rem 1rem;flex:1;min-height:60px">
+          <!-- Presets section -->
+          <div style="padding:.7rem 1rem;border-bottom:1px solid var(--border)">
+            <div style="font-size:.7rem;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:.5rem">PRESETS</div>
+            <div id="sim-presets-list"></div>
+          </div>
+          <!-- Saved scenarios -->
+          <div style="padding:.5rem 1rem .3rem;font-size:.7rem;font-weight:700;color:var(--muted);letter-spacing:.06em">GUARDADOS</div>
+          <div id="sim-scenarios-list" style="overflow-y:auto;padding:.3rem 1rem .7rem;flex:1;min-height:60px">
             <div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1rem">Cargando…</div>
           </div>
         </div>
@@ -4061,7 +4246,26 @@ function toggleCalFilter(key){
   renderCal();
 }
 let EXTRAS_CATALOG=[];   // loaded once after login
-let _extrasItems=[];     // working copy for current modal: [{key,name,qty,unit_price}]
+let _extrasItems=[];     // working copy for current modal: [{key,name,qty,unit_price,...tablaFields}]
+
+const TABLA_CATALOG = {
+  salada:{label:'Tabla Salada',emoji:'🧀',
+    tier1:["Aceitunas drvillanas 200gr","Hummus Buka 220g","Papas Lay's 150g"],
+    tier2:["Jamón serrano","Salame premium","Cajú premium","Cranberries 150gr","Pepinillos 200gr","Queso crema + soya y sésamo","Grisines"],
+    tier3:["Maní 150gr","Crackers 90gr","Super 8","Galletas obsesión"]},
+  dulce:{label:'Tabla Dulce',emoji:'🍫',
+    tier1:["Chocolate sahnenuss 90gr"],
+    tier2:["Queso crema + mermelada pimentón","Galletas Chip Choco 150gr"],
+    tier3:["Alfajor entrelagos","Super 8","Galletas obsesión"]},
+  arma:{label:'Arma tu Tabla',emoji:'🎨',
+    tier1:["Aceitunas sevillanas 200gr","Hummus Buka 220g","Papas Lay's 150g","Chocolate sahnenuss 90gr","Jamón serrano 60gr"],
+    tier2:["Salame premium","Cajú premium","Cranberries 150gr","Pepinillos 200gr","Queso crema + mermelada pimentón","Queso crema + soya y sésamo","Grisines 120gr"],
+    tier3:["Chocolate vegano 140gr","Maní 150gr","Alfajor entrelagos","Crackers 90gr","Super 8","Galletas obsesión"]},
+  vegana:{label:'Tabla Vegana',emoji:'🥑',
+    tier1:["Aceitunas sevillanas 200gr","Hummus Buka 220g"],
+    tier2:["Cajú premium","Cranberries 150gr","Pepinillos 200gr","Grisines 120gr"],
+    tier3:["Chocolate vegano 140gr","Maní 150gr","Crackers 90gr"]},
+};
 let _alojAddon=[];       // [{key,name,entry_date,exit_date,nights,unit_price}]
 let _expAddon=[];        // [{key,name,date,qty,unit_price}]
 let ALOJ_CATALOG=[];     // loaded from /api/admin/alojamientos
@@ -4839,6 +5043,19 @@ async function openModal(id){
           </select>
           <button type="button" onclick="addExtraFromSelect()">+ Agregar</button>
         </div>
+        <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap">
+          <button type="button" onclick="openTablaModal()"
+            style="background:rgba(253,126,20,.12);color:#fd7e14;border:1px solid rgba(253,126,20,.35);
+                   border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
+            🍽 Agregar Tabla
+          </button>
+          <button type="button" onclick="copyTablaLink(document.getElementById('_bref_val').value)"
+            id="btn-copy-tabla-link"
+            style="background:rgba(74,158,255,.1);color:var(--blue);border:1px solid rgba(74,158,255,.25);
+                   border-radius:8px;padding:.35rem .8rem;font-size:.78rem;cursor:pointer;font-weight:600">
+            🔗 Link tabla cliente
+          </button>
+        </div>
       </div>
 
       <!-- ── Alojamientos add-on ── -->
@@ -5077,6 +5294,103 @@ function copyFirmaLink(bookingRef){
     prompt('Copia este link:', url);
   });
 }
+function copyTablaLink(bookingRef){
+  if(!bookingRef){ showToast('Sin booking_ref'); return; }
+  const url = `${location.origin}/tabla/${bookingRef}`;
+  navigator.clipboard.writeText(url).then(()=>{
+    showToast('✅ Link tabla copiado: '+url);
+  }).catch(()=>{
+    prompt('Copia este link:', url);
+  });
+}
+
+// ── Tabla config modal ────────────────────────────────────────────────────────
+let _tablaEditIdx = null; // null = new tabla, number = edit existing item
+
+function openTablaModal(editIdx){
+  _tablaEditIdx = editIdx ?? null;
+  const existing = editIdx != null ? _extrasItems[editIdx] : null;
+  const selType = existing?.tabla_type || null;
+
+  const typeHtml = Object.entries(TABLA_CATALOG).map(([k,c])=>`
+    <label style="display:flex;align-items:center;gap:.5rem;padding:.5rem .6rem;border:1.5px solid ${selType===k?'var(--blue)':'var(--border)'};border-radius:8px;cursor:pointer;transition:border-color .2s" id="ttlbl-${k}">
+      <input type="radio" name="tabla-type" value="${k}" ${selType===k?'checked':''} onchange="_tablaTypeChanged()" style="accent-color:var(--blue)">
+      <span>${c.emoji} ${c.label}</span>
+    </label>`).join('');
+
+  document.getElementById('tabla-modal').style.display='flex';
+  document.getElementById('tm-type-section').innerHTML=typeHtml;
+  _tablaTypeChanged(existing);
+}
+
+function _tablaTypeChanged(existing){
+  const radio = document.querySelector('input[name="tabla-type"]:checked');
+  const type = radio?.value;
+  // update border colors
+  document.querySelectorAll('[id^=ttlbl-]').forEach(el=>{
+    el.style.borderColor = el.id === 'ttlbl-'+type ? 'var(--blue)' : 'var(--border)';
+  });
+  if(!type){ document.getElementById('tm-ing-section').innerHTML=''; return; }
+  const cat = TABLA_CATALOG[type];
+  const ex = existing?.tabla_type===type ? existing : null;
+
+  const mk = (tier, items, pick, key)=>`
+    <div style="margin-top:.75rem">
+      <div style="font-size:.73rem;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem">${tier}</div>
+      ${items.map(it=>`
+        <label style="display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;border:1.5px solid var(--border);border-radius:7px;cursor:pointer;margin-bottom:.3rem">
+          <input type="${pick===1?'radio':'checkbox'}" name="${key}" value="${it.replace(/"/g,'&quot;')}" ${pick===1?'':''}
+            ${ex&&(pick===1?ex[key]===it:(ex[key]||[]).includes(it))?'checked':''}>
+          <span style="font-size:.82rem">${it}</span>
+        </label>`).join('')}
+    </div>`;
+
+  document.getElementById('tm-ing-section').innerHTML =
+    mk('⭐ Elige 1 (premium)', cat.tier1, 1, 'elige_1') +
+    mk('🎯 Elige 2 (medios)', cat.tier2, 2, 'elige_2') +
+    mk('✨ Elige 3 (extras)', cat.tier3, 3, 'elige_3');
+}
+
+function saveTablaConfig(){
+  const radio = document.querySelector('input[name="tabla-type"]:checked');
+  if(!radio){ showToast('Elige un tipo de tabla'); return; }
+  const type = radio.value;
+  const cat = TABLA_CATALOG[type];
+
+  const e1 = document.querySelector('input[name="elige_1"]:checked')?.value;
+  if(!e1){ showToast('Elige el ingrediente premium'); return; }
+
+  const e2checked = [...document.querySelectorAll('input[name="elige_2"]:checked')].map(el=>el.value);
+  if(e2checked.length!==2){ showToast('Elige exactamente 2 ingredientes medios'); return; }
+
+  const e3checked = [...document.querySelectorAll('input[name="elige_3"]:checked')].map(el=>el.value);
+  if(e3checked.length!==3){ showToast('Elige exactamente 3 ingredientes extras'); return; }
+
+  const key = 'tabla__'+type;
+  const name = cat.emoji+' '+cat.label;
+
+  if(_tablaEditIdx != null){
+    // Edit existing
+    _extrasItems[_tablaEditIdx] = {
+      ..._extrasItems[_tablaEditIdx],
+      key, name, tabla_type:type,
+      elige_1:e1, elige_2:e2checked, elige_3:e3checked,
+    };
+  } else {
+    // Remove any existing tabla__ item first (one per reservation)
+    const idx = _extrasItems.findIndex(e=>e.key.startsWith('tabla__'));
+    if(idx>=0) _extrasItems.splice(idx,1);
+    _extrasItems.push({key, name, qty:1, unit_price:25000, unit_cost:0,
+      tabla_type:type, elige_1:e1, elige_2:e2checked, elige_3:e3checked});
+  }
+  closeTablaModal();
+  renderExtrasEditor();
+}
+
+function closeTablaModal(){
+  document.getElementById('tabla-modal').style.display='none';
+}
+
 async function sendFirmasSummary(bookingRef){
   if(!bookingRef) return;
   try{
@@ -5129,7 +5443,14 @@ async function saveModal(id){
   let extrasTotal=0;
   _extrasItems.forEach(item=>{
     const qty=+item.qty||0; const price=+item.unit_price||0;
-    if(qty>0){ extrasJson[item.key]={qty, unit_price:price}; extrasTotal+=qty*price; }
+    if(qty>0){
+      const val={qty, unit_price:price};
+      if(item.tabla_type){
+        val.name=item.name; val.tabla_type=item.tabla_type;
+        val.elige_1=item.elige_1||''; val.elige_2=item.elige_2||[]; val.elige_3=item.elige_3||[];
+      }
+      extrasJson[item.key]=val; extrasTotal+=qty*price;
+    }
   });
   (_alojAddon||[]).forEach(item=>{
     const nights=+item.nights||1; const price=+item.unit_price||0;
@@ -7058,6 +7379,22 @@ function initExtrasEditor(extrasJson){
         date:       isObj&&val.date ? val.date : '',
         unit_price: isObj&&val.unit_price ? +val.unit_price : 0,
       });
+    } else if(key.startsWith('tabla__')){
+      const tType = key.replace('tabla__','');
+      const tCat = TABLA_CATALOG[tType] || {};
+      const qty = isObj ? (+val.qty||1) : 1;
+      const saved_price = isObj&&val.unit_price ? +val.unit_price : 25000;
+      _extrasItems.push({
+        key,
+        name:       isObj&&val.name ? val.name : ((tCat.emoji||'🍽')+' '+(tCat.label||tType)),
+        qty,
+        unit_price: saved_price,
+        unit_cost:  0,
+        tabla_type: tType,
+        elige_1:    isObj&&val.elige_1 ? val.elige_1 : '',
+        elige_2:    isObj&&Array.isArray(val.elige_2) ? val.elige_2 : [],
+        elige_3:    isObj&&Array.isArray(val.elige_3) ? val.elige_3 : [],
+      });
     } else {
       const cat = catalogByKey[key];
       const qty = isObj ? (+val.qty||1) : (+val||1);
@@ -7085,6 +7422,30 @@ function populateCatalogSelect(){
     EXTRAS_CATALOG.map(e=>`<option value="${e.key}" data-price="${e.price}">${e.name} — ${fmtMoney(e.price)}</option>`).join('');
 }
 
+function _renderTablaRow(item, i){
+  const tCat = TABLA_CATALOG[item.tabla_type] || {};
+  const ingHtml = `
+    <div style="margin-top:.5rem;padding:.5rem .6rem;background:rgba(253,126,20,.07);border:1px solid rgba(253,126,20,.2);border-radius:8px;font-size:.75rem;line-height:1.7">
+      <div><span style="color:var(--muted)">⭐ Premium:</span> <strong>${item.elige_1||'—'}</strong></div>
+      <div><span style="color:var(--muted)">🎯 Medios:</span> ${(item.elige_2||[]).join(', ')||'—'}</div>
+      <div><span style="color:var(--muted)">✨ Extras:</span> ${(item.elige_3||[]).join(', ')||'—'}</div>
+      <button onclick="openTablaModal(${i})" style="margin-top:.35rem;background:none;border:1px solid rgba(253,126,20,.4);color:#fd7e14;border-radius:6px;padding:.25rem .6rem;font-size:.72rem;cursor:pointer;font-weight:600">
+        ✏️ Editar ingredientes
+      </button>
+    </div>`;
+  return `<div class="extras-row" style="flex-direction:column;align-items:stretch;gap:0">
+    <div style="display:flex;align-items:center;gap:.4rem">
+      <div class="ex-name" title="${item.name}" style="flex:1">${item.name}</div>
+      <input type="number" min="0" value="${item.unit_price}" title="Precio tabla"
+        style="width:82px"
+        oninput="_extrasItems[${i}].unit_price=+this.value||0;updateExtrasTotals();updateExtraSubtotal(${i})">
+      <div class="ex-sub" id="ex-sub-${i}">${fmtMoney(item.unit_price)}</div>
+      <button class="ex-del" onclick="removeExtraItem(${i})" title="Quitar">✕</button>
+    </div>
+    ${ingHtml}
+  </div>`;
+}
+
 function renderExtrasEditor(){
   const list = document.getElementById('extras-list');
   if(!list) return;
@@ -7093,8 +7454,9 @@ function renderExtrasEditor(){
     updateExtrasTotals();
     return;
   }
-  list.innerHTML = _extrasItems.map((item,i)=>`
-    <div class="extras-row">
+  list.innerHTML = _extrasItems.map((item,i)=> item.tabla_type
+    ? _renderTablaRow(item, i)
+    : `<div class="extras-row">
       <div class="ex-name" title="${item.name}">${item.name}</div>
       <input type="number" min="1" value="${item.qty}" title="Cantidad"
         oninput="_extrasItems[${i}].qty=+this.value||1;updateExtrasTotals();updateExtraSubtotal(${i})">
@@ -7102,7 +7464,8 @@ function renderExtrasEditor(){
         oninput="_extrasItems[${i}].unit_price=+this.value||0;updateExtrasTotals();updateExtraSubtotal(${i})">
       <div class="ex-sub" id="ex-sub-${i}">${fmtMoney(item.qty*item.unit_price)}</div>
       <button class="ex-del" onclick="removeExtraItem(${i})" title="Quitar">✕</button>
-    </div>`).join('');
+    </div>`
+  ).join('');
   updateExtrasTotals();
 }
 
@@ -10690,6 +11053,31 @@ async function deleteGastoCategoria(id){
 .log-level-btn{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:.25rem .6rem;border-radius:6px;cursor:pointer;font-size:.75rem;font-weight:600}
 .log-level-btn.active{background:var(--surface);border-color:var(--gold);color:var(--gold)}
 </style>
+
+<!-- ── Tabla Config Modal ─────────────────────────────────────────────────── -->
+<div id="tabla-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;
+  align-items:center;justify-content:center;padding:1rem;overflow-y:auto">
+  <div style="background:var(--card);border-radius:16px;width:100%;max-width:480px;max-height:90vh;
+              overflow-y:auto;padding:1.4rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-size:.95rem;font-weight:700">🍽 Configurar Tabla</div>
+      <button onclick="closeTablaModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;line-height:1;padding:.2rem .5rem">✕</button>
+    </div>
+    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.5rem">Tipo de tabla</div>
+    <div id="tm-type-section" style="display:flex;flex-direction:column;gap:.35rem"></div>
+    <div id="tm-ing-section" style="margin-top:.5rem"></div>
+    <div style="display:flex;gap:.6rem;margin-top:1.2rem">
+      <button onclick="closeTablaModal()"
+        style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:.65rem;font-size:.85rem;cursor:pointer">
+        Cancelar
+      </button>
+      <button onclick="saveTablaConfig()"
+        style="flex:2;background:#fd7e14;color:#fff;border:none;border-radius:10px;padding:.65rem;font-size:.85rem;font-weight:700;cursor:pointer">
+        ✓ Guardar tabla
+      </button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

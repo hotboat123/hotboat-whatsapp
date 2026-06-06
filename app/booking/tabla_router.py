@@ -1,0 +1,276 @@
+"""Client-facing endpoints for tabla (food board) selection per reservation."""
+import json as _json
+import logging
+import os
+from datetime import datetime, timezone
+from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+tabla_router = APIRouter()
+
+TABLA_HTML_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "tabla.html")
+
+TABLA_CATALOG = {
+    "salada": {
+        "label": "Tabla Salada",
+        "emoji": "🧀",
+        "tier1": ["Aceitunas drvillanas 200gr", "Hummus Buka 220g", "Papas Lay's 150g"],
+        "tier2": ["Jamón serrano", "Salame premium", "Cajú premium", "Cranberries 150gr",
+                  "Pepinillos 200gr", "Queso crema + soya y sésamo", "Grisines"],
+        "tier3": ["Maní 150gr", "Crackers 90gr", "Super 8", "Galletas obsesión"],
+    },
+    "dulce": {
+        "label": "Tabla Dulce",
+        "emoji": "🍫",
+        "tier1": ["Chocolate sahnenuss 90gr"],
+        "tier2": ["Queso crema + mermelada pimentón", "Galletas Chip Choco 150gr"],
+        "tier3": ["Alfajor entrelagos", "Super 8", "Galletas obsesión"],
+    },
+    "arma": {
+        "label": "Arma tu Tabla",
+        "emoji": "🎨",
+        "tier1": ["Aceitunas sevillanas 200gr", "Hummus Buka 220g", "Papas Lay's 150g",
+                  "Chocolate sahnenuss 90gr", "Jamón serrano 60gr"],
+        "tier2": ["Salame premium", "Cajú premium", "Cranberries 150gr", "Pepinillos 200gr",
+                  "Queso crema + mermelada pimentón", "Queso crema + soya y sésamo", "Grisines 120gr"],
+        "tier3": ["Chocolate vegano 140gr", "Maní 150gr", "Alfajor entrelagos",
+                  "Crackers 90gr", "Super 8", "Galletas obsesión"],
+    },
+    "vegana": {
+        "label": "Tabla Vegana",
+        "emoji": "🥑",
+        "tier1": ["Aceitunas sevillanas 200gr", "Hummus Buka 220g"],
+        "tier2": ["Cajú premium", "Cranberries 150gr", "Pepinillos 200gr", "Grisines 120gr"],
+        "tier3": ["Chocolate vegano 140gr", "Maní 150gr", "Crackers 90gr"],
+    },
+}
+
+DEFAULT_PRICE = 25000
+
+
+def _ensure_tabla_table() -> None:
+    """Create tabla_selections table if it doesn't exist yet (idempotent)."""
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tabla_selections (
+                  id           SERIAL PRIMARY KEY,
+                  booking_ref  VARCHAR(50) UNIQUE NOT NULL,
+                  tabla_type   VARCHAR(50),
+                  elige_1      TEXT,
+                  elige_2      JSONB DEFAULT '[]',
+                  elige_3      JSONB DEFAULT '[]',
+                  completed_at TIMESTAMP WITH TIME ZONE,
+                  created_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_tabla_booking_ref ON tabla_selections(booking_ref);
+            """)
+            conn.commit()
+
+
+def _tabla_html() -> str:
+    with open(TABLA_HTML_PATH, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def _resolve_booking(booking_ref: str) -> Optional[dict]:
+    from app.db.connection import get_connection
+
+    if not booking_ref:
+        return None
+    if booking_ref.upper().startswith("AA-"):
+        try:
+            apt_id = int(booking_ref[3:])
+        except ValueError:
+            return None
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT nombre_cliente, fecha, hora, num_personas, email FROM all_appointments WHERE id=%s",
+                    (apt_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                return {
+                    "customer_name": row[0] or "",
+                    "booking_date": str(row[1]) if row[1] else "",
+                    "booking_time": str(row[2])[:5] if row[2] else "",
+                    "num_people": row[3],
+                    "customer_email": row[4] or "",
+                    "booking_ref": booking_ref,
+                }
+    from app.booking.db import get_booking_by_ref
+    b = get_booking_by_ref(booking_ref)
+    if b:
+        return {
+            "customer_name": b.get("customer_name") or "",
+            "booking_date": str(b.get("booking_date") or ""),
+            "booking_time": str(b.get("booking_time") or "")[:5],
+            "num_people": b.get("num_people"),
+            "customer_email": b.get("customer_email") or "",
+            "booking_ref": booking_ref,
+        }
+    return None
+
+
+def _get_apt_id(booking_ref: str) -> Optional[int]:
+    from app.db.connection import get_connection
+
+    if booking_ref.upper().startswith("AA-"):
+        try:
+            return int(booking_ref[3:])
+        except ValueError:
+            return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM all_appointments WHERE source='hotboat_web' AND source_id=%s LIMIT 1",
+                (booking_ref,),
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+
+
+class TablaPayload(BaseModel):
+    tabla_type: str
+    elige_1: str
+    elige_2: List[str]
+    elige_3: List[str]
+    price: Optional[int] = DEFAULT_PRICE
+
+
+@tabla_router.get("/tabla/{booking_ref:path}", response_class=HTMLResponse)
+async def serve_tabla_form(booking_ref: str):
+    try:
+        return HTMLResponse(content=_tabla_html())
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Página de tabla no encontrada")
+
+
+@tabla_router.get("/api/tabla/catalog")
+async def get_tabla_catalog():
+    return {"catalog": TABLA_CATALOG, "default_price": DEFAULT_PRICE}
+
+
+@tabla_router.get("/api/tabla/{booking_ref}/info")
+async def get_tabla_info(booking_ref: str):
+    from app.db.connection import get_connection
+
+    booking = _resolve_booking(booking_ref)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+
+    existing = None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT tabla_type, elige_1, elige_2, elige_3, completed_at FROM tabla_selections WHERE booking_ref=%s",
+                (booking_ref,),
+            )
+            row = cur.fetchone()
+            if row:
+                existing = {
+                    "tabla_type": row[0],
+                    "elige_1": row[1],
+                    "elige_2": row[2] if row[2] is not None else [],
+                    "elige_3": row[3] if row[3] is not None else [],
+                    "completed_at": str(row[4]) if row[4] else None,
+                }
+
+    return {
+        "booking_ref": booking["booking_ref"],
+        "customer_name": booking["customer_name"],
+        "booking_date": booking["booking_date"],
+        "booking_time": booking["booking_time"],
+        "catalog": TABLA_CATALOG,
+        "default_price": DEFAULT_PRICE,
+        "existing": existing,
+    }
+
+
+@tabla_router.post("/api/tabla/{booking_ref}")
+async def submit_tabla(booking_ref: str, payload: TablaPayload):
+    from app.db.connection import get_connection
+
+    booking = _resolve_booking(booking_ref)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+
+    if payload.tabla_type not in TABLA_CATALOG:
+        raise HTTPException(status_code=400, detail="Tipo de tabla inválido")
+
+    cat = TABLA_CATALOG[payload.tabla_type]
+    if payload.elige_1 not in cat["tier1"]:
+        raise HTTPException(status_code=400, detail="Ingrediente tier 1 inválido")
+    if len(payload.elige_2) != 2 or not all(i in cat["tier2"] for i in payload.elige_2):
+        raise HTTPException(status_code=400, detail="Selección tier 2 inválida (necesita exactamente 2)")
+    if len(payload.elige_3) != 3 or not all(i in cat["tier3"] for i in payload.elige_3):
+        raise HTTPException(status_code=400, detail="Selección tier 3 inválida (necesita exactamente 3)")
+
+    price = payload.price if payload.price and payload.price > 0 else DEFAULT_PRICE
+    now = datetime.now(timezone.utc)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO tabla_selections (booking_ref, tabla_type, elige_1, elige_2, elige_3, completed_at)
+                VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s)
+                ON CONFLICT (booking_ref) DO UPDATE SET
+                  tabla_type   = EXCLUDED.tabla_type,
+                  elige_1      = EXCLUDED.elige_1,
+                  elige_2      = EXCLUDED.elige_2,
+                  elige_3      = EXCLUDED.elige_3,
+                  completed_at = EXCLUDED.completed_at
+                """,
+                (
+                    booking_ref,
+                    payload.tabla_type,
+                    payload.elige_1,
+                    _json.dumps(payload.elige_2, ensure_ascii=False),
+                    _json.dumps(payload.elige_3, ensure_ascii=False),
+                    now,
+                ),
+            )
+
+            apt_id = _get_apt_id(booking_ref)
+            if apt_id:
+                tabla_key = f"tabla__{payload.tabla_type}"
+                tabla_val = {
+                    "qty": 1,
+                    "unit_price": price,
+                    "name": f"{cat['emoji']} {cat['label']}",
+                    "tabla_type": payload.tabla_type,
+                    "elige_1": payload.elige_1,
+                    "elige_2": payload.elige_2,
+                    "elige_3": payload.elige_3,
+                }
+                # Remove any existing tabla__ key, then merge new one
+                cur.execute(
+                    """
+                    UPDATE all_appointments
+                    SET extras_json = (
+                        COALESCE(
+                          (SELECT jsonb_object_agg(k, v)
+                           FROM jsonb_each(COALESCE(extras_json, '{}')) t(k, v)
+                           WHERE k NOT LIKE 'tabla\\_%%'),
+                          '{}'::jsonb
+                        ) || %s::jsonb
+                    )
+                    WHERE id = %s
+                    """,
+                    (
+                        _json.dumps({tabla_key: tabla_val}, ensure_ascii=False),
+                        apt_id,
+                    ),
+                )
+        conn.commit()
+
+    return {"ok": True, "tabla_type": payload.tabla_type}

@@ -17,6 +17,7 @@ from app.booking.stock_router import stock_router
 from app.booking.financial_router import financial_router
 from app.booking.bot_config_router import bot_config_router, _ensure_tables as _ensure_bot_tables, seed_defaults as seed_bot_defaults
 from app.booking.gastos_router import gastos_router, _ensure_tables as _ensure_gastos_tables
+from app.booking.tabla_router import tabla_router, _ensure_tabla_table
 from app.meta_pixel import apply_meta_pixel_placeholder, is_meta_pixel_enabled
 from app.config import get_settings
 from app.whatsapp.webhook import handle_webhook, verify_webhook
@@ -538,6 +539,10 @@ async def lifespan(app: FastAPI):
         _ensure_gastos_tables()
     except Exception as _e:
         logger.warning(f"gastos tables setup skipped: {_e}")
+    try:
+        _ensure_tabla_table()
+    except Exception as _e:
+        logger.warning(f"tabla table setup skipped: {_e}")
 
     sync_task       = asyncio.create_task(_run_auto_sync())
     email_task      = asyncio.create_task(_run_email_sweeps_scheduler())
@@ -606,6 +611,7 @@ app.include_router(stock_router)
 app.include_router(financial_router)
 app.include_router(bot_config_router)
 app.include_router(gastos_router)
+app.include_router(tabla_router)
 
 
 def _serve_chat_html() -> HTMLResponse:

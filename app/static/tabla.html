@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Elige tu Tabla · HotBoat Chile</title>
+<style>
+:root{
+  --blue:#0d6efd;--blue-dark:#0b5ed7;--green:#198754;--red:#dc3545;
+  --bg:#f0f4ff;--card:#fff;--border:#dee2e6;--text:#212529;--muted:#6c757d;
+  --gold:#e8a000;--orange:#fd7e14;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+     background:var(--bg);color:var(--text);min-height:100vh;padding:0 0 48px}
+
+.header{background:linear-gradient(135deg,#0a1628 0%,#1a3a6e 100%);
+        color:#fff;padding:1.4rem 1rem;text-align:center}
+.header .logo img{height:64px;width:auto;display:block;margin:0 auto .4rem}
+.header h1{font-size:1.1rem;font-weight:700;margin-bottom:.2rem}
+.header p{font-size:.8rem;opacity:.75}
+.booking-badge{display:inline-flex;align-items:center;gap:.5rem;
+  background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);
+  border-radius:20px;padding:.45rem .9rem;margin-top:.8rem;font-size:.83rem}
+
+.container{max-width:480px;margin:0 auto;padding:1rem}
+
+/* Steps */
+.step{display:none}
+.step.active{display:block}
+
+/* Step indicator */
+.step-bar{display:flex;align-items:center;justify-content:center;gap:.3rem;margin:1rem 0 1.2rem}
+.step-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:background .25s}
+.step-dot.done{background:var(--green)}
+.step-dot.current{background:var(--blue);width:22px;border-radius:4px}
+
+/* Cards */
+.card{background:var(--card);border-radius:16px;box-shadow:0 2px 16px rgba(0,0,0,.08);
+      padding:1.4rem;margin-bottom:1rem}
+.card-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+            color:var(--muted);margin-bottom:.9rem;display:flex;align-items:center;gap:.4rem}
+
+/* Type cards */
+.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
+.type-card{border:2px solid var(--border);border-radius:14px;padding:1.1rem .8rem;
+           text-align:center;cursor:pointer;transition:all .2s;user-select:none}
+.type-card:hover{border-color:#adb5bd;background:#f8f9fa}
+.type-card.selected{border-color:var(--blue);background:#e8f0fe;box-shadow:0 0 0 3px rgba(13,110,253,.1)}
+.type-card .tc-emoji{font-size:2rem;margin-bottom:.4rem}
+.type-card .tc-label{font-weight:700;font-size:.93rem;color:var(--text)}
+.type-card .tc-sub{font-size:.73rem;color:var(--muted);margin-top:.2rem}
+
+/* Ingredient option */
+.ing-option{display:flex;align-items:center;gap:.75rem;padding:.8rem .9rem;
+  border:2px solid var(--border);border-radius:12px;cursor:pointer;
+  transition:border-color .2s,background .2s;margin-bottom:.5rem;user-select:none}
+.ing-option:hover{border-color:#adb5bd;background:#f8f9fa}
+.ing-option.selected{border-color:var(--blue);background:#e8f0fe}
+.ing-option.selected-green{border-color:var(--green);background:#f0fdf4}
+.ing-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);
+           flex-shrink:0;display:flex;align-items:center;justify-content:center;
+           font-size:.85rem;transition:all .2s}
+.ing-option.selected .ing-check{background:var(--blue);border-color:var(--blue);color:#fff}
+.ing-option.selected-green .ing-check{background:var(--green);border-color:var(--green);color:#fff}
+.ing-label{font-size:.9rem;font-weight:500;flex:1}
+
+/* Counter badge */
+.counter-badge{display:inline-flex;align-items:center;gap:.4rem;background:#e8f0fe;
+  color:var(--blue);border-radius:20px;padding:.3rem .7rem;font-size:.8rem;font-weight:700;
+  margin-bottom:.8rem}
+
+/* Summary */
+.summary-row{display:flex;justify-content:space-between;align-items:center;
+  padding:.55rem 0;border-bottom:1px solid var(--border)}
+.summary-row:last-child{border-bottom:none}
+.sr-label{font-size:.82rem;color:var(--muted)}
+.sr-val{font-size:.88rem;font-weight:600;color:var(--text)}
+.sr-items{font-size:.8rem;color:var(--text);text-align:right;line-height:1.5}
+
+.price-row{display:flex;justify-content:space-between;align-items:center;
+  padding:.7rem .9rem;background:linear-gradient(135deg,#0a1628,#1a3a6e);
+  border-radius:12px;color:#fff;margin-top:.4rem}
+.price-row .pl{font-size:.82rem;opacity:.8}
+.price-row .pv{font-size:1.3rem;font-weight:800}
+
+/* Buttons */
+.btn{width:100%;padding:.95rem;border:none;border-radius:12px;font-size:.97rem;
+  font-weight:700;cursor:pointer;transition:background .2s,transform .1s;
+  display:flex;align-items:center;justify-content:center;gap:.5rem}
+.btn:active{transform:scale(.98)}
+.btn:disabled{background:#adb5bd!important;cursor:not-allowed}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover:not(:disabled){background:var(--blue-dark)}
+.btn-success{background:var(--green);color:#fff}
+.btn-back{background:none;border:2px solid var(--border);color:var(--muted);
+          border-radius:12px;padding:.55rem 1rem;font-size:.82rem;font-weight:600;
+          cursor:pointer;margin-bottom:.6rem;display:inline-flex;align-items:center;gap:.3rem}
+.btn-back:hover{border-color:#adb5bd;color:var(--text)}
+
+.spinner{width:18px;height:18px;border:3px solid rgba(255,255,255,.3);
+         border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Success */
+#success{display:none;text-align:center;padding:2rem 1rem}
+.check-circle{width:80px;height:80px;background:#d1fae5;border-radius:50%;
+              display:flex;align-items:center;justify-content:center;
+              font-size:2.5rem;margin:0 auto 1rem}
+#success h2{color:var(--green);font-size:1.3rem;margin-bottom:.5rem}
+#success p{color:var(--muted);font-size:.9rem;line-height:1.5}
+
+/* Already done */
+#already-done{display:none;text-align:center;padding:2rem 1rem}
+.done-circle{width:80px;height:80px;background:#dbeafe;border-radius:50%;
+             display:flex;align-items:center;justify-content:center;
+             font-size:2.5rem;margin:0 auto 1rem}
+
+/* Not found */
+#not-found{display:none;text-align:center;padding:3rem 1rem}
+#not-found .nf-icon{font-size:3rem;margin-bottom:1rem}
+#not-found h2{color:var(--red);margin-bottom:.5rem}
+#not-found p{color:var(--muted);font-size:.9rem}
+
+/* Toast */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(100px);
+       background:#dc3545;color:#fff;border-radius:10px;padding:.7rem 1.2rem;
+       font-size:.88rem;font-weight:600;z-index:9999;transition:transform .3s;
+       max-width:90vw;text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+.tier-desc{font-size:.78rem;color:var(--muted);margin-bottom:.75rem;line-height:1.4}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">
+    <img src="/static/logo.png" alt="HotBoat Chile" onerror="this.style.display='none'">
+  </div>
+  <h1>🍽 Elige tu Tabla</h1>
+  <p>Personaliza tu experiencia gastronómica a bordo</p>
+  <div class="booking-badge" id="booking-badge" style="display:none">
+    <span>🛥</span>
+    <span id="badge-name">Cargando...</span>
+    <span>·</span>
+    <span id="badge-date"></span>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Loading -->
+  <div id="loading" style="text-align:center;padding:3rem 1rem;color:var(--muted)">
+    <div class="spinner" style="display:inline-block;border-color:rgba(0,0,0,.15);border-top-color:var(--blue);margin-bottom:1rem"></div>
+    <p style="font-size:.9rem">Cargando...</p>
+  </div>
+
+  <!-- Not found -->
+  <div id="not-found">
+    <div class="nf-icon">❓</div>
+    <h2>Reserva no encontrada</h2>
+    <p>El link que usaste no corresponde a una reserva activa.</p>
+  </div>
+
+  <!-- Already done -->
+  <div id="already-done">
+    <div class="done-circle">🍽</div>
+    <h2 style="color:var(--blue);font-size:1.3rem;margin-bottom:.5rem">¡Tu tabla ya está elegida!</h2>
+    <p style="color:var(--muted);font-size:.9rem;line-height:1.5;margin-bottom:1.2rem">
+      Ya configuraste tu tabla. Si deseas cambiarla, contáctanos directamente.
+    </p>
+    <div id="done-summary" class="card" style="text-align:left"></div>
+  </div>
+
+  <!-- Success screen -->
+  <div id="success">
+    <div class="check-circle">✓</div>
+    <h2>¡Tabla confirmada!</h2>
+    <p>Tu selección fue guardada. Nos vemos a bordo 🛥</p>
+  </div>
+
+  <!-- Step bar (shared) -->
+  <div class="step-bar" id="step-bar" style="display:none">
+    <div class="step-dot" id="dot-1"></div>
+    <div class="step-dot" id="dot-2"></div>
+    <div class="step-dot" id="dot-3"></div>
+    <div class="step-dot" id="dot-4"></div>
+    <div class="step-dot" id="dot-5"></div>
+  </div>
+
+  <!-- Step 1: Choose type -->
+  <div class="step" id="step-1">
+    <div class="card">
+      <div class="card-title">🍽 ¿Qué tipo de tabla quieres?</div>
+      <div class="type-grid" id="type-grid"></div>
+    </div>
+    <button class="btn btn-primary" id="btn-next-1" onclick="goStep(2)" disabled>
+      Continuar →
+    </button>
+  </div>
+
+  <!-- Step 2: Tier 1 – pick 1 -->
+  <div class="step" id="step-2">
+    <button class="btn-back" onclick="goStep(1)">← Volver</button>
+    <div class="card">
+      <div class="card-title">⭐ Elige 1 ingrediente premium</div>
+      <div class="tier-desc">Selecciona el ingrediente estrella de tu tabla.</div>
+      <div id="tier1-list"></div>
+    </div>
+    <button class="btn btn-primary" id="btn-next-2" onclick="goStep(3)" disabled>
+      Continuar →
+    </button>
+  </div>
+
+  <!-- Step 3: Tier 2 – pick 2 -->
+  <div class="step" id="step-3">
+    <button class="btn-back" onclick="goStep(2)">← Volver</button>
+    <div class="card">
+      <div class="card-title">🎯 Elige 2 ingredientes medios</div>
+      <div class="counter-badge" id="counter-2">
+        <span id="count-2">0</span>/2 seleccionados
+      </div>
+      <div id="tier2-list"></div>
+    </div>
+    <button class="btn btn-primary" id="btn-next-3" onclick="goStep(4)" disabled>
+      Continuar →
+    </button>
+  </div>
+
+  <!-- Step 4: Tier 3 – pick 3 -->
+  <div class="step" id="step-4">
+    <button class="btn-back" onclick="goStep(3)">← Volver</button>
+    <div class="card">
+      <div class="card-title">✨ Elige 3 ingredientes extras</div>
+      <div class="counter-badge" id="counter-3">
+        <span id="count-3">0</span>/3 seleccionados
+      </div>
+      <div id="tier3-list"></div>
+    </div>
+    <button class="btn btn-primary" id="btn-next-4" onclick="goStep(5)" disabled>
+      Ver resumen →
+    </button>
+  </div>
+
+  <!-- Step 5: Confirm -->
+  <div class="step" id="step-5">
+    <button class="btn-back" onclick="goStep(4)">← Volver</button>
+    <div class="card">
+      <div class="card-title">📋 Resumen de tu tabla</div>
+      <div id="summary-content"></div>
+      <div class="price-row" style="margin-top:1rem">
+        <span class="pl">Precio total</span>
+        <span class="pv" id="summary-price">$25.000</span>
+      </div>
+    </div>
+    <button class="btn btn-success" id="btn-confirm" onclick="confirmTabla()">
+      <div class="spinner" id="spin-confirm"></div>
+      <span id="btn-confirm-txt">✓ Confirmar mi tabla</span>
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const bookingRef = location.pathname.split('/tabla/')[1] || '';
+let catalog = {};
+let defaultPrice = 25000;
+let sel = { type: null, tier1: null, tier2: [], tier3: [] };
+
+async function init() {
+  if (!bookingRef) { showScreen('not-found'); return; }
+  try {
+    const d = await fetch(`/api/tabla/${encodeURIComponent(bookingRef)}/info`).then(r => r.ok ? r.json() : null);
+    if (!d) { showScreen('not-found'); return; }
+
+    catalog = d.catalog;
+    defaultPrice = d.default_price || 25000;
+
+    document.getElementById('badge-name').textContent = d.customer_name || 'Cliente';
+    document.getElementById('badge-date').textContent = fmtDate(d.booking_date) + (d.booking_time ? ' · ' + d.booking_time : '');
+    document.getElementById('booking-badge').style.display = 'inline-flex';
+
+    if (d.existing && d.existing.completed_at) {
+      showExistingDone(d.existing);
+      return;
+    }
+
+    renderTypeGrid();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('step-bar').style.display = 'flex';
+    goStep(1);
+  } catch (e) {
+    showScreen('not-found');
+  }
+}
+
+function showScreen(id) {
+  document.getElementById('loading').style.display = 'none';
+  ['not-found','already-done','success'].forEach(s => document.getElementById(s).style.display = 'none');
+  document.getElementById('step-bar').style.display = 'none';
+  [1,2,3,4,5].forEach(n => { const el = document.getElementById('step-'+n); if(el) el.classList.remove('active'); });
+  document.getElementById(id).style.display = 'block';
+}
+
+function showExistingDone(ex) {
+  const cat = catalog[ex.tabla_type] || {};
+  const label = (cat.emoji || '🍽') + ' ' + (cat.label || ex.tabla_type);
+  const html = `
+    <div class="summary-row"><span class="sr-label">Tipo</span><span class="sr-val">${label}</span></div>
+    <div class="summary-row">
+      <span class="sr-label">⭐ Premium</span>
+      <span class="sr-val">${ex.elige_1 || '-'}</span>
+    </div>
+    <div class="summary-row">
+      <span class="sr-label">🎯 Medios</span>
+      <span class="sr-items">${(ex.elige_2||[]).join('<br>')}</span>
+    </div>
+    <div class="summary-row">
+      <span class="sr-label">✨ Extras</span>
+      <span class="sr-items">${(ex.elige_3||[]).join('<br>')}</span>
+    </div>`;
+  document.getElementById('done-summary').innerHTML = html;
+  showScreen('already-done');
+}
+
+function renderTypeGrid() {
+  const grid = document.getElementById('type-grid');
+  const types = [
+    {key:'salada', emoji:'🧀', label:'Tabla Salada', sub:'Fiambres, untables y snacks salados'},
+    {key:'dulce',  emoji:'🍫', label:'Tabla Dulce',  sub:'Chocolates, galletas y dulces'},
+    {key:'arma',   emoji:'🎨', label:'Arma tu Tabla',sub:'Mix libre de todos los sabores'},
+    {key:'vegana', emoji:'🥑', label:'Tabla Vegana', sub:'100% vegetales y sin lacteos'},
+  ];
+  grid.innerHTML = types.map(t => `
+    <div class="type-card" id="tc-${t.key}" onclick="selectType('${t.key}')">
+      <div class="tc-emoji">${t.emoji}</div>
+      <div class="tc-label">${t.label}</div>
+      <div class="tc-sub">${t.sub}</div>
+    </div>`).join('');
+}
+
+function selectType(key) {
+  if (!catalog[key]) return;
+  sel.type = key;
+  sel.tier1 = null; sel.tier2 = []; sel.tier3 = [];
+  document.querySelectorAll('.type-card').forEach(el => el.classList.remove('selected'));
+  document.getElementById('tc-'+key).classList.add('selected');
+  document.getElementById('btn-next-1').disabled = false;
+}
+
+function goStep(n) {
+  [1,2,3,4,5].forEach(i => {
+    const el = document.getElementById('step-'+i);
+    if(el) el.classList.toggle('active', i===n);
+  });
+  updateDots(n);
+  if (n === 2) renderTier1();
+  if (n === 3) renderTier2();
+  if (n === 4) renderTier3();
+  if (n === 5) renderSummary();
+  window.scrollTo(0,0);
+}
+
+function updateDots(current) {
+  for (let i = 1; i <= 5; i++) {
+    const d = document.getElementById('dot-'+i);
+    if (!d) continue;
+    d.className = 'step-dot' + (i < current ? ' done' : i === current ? ' current' : '');
+  }
+}
+
+function renderTier1() {
+  const cat = catalog[sel.type];
+  if (!cat) return;
+  const list = document.getElementById('tier1-list');
+  list.innerHTML = cat.tier1.map(item => `
+    <div class="ing-option${sel.tier1===item?' selected':''}" id="t1-${esc(item)}" onclick="selectTier1('${esc(item)}')">
+      <div class="ing-check">${sel.tier1===item?'✓':''}</div>
+      <div class="ing-label">${item}</div>
+    </div>`).join('');
+  document.getElementById('btn-next-2').disabled = !sel.tier1;
+}
+
+function selectTier1(item) {
+  sel.tier1 = item;
+  renderTier1();
+  document.getElementById('btn-next-2').disabled = false;
+}
+
+function renderTier2() {
+  const cat = catalog[sel.type];
+  if (!cat) return;
+  const list = document.getElementById('tier2-list');
+  list.innerHTML = cat.tier2.map(item => {
+    const on = sel.tier2.includes(item);
+    return `<div class="ing-option${on?' selected':''}" id="t2-${esc(item)}" onclick="toggleTier2('${esc(item)}')">
+      <div class="ing-check">${on?'✓':''}</div>
+      <div class="ing-label">${item}</div>
+    </div>`;
+  }).join('');
+  updateCount2();
+}
+
+function toggleTier2(item) {
+  const idx = sel.tier2.indexOf(item);
+  if (idx >= 0) sel.tier2.splice(idx, 1);
+  else if (sel.tier2.length < 2) sel.tier2.push(item);
+  else { showToast('Solo puedes elegir 2 ingredientes'); return; }
+  renderTier2();
+}
+
+function updateCount2() {
+  document.getElementById('count-2').textContent = sel.tier2.length;
+  document.getElementById('btn-next-3').disabled = sel.tier2.length !== 2;
+}
+
+function renderTier3() {
+  const cat = catalog[sel.type];
+  if (!cat) return;
+  const list = document.getElementById('tier3-list');
+  list.innerHTML = cat.tier3.map(item => {
+    const on = sel.tier3.includes(item);
+    return `<div class="ing-option${on?' selected-green':''}" id="t3-${esc(item)}" onclick="toggleTier3('${esc(item)}')">
+      <div class="ing-check">${on?'✓':''}</div>
+      <div class="ing-label">${item}</div>
+    </div>`;
+  }).join('');
+  updateCount3();
+}
+
+function toggleTier3(item) {
+  const idx = sel.tier3.indexOf(item);
+  if (idx >= 0) sel.tier3.splice(idx, 1);
+  else if (sel.tier3.length < 3) sel.tier3.push(item);
+  else { showToast('Solo puedes elegir 3 ingredientes'); return; }
+  renderTier3();
+}
+
+function updateCount3() {
+  document.getElementById('count-3').textContent = sel.tier3.length;
+  document.getElementById('btn-next-4').disabled = sel.tier3.length !== 3;
+}
+
+function renderSummary() {
+  const cat = catalog[sel.type] || {};
+  const label = (cat.emoji || '🍽') + ' ' + (cat.label || sel.type);
+  document.getElementById('summary-content').innerHTML = `
+    <div class="summary-row"><span class="sr-label">Tipo</span><span class="sr-val">${label}</span></div>
+    <div class="summary-row">
+      <span class="sr-label">⭐ Premium</span>
+      <span class="sr-val">${sel.tier1}</span>
+    </div>
+    <div class="summary-row">
+      <span class="sr-label">🎯 Medios</span>
+      <span class="sr-items">${sel.tier2.join('<br>')}</span>
+    </div>
+    <div class="summary-row">
+      <span class="sr-label">✨ Extras</span>
+      <span class="sr-items">${sel.tier3.join('<br>')}</span>
+    </div>`;
+  document.getElementById('summary-price').textContent = '$' + defaultPrice.toLocaleString('es-CL');
+}
+
+async function confirmTabla() {
+  const btn = document.getElementById('btn-confirm');
+  const spin = document.getElementById('spin-confirm');
+  const txt = document.getElementById('btn-confirm-txt');
+  btn.disabled = true;
+  spin.style.display = 'block';
+  txt.style.display = 'none';
+  try {
+    const r = await fetch(`/api/tabla/${encodeURIComponent(bookingRef)}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        tabla_type: sel.type,
+        elige_1: sel.tier1,
+        elige_2: sel.tier2,
+        elige_3: sel.tier3,
+        price: defaultPrice,
+      }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(()=>({detail:'Error desconocido'}));
+      throw new Error(e.detail || 'Error al guardar');
+    }
+    document.getElementById('step-bar').style.display = 'none';
+    [1,2,3,4,5].forEach(n => { const el = document.getElementById('step-'+n); if(el) el.classList.remove('active'); });
+    showScreen('success');
+  } catch(e) {
+    showToast(e.message);
+    btn.disabled = false;
+    spin.style.display = 'none';
+    txt.style.display = 'block';
+  }
+}
+
+function esc(s) { return (s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function fmtDate(s) {
+  if (!s) return '';
+  try {
+    const [y,m,d] = s.split('-');
+    return `${d}/${m}/${y}`;
+  } catch { return s; }
+}
+
+let _toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+init();
+</script>
+</body>
+</html>
