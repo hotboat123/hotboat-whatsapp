@@ -5310,7 +5310,7 @@ async function toggleExtraStock(extraId, stockProductId){
   try{
     if(stockProductId){
       if(!confirm('¿Quitar este producto del control de stock? Se mantiene el historial.')) return;
-      await api(`/api/admin/precios-extras/${encodeURIComponent(extraId)}/link-stock`,{method:'DELETE'});
+      await api(`/api/admin/precios-extras/${encodeURIComponent(extraId)}/unlink-stock`,{method:'POST'});
       showToast('Producto quitado del stock');
     } else {
       await api(`/api/admin/precios-extras/${encodeURIComponent(extraId)}/link-stock`,{method:'POST'});

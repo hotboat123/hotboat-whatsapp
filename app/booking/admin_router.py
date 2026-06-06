@@ -1850,7 +1850,7 @@ async def link_extra_to_stock(extra_id: str, x_admin_key: str = Header("")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@admin_router.delete("/api/admin/precios-extras/{extra_id}/link-stock")
+@admin_router.post("/api/admin/precios-extras/{extra_id}/unlink-stock")
 async def unlink_extra_from_stock(extra_id: str, x_admin_key: str = Header("")):
     """Unlink an extra from its stock product (sets stock_product_id=NULL, removes BOM).
     Does NOT delete the stock_products entry to preserve history."""
