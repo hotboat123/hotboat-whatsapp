@@ -5370,14 +5370,17 @@ function renderTablasCatalogAdmin(){
         <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.3rem">${tierLabel[tier]}</div>
         <div id="tci-chips-${t}-${tier}">${chips||'<span style="font-size:.75rem;color:var(--muted)">Sin ingredientes</span>'}</div>
         <div style="display:flex;gap:.4rem;margin-top:.4rem">
-          <select id="tci-inp-${t}-${tier}"
-            style="flex:1;font-size:.8rem;padding:.3rem .6rem;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:7px;outline:none">
-            <option value="">— Seleccionar ingrediente —</option>
+          <input id="tci-inp-${t}-${tier}" list="tci-list-${t}-${tier}"
+            placeholder="Buscar ingrediente..."
+            autocomplete="off"
+            style="flex:1;font-size:.8rem;padding:.3rem .6rem;background:var(--input);border:1px solid var(--border);color:#fff;border-radius:7px;outline:none"
+            onkeydown="if(event.key==='Enter')tciAdd('${t}',${tier})">
+          <datalist id="tci-list-${t}-${tier}">
             ${(_extrasCatData.length?_extrasCatData:EXTRAS_CATALOG)
               .filter(e=>!items.some(it=>it.ingredient===e.name))
-              .map(e=>`<option value="${escHtml(e.name)}">${escHtml(e.name)}</option>`)
+              .map(e=>`<option value="${escHtml(e.name)}">`)
               .join('')}
-          </select>
+          </datalist>
           <button onclick="tciAdd('${t}',${tier})"
             style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.3rem .7rem;font-size:.82rem;font-weight:700;cursor:pointer">+</button>
         </div>
@@ -5393,7 +5396,9 @@ function renderTablasCatalogAdmin(){
 async function tciAdd(tablaType, tier){
   const inp = document.getElementById(`tci-inp-${tablaType}-${tier}`);
   const ingredient = inp?.value.trim();
-  if(!ingredient){ showToast('Escribe el nombre del ingrediente'); return; }
+  if(!ingredient){ showToast('Selecciona un ingrediente'); return; }
+  const catalog = _extrasCatData.length ? _extrasCatData : EXTRAS_CATALOG;
+  if(!catalog.some(e=>e.name===ingredient)){ showToast('Selecciona un ingrediente válido de la lista'); inp.value=''; return; }
   try{
     await api('/api/admin/tabla/catalog/item',{method:'POST',body:JSON.stringify({tabla_type:tablaType,tier,ingredient})});
     inp.value='';
