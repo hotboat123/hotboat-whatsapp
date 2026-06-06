@@ -3268,8 +3268,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           const data = _simGetData();
           const now  = new Date().toISOString();
 
-          // Update in place if same name already exists OR same ID (rename)
-          const existingIdx = list.findIndex(s => s.id === _simScenarioId || s.name === name);
+          // Match only by name: same name → update in place; different name → always new
+          const existingIdx = list.findIndex(s => s.name === name);
           if(existingIdx >= 0){
             list[existingIdx] = { ...list[existingIdx], ...data, name, updated_at: now };
             _simScenarioId = list[existingIdx].id;
