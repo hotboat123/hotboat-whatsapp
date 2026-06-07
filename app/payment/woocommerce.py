@@ -95,6 +95,10 @@ async def create_order(
         data.get("payment_url") or
         f"{WOO_URL}/es/checkout/order-pay/{order_id}/?pay_for_order=true&key={order_key}"
     )
+    # Force correct domain — WooCommerce sometimes returns hotboat.cl if siteurl is stale
+    for wrong_domain in ["https://hotboat.cl", "http://hotboat.cl",
+                         "https://www.hotboat.cl", "http://www.hotboatchile.com"]:
+        woo_payment_url = woo_payment_url.replace(wrong_domain, WOO_URL)
     # Force Spanish (/es/) in payment URL regardless of what WooCommerce returns
     woo_payment_url = woo_payment_url.replace(
         f"{WOO_URL}/checkout/", f"{WOO_URL}/es/checkout/"
