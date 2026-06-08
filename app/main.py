@@ -442,6 +442,7 @@ def _ensure_extras_visibility_table():
                     ("costo",        "INTEGER"),
                     ("icon",         "TEXT"),
                     ("name",         "TEXT"),
+                    ("user_hidden",  "BOOLEAN NOT NULL DEFAULT FALSE"),
                 ]:
                     cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col} {definition}")
 

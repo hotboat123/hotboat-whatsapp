@@ -1590,6 +1590,7 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                            COALESCE(description_pt, '') AS description_pt,
                            stock_product_id
                     FROM extras_visibility
+                    WHERE COALESCE(user_hidden, FALSE) = FALSE
                     ORDER BY sort_order, extra_name_lower
                 """)
                 extras = []
@@ -1787,8 +1788,11 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Physical delete — extras_visibility is our own table, not Sheets-synced
-                cur.execute("DELETE FROM extras_visibility WHERE extra_name_lower = %s", (extra_id,))
+                # Soft-delete so startup seed doesn't re-insert on next restart
+                cur.execute(
+                    "UPDATE extras_visibility SET user_hidden=TRUE, show_in_booking=FALSE WHERE extra_name_lower = %s",
+                    (extra_id,),
+                )
                 conn.commit()
         return {"ok": True}
     except Exception as e:

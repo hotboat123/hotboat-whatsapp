@@ -71,7 +71,7 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
                            COALESCE(NULLIF(TRIM(description_pt), ''), '') AS description_pt,
                            COALESCE(sort_order, 999)        AS sort_order
                     FROM extras_visibility
-                    WHERE show_in_booking = TRUE
+                    WHERE show_in_booking = TRUE AND COALESCE(user_hidden, FALSE) = FALSE
                     ORDER BY sort_order, extra_name_lower
                 """)
                 extras = []

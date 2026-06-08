@@ -1440,7 +1440,7 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT extra_name_lower, name, COALESCE(precio_venta,0) FROM extras_visibility"
+                    "SELECT extra_name_lower, name, COALESCE(precio_venta,0) FROM extras_visibility WHERE COALESCE(user_hidden,FALSE)=FALSE"
                 )
                 for (name_lower, name, price) in cur.fetchall():
                     display = name or name_lower
@@ -2037,7 +2037,7 @@ def _build_booking_card_html(b: dict, is_weekly: bool = False) -> str:
         from app.db.connection import get_connection as _gc
         with _gc() as _conn:
             with _conn.cursor() as _cur:
-                _cur.execute("SELECT extra_name_lower, COALESCE(name, extra_name_lower) FROM extras_visibility")
+                _cur.execute("SELECT extra_name_lower, COALESCE(name, extra_name_lower) FROM extras_visibility WHERE COALESCE(user_hidden,FALSE)=FALSE")
                 for _k, _n in _cur.fetchall():
                     catalog[_k.lower()] = _n
     except Exception:
