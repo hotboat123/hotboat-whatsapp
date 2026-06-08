@@ -1414,6 +1414,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right">I.Aloj.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Exp.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Ext.</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Descuentos manual + cupón (prorrateados en I.Reserva…I.Ext.)">Desc.</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Comis.</th>
                 <th style="padding:.55rem .45rem;text-align:right">I.Neto</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo operativo: N reservas × costo_operativo_por_reserva (config)">C.Op</th>
@@ -1503,9 +1504,34 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <!-- ── Forecast Panel ─────────────────────────────────────────────── -->
     <div id="fin-fc-panel" style="display:none">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
-        <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
           <span style="font-weight:600;font-size:.92rem">🔭 Forecast vs Budget</span>
-          <button onclick="loadForecast()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↻ Actualizar</button>
+          <div style="display:flex;gap:.4rem;align-items:center">
+            <div style="display:flex;gap:.2rem;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:.18rem">
+              <button id="fc-view-monthly" onclick="setFcView('monthly')"
+                style="background:var(--gold);color:#000;border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;font-weight:600;cursor:pointer">Mensual</button>
+              <button id="fc-view-weekly" onclick="setFcView('weekly')"
+                style="background:transparent;color:var(--muted);border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;cursor:pointer">Semanal</button>
+            </div>
+            <button onclick="loadForecast(_fcView)" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↻</button>
+          </div>
+        </div>
+        <!-- Date range bar -->
+        <div style="padding:.55rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;background:var(--card)">
+          <span style="font-size:.72rem;color:var(--muted);font-weight:500;white-space:nowrap">Rango:</span>
+          <input type="date" id="fc-date-from"
+            style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .45rem;font-size:.75rem;outline:none"
+            onchange="fcApplyRange()">
+          <span style="color:var(--muted);font-size:.75rem">→</span>
+          <input type="date" id="fc-date-to"
+            style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .45rem;font-size:.75rem;outline:none"
+            onchange="fcApplyRange()">
+          <div style="display:flex;gap:.25rem;margin-left:.2rem">
+            <button onclick="fcSetPreset(3)"  style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">3m</button>
+            <button onclick="fcSetPreset(6)"  style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">6m</button>
+            <button onclick="fcSetPreset(9)"  style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">9m</button>
+            <button onclick="fcSetPreset(14)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:.18rem .45rem;font-size:.7rem;cursor:pointer">1a</button>
+          </div>
         </div>
         <div id="fin-fc-content" style="padding:1rem"></div>
       </div>
@@ -10364,60 +10390,236 @@ async function saveFinStructure(){
 }
 
 // ── Forecast ──────────────────────────────────────────────────
-async function loadForecast(){
+const _FC_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+let _fcView = 'monthly';
+let _fcDateFrom = null, _fcDateTo = null;
+
+function fmtClpK(n){
+  const v = Math.abs(Math.round(Number(n)||0));
+  if(v >= 1000000) return '$'+(v/1000000).toFixed(1).replace('.0','')+'M';
+  if(v >= 1000)    return '$'+(v/1000).toFixed(0)+'K';
+  return '$'+v.toLocaleString('es-CL');
+}
+
+function setFcView(v){
+  _fcView = v;
+  const onCSS  = 'background:var(--gold);color:#000;border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;font-weight:600;cursor:pointer';
+  const offCSS = 'background:transparent;color:var(--muted);border:none;border-radius:5px;padding:.22rem .6rem;font-size:.75rem;cursor:pointer';
+  document.getElementById('fc-view-monthly').style.cssText = v==='monthly' ? onCSS : offCSS;
+  document.getElementById('fc-view-weekly').style.cssText  = v==='weekly'  ? onCSS : offCSS;
+  loadForecast(v);
+}
+
+async function loadForecast(view){
+  view = view || _fcView || 'monthly';
+  _fcView = view;
   const el = document.getElementById('fin-fc-content');
   el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:.5rem">Cargando…</div>';
+  let params;
+  if(_fcDateFrom && _fcDateTo){
+    params = `view=${view}&date_from=${_fcDateFrom}&date_to=${_fcDateTo}`;
+  } else if(view === 'weekly'){
+    params = 'view=weekly&weeks_back=4&weeks_ahead=34';
+  } else {
+    params = 'view=monthly&months_back=3&months_ahead=9';
+  }
   try {
-    const r = await fetch('/api/admin/financial/forecast?months_ahead=3');
+    const r = await fetch(`/api/admin/financial/forecast-table?${params}`, {headers:{'x-admin-key':KEY}});
+    if(!r.ok) throw new Error(await r.text());
     const d = await r.json();
     _finLastForecast = d.data || [];
-    renderForecast(_finLastForecast);
+    renderForecast(_finLastForecast, view);
   } catch(e){
-    el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar</div>';
+    el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar: '+e.message+'</div>';
   }
 }
 
-function renderForecast(data){
+function fcApplyRange(){
+  _fcDateFrom = document.getElementById('fc-date-from').value || null;
+  _fcDateTo   = document.getElementById('fc-date-to').value || null;
+  loadForecast(_fcView);
+}
+
+function fcSetPreset(months){
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const toMonth = new Date(now.getFullYear(), now.getMonth() + months - 1, 1);
+  const lastDay = new Date(toMonth.getFullYear(), toMonth.getMonth() + 1, 0);
+  const fmt = d => d.toISOString().split('T')[0];
+  _fcDateFrom = fmt(from);
+  _fcDateTo   = fmt(lastDay);
+  document.getElementById('fc-date-from').value = _fcDateFrom;
+  document.getElementById('fc-date-to').value   = _fcDateTo;
+  loadForecast(_fcView);
+}
+
+function _fcInlineEdit(spanId, currentVal, onSave){
+  const span = document.getElementById(spanId);
+  if(!span) return false;
+  const input = document.createElement('input');
+  input.type='number'; input.value=currentVal||''; input.placeholder='0'; input.min='0';
+  input.style.cssText='width:105px;background:var(--card);border:1px solid var(--gold);color:var(--text);border-radius:5px;padding:.18rem .4rem;font-size:.8rem;text-align:right;outline:none';
+  let saved=false;
+  const doSave=async()=>{ if(saved)return; saved=true; await onSave(parseInt(input.value)||0); };
+  input.addEventListener('blur', doSave);
+  input.addEventListener('keydown', e=>{
+    if(e.key==='Enter') input.blur();
+    if(e.key==='Escape'){ saved=true; renderForecast(_finLastForecast,_fcView); }
+  });
+  span.replaceWith(input); input.focus(); input.select();
+  return true;
+}
+
+async function _fcSavePlan(type, key, amount){
+  await fetch('/api/admin/financial/plan-entry',{
+    method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
+    body: JSON.stringify({type, key, amount})
+  });
+}
+
+function renderForecast(data, view){
+  view = view || _fcView || 'monthly';
   const el = document.getElementById('fin-fc-content');
-  if(!data||!data.length){
-    el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Sin reservas futuras</div>'; return;
+  if(!data||!data.length){ el.innerHTML='<div style="color:var(--muted);font-size:.82rem">Sin datos</div>'; return; }
+  const isWeekly = view === 'weekly';
+
+  let rows = '';
+  for(const m of data){
+    const isPast = m.is_past, isCurrent = m.is_current;
+    const rowBg = isCurrent ? 'rgba(250,204,21,.06)' : isPast ? 'rgba(255,255,255,.015)' : '';
+
+    let periodLabel;
+    if(isWeekly){
+      periodLabel = m.week_label || m.month;
+    } else {
+      const [yr, mo] = m.month.split('-');
+      periodLabel = _FC_MONTHS[parseInt(mo)-1]+' '+yr;
+    }
+    const badge = isCurrent ? ' <span style="font-size:.62rem;color:var(--gold);font-weight:700">HOY</span>'
+                : isPast    ? ' <span style="font-size:.62rem;color:var(--muted)">✓</span>' : '';
+
+    let realHtml = '—';
+    if(m.actual_income !== null){
+      const col = isPast ? 'var(--green)' : 'var(--gold)';
+      realHtml = `<span style="font-weight:600;color:${col}">${fmtClp(m.actual_income)}</span>`;
+      if(isCurrent && !isWeekly) realHtml += `<br><span style="font-size:.63rem;color:var(--muted)">parcial</span>`;
+      if(m.actual_bookings) realHtml += `<br><span style="font-size:.63rem;color:var(--muted)">${m.actual_bookings} res.</span>`;
+    }
+
+    let budgetHtml = '';
+    const budgetSpanId = `fc-b-${m.month}`;
+    if(isPast){
+      if(m.manual_income){
+        const delta = m.actual_income !== null ? m.actual_income - m.manual_income : null;
+        budgetHtml = `<span style="color:var(--text)">${fmtClp(m.manual_income)}</span>`;
+        if(delta !== null) budgetHtml += `<br><span style="font-size:.63rem;color:${delta>=0?'var(--green)':'var(--red)'}">${delta>=0?'+':''}${fmtClpK(delta)}</span>`;
+      } else {
+        budgetHtml = `<span style="color:var(--muted);font-size:.75rem">—</span>`;
+      }
+    } else {
+      const bv = m.manual_income;
+      const isOverride = m.manual_is_override;
+      const hint = isWeekly && !isOverride && bv ? `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">del mensual</span>` : '';
+      budgetHtml = `<span id="${budgetSpanId}"
+        onclick="fcEditBudget('${m.month}','${m.month_key}',${bv||0},${isWeekly})"
+        style="cursor:pointer;display:inline-block;min-width:80px;text-align:right;padding:.18rem .45rem;
+               border-radius:5px;border:1px dashed ${bv?'var(--border)':'rgba(255,255,255,.12)'};
+               color:${bv?'var(--text)':'var(--muted)'};font-size:${bv?'.82rem':'.73rem'}"
+        title="Click para editar budget">${bv ? fmtClp(bv) : '+ añadir'}</span>${hint}`;
+    }
+
+    let forecastHtml = '';
+    const fcSpanId = `fc-f-${m.month}`;
+    const fcType = isWeekly ? 'week_forecast' : 'month_forecast';
+    if(isPast){
+      if(m.forecast_income){
+        const delta = m.actual_income !== null ? m.actual_income - m.forecast_income : null;
+        forecastHtml = `<span style="color:var(--text)">${fmtClp(m.forecast_income)}</span>`;
+        if(delta !== null) forecastHtml += `<br><span style="font-size:.63rem;color:${delta>=0?'var(--green)':'var(--red)'}">${delta>=0?'+':''}${fmtClpK(delta)}</span>`;
+      } else {
+        forecastHtml = `<span style="color:var(--muted);font-size:.75rem">—</span>`;
+      }
+    } else {
+      const fv = m.forecast_income;
+      const sv = m.suggested_income;
+      const sugLabel = sv ? `<span style="font-size:.62rem;color:var(--muted);opacity:.75">sugerido: ${fmtClpK(sv)}${m.suggested_source?' ('+m.suggested_source+')':''}</span>` : '';
+      forecastHtml = `<span id="${fcSpanId}"
+        onclick="fcEditForecast('${m.month}','${fcType}',${fv||0})"
+        style="cursor:pointer;display:inline-block;min-width:80px;text-align:right;padding:.18rem .45rem;
+               border-radius:5px;border:1px dashed ${fv?'var(--border)':'rgba(255,255,255,.12)'};
+               color:${fv?'var(--text)':'var(--muted)'};font-size:${fv?'.82rem':'.73rem'}"
+        title="Click para editar forecast">${fv ? fmtClp(fv) : '+ añadir'}</span>
+        ${sugLabel ? `<br>${sugLabel}` : ''}`;
+    }
+
+    let deltaHtml = '—';
+    if(isPast && m.forecast_income && m.actual_income !== null){
+      const d2 = m.actual_income - m.forecast_income;
+      deltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">real vs fc</span></span>`;
+    } else if(!isPast && m.forecast_income && m.manual_income){
+      const d2 = m.forecast_income - m.manual_income;
+      deltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">fc vs budget</span></span>`;
+    }
+
+    rows += `<tr style="background:${rowBg};border-bottom:1px solid var(--border)">
+      <td style="padding:.45rem .7rem;font-weight:${isCurrent?700:500}">${periodLabel}${badge}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${realHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${budgetHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${forecastHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${deltaHtml}</td>
+    </tr>`;
   }
-  const MONTH_NAMES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  el.innerHTML = data.map(m=>{
-    const mo = parseInt(m.month.split('-')[1]);
-    const yr = m.month.split('-')[0];
-    const b = m.budget || {};
-    const incomeBudget = b.income_budget || 0;
-    const vs = m.vs_budget;
-    const vsColor = vs >= 0 ? 'var(--green)' : 'var(--red)';
-    const vsPct = incomeBudget ? Math.round(vs/incomeBudget*100) : null;
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:.8rem">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.8rem">
-        <div>
-          <div style="font-weight:600">${MONTH_NAMES[mo]} ${yr}</div>
-          <div style="color:var(--muted);font-size:.75rem">${m.n_reservas} reservas · ${m.confirmed} confirmadas · ${m.pending} pendientes</div>
-        </div>
-        <button onclick="openBudgetModal('${yr}','${mo}')" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.28rem .6rem;font-size:.75rem;cursor:pointer">
-          📋 Editar budget
-        </button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;font-size:.8rem">
-        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
-          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Ingreso Forecast</div>
-          <div style="font-weight:600;color:var(--gold)">${fmtClp(m.net_income)}</div>
-          ${incomeBudget ? `<div style="font-size:.7rem;color:${vsColor};margin-top:.15rem">${vs>=0?'+':''}${fmtClp(vs)} vs budget ${vsPct!==null?'('+vsPct+'%)':''}</div>` : ''}
-        </div>
-        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
-          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Budget Ingreso</div>
-          <div style="font-weight:600">${incomeBudget ? fmtClp(incomeBudget) : '<span style="color:var(--muted)">—</span>'}</div>
-        </div>
-        <div style="background:var(--card);border-radius:8px;padding:.6rem .8rem">
-          <div style="color:var(--muted);font-size:.7rem;margin-bottom:.2rem">Resultado Forecast</div>
-          <div style="font-weight:600;color:${colorNum(m.resultado_forecast)}">${fmtClp(m.resultado_forecast)}</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+
+  const periodHeader = isWeekly ? 'Semana' : 'Mes';
+  el.innerHTML = `<div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+      <thead><tr style="background:var(--card);color:var(--muted);font-size:.67rem;text-transform:uppercase;letter-spacing:.04em">
+        <th style="padding:.5rem .7rem;text-align:left">${periodHeader}</th>
+        <th style="padding:.5rem .5rem;text-align:right">Real</th>
+        <th style="padding:.5rem .5rem;text-align:right">Budget</th>
+        <th style="padding:.5rem .5rem;text-align:right">Forecast</th>
+        <th style="padding:.5rem .5rem;text-align:right">Δ</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+async function fcEditBudget(weekOrMonthKey, monthKey, currentVal, isWeekly){
+  const spanId = `fc-b-${weekOrMonthKey}`;
+  _fcInlineEdit(spanId, currentVal, async (val)=>{
+    try {
+      if(isWeekly){
+        await _fcSavePlan('week_budget', weekOrMonthKey, val);
+        const row = (_finLastForecast||[]).find(r=>r.month===weekOrMonthKey);
+        if(row){ row.manual_income = val||null; row.manual_is_override = true; }
+      } else {
+        const [yr, mo] = monthKey.split('-');
+        const row = (_finLastForecast||[]).find(r=>r.month===weekOrMonthKey);
+        await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`,{
+          method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
+          body: JSON.stringify({income_budget:val, costs_budget:(row&&row.manual_costs)||0,
+                                marketing_budget:(row&&row.manual_marketing)||0, notes:''})
+        });
+        if(row) row.manual_income = val||null;
+      }
+      renderForecast(_finLastForecast, _fcView);
+      showToast('✅ Budget guardado');
+    } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast, _fcView); }
+  });
+}
+
+async function fcEditForecast(key, type, currentVal){
+  const spanId = `fc-f-${key}`;
+  _fcInlineEdit(spanId, currentVal, async (val)=>{
+    try {
+      await _fcSavePlan(type, key, val);
+      const row = (_finLastForecast||[]).find(r=>r.month===key);
+      if(row) row.forecast_income = val||null;
+      renderForecast(_finLastForecast, _fcView);
+      showToast('✅ Forecast guardado');
+    } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast, _fcView); }
+  });
 }
 
 // ── Commissions modal ─────────────────────────────────────────
