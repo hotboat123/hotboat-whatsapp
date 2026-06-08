@@ -1,7 +1,7 @@
 """
 Stock management router — /api/admin/stock/...
 Handles: products CRUD, bill-of-materials per extra, stock adjustments,
-         booking consumption (auto-deduct when extras are saved), low-stock alerts.
+         booking consumption (deducted after reservation date passes), low-stock alerts.
 """
 import json
 import logging
@@ -430,3 +430,193 @@ def get_movements(product_id: Optional[int] = None, limit: int = 100,
                 if r.get("created_at"):
                     r["created_at"] = str(r["created_at"])
             return {"movements": rows}
+
+
+# ─────────────────────────── Auto-consume past reservations ─────────────────
+
+def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=None):
+    """Consume stock for one booking. Returns number of movements applied."""
+    import json as _json
+
+    # Parse extras
+    if isinstance(extras_json, str):
+        try:
+            extras_json = _json.loads(extras_json)
+        except Exception:
+            extras_json = {}
+    if not isinstance(extras_json, dict):
+        extras_json = {}
+
+    items = []
+
+    # Regular booking extras (key → qty)
+    for slug, qty in extras_json.items():
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            qty = 1
+        if qty > 0:
+            items.append({"extra_slug": slug, "quantity": qty, "variant_product_id": None})
+
+    # Tabla ingredients (chosen by client)
+    if tabla_selection:
+        for ingredient_name in tabla_selection:
+            name_lower = ingredient_name.lower()
+            # Check if this ingredient has a stock product linked
+            cur.execute(
+                "SELECT id FROM stock_products WHERE LOWER(name)=%s LIMIT 1",
+                (name_lower,)
+            )
+            row = cur.fetchone()
+            if row:
+                _apply_movement(cur, row[0], -1, "booking", booking_ref,
+                                name_lower, f"Tabla — {ingredient_name}")
+        return len(tabla_selection)
+
+    if not items:
+        return 0
+
+    movements = 0
+    for item in items:
+        cur.execute(
+            "SELECT product_id, quantity, is_variant, variant_label FROM extras_bom WHERE extra_slug=%s",
+            (item["extra_slug"],)
+        )
+        bom_rows = cur.fetchall()
+        if not bom_rows:
+            continue
+        has_variants = any(r[2] for r in bom_rows)
+        if has_variants:
+            if item["variant_product_id"]:
+                target = next((r for r in bom_rows if r[0] == item["variant_product_id"]), None)
+                if target:
+                    _apply_movement(cur, target[0], -(target[1] * item["quantity"]),
+                                    "booking", booking_ref, item["extra_slug"],
+                                    f"Reserva {booking_ref} — variante {target[3]}")
+                    movements += 1
+        else:
+            for product_id, qty, _, _ in bom_rows:
+                _apply_movement(cur, product_id, -(qty * item["quantity"]),
+                                "booking", booking_ref, item["extra_slug"],
+                                f"Reserva {booking_ref}")
+                movements += 1
+    return movements
+
+
+def auto_consume_past_bookings() -> dict:
+    """
+    Find all confirmed reservations whose date has already passed and whose
+    stock has not been consumed yet, then deduct their stock.
+    Called on startup and periodically by the background scheduler.
+    Returns a summary dict.
+    """
+    import json as _json
+    from datetime import date
+
+    today = date.today().isoformat()
+    consumed = []
+    skipped = []
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Query both web bookings and all_appointments
+                # hotboat_appointments: web reservations
+                cur.execute("""
+                    SELECT id, source_id, fecha, extras_json, stock_consumed_at
+                    FROM hotboat_appointments
+                    WHERE fecha <= %s
+                      AND status IN ('confirmed', 'CONFIRMED', 'pending', 'PENDING')
+                      AND stock_consumed_at IS NULL
+                """, (today,))
+                web_rows = cur.fetchall()
+
+                # all_appointments: synced/historical reservations
+                cur.execute("""
+                    SELECT id, source_id, fecha, extras_json, stock_consumed_at
+                    FROM all_appointments
+                    WHERE fecha <= %s
+                      AND status IN ('confirmed', 'CONFIRMED', 'pending', 'PENDING')
+                      AND stock_consumed_at IS NULL
+                """, (today,))
+                all_rows = cur.fetchall()
+
+            processed_refs = set()
+
+            for table_name, rows in [("hotboat_appointments", web_rows), ("all_appointments", all_rows)]:
+                for (row_id, source_id, fecha, extras_json, _) in rows:
+                    ref = source_id or f"AA-{row_id}"
+                    if ref in processed_refs:
+                        continue
+                    processed_refs.add(ref)
+
+                    # Check if already consumed (via stock_movements)
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT COUNT(*) FROM stock_movements WHERE booking_ref=%s AND reason='booking'",
+                            (ref,)
+                        )
+                        already = cur.fetchone()[0]
+                        if already > 0:
+                            # Mark as consumed so we don't check again
+                            cur.execute(
+                                f"UPDATE {table_name} SET stock_consumed_at=NOW() WHERE id=%s",
+                                (row_id,)
+                            )
+                            conn.commit()
+                            skipped.append(ref)
+                            continue
+
+                        # Check for tabla selection
+                        cur.execute(
+                            "SELECT elige_1, elige_2, elige_3 FROM tabla_selections WHERE booking_ref=%s",
+                            (ref,)
+                        )
+                        tabla_row = cur.fetchone()
+                        tabla_ingredients = []
+                        if tabla_row:
+                            elige_1, elige_2, elige_3 = tabla_row
+                            if elige_1:
+                                tabla_ingredients.append(elige_1)
+                            if elige_2:
+                                try:
+                                    tabla_ingredients.extend(_json.loads(elige_2) if isinstance(elige_2, str) else elige_2)
+                                except Exception:
+                                    pass
+                            if elige_3:
+                                try:
+                                    tabla_ingredients.extend(_json.loads(elige_3) if isinstance(elige_3, str) else elige_3)
+                                except Exception:
+                                    pass
+
+                        mvts = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None)
+
+                        # Mark as consumed
+                        cur.execute(
+                            f"UPDATE {table_name} SET stock_consumed_at=NOW() WHERE id=%s",
+                            (row_id,)
+                        )
+                        conn.commit()
+
+                        if mvts > 0:
+                            consumed.append(ref)
+                        else:
+                            skipped.append(ref)
+
+            alerts = _check_low_stock(conn)
+
+        if alerts:
+            _send_low_stock_alert(alerts)
+
+        logger.info("Stock auto-consume: %d consumed, %d skipped (no BOM)", len(consumed), len(skipped))
+        return {"consumed": consumed, "skipped": skipped}
+
+    except Exception as e:
+        logger.error("auto_consume_past_bookings error: %s", e)
+        return {"error": str(e), "consumed": [], "skipped": []}
+
+
+@stock_router.post("/api/admin/stock/auto-consume-past")
+def trigger_auto_consume(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    return auto_consume_past_bookings()

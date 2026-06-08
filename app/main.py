@@ -395,6 +395,37 @@ async def _run_yesterday_weekly_scheduler():
         await asyncio.sleep(60)
 
 
+async def _run_stock_consume_scheduler():
+    """Daily at 06:00 Santiago: deduct stock for reservations whose date has passed."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    SEND_HOUR = 6
+
+    # Run once at startup (with a short delay to let DB settle)
+    await asyncio.sleep(45)
+    try:
+        from app.booking.stock_router import auto_consume_past_bookings
+        result = await asyncio.to_thread(auto_consume_past_bookings)
+        logger.info("📦 Stock auto-consume (startup): %s", result)
+    except Exception as _e:
+        logger.warning("Stock auto-consume startup skipped: %s", _e)
+
+    while True:
+        now = datetime.now(CHILE_TZ)
+        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        await asyncio.sleep((target - now).total_seconds())
+        try:
+            from app.booking.stock_router import auto_consume_past_bookings
+            result = await asyncio.to_thread(auto_consume_past_bookings)
+            logger.info("📦 Stock auto-consume (daily): %s", result)
+        except Exception as _e:
+            logger.error("Stock auto-consume scheduler error: %s", _e)
+        await asyncio.sleep(60)
+
+
 def _ensure_web_push_table():
     """Create web_push_subscriptions table if it doesn't exist."""
     try:
@@ -555,6 +586,7 @@ async def lifespan(app: FastAPI):
     sig_task        = asyncio.create_task(_run_signature_summary_scheduler())
     prebooking_task = asyncio.create_task(_run_pre_booking_notif_scheduler())
     notif_task      = asyncio.create_task(_run_yesterday_weekly_scheduler())
+    stock_task      = asyncio.create_task(_run_stock_consume_scheduler())
     logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
     logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
     logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
@@ -563,7 +595,7 @@ async def lifespan(app: FastAPI):
     logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
     logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
     yield
-    for task in (sync_task, email_task, pending_task, daily_task, sig_task, prebooking_task, notif_task):
+    for task in (sync_task, email_task, pending_task, daily_task, sig_task, prebooking_task, notif_task, stock_task):
         task.cancel()
         try:
             await task

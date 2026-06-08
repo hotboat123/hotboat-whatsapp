@@ -608,6 +608,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <p style="margin:.2rem 0 0;color:var(--muted);font-size:.8rem">Gestiona el inventario de productos y su relación con los extras.</p>
         </div>
         <button class="btn-primary" onclick="openStockProductModal()">+ Nuevo Producto</button>
+        <button onclick="triggerAutoConsumeStock()" title="Descuenta el stock de todas las reservas cuya fecha ya pasó y aún no habían descontado" style="background:rgba(74,222,128,.12);border:1px solid #4ade80;color:#4ade80;border-radius:8px;padding:.38rem .85rem;font-size:.8rem;cursor:pointer;font-weight:600">📦 Consumir stock de reservas pasadas</button>
         <button class="btn-secondary" onclick="loadStockSection()" style="padding:.4rem .8rem;font-size:.78rem">↺ Actualizar</button>
       </div>
 
@@ -5717,8 +5718,6 @@ async function saveModal(id){
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
     showToast('Guardado ✓');
-    // Auto-consume stock for extras that have a BOM configured
-    _autoConsumeStock(id).catch(e=>console.warn('stock consume skipped:',e));
     closeModal();
     await loadReservas();
     loadLista();
@@ -9302,6 +9301,19 @@ async function consumeStockForBooking(){
     // Refresh stock table if visible
     if(document.getElementById('section-stock')?.style.display !== 'none') await loadStockSection();
   }catch(e){ showToast('❌ Error: '+e.message); }
+}
+
+async function triggerAutoConsumeStock(){
+  const btn = event.currentTarget;
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Procesando...'; btn.disabled = true;
+  try{
+    const res = await api('/api/admin/stock/auto-consume-past', {method:'POST'});
+    const n = (res.consumed||[]).length;
+    showToast(n > 0 ? `✅ Stock descontado para ${n} reserva(s)` : '✅ Todo al día — sin reservas pendientes');
+    await loadStockSection();
+  }catch(e){ showToast('❌ Error: '+e.message); }
+  finally{ btn.textContent = orig; btn.disabled = false; }
 }
 
 // Load stock section when switching to it
