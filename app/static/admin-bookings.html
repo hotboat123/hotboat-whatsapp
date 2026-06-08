@@ -472,9 +472,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th onclick="sortBy('ingreso_total')">Total ⇅</th>
               <th>Estado</th>
               <th>Fuente</th>
+              <th onclick="sortBy('created_at')" style="white-space:nowrap">Reservó ⇅</th>
             </tr>
           </thead>
-          <tbody id="lista-tbody"><tr><td colspan="8" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="lista-tbody"><tr><td colspan="9" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
       <p style="color:var(--muted);font-size:.78rem;margin-top:.5rem" id="lista-count"></p>
@@ -4510,7 +4511,7 @@ async function loadLista(){
   if(status&&status!=='all') url+=`&status=${status}`;
   if(source&&source!=='all') url+=`&source=${source}`;
   const tbody=document.getElementById('lista-tbody');
-  tbody.innerHTML=`<tr><td colspan="8" class="loading-msg">Cargando...</td></tr>`;
+  tbody.innerHTML=`<tr><td colspan="9" class="loading-msg">Cargando...</td></tr>`;
   try{
     const data=await api(url);
     let rows=data.reservas;
@@ -4531,10 +4532,11 @@ async function loadLista(){
           <span class="chip">${r.source||'-'}</span>
           ${r.has_flex?`<span class="chip" style="background:#1e3a5f44;color:#60a5fa;border:1px solid #1e4a7f">🔒 Flex</span>`:''}
         </td>
-      </tr>`).join(''):`<tr><td colspan="8" class="no-data">Sin resultados</td></tr>`;
+        <td style="color:var(--muted);font-size:.78rem;white-space:nowrap">${r.created_at?fmtReservaCreada(r.created_at):'-'}</td>
+      </tr>`).join(''):`<tr><td colspan="9" class="no-data">Sin resultados</td></tr>`;
     document.getElementById('lista-count').textContent=`${rows.length} reservas`;
   }catch(e){
-    tbody.innerHTML=`<tr><td colspan="8" class="no-data">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="9" class="no-data">Error: ${e.message}</td></tr>`;
   }
 }
 function sortBy(col){
