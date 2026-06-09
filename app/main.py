@@ -536,8 +536,7 @@ _PACKS_CATALOG_SEED = [
         "description": (
             "Experiencia completa en Termas Angostura: 2 noches en cabaña exclusiva "
             "dentro del complejo termal, acceso ilimitado a las termas, pensión completa "
-            "(desayuno, almuerzo y cena), paseo en HotBoat por el lago y arriendo de auto "
-            "incluido para moverse con total libertad."
+            "(desayuno, almuerzo y cena) y paseo en HotBoat por el lago."
         ),
         "personas": "2 personas",
         "price_from": 399990,
@@ -547,7 +546,6 @@ _PACKS_CATALOG_SEED = [
             "Acceso ilimitado a Termas Angostura",
             "Pensión completa (desayuno, almuerzo y cena)",
             "Paseo en HotBoat (2 personas)",
-            "Arriendo de auto incluido",
         ],
         "display_order": 4,
     },
