@@ -1216,6 +1216,45 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
+      <!-- ── High season by product ─────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">🔥 Temporada alta por producto</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Marca días de temporada alta para <strong>experiencias, packs y alojamientos</strong>.<br>
+          Estos días desactivan pago web para ese producto específico y pasan a flujo por email/confirmación manual.
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem;align-items:flex-end">
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:.35rem">Tipo de producto</label>
+            <select id="hs-scope-type" onchange="onHighSeasonTypeChange()"
+              style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;font-size:.85rem;min-width:220px">
+              <option value="experience">Experiencia</option>
+              <option value="pack">Pack</option>
+              <option value="alojamiento">Alojamiento</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:.35rem">Producto</label>
+            <select id="hs-scope-slug" onchange="loadHighSeasonDays()"
+              style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;font-size:.85rem;min-width:280px">
+              <option value="">— Elige producto —</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:.6rem;margin-bottom:.8rem;flex-wrap:wrap;align-items:center">
+          <button onclick="hsCalPrev()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">‹</button>
+          <h2 id="hs-cal-title" style="font-size:.95rem;flex:1;margin:0"></h2>
+          <button onclick="hsCalNext()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">›</button>
+        </div>
+        <div class="cal-grid" id="hs-cal-grid" style="gap:2px"></div>
+        <div style="display:flex;gap:1rem;margin-top:.8rem;font-size:.75rem;color:var(--muted)">
+          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Temporada alta ON</span>
+          <span><span style="background:#7070a0;display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>Temporada alta OFF</span>
+          <span><span style="background:var(--gold);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem;opacity:.45"></span>Hoy</span>
+        </div>
+        <div id="hs-list" style="margin-top:1rem"></div>
+      </div>
+
       <!-- ── Push Notifications ─────────────────────────────────────── -->
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">🔔 Notificaciones Push (Expo Go)</div>
@@ -6517,6 +6556,8 @@ function renderVacList(vacDays){
 
 // ── Urgency days calendar ─────────────────────────────────────────────────────
 let urgYear = new Date().getFullYear(), urgMonth = new Date().getMonth();
+let hsYear  = new Date().getFullYear(), hsMonth  = new Date().getMonth();
+let highSeasonDays = {}; // {dateStr: true=ON, false=OFF}
 // ── Profile calendar ──────────────────────────────────────────────────────────
 let urgencyDays   = {}; // {dateStr: {enabled, profile_key}}
 let scheduleTypes = []; // [{id, name, hours}]
@@ -6775,6 +6816,153 @@ async function saveUrgencyModes(){
     renderUrgList();
     renderProfileLegend();
   }catch(e){ showToast('Error guardando modos'); }
+}
+
+// ── High season per product ───────────────────────────────────────────────────
+function hsScopeQuery(){
+  const typeEl = document.getElementById('hs-scope-type');
+  const slugEl = document.getElementById('hs-scope-slug');
+  const entity_type = typeEl ? typeEl.value : 'experience';
+  const entity_slug = slugEl && slugEl.value ? slugEl.value : '';
+  return {entity_type, entity_slug};
+}
+
+async function onHighSeasonTypeChange(){
+  const sel = document.getElementById('hs-scope-slug');
+  const typeEl = document.getElementById('hs-scope-type');
+  const t = typeEl ? typeEl.value : 'experience';
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— Cargando —</option>';
+  try{
+    if(t === 'experience'){
+      let list = EXP_CATALOG || [];
+      if(!list.length){
+        const er = await fetch('/api/admin/experiencias',{headers:{'x-admin-key':KEY}}).then(r=>r.json());
+        EXP_CATALOG = er.experiences || [];
+        list = EXP_CATALOG;
+      }
+      const escV = s => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+      sel.innerHTML = '<option value="">— Elige experiencia —</option>' +
+        list.map(e=>`<option value="${escV(e.slug)}">${escV(e.icon||'')} ${escV(e.name)} (${escV(e.slug)})</option>`).join('');
+    } else if(t === 'alojamiento'){
+      let list = ALOJ_CATALOG || [];
+      if(!list.length){
+        const ar = await fetch('/api/admin/alojamientos',{headers:{'x-admin-key':KEY}}).then(r=>r.json());
+        ALOJ_CATALOG = ar.alojamientos || [];
+        list = ALOJ_CATALOG;
+      }
+      const escV = s => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+      sel.innerHTML = '<option value="">— Elige alojamiento —</option>' +
+        list.map(a=>`<option value="${escV(a.slug)}">${escV(a.icon||'')} ${escV(a.name)} (${escV(a.slug)})</option>`).join('');
+    } else {
+      let list = typeof _packs !== 'undefined' ? _packs : [];
+      if(!list.length){
+        const pr = await fetch('/api/admin/packs',{headers:{'x-admin-key':KEY}}).then(r=>r.json());
+        _packs = pr.packs || [];
+        list = _packs;
+      }
+      const escV = s => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+      sel.innerHTML = '<option value="">— Elige pack —</option>' +
+        list.map(p=>`<option value="${escV(p.slug)}">${escV(p.icon||'')} ${escV(p.name)} (${escV(p.slug)})</option>`).join('');
+    }
+  }catch(_e){
+    sel.innerHTML = '<option value="">— Error al cargar —</option>';
+  }
+  await loadHighSeasonDays();
+}
+
+async function loadHighSeasonDays(){
+  try{
+    const {entity_type, entity_slug} = hsScopeQuery();
+    if(!entity_slug){
+      highSeasonDays = {};
+      renderHighSeasonCal();
+      renderHighSeasonList();
+      return;
+    }
+    const lastDay = new Date(hsYear, hsMonth + 1, 0).getDate();
+    const desde = `${hsYear}-${String(hsMonth+1).padStart(2,'0')}-01`;
+    const hasta = `${hsYear}-${String(hsMonth+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+    let url = `/api/admin/urgency-days?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&entity_type=${encodeURIComponent(entity_type)}`;
+    url += `&entity_slug=${encodeURIComponent(entity_slug)}`;
+    const d = await api(url);
+    highSeasonDays = {};
+    (d.urgency_days||[]).forEach(v=>{ highSeasonDays[v.date] = v.enabled; });
+    renderHighSeasonCal();
+    renderHighSeasonList();
+  }catch(_e){}
+}
+
+function hsCalPrev(){ hsMonth--; if(hsMonth<0){hsMonth=11;hsYear--;} loadHighSeasonDays(); }
+function hsCalNext(){ hsMonth++; if(hsMonth>11){hsMonth=0;hsYear++;} loadHighSeasonDays(); }
+
+function renderHighSeasonCal(){
+  const grid = document.getElementById('hs-cal-grid');
+  const title = document.getElementById('hs-cal-title');
+  if(!grid) return;
+  title.textContent = `${MONTHS[hsMonth]} ${hsYear}`;
+  const firstDayJs = new Date(hsYear,hsMonth,1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
+  const daysInMonth = new Date(hsYear,hsMonth+1,0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
+  for(let i=0;i<leadDays;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${hsYear}-${String(hsMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt=new Date(hsYear,hsMonth,d);
+    const isToday=dt.getTime()===today.getTime();
+    const override=highSeasonDays.hasOwnProperty(dateStr);
+    const isOn=override&&highSeasonDays[dateStr]===true;
+    const isOff=override&&highSeasonDays[dateStr]===false;
+    const cls=`cal-day${isOn?' urgency-on':isOff?' urgency-off':''}${isToday?' today':''}`;
+    const icon=isOn?'🔥':isOff?'✗':'';
+    const tip=isOn?'Temporada alta ON — click para ciclar':isOff?'Temporada alta OFF — click para quitar':'Click para marcar temporada alta';
+    html+=`<div class="${cls}" onclick="cycleHighSeasonDay('${dateStr}')" title="${tip}">
+      <div class="cal-day-num">${d}</div>
+      ${icon?`<div style="font-size:.6rem">${icon}</div>`:''}
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+async function cycleHighSeasonDay(dateStr){
+  const {entity_type, entity_slug} = hsScopeQuery();
+  if(!entity_slug){ showToast('Elige un producto primero'); return; }
+  const cur = highSeasonDays.hasOwnProperty(dateStr) ? highSeasonDays[dateStr] : null;
+  const scope = {entity_type, entity_slug};
+  try{
+    if(cur === null){
+      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({ date:dateStr, enabled:true, ...scope })});
+      highSeasonDays[dateStr] = true;
+      showToast(`🔥 ${dateStr}: temporada alta ON`);
+    } else if(cur === true){
+      await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({ date:dateStr, enabled:false, ...scope })});
+      highSeasonDays[dateStr] = false;
+      showToast(`✗ ${dateStr}: temporada alta OFF`);
+    } else {
+      let du = `/api/admin/urgency-days/${encodeURIComponent(dateStr)}?entity_type=${encodeURIComponent(entity_type)}`;
+      du += `&entity_slug=${encodeURIComponent(entity_slug)}`;
+      await api(du,{method:'DELETE'});
+      delete highSeasonDays[dateStr];
+      showToast(`${dateStr}: sin override de temporada alta`);
+    }
+    renderHighSeasonCal();
+    renderHighSeasonList();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+function renderHighSeasonList(){
+  const el = document.getElementById('hs-list');
+  if(!el) return;
+  const entries = Object.entries(highSeasonDays);
+  if(!entries.length){ el.innerHTML='<p style="color:var(--muted);font-size:.82rem">Sin overrides de temporada alta para este producto.</p>'; return; }
+  el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem">
+    ${entries.sort(([a],[b])=>a<b?-1:1).map(([date,enabled])=>`
+      <div style="background:${enabled?'rgba(245,200,66,.15)':'rgba(112,112,160,.12)'};border:1px solid ${enabled?'rgba(245,200,66,.35)':'rgba(112,112,160,.3)'};border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
+        ${enabled?'🔥':'✗'} ${date}
+        <button onclick="cycleHighSeasonDay('${date}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem" title="Ciclar estado">↻</button>
+      </div>`).join('')}
+  </div>`;
 }
 
 // ── Payment rows ──────────────────────────────────────────────────────────────
