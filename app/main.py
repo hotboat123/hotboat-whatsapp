@@ -528,12 +528,68 @@ def _seed_extras_visibility():
         logger.warning("extras_visibility seed failed: %s", e)
 
 
+_PACKS_CATALOG_SEED = [
+    {
+        "slug": "termas-angostura",
+        "name": "Pack Termas Angostura",
+        "icon": "♨️",
+        "description": (
+            "Experiencia completa en Termas Angostura: 2 noches en cabaña exclusiva "
+            "dentro del complejo termal, acceso ilimitado a las termas, pensión completa "
+            "(desayuno, almuerzo y cena), paseo en HotBoat por el lago y arriendo de auto "
+            "incluido para moverse con total libertad."
+        ),
+        "personas": "2 personas",
+        "price_from": 399990,
+        "cost_from": 0,
+        "includes": [
+            "2 noches en Cabaña exclusiva Termas Angostura",
+            "Acceso ilimitado a Termas Angostura",
+            "Pensión completa (desayuno, almuerzo y cena)",
+            "Paseo en HotBoat (2 personas)",
+            "Arriendo de auto incluido",
+        ],
+        "display_order": 4,
+    },
+]
+
+
+def _seed_packs_catalog():
+    """Insert canonical packs that don't yet exist in DB (ON CONFLICT DO NOTHING)."""
+    import json as _json
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for p in _PACKS_CATALOG_SEED:
+                    cur.execute(
+                        """
+                        INSERT INTO packs
+                          (slug, name, icon, description, personas,
+                           price_from, cost_from, includes,
+                           is_active, display_order)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s)
+                        ON CONFLICT (slug) DO NOTHING
+                        """,
+                        (
+                            p["slug"], p["name"], p["icon"], p["description"],
+                            p["personas"], p["price_from"], p["cost_from"],
+                            _json.dumps(p["includes"], ensure_ascii=False),
+                            p["display_order"],
+                        ),
+                    )
+        logger.info("✅ Packs catalog seeded")
+    except Exception as _e:
+        logger.warning(f"Pack catalog seed skipped: {_e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
     _ensure_web_push_table()
     _ensure_extras_visibility_table()
     _seed_extras_visibility()
+    _seed_packs_catalog()
     try:
         from app.bot.cart import CartManager
         CartManager.refresh_prices_from_db()
