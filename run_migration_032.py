@@ -12,9 +12,13 @@ PACK = {
     "name":        "Pack Termas Angostura",
     "icon":        "♨️",
     "description": (
-        "Experiencia completa en Termas Angostura: 2 noches en cabaña exclusiva "
-        "dentro del complejo termal, acceso ilimitado a las termas, pensión completa "
-        "(desayuno, almuerzo y cena) y paseo en HotBoat por el lago."
+        "¿Te animas a una pausa?\n\n"
+        "Escápate a una cabaña rodeada de bosque nativo, donde el tiempo se detiene. "
+        "Durante dos noches disfrutarás de desayuno, almuerzo y cena en el restaurante "
+        "del complejo, y de acceso ilimitado a las piscinas de aguas termales al aire libre.\n\n"
+        "Y como broche de oro: la experiencia única e inigualable del HotBoat — una tinaja "
+        "flotante que navega en medio de la laguna, rodeada de volcanes y bosque nativo. "
+        "Una sensación que no encontrarás en ningún otro lugar del mundo."
     ),
     "personas":    "2 personas",
     "price_from":  399990,
