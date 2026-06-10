@@ -7828,7 +7828,19 @@ function initExtrasEditor(extrasJson){
     });
     extrasJson = converted;
   }
+  // Some web formats wrap extras in {extras: [...], price_per_person: N} — unwrap the inner list
+  if(extrasJson && !Array.isArray(extrasJson) && Array.isArray(extrasJson.extras)){
+    const converted = {};
+    extrasJson.extras.forEach((e,i)=>{
+      const rawKey = (e.name||'extra_'+i).toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+      const key = rawKey || ('extra_'+i);
+      converted[key] = {qty: e.quantity||1, unit_price: e.price||0, name: e.name||'Extra'};
+    });
+    extrasJson = converted;
+  }
   Object.entries(extrasJson||{}).forEach(([key, val])=>{
+    // Skip metadata keys that are not bookable extras (mirrors backend _flatten_saved_extras_json)
+    if(key === 'extras' || key === 'price_per_person') return;
     const isObj = typeof val === 'object' && val !== null;
     if(key.startsWith('aloj__')){
       // Stored as {qty:nights, unit_price, entry_date, exit_date, name}
