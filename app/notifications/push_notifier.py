@@ -27,8 +27,15 @@ def _vapid_claims_for(endpoint: str) -> dict:
     }
 
 
-def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_key: str) -> bool:
-    """Blocking Web Push send — run inside asyncio.to_thread."""
+_EXPIRED_SENTINEL = "__EXPIRED__"
+
+
+def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_key: str):
+    """Blocking Web Push send — run inside asyncio.to_thread.
+
+    Returns True on success, _EXPIRED_SENTINEL if the subscription is gone
+    (HTTP 410/404 → must be deleted), or False on other transient errors.
+    """
     try:
         from pywebpush import webpush, WebPushException
     except ImportError:
@@ -44,6 +51,12 @@ def _send_web_push_sync(subscription_info: dict, payload: dict, vapid_private_ke
         )
         return True
     except Exception as exc:
+        # 410 Gone / 404 Not Found → subscription is permanently invalid, must remove
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status in (404, 410):
+            logger.info("Web Push subscription expired/gone (HTTP %s) — will remove: %s...",
+                        status, subscription_info.get("endpoint", "")[:60])
+            return _EXPIRED_SENTINEL
         logger.warning("Web Push send failed (endpoint: %s...): %s",
                        subscription_info.get("endpoint", "")[:40], exc)
         return False
@@ -100,6 +113,15 @@ class PushNotifier:
             ],
             return_exceptions=True,
         )
+        # Clean up permanently expired subscriptions so they stop accumulating
+        expired_endpoints = [
+            sub["endpoint"]
+            for sub, result in zip(subscriptions, results)
+            if result is _EXPIRED_SENTINEL
+        ]
+        if expired_endpoints:
+            asyncio.create_task(self._delete_subscriptions(expired_endpoints))
+
         sent = sum(1 for r in results if r is True)
         logger.info("Web Push sent to %d/%d subscription(s): %s", sent, len(subscriptions), title[:60])
         return sent > 0
@@ -145,6 +167,21 @@ class PushNotifier:
         except Exception as exc:
             logger.error("Error registering Web Push subscription: %s", exc)
             return False
+
+    async def _delete_subscriptions(self, endpoints: List[str]) -> None:
+        """Remove permanently-expired push subscriptions from the DB."""
+        try:
+            from app.db.connection import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.executemany(
+                        "DELETE FROM web_push_subscriptions WHERE endpoint = %s",
+                        [(ep,) for ep in endpoints],
+                    )
+                    conn.commit()
+            logger.info("Removed %d expired push subscription(s)", len(endpoints))
+        except Exception as exc:
+            logger.error("Error removing expired push subscriptions: %s", exc)
 
     async def unregister_subscription(self, endpoint: str) -> bool:
         try:
