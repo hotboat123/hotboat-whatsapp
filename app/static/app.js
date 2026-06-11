@@ -254,8 +254,22 @@ async function _checkPushState() {
             await savePushSubscription(existing);
             _updateNotifBtn('active');
             console.log('✅ Push already subscribed');
+        } else if (Notification.permission === 'granted') {
+            // Permission was granted before but subscription expired — resubscribe silently
+            try {
+                const subscription = await _swRegistration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: _urlBase64ToUint8Array(publicKey),
+                });
+                await savePushSubscription(subscription);
+                _updateNotifBtn('active');
+                console.log('✅ Push auto-resubscribed after expiry');
+            } catch (resubErr) {
+                console.warn('Auto-resubscribe failed:', resubErr);
+                _updateNotifBtn('inactive');
+            }
         } else {
-            // Not subscribed — show bell button so user can tap to enable
+            // No permission yet — show bell so user can tap to enable
             _updateNotifBtn('inactive');
         }
     } catch (err) {
