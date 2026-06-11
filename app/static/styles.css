@@ -1104,6 +1104,11 @@ audio::-webkit-media-controls-volume-slider {
     user-select: none;
 }
 
+.message.received .message-text {
+    user-select: text;
+    cursor: text;
+}
+
 .message.received:hover {
     background-color: rgba(255, 255, 255, 0.05);
 }
