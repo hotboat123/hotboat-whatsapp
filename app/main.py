@@ -1492,6 +1492,40 @@ async def push_status(x_admin_key: str = Header(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/push/web-status")
+async def push_web_status(x_admin_key: str = Header(...)):
+    """Return registered Web Push subscriptions with diagnostic info."""
+    settings = get_settings()
+    if x_admin_key != settings.admin_api_key:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT endpoint, created_at, last_used_at
+                    FROM web_push_subscriptions
+                    ORDER BY last_used_at DESC NULLS LAST
+                """)
+                rows = cur.fetchall()
+                subs = []
+                for endpoint, created_at, last_used_at in rows:
+                    short = endpoint[-30:] if endpoint else "?"
+                    active = last_used_at is not None and (
+                        (datetime.now() - last_used_at.replace(tzinfo=None)).days < 90
+                    )
+                    subs.append({
+                        "endpoint_suffix": f"...{short}",
+                        "created_at": created_at.isoformat() if created_at else None,
+                        "last_used_at": last_used_at.isoformat() if last_used_at else None,
+                        "active": active,
+                    })
+        return {"total": len(subs), "subscriptions": subs}
+    except Exception as e:
+        logger.error(f"Error getting web push status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # MESSAGE REACTIONS ENDPOINT
 # ============================================================================
