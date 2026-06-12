@@ -123,7 +123,9 @@ def _ensure_catalog_table() -> None:
 
 
 def _seed_catalog_defaults() -> None:
-    """Seed the DB catalog from hardcoded TABLA_CATALOG defaults (ON CONFLICT DO NOTHING)."""
+    """Seed the DB catalog from hardcoded TABLA_CATALOG defaults.
+    Updates sort_order on conflict so existing admin-added ingredients are preserved
+    but the canonical defaults always have correct ordering."""
     from app.db.connection import get_connection
 
     rows = []
@@ -138,7 +140,8 @@ def _seed_catalog_defaults() -> None:
                 cur.execute(
                     """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order)
                        VALUES (%s, %s, %s, %s)
-                       ON CONFLICT (tabla_type, tier, ingredient) DO NOTHING""",
+                       ON CONFLICT (tabla_type, tier, ingredient) DO UPDATE
+                           SET sort_order = EXCLUDED.sort_order""",
                     (t_type, tier_num, ing, sort_order),
                 )
         conn.commit()
@@ -146,7 +149,7 @@ def _seed_catalog_defaults() -> None:
 
 def _get_catalog_from_db() -> dict:
     """Return catalog in same format as TABLA_CATALOG, reading from DB.
-    Falls back to hardcoded TABLA_CATALOG if DB not ready."""
+    Falls back to hardcoded TABLA_CATALOG if DB not ready or empty."""
     from app.db.connection import get_connection
 
     result = {k: {**v, "tier1": [], "tier2": [], "tier3": []} for k, v in TABLA_CATALOG.items()}
@@ -157,10 +160,12 @@ def _get_catalog_from_db() -> dict:
                     "SELECT tabla_type, tier, ingredient FROM tabla_catalog_items ORDER BY tabla_type, tier, sort_order, ingredient"
                 )
                 rows = cur.fetchall()
-        if rows:
-            for t_type, tier_num, ing in rows:
-                if t_type in result:
-                    result[t_type][f"tier{tier_num}"].append(ing)
+        if not rows:
+            # DB table is empty — return hardcoded defaults so the picker always works
+            return {k: {**v} for k, v in TABLA_CATALOG.items()}
+        for t_type, tier_num, ing in rows:
+            if t_type in result:
+                result[t_type][f"tier{tier_num}"].append(ing)
     except Exception as e:
         logger.warning("_get_catalog_from_db fallback to hardcoded: %s", e)
         return {k: {**v} for k, v in TABLA_CATALOG.items()}
