@@ -190,15 +190,23 @@ def _seed_tabla_products() -> None:
                     """,
                     (name.lower(), name, cost, icon),
                 )
-            # Seed the master "Tabla de picoteo" booking extra — always restore if deleted
+            # Remove any duplicate tabla entries with spaces or alternate spellings
+            cur.execute("""
+                DELETE FROM extras_visibility
+                WHERE extra_name_lower != 'tabla_de_picoteo'
+                  AND REPLACE(LOWER(extra_name_lower), ' ', '_') = 'tabla_de_picoteo'
+            """)
+            # Seed the master "Tabla de picoteo" booking extra — always restore/update
             cur.execute(
                 """
                 INSERT INTO extras_visibility
                     (extra_name_lower, name, show_in_booking, costo, precio_venta, icon, sort_order, updated_at)
-                VALUES ('tabla_de_picoteo', 'Tabla de picoteo', true, 0, 25000, '🧺', 80, NOW())
+                VALUES ('tabla_de_picoteo', 'Tabla de picoteo', true, 10000, 20000, '🧺', 80, NOW())
                 ON CONFLICT (extra_name_lower) DO UPDATE
                     SET show_in_booking = TRUE,
                         user_hidden     = FALSE,
+                        costo           = 10000,
+                        precio_venta    = 20000,
                         name            = COALESCE(EXCLUDED.name, extras_visibility.name),
                         icon            = COALESCE(NULLIF(extras_visibility.icon,''), EXCLUDED.icon),
                         sort_order      = EXCLUDED.sort_order,
