@@ -1129,11 +1129,12 @@ def _load_plan() -> Dict:
 async def save_plan_entry(request: Request, x_admin_key: str = Header("")):
     """Save a single budget or forecast entry (week or month)."""
     body = await request.json()
-    entry_type = body.get("type")  # "week_budget" | "week_forecast" | "month_forecast"
+    entry_type = body.get("type")  # "week_budget" | "week_forecast" | "month_forecast" | "week_cost_forecast" | "month_cost_forecast"
     key        = body.get("key")   # "2026-W22" or "2026-06"
     amount     = int(body.get("amount") or 0)
-    if entry_type not in ("week_budget", "week_forecast", "month_forecast"):
-        raise HTTPException(400, "type must be week_budget, week_forecast, or month_forecast")
+    if entry_type not in ("week_budget", "week_forecast", "month_forecast",
+                          "week_cost_forecast", "month_cost_forecast"):
+        raise HTTPException(400, "type must be week_budget, week_forecast, month_forecast, week_cost_forecast, or month_cost_forecast")
     if not key:
         raise HTTPException(400, "key required")
     plan = _load_plan()
@@ -1161,9 +1162,11 @@ async def get_forecast_table(
         cy, cm = today.year, today.month
         commissions = _get_commissions()
         plan = _load_plan()
-        week_budget_plan    = plan.get("week_budget", {})
-        week_forecast_plan  = plan.get("week_forecast", {})
-        month_forecast_plan = plan.get("month_forecast", {})
+        week_budget_plan       = plan.get("week_budget", {})
+        week_forecast_plan     = plan.get("week_forecast", {})
+        month_forecast_plan    = plan.get("month_forecast", {})
+        week_cost_fc_plan      = plan.get("week_cost_forecast", {})
+        month_cost_fc_plan     = plan.get("month_cost_forecast", {})
 
         # ── WEEKLY VIEW ───────────────────────────────────────────────────────
         if view == "weekly":
@@ -1210,12 +1213,12 @@ async def get_forecast_table(
                 with conn.cursor() as cur:
                     cur.execute("""
                         SELECT COALESCE(fecha::text,''), COALESCE(ingreso_total,0),
-                               COALESCE(pagos,'[]'::jsonb)
+                               COALESCE(costo_operativo_total,0), COALESCE(pagos,'[]'::jsonb)
                         FROM all_appointments
                         WHERE fecha BETWEEN %s AND %s AND status = ANY(%s)
                         ORDER BY fecha
                     """, (d_from_w, d_to_w, list(CONFIRMED_STATUSES)))
-                    for fecha_str, gross, pagos_raw in cur.fetchall():
+                    for fecha_str, gross, costo, pagos_raw in cur.fetchall():
                         if not fecha_str:
                             continue
                         dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
@@ -1223,8 +1226,9 @@ async def get_forecast_table(
                         wk = f"{iso.year}-W{iso.week:02d}"
                         net = _calc_net(float(gross), pagos_raw, commissions)
                         if wk not in by_week:
-                            by_week[wk] = {"income": 0, "bookings": 0}
+                            by_week[wk] = {"income": 0, "costs": 0, "bookings": 0}
                         by_week[wk]["income"]   += int(net)
+                        by_week[wk]["costs"]    += int(float(costo))
                         by_week[wk]["bookings"] += 1
 
             # Monthly budgets as fallback when no per-week budget set
@@ -1239,6 +1243,15 @@ async def get_forecast_table(
                     return None
                 _, days = _cal.monthrange(y, m)
                 return int(inc / (days / 7.0))
+
+            def _week_cost_budget_fallback(ws):
+                y, m = ws.year, ws.month
+                b = month_budgets.get((y, m), {})
+                costs = (b.get("costs_budget", 0) or 0) + (b.get("marketing_budget", 0) or 0)
+                if not costs:
+                    return None
+                _, days = _cal.monthrange(y, m)
+                return int(costs / (days / 7.0))
 
             def _week_suggested(iso_year, iso_week, is_past):
                 if is_past:
@@ -1286,7 +1299,12 @@ async def get_forecast_table(
                 # Per-week forecast (manual)
                 wfval = week_forecast_plan.get(w["key"])
                 wfval = int(wfval) if wfval is not None else None
+                wcf_val = week_cost_fc_plan.get(w["key"])
+                wcf_val = int(wcf_val) if wcf_val is not None else None
+                wcb_val = _week_cost_budget_fallback(ws)
                 sug_val, sug_src = _week_suggested(w["iso_year"], w["iso_week"], w["is_past"])
+                actual_costs  = data["costs"]  if data else None
+                actual_result = (data["income"] - data["costs"]) if data else None
                 result.append({
                     "month":            w["key"],
                     "week_label":       lbl,
@@ -1294,11 +1312,15 @@ async def get_forecast_table(
                     "is_past":          w["is_past"],
                     "is_current":       w["is_current"],
                     "actual_income":    data["income"]   if data else None,
+                    "actual_costs":     actual_costs,
+                    "actual_result":    actual_result,
                     "actual_bookings":  data["bookings"] if data else None,
-                    "actual_result":    None,
                     "manual_income":    wbval,
+                    "manual_costs":     wcb_val,
+                    "manual_marketing": None,
                     "manual_is_override": bval_is_override,
                     "forecast_income":  wfval,
+                    "forecast_costs":   wcf_val,
                     "suggested_income": sug_val,
                     "suggested_source": sug_src,
                     "is_weekly":        True,
@@ -1351,8 +1373,9 @@ async def get_forecast_table(
                     gross, costo = float(gross), float(costo)
                     net = _calc_net(gross, pagos_raw, commissions)
                     if key not in by_month:
-                        by_month[key] = {"income": 0, "result": 0, "bookings": 0}
+                        by_month[key] = {"income": 0, "costs": 0, "result": 0, "bookings": 0}
                     by_month[key]["income"]   += int(net)
+                    by_month[key]["costs"]    += int(costo)
                     by_month[key]["result"]   += int(net - costo)
                     by_month[key]["bookings"] += 1
 
@@ -1391,6 +1414,8 @@ async def get_forecast_table(
             sug_val, sug_src = _suggested(y, m) if not is_past else (None, None)
             fc_val = month_forecast_plan.get(mk)
             fc_val = int(fc_val) if fc_val is not None else None
+            fc_cost_val = month_cost_fc_plan.get(mk)
+            fc_cost_val = int(fc_cost_val) if fc_cost_val is not None else None
             result.append({
                 "month":            mk,
                 "week_label":       None,
@@ -1398,6 +1423,7 @@ async def get_forecast_table(
                 "is_past":          is_past,
                 "is_current":       is_current,
                 "actual_income":    data["income"]   if data else None,
+                "actual_costs":     data["costs"]    if data else None,
                 "actual_result":    data["result"]   if data else None,
                 "actual_bookings":  data["bookings"] if data else None,
                 "manual_income":    int(budget["income_budget"])    if budget["income_budget"]    else None,
@@ -1405,6 +1431,7 @@ async def get_forecast_table(
                 "manual_marketing": int(budget["marketing_budget"]) if budget["marketing_budget"] else None,
                 "manual_is_override": True,
                 "forecast_income":  fc_val,
+                "forecast_costs":   fc_cost_val,
                 "suggested_income": sug_val,
                 "suggested_source": sug_src,
                 "is_weekly":        False,

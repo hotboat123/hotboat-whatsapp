@@ -10914,6 +10914,7 @@ function renderForecast(data, view){
   const el = document.getElementById('fin-fc-content');
   if(!data||!data.length){ el.innerHTML='<div style="color:var(--muted);font-size:.82rem">Sin datos</div>'; return; }
   const isWeekly = view === 'weekly';
+  const SEP = 'border-left:2px solid rgba(255,255,255,.08)';
 
   let rows = '';
   for(const m of data){
@@ -10930,6 +10931,7 @@ function renderForecast(data, view){
     const badge = isCurrent ? ' <span style="font-size:.62rem;color:var(--gold);font-weight:700">HOY</span>'
                 : isPast    ? ' <span style="font-size:.62rem;color:var(--muted)">✓</span>' : '';
 
+    // ── INGRESOS ──────────────────────────────────────────────────────────────
     let realHtml = '—';
     if(m.actual_income !== null){
       const col = isPast ? 'var(--green)' : 'var(--gold)';
@@ -10993,25 +10995,108 @@ function renderForecast(data, view){
       deltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">fc vs budget</span></span>`;
     }
 
+    // ── UTILIDAD ──────────────────────────────────────────────────────────────
+    // Real utilidad = actual_result (income - costs from bookings)
+    let uRealHtml = '—';
+    if(m.actual_result !== null && m.actual_result !== undefined){
+      const col = m.actual_result >= 0 ? 'var(--green)' : 'var(--red)';
+      uRealHtml = `<span style="font-weight:600;color:${col}">${fmtClp(m.actual_result)}</span>`;
+      if(isCurrent && !isWeekly) uRealHtml += `<br><span style="font-size:.63rem;color:var(--muted)">parcial</span>`;
+    }
+
+    // Budget utilidad = income_budget - costs_budget - marketing_budget
+    let uBudgetHtml = '—';
+    const bi = m.manual_income || 0;
+    const bc = (m.manual_costs || 0) + (m.manual_marketing || 0);
+    if(bi || bc){
+      const ub = bi - bc;
+      const col = ub >= 0 ? 'var(--green)' : 'var(--red)';
+      if(isPast){
+        uBudgetHtml = `<span style="color:${col}">${fmtClp(ub)}</span>`;
+      } else {
+        const hint = isWeekly && !(m.manual_is_override) && bi ? `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">del mensual</span>` : '';
+        uBudgetHtml = `<span style="color:${bi?col:'var(--muted)'};">${bi ? fmtClp(ub) : '—'}</span>${hint}`;
+      }
+    }
+
+    // Forecast utilidad = forecast_income - forecast_costs (editable cost forecast)
+    const fcCostType = isWeekly ? 'week_cost_forecast' : 'month_cost_forecast';
+    const fcCostSpanId = `fc-cf-${m.month}`;
+    let uFcHtml = '—';
+    if(isPast){
+      // Show forecast utility if both values recorded
+      const fi = m.forecast_income, fc = m.forecast_costs;
+      if(fi !== null && fi !== undefined){
+        const uf = fi - (fc || 0);
+        const col = uf >= 0 ? 'var(--green)' : 'var(--red)';
+        uFcHtml = `<span style="color:${col}">${fmtClp(uf)}</span>`;
+        if(fc) uFcHtml += `<br><span style="font-size:.62rem;color:var(--muted)">costos: ${fmtClpK(fc)}</span>`;
+      }
+    } else {
+      const fi = m.forecast_income;
+      const cv = m.forecast_costs;
+      if(fi !== null && fi !== undefined){
+        const uf = fi - (cv || 0);
+        const col = uf >= 0 ? 'var(--green)' : 'var(--red)';
+        uFcHtml = `<span style="color:${col};font-weight:600">${fmtClp(uf)}</span>`;
+      } else {
+        uFcHtml = '';
+      }
+      uFcHtml += `<br><span id="${fcCostSpanId}"
+        onclick="fcEditCostForecast('${m.month}','${fcCostType}',${cv||0})"
+        style="cursor:pointer;display:inline-block;min-width:70px;text-align:right;padding:.12rem .35rem;
+               border-radius:5px;border:1px dashed ${cv?'var(--border)':'rgba(255,255,255,.1)'};
+               color:${cv?'var(--muted)':'rgba(255,255,255,.3)'};font-size:.7rem"
+        title="Click para editar forecast costos">${cv ? '- '+fmtClpK(cv) : '− costos'}</span>`;
+    }
+
+    // Δ utilidad
+    let uDeltaHtml = '—';
+    const fuResult = (m.forecast_income !== null && m.forecast_income !== undefined)
+      ? (m.forecast_income - (m.forecast_costs || 0)) : null;
+    const buResult = bi - bc;
+    if(isPast && fuResult !== null && m.actual_result !== null && m.actual_result !== undefined){
+      const d2 = m.actual_result - fuResult;
+      uDeltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">real vs fc</span></span>`;
+    } else if(!isPast && fuResult !== null && (bi || bc)){
+      const d2 = fuResult - buResult;
+      uDeltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">fc vs budget</span></span>`;
+    }
+
     rows += `<tr style="background:${rowBg};border-bottom:1px solid var(--border)">
       <td style="padding:.45rem .7rem;font-weight:${isCurrent?700:500}">${periodLabel}${badge}</td>
       <td style="padding:.45rem .5rem;text-align:right">${realHtml}</td>
       <td style="padding:.45rem .5rem;text-align:right">${budgetHtml}</td>
       <td style="padding:.45rem .5rem;text-align:right">${forecastHtml}</td>
       <td style="padding:.45rem .5rem;text-align:right">${deltaHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right;${SEP}">${uRealHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${uBudgetHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${uFcHtml}</td>
+      <td style="padding:.45rem .5rem;text-align:right">${uDeltaHtml}</td>
     </tr>`;
   }
 
   const periodHeader = isWeekly ? 'Semana' : 'Mes';
+  const thBase = 'padding:.4rem .5rem;text-align:right;font-size:.65rem';
   el.innerHTML = `<div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse;font-size:.8rem">
-      <thead><tr style="background:var(--card);color:var(--muted);font-size:.67rem;text-transform:uppercase;letter-spacing:.04em">
-        <th style="padding:.5rem .7rem;text-align:left">${periodHeader}</th>
-        <th style="padding:.5rem .5rem;text-align:right">Real</th>
-        <th style="padding:.5rem .5rem;text-align:right">Budget</th>
-        <th style="padding:.5rem .5rem;text-align:right">Forecast</th>
-        <th style="padding:.5rem .5rem;text-align:right">Δ</th>
-      </tr></thead>
+      <thead>
+        <tr style="background:var(--card);color:var(--muted);font-size:.67rem;text-transform:uppercase;letter-spacing:.04em">
+          <th rowspan="2" style="padding:.4rem .7rem;text-align:left;vertical-align:bottom">${periodHeader}</th>
+          <th colspan="4" style="${thBase};text-align:center;color:#4a9eff;border-bottom:2px solid #4a9eff;padding-bottom:.2rem">📊 Ingresos</th>
+          <th colspan="4" style="${thBase};text-align:center;color:var(--green);border-bottom:2px solid var(--green);padding-bottom:.2rem;${SEP}">💰 Utilidad</th>
+        </tr>
+        <tr style="background:var(--card);color:var(--muted);font-size:.65rem">
+          <th style="${thBase}">Real</th>
+          <th style="${thBase}">Budget</th>
+          <th style="${thBase}">Forecast</th>
+          <th style="${thBase}">Δ</th>
+          <th style="${thBase};${SEP}">Real</th>
+          <th style="${thBase}">Budget</th>
+          <th style="${thBase}">Forecast</th>
+          <th style="${thBase}">Δ</th>
+        </tr>
+      </thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
@@ -11050,6 +11135,19 @@ async function fcEditForecast(key, type, currentVal){
       if(row) row.forecast_income = val||null;
       renderForecast(_finLastForecast, _fcView);
       showToast('✅ Forecast guardado');
+    } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast, _fcView); }
+  });
+}
+
+async function fcEditCostForecast(key, type, currentVal){
+  const spanId = `fc-cf-${key}`;
+  _fcInlineEdit(spanId, currentVal, async (val)=>{
+    try {
+      await _fcSavePlan(type, key, val);
+      const row = (_finLastForecast||[]).find(r=>r.month===key);
+      if(row) row.forecast_costs = val||null;
+      renderForecast(_finLastForecast, _fcView);
+      showToast('✅ Forecast costos guardado');
     } catch(e){ showToast('❌ '+e.message, true); renderForecast(_finLastForecast, _fcView); }
   });
 }
