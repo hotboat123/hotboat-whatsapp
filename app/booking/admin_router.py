@@ -1643,6 +1643,16 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
             with conn.cursor() as cur:
                 # If key changed (rename), update the PK
                 if extra_id != new_name_lower:
+                    # Remove any hidden/deleted row with the target key so the PK rename doesn't conflict
+                    cur.execute(
+                        "DELETE FROM extras_visibility WHERE extra_name_lower = %s AND COALESCE(user_hidden, FALSE) = TRUE",
+                        (new_name_lower,),
+                    )
+                    # Also remove a live duplicate with the target key (merged into the renamed one)
+                    cur.execute(
+                        "DELETE FROM extras_visibility WHERE extra_name_lower = %s AND extra_name_lower != %s",
+                        (new_name_lower, extra_id),
+                    )
                     cur.execute("""
                         UPDATE extras_visibility
                         SET extra_name_lower = %s, name = %s,
@@ -1760,6 +1770,22 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@admin_router.post("/api/admin/precios-extras/purge-hidden")
+async def purge_hidden_extras(x_admin_key: str = Header("")):
+    """Permanently delete all soft-deleted (user_hidden=TRUE) extras that were hidden via old delete logic."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM extras_visibility WHERE COALESCE(user_hidden, FALSE) = TRUE")
+                deleted = cur.rowcount
+                conn.commit()
+        return {"ok": True, "deleted": deleted}
+    except Exception as e:
+        logger.error(f"Error purging hidden extras: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @admin_router.post("/api/admin/precios-extras/reorder")
 async def reorder_extras(x_admin_key: str = Header(""), request: Request = None):
     """Save new sort order. Body: [{name_lower, sort_order}, ...]"""
@@ -1788,9 +1814,9 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Soft-delete so startup seed doesn't re-insert on next restart
+                # Hard delete — soft-delete caused PK conflicts on rename/upsert
                 cur.execute(
-                    "UPDATE extras_visibility SET user_hidden=TRUE, show_in_booking=FALSE WHERE extra_name_lower = %s",
+                    "DELETE FROM extras_visibility WHERE extra_name_lower = %s",
                     (extra_id,),
                 )
                 conn.commit()
