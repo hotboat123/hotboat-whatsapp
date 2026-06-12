@@ -190,13 +190,19 @@ def _seed_tabla_products() -> None:
                     """,
                     (name.lower(), name, cost, icon),
                 )
-            # Seed the master "Tabla de picoteo" booking extra (show_in_booking=True, price $25k default)
+            # Seed the master "Tabla de picoteo" booking extra — always restore if deleted
             cur.execute(
                 """
                 INSERT INTO extras_visibility
                     (extra_name_lower, name, show_in_booking, costo, precio_venta, icon, sort_order, updated_at)
                 VALUES ('tabla_de_picoteo', 'Tabla de picoteo', true, 0, 25000, '🧺', 80, NOW())
-                ON CONFLICT (extra_name_lower) DO NOTHING
+                ON CONFLICT (extra_name_lower) DO UPDATE
+                    SET show_in_booking = TRUE,
+                        user_hidden     = FALSE,
+                        name            = COALESCE(EXCLUDED.name, extras_visibility.name),
+                        icon            = COALESCE(NULLIF(extras_visibility.icon,''), EXCLUDED.icon),
+                        sort_order      = EXCLUDED.sort_order,
+                        updated_at      = NOW()
                 """,
             )
         conn.commit()

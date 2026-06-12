@@ -7291,8 +7291,6 @@ async function loadExtrasCat(){
   if(!tbody) return;
   tbody.innerHTML='<tr><td colspan="12" class="loading-msg">Cargando...</td></tr>';
   try{
-    // Purge any leftover soft-deleted rows from old delete logic (idempotent)
-    api('/api/admin/precios-extras/purge-hidden', {method:'POST'}).catch(()=>{});
     const d = await api('/api/admin/precios-extras');
     EXTRAS_CATALOG = d.extras||[];   // also refresh catalog for modal dropdowns
     _extrasCatData = d.extras||[];
