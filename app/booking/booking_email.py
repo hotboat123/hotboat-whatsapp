@@ -1691,12 +1691,39 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
 
 
 def try_send_booking_confirmation_after_payment(booking_ref: str) -> Dict[str, Any]:
-    result = send_email_for_trigger("booking_confirmed", booking_ref)
+    """
+    Send the booking_confirmed email after a successful web payment.
+    Uses send_confirmation_admin_force (same as the admin panel button) so the
+    email always contains real DB data — never template/sample placeholders.
+    """
+    # Look up the booking to get the integer ID and check idempotency
+    booking = get_booking_by_ref(booking_ref)
+    if not booking:
+        logger.warning("try_send_booking_confirmation_after_payment: booking not found ref=%s", booking_ref)
+        return {"sent": False, "reason": "not_found"}
+
+    if booking.get("confirmation_email_sent_at"):
+        logger.info("try_send_booking_confirmation_after_payment: already sent ref=%s", booking_ref)
+        return {"sent": False, "reason": "already_sent"}
+
+    booking_id = booking.get("id")
+    if not booking_id:
+        logger.warning("try_send_booking_confirmation_after_payment: no id for ref=%s", booking_ref)
+        return {"sent": False, "reason": "no_id"}
+
+    # Use the same rich-email builder the admin panel uses — always real data
+    result = send_confirmation_admin_force(booking_id)
+
+    # Mark idempotency flag so the pending-payment sweep doesn't re-send
+    if result.get("sent"):
+        mark_confirmation_email_sent(booking_ref)
+
     # Also notify the operator
     try:
         send_email_for_trigger("admin_booking_confirmed", booking_ref)
     except Exception as _e:
         logger.warning("admin_booking_confirmed email: %s", _e)
+
     return result
 
 
