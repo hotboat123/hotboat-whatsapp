@@ -4436,17 +4436,20 @@ let _appliedCoupon=null; // working copy for current modal: {code, discount_amou
 let _currentReservaData = null; // full reservation object for current modal
 
 // ── Auth ────────────────────────────────────────────────────────────────────
-async function _applyUserSession(key){
+async function _applyUserSession(key, prefetched){
   KEY = key;
-  try {
-    const r = await fetch('/api/admin/auth/login',{headers:{'x-admin-key':key}});
-    if(r.ok){
-      const d = await r.json();
-      _userSections = d.sections || null;
-      _userIsSuper  = d.is_super !== false;
-      _userName     = d.name || 'Admin';
-    }
-  } catch(_){}
+  let d = prefetched;
+  if(!d){
+    try {
+      const r = await fetch('/api/admin/auth/login',{method:'POST',headers:{'x-admin-key':key}});
+      if(r.ok) d = await r.json();
+    } catch(_){}
+  }
+  if(d){
+    _userSections = d.sections || null;
+    _userIsSuper  = d.is_super !== false;
+    _userName     = d.name || 'Admin';
+  }
   _applyNavPermissions();
 }
 
@@ -4470,10 +4473,11 @@ function doLogin(){
   err.style.display='none';
   fetch('/api/admin/auth/login', {method:'POST', headers:{'x-admin-key': pw}}).then(async r=>{
     if(r.ok){
+      const loginData = await r.json();
       document.getElementById('login-screen').style.display='none';
       document.getElementById('dashboard').style.display='flex';
       document.getElementById('menu-btn').style.display='';
-      await _applyUserSession(pw);
+      await _applyUserSession(pw, loginData);
       loadExtrasCatalog();
       loadAlojExpCatalogs();
       reloadAll();
