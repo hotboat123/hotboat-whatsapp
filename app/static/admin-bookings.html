@@ -4468,7 +4468,7 @@ function doLogin(){
   const pw = document.getElementById('pw-input').value;
   const err = document.getElementById('pw-err');
   err.style.display='none';
-  fetch('/api/admin/auth/login', {headers:{'x-admin-key': pw}}).then(async r=>{
+  fetch('/api/admin/auth/login', {method:'POST', headers:{'x-admin-key': pw}}).then(async r=>{
     if(r.ok){
       document.getElementById('login-screen').style.display='none';
       document.getElementById('dashboard').style.display='flex';
