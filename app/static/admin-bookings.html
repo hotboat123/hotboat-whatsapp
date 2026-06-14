@@ -1392,6 +1392,19 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div id="fix-pago-result" style="display:none;font-size:.8rem;padding:.55rem .75rem;border-radius:8px;background:#0d1f33;color:#60a5fa;border:1px solid #1e3a5f"></div>
         </div>
       </div>
+
+      <!-- ── Gestión de Usuarios ──────────────────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem" id="users-mgmt-wrap">
+        <div class="chart-title">👥 Gestión de Usuarios</div>
+        <p style="color:var(--muted);font-size:.82rem;margin-bottom:1rem;line-height:1.6">
+          Crea usuarios con acceso restringido a pestañas específicas.<br>
+          Los usuarios sin pestañas asignadas tienen acceso completo (super admin).
+        </p>
+        <div id="admin-users-list" style="display:flex;flex-direction:column;gap:.55rem;margin-bottom:1rem"></div>
+        <button onclick="openUserModal()" style="background:rgba(74,158,255,.15);border:1px solid rgba(74,158,255,.35);color:#4a9eff;border-radius:8px;padding:.45rem 1rem;font-size:.83rem;cursor:pointer;font-weight:600">
+          + Agregar usuario
+        </button>
+      </div>
     </div>
 
 
@@ -4353,6 +4366,9 @@ const DAYS_SHORT=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 function calLeadDaysMonFirst(jsGetDay){ return (jsGetDay + 6) % 7; }
 let KEY='__no_auth__', allReservas=[], calYear=new Date().getFullYear(), calMonth=new Date().getMonth();
 let sortCol='fecha', sortDir=-1;
+let _userSections = null;   // null = full access; string[] = allowed sections
+let _userIsSuper  = true;   // true if user has full access
+let _userName     = 'Admin';
 
 // ── Calendar status filters ──────────────────────────────────────────────────
 const CAL_STATUS_GROUPS = [
@@ -4420,20 +4436,52 @@ let _appliedCoupon=null; // working copy for current modal: {code, discount_amou
 let _currentReservaData = null; // full reservation object for current modal
 
 // ── Auth ────────────────────────────────────────────────────────────────────
+async function _applyUserSession(key){
+  KEY = key;
+  try {
+    const r = await fetch('/api/admin/auth/login',{headers:{'x-admin-key':key}});
+    if(r.ok){
+      const d = await r.json();
+      _userSections = d.sections || null;
+      _userIsSuper  = d.is_super !== false;
+      _userName     = d.name || 'Admin';
+    }
+  } catch(_){}
+  _applyNavPermissions();
+}
+
+function _applyNavPermissions(){
+  const allSections = ['calendar','lista','clientes','stats','extras-cat','stock','tablas-admin',
+    'coupons','emails','alojamientos-admin','aloj-bookings','experiencias','packs-admin',
+    'cal-extras','financial','simulator','sueldos','gastos','chatbot','payment-test','logs','settings'];
+  allSections.forEach(sec=>{
+    const el = document.getElementById('nav-'+sec);
+    if(!el) return;
+    el.style.display = (!_userSections || _userSections.includes(sec)) ? '' : 'none';
+  });
+  // Show/hide user management in settings based on super status
+  const umWrap = document.getElementById('users-mgmt-wrap');
+  if(umWrap) umWrap.style.display = _userIsSuper ? '' : 'none';
+}
+
 function doLogin(){
   const pw = document.getElementById('pw-input').value;
   const err = document.getElementById('pw-err');
-  // Quick check via API
   fetch('/api/admin/stats?year=2026', {headers:{'x-admin-key':pw}}).then(r=>{
     if(r.ok){
-      KEY = pw;
       document.getElementById('login-screen').style.display='none';
       document.getElementById('dashboard').style.display='flex';
       document.getElementById('menu-btn').style.display='';
-      loadExtrasCatalog();
-      loadAlojExpCatalogs();
-      reloadAll();
+      _applyUserSession(pw).then(()=>{
+        loadExtrasCatalog();
+        loadAlojExpCatalogs();
+        reloadAll();
+      });
     } else {
+      // Try login endpoint to get specific error
+      fetch('/api/admin/auth/login',{headers:{'x-admin-key':pw}}).then(async lr=>{
+        err.textContent = lr.ok ? '' : (await lr.json().catch(()=>({detail:''}))).detail || 'Contraseña incorrecta';
+      }).catch(()=>{});
       err.style.display='';
     }
   }).catch(()=>{ err.style.display=''; });
@@ -4445,13 +4493,16 @@ function doLogin(){
   document.getElementById('dashboard').style.display='flex';
   const mb=document.getElementById('menu-btn');
   if(mb) mb.style.display='';
-  loadExtrasCatalog();
-  loadAlojExpCatalogs();
-  reloadAll();
+  _applyUserSession(KEY).then(()=>{
+    loadExtrasCatalog();
+    loadAlojExpCatalogs();
+    reloadAll();
+  });
 })();
 
 // ── Navigation ───────────────────────────────────────────────────────────────
 function showSection(name){
+  if(_userSections && !_userSections.includes(name)) return;
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('section-'+name).classList.add('active');
@@ -4466,7 +4517,7 @@ function showSection(name){
   if(name==='stats'){ loadStats(); loadCashReport(); }
   if(name==='extras-cat') loadExtrasCat();
   if(name==='emails') loadEmailBookingConfig();
-  if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); adminCheckPushState(); }
+  if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); adminCheckPushState(); if(_userIsSuper) loadAdminUsers(); }
   if(name==='alojamientos-admin') loadAlojamientos();
   if(name==='experiencias') loadExperiencias();
   if(name==='packs-admin') loadPacksAdmin();
@@ -12213,6 +12264,153 @@ async function deleteBotKeyword(id){
     </div>
   </div>
 </div>
+
+<!-- ── User Modal ──────────────────────────────────────────────────────────── -->
+<div id="user-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;
+  align-items:center;justify-content:center;padding:1rem;overflow-y:auto">
+  <div style="background:var(--card);border-radius:16px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:1.4rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem">
+      <div style="font-size:.95rem;font-weight:700" id="user-modal-title">👤 Agregar usuario</div>
+      <button onclick="closeUserModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:.2rem .5rem">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.85rem">
+      <div>
+        <label style="font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Nombre</label>
+        <input id="um-name" type="text" placeholder="Ej: María González"
+          style="width:100%;margin-top:.3rem;padding:.55rem .75rem;background:var(--input);border:1px solid var(--border);color:#fff;border-radius:8px;font-size:.88rem;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Contraseña</label>
+        <input id="um-key" type="text" placeholder="Ej: hotboat2026"
+          style="width:100%;margin-top:.3rem;padding:.55rem .75rem;background:var(--input);border:1px solid var(--border);color:#fff;border-radius:8px;font-size:.88rem;outline:none;box-sizing:border-box">
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.25rem">Dejar en blanco al editar para no cambiar la contraseña.</div>
+      </div>
+      <div>
+        <label style="font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:.6rem">
+          Acceso a pestañas
+          <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.72rem">(sin marcar ninguna = acceso completo)</span>
+        </label>
+        <div id="um-sections" style="display:grid;grid-template-columns:1fr 1fr;gap:.35rem .7rem;margin-top:.5rem;font-size:.82rem"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:.6rem;margin-top:1.3rem">
+      <button onclick="closeUserModal()" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:.65rem;font-size:.85rem;cursor:pointer">Cancelar</button>
+      <button onclick="saveUserModal()" style="flex:2;background:#4a9eff;color:#fff;border:none;border-radius:10px;padding:.65rem;font-size:.85rem;font-weight:700;cursor:pointer">✓ Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Admin Users management ────────────────────────────────────────────────────
+
+const _SECTION_LABELS = {
+  'calendar':'📅 Calendario','lista':'📋 Reservas','clientes':'👥 Clientes',
+  'stats':'📊 Estadísticas','extras-cat':'🏷️ Precios Extras','stock':'📦 Stock',
+  'tablas-admin':'🍽 Tablas','coupons':'🎟️ Cupones','emails':'✉️ Emails reservas',
+  'alojamientos-admin':'🏠 Alojamientos','aloj-bookings':'📋 Reservas Aloj.',
+  'experiencias':'🏔️ Experiencias','packs-admin':'🎁 Packs','cal-extras':'🗓️ Cal. Extras',
+  'financial':'💰 Finanzas','simulator':'🎯 Simulador','sueldos':'👷 Sueldos',
+  'gastos':'🧾 Gastos','chatbot':'🤖 Chatbot','payment-test':'💳 Test Pagos',
+  'logs':'🔍 Logs','settings':'⚙️ Configuración',
+};
+
+let _userModalIdx = null; // null = new, number = edit index
+
+async function loadAdminUsers(){
+  const el = document.getElementById('admin-users-list');
+  if(!el) return;
+  try {
+    const d = await api('/api/admin/users');
+    const users = d.users || [];
+    if(!users.length){
+      el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Sin usuarios configurados. Todos los que conozcan la contraseña tienen acceso completo.</div>';
+      return;
+    }
+    el.innerHTML = users.map(u=>{
+      const secs = u.sections ? u.sections.map(s=>(_SECTION_LABELS[s]||s)).join(', ') : '🔓 Acceso completo';
+      return `<div style="display:flex;align-items:flex-start;gap:.7rem;padding:.6rem .75rem;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:.88rem">${escHtml(u.name)}</div>
+          <div style="font-size:.72rem;color:var(--muted);margin-top:.15rem">🔑 ${u.key_masked}</div>
+          <div style="font-size:.72rem;color:var(--muted);margin-top:.1rem;line-height:1.5">${escHtml(secs)}</div>
+        </div>
+        <div style="display:flex;gap:.4rem;flex-shrink:0">
+          <button onclick="openUserModal(${u.idx})" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.28rem .6rem;font-size:.78rem;cursor:pointer">✏️</button>
+          <button onclick="deleteAdminUser(${u.idx},'${escHtml(u.name)}')" style="background:none;border:1px solid var(--border);color:var(--red);border-radius:7px;padding:.28rem .6rem;font-size:.78rem;cursor:pointer">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e){ el.innerHTML = `<div style="color:var(--red);font-size:.82rem">Error: ${e.message}</div>`; }
+}
+
+async function openUserModal(idx){
+  _userModalIdx = (idx !== undefined && idx !== null) ? idx : null;
+  document.getElementById('user-modal-title').textContent = _userModalIdx !== null ? '✏️ Editar usuario' : '👤 Agregar usuario';
+  document.getElementById('um-name').value = '';
+  document.getElementById('um-key').value  = '';
+
+  // Build section checkboxes
+  const secDiv = document.getElementById('um-sections');
+  secDiv.innerHTML = Object.entries(_SECTION_LABELS).map(([k,v])=>
+    `<label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
+      <input type="checkbox" name="um-sec" value="${k}" style="accent-color:#4a9eff;width:14px;height:14px;cursor:pointer">
+      <span>${v}</span>
+    </label>`
+  ).join('');
+
+  if(_userModalIdx !== null){
+    try {
+      const d = await api('/api/admin/users');
+      const u = (d.users||[]).find(x=>x.idx===_userModalIdx);
+      if(u){
+        document.getElementById('um-name').value = u.name;
+        if(u.sections){
+          document.querySelectorAll('input[name="um-sec"]').forEach(cb=>{
+            cb.checked = u.sections.includes(cb.value);
+          });
+        }
+      }
+    } catch(_){}
+  }
+  document.getElementById('user-modal').style.display='flex';
+}
+
+function closeUserModal(){
+  document.getElementById('user-modal').style.display='none';
+}
+
+async function saveUserModal(){
+  const name = document.getElementById('um-name').value.trim();
+  const key  = document.getElementById('um-key').value.trim();
+  if(!name){ showToast('El nombre es requerido'); return; }
+  if(_userModalIdx === null && !key){ showToast('La contraseña es requerida para un nuevo usuario'); return; }
+
+  const checked = [...document.querySelectorAll('input[name="um-sec"]:checked')].map(cb=>cb.value);
+  const sections = checked.length ? checked : null; // null = full access
+
+  try {
+    if(_userModalIdx !== null){
+      const body = {name, sections};
+      if(key) body.key = key;
+      await api(`/api/admin/users/${_userModalIdx}`,{method:'PUT',body:JSON.stringify(body)});
+    } else {
+      await api('/api/admin/users',{method:'POST',body:JSON.stringify({name,key,sections})});
+    }
+    closeUserModal();
+    loadAdminUsers();
+    showToast('✅ Usuario guardado');
+  } catch(e){ showToast('❌ '+e.message); }
+}
+
+async function deleteAdminUser(idx, name){
+  if(!confirm(`¿Eliminar usuario "${name}"?`)) return;
+  try {
+    await api(`/api/admin/users/${idx}`,{method:'DELETE'});
+    loadAdminUsers();
+    showToast('✅ Usuario eliminado');
+  } catch(e){ showToast('❌ '+e.message); }
+}
+</script>
 
 </body>
 </html>

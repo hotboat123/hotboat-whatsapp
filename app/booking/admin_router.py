@@ -75,8 +75,96 @@ from app.booking.operator_settings import (
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
+def _get_admin_users() -> list:
+    raw = get_setting("admin_users") or "[]"
+    try:
+        return json.loads(raw)
+    except Exception:
+        return []
+
+def _save_admin_users(users: list) -> None:
+    set_setting("admin_users", json.dumps(users))
+
 def _check_auth(key: str):
-    pass  # Auth temporarily disabled
+    pass  # Auth temporarily disabled — per-section enforcement is frontend-only
+
+
+@admin_router.post("/api/admin/auth/login")
+async def admin_login(x_admin_key: str = Header("")):
+    """Return user info (name + allowed sections) for the given key.
+    If no users are configured, grants full access to any key."""
+    users = _get_admin_users()
+    if not users:
+        return {"name": "Admin", "sections": None, "is_super": True}
+    user = next((u for u in users if u.get("key") == x_admin_key), None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+    return {
+        "name": user.get("name", "Admin"),
+        "sections": user.get("sections"),   # None = full access
+        "is_super": user.get("sections") is None,
+    }
+
+
+@admin_router.get("/api/admin/users")
+async def list_admin_users(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    users = _get_admin_users()
+    masked = []
+    for i, u in enumerate(users):
+        k = u.get("key", "")
+        masked_key = (k[:2] + "***" + k[-2:]) if len(k) > 4 else "***"
+        masked.append({"idx": i, "name": u.get("name", ""), "key_masked": masked_key,
+                       "sections": u.get("sections")})
+    return {"users": masked}
+
+
+@admin_router.post("/api/admin/users")
+async def create_admin_user(request: Request, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    key  = (body.get("key")  or "").strip()
+    sections = body.get("sections")   # None = full access; list = restricted
+    if not name or not key:
+        raise HTTPException(400, "nombre y contraseña son requeridos")
+    users = _get_admin_users()
+    if any(u.get("key") == key for u in users):
+        raise HTTPException(409, "Ya existe un usuario con esa contraseña")
+    users.append({"name": name, "key": key, "sections": sections})
+    _save_admin_users(users)
+    return {"ok": True}
+
+
+@admin_router.put("/api/admin/users/{idx}")
+async def update_admin_user(idx: int, request: Request, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    body = await request.json()
+    users = _get_admin_users()
+    if idx < 0 or idx >= len(users):
+        raise HTTPException(404, "Usuario no encontrado")
+    if "name" in body:
+        users[idx]["name"] = (body["name"] or "").strip()
+    if body.get("key"):
+        new_key = body["key"].strip()
+        if any(i != idx and u.get("key") == new_key for i, u in enumerate(users)):
+            raise HTTPException(409, "Ya existe un usuario con esa contraseña")
+        users[idx]["key"] = new_key
+    if "sections" in body:
+        users[idx]["sections"] = body["sections"]
+    _save_admin_users(users)
+    return {"ok": True}
+
+
+@admin_router.delete("/api/admin/users/{idx}")
+async def delete_admin_user(idx: int, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    users = _get_admin_users()
+    if idx < 0 or idx >= len(users):
+        raise HTTPException(404, "Usuario no encontrado")
+    users.pop(idx)
+    _save_admin_users(users)
+    return {"ok": True}
 
 
 # ── HTML page ─────────────────────────────────────────────────────────────────
