@@ -4467,38 +4467,23 @@ function _applyNavPermissions(){
 function doLogin(){
   const pw = document.getElementById('pw-input').value;
   const err = document.getElementById('pw-err');
-  fetch('/api/admin/stats?year=2026', {headers:{'x-admin-key':pw}}).then(r=>{
+  err.style.display='none';
+  fetch('/api/admin/auth/login', {headers:{'x-admin-key': pw}}).then(async r=>{
     if(r.ok){
       document.getElementById('login-screen').style.display='none';
       document.getElementById('dashboard').style.display='flex';
       document.getElementById('menu-btn').style.display='';
-      _applyUserSession(pw).then(()=>{
-        loadExtrasCatalog();
-        loadAlojExpCatalogs();
-        reloadAll();
-      });
+      await _applyUserSession(pw);
+      loadExtrasCatalog();
+      loadAlojExpCatalogs();
+      reloadAll();
     } else {
-      // Try login endpoint to get specific error
-      fetch('/api/admin/auth/login',{headers:{'x-admin-key':pw}}).then(async lr=>{
-        err.textContent = lr.ok ? '' : (await lr.json().catch(()=>({detail:''}))).detail || 'Contraseña incorrecta';
-      }).catch(()=>{});
+      const body = await r.json().catch(()=>({}));
+      err.textContent = body.detail || 'Contraseña incorrecta';
       err.style.display='';
     }
-  }).catch(()=>{ err.style.display=''; });
+  }).catch(()=>{ err.textContent='Error de conexión'; err.style.display=''; });
 }
-
-// ── Auto-login (auth temporarily disabled) ────────────────────────────────────
-(function(){
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('dashboard').style.display='flex';
-  const mb=document.getElementById('menu-btn');
-  if(mb) mb.style.display='';
-  _applyUserSession(KEY).then(()=>{
-    loadExtrasCatalog();
-    loadAlojExpCatalogs();
-    reloadAll();
-  });
-})();
 
 // ── Navigation ───────────────────────────────────────────────────────────────
 function showSection(name){
