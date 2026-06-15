@@ -4471,6 +4471,8 @@ async function _applyUserSession(key, prefetched){
 }
 
 function doLogout(){
+  localStorage.removeItem('hb_admin_key');
+  localStorage.removeItem('hb_admin_key_ts');
   KEY = '__no_auth__';
   _userSections = null;
   _userIsSuper = true;
@@ -4500,6 +4502,17 @@ function _applyNavPermissions(){
   if(umWrap) umWrap.style.display = _userIsSuper ? '' : 'none';
 }
 
+function _enterDashboard(pw, loginData){
+  localStorage.setItem('hb_admin_key', pw);
+  localStorage.setItem('hb_admin_key_ts', Date.now().toString());
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('dashboard').style.display='flex';
+  document.getElementById('menu-btn').style.display='';
+  return _applyUserSession(pw, loginData).then(()=>{
+    loadExtrasCatalog(); loadAlojExpCatalogs(); reloadAll();
+  });
+}
+
 function doLogin(){
   const pw = document.getElementById('pw-input').value;
   const err = document.getElementById('pw-err');
@@ -4507,13 +4520,7 @@ function doLogin(){
   fetch('/api/admin/auth/login', {method:'POST', headers:{'x-admin-key': pw}}).then(async r=>{
     if(r.ok){
       const loginData = await r.json();
-      document.getElementById('login-screen').style.display='none';
-      document.getElementById('dashboard').style.display='flex';
-      document.getElementById('menu-btn').style.display='';
-      await _applyUserSession(pw, loginData);
-      loadExtrasCatalog();
-      loadAlojExpCatalogs();
-      reloadAll();
+      await _enterDashboard(pw, loginData);
     } else {
       const body = await r.json().catch(()=>({}));
       err.textContent = body.detail || 'Contraseña incorrecta';
@@ -4521,6 +4528,18 @@ function doLogin(){
     }
   }).catch(()=>{ err.textContent='Error de conexión'; err.style.display=''; });
 }
+
+// Auto-login from localStorage (30-day session)
+(function(){
+  const saved = localStorage.getItem('hb_admin_key');
+  const ts    = parseInt(localStorage.getItem('hb_admin_key_ts') || '0', 10);
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+  if(!saved || Date.now() - ts > THIRTY_DAYS){ localStorage.removeItem('hb_admin_key'); return; }
+  fetch('/api/admin/auth/login', {method:'POST', headers:{'x-admin-key': saved}}).then(async r=>{
+    if(r.ok){ await _enterDashboard(saved, await r.json()); }
+    else { localStorage.removeItem('hb_admin_key'); }
+  }).catch(()=>{});
+})();
 
 // ── Navigation ───────────────────────────────────────────────────────────────
 function showSection(name){
