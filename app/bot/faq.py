@@ -49,28 +49,28 @@ class FAQHandler:
             "precio": """💰 *Precios HotBoat:*
 
 👥 *2 personas*
-• $69.990 x persona
-• Total: *$139.980*
+• $76.990 x persona
+• Total: *$153.980*
 
 👥 *3 personas*
-• $54.990 x persona
-• Total: *$164.970*
+• $59.990 x persona
+• Total: *$179.970*
 
 👥 *4 personas*
-• $44.990 x persona
-• Total: *$179.960*
+• $48.990 x persona
+• Total: *$195.960*
 
 👥 *5 personas*
-• $38.990 x persona
-• Total: *$194.950*
+• $42.990 x persona
+• Total: *$214.950*
 
 👥 *6 personas*
-• $32.990 x persona
-• Total: *$197.940*
+• $36.990 x persona
+• Total: *$221.940*
 
 👥 *7 personas*
-• $29.990 x persona
-• Total: *$209.930*
+• $33.990 x persona
+• Total: *$237.930*
 
 _*niños pagan desde los 6 años_
 

@@ -311,32 +311,32 @@ Digite o idioma que deseja usar:
     },
     
     # Prices (same numbers, different currency format)
-    "prices_info": {
+    "prices_info": {  # noqa: E501  (price table updated 2026-06)
         "es": """PRECIOS POR PERSONA:
-- 2 personas: $69,990 por persona (Total: $139,980)
-- 3 personas: $54,990 por persona (Total: $164,970)
-- 4 personas: $44,990 por persona (Total: $179,960)
-- 5 personas: $38,990 por persona (Total: $194,950)
-- 6 personas: $32,990 por persona (Total: $197,940)
-- 7 personas: $29,990 por persona (Total: $209,930)
+- 2 personas: $76,990 por persona (Total: $153,980)
+- 3 personas: $59,990 por persona (Total: $179,970)
+- 4 personas: $48,990 por persona (Total: $195,960)
+- 5 personas: $42,990 por persona (Total: $214,950)
+- 6 personas: $36,990 por persona (Total: $221,940)
+- 7 personas: $33,990 por persona (Total: $237,930)
 *Niños pagan desde los 6 años""",
-        
+
         "en": """PRICES PER PERSON:
-- 2 people: $69,990 per person (Total: $139,980 CLP)
-- 3 people: $54,990 per person (Total: $164,970 CLP)
-- 4 people: $44,990 per person (Total: $179,960 CLP)
-- 5 people: $38,990 per person (Total: $194,950 CLP)
-- 6 people: $32,990 per person (Total: $197,940 CLP)
-- 7 people: $29,990 per person (Total: $209,930 CLP)
+- 2 people: $76,990 per person (Total: $153,980 CLP)
+- 3 people: $59,990 per person (Total: $179,970 CLP)
+- 4 people: $48,990 per person (Total: $195,960 CLP)
+- 5 people: $42,990 per person (Total: $214,950 CLP)
+- 6 people: $36,990 per person (Total: $221,940 CLP)
+- 7 people: $33,990 per person (Total: $237,930 CLP)
 *Children pay from 6 years old""",
-        
+
         "pt": """PREÇOS POR PESSOA:
-- 2 pessoas: $69.990 por pessoa (Total: $139.980 CLP)
-- 3 pessoas: $54.990 por pessoa (Total: $164.970 CLP)
-- 4 pessoas: $44.990 por pessoa (Total: $179.960 CLP)
-- 5 pessoas: $38.990 por pessoa (Total: $194.950 CLP)
-- 6 pessoas: $32.990 por pessoa (Total: $197.940 CLP)
-- 7 pessoas: $29.990 por pessoa (Total: $209.930 CLP)
+- 2 pessoas: $76.990 por pessoa (Total: $153.980 CLP)
+- 3 pessoas: $59.990 por pessoa (Total: $179.970 CLP)
+- 4 pessoas: $48.990 por pessoa (Total: $195.960 CLP)
+- 5 pessoas: $42.990 por pessoa (Total: $214.950 CLP)
+- 6 pessoas: $36.990 por pessoa (Total: $221.940 CLP)
+- 7 pessoas: $33.990 por pessoa (Total: $237.930 CLP)
 *Crianças pagam a partir dos 6 anos"""
     },
     
@@ -392,90 +392,90 @@ Gostaria de reservar sua experiência?"""
         "es": """💰 *Precios HotBoat:*
 
 👥 *2 personas*
-• $69.990 x persona
-• Total: *$139.980*
+• $76.990 x persona
+• Total: *$153.980*
 
 👥 *3 personas*
-• $54.990 x persona
-• Total: *$164.970*
+• $59.990 x persona
+• Total: *$179.970*
 
 👥 *4 personas*
-• $44.990 x persona
-• Total: *$179.960*
+• $48.990 x persona
+• Total: *$195.960*
 
 👥 *5 personas*
-• $38.990 x persona
-• Total: *$194.950*
+• $42.990 x persona
+• Total: *$214.950*
 
 👥 *6 personas*
-• $32.990 x persona
-• Total: *$197.940*
+• $36.990 x persona
+• Total: *$221.940*
 
 👥 *7 personas*
-• $29.990 x persona
-• Total: *$209.930*
+• $33.990 x persona
+• Total: *$237.930*
 
 _*niños pagan desde los 6 años_
 
 Aquí puedes reservar tu horario directo 👇
 https://whatsapp.hotboat.cl/booking""",
-        
+
         "en": """💰 *HotBoat Prices:*
 
 👥 *2 people*
-• $69,990 per person
-• Total: *$139,980 CLP*
+• $76,990 per person
+• Total: *$153,980 CLP*
 
 👥 *3 people*
-• $54,990 per person
-• Total: *$164,970 CLP*
+• $59,990 per person
+• Total: *$179,970 CLP*
 
 👥 *4 people*
-• $44,990 per person
-• Total: *$179,960 CLP*
+• $48,990 per person
+• Total: *$195,960 CLP*
 
 👥 *5 people*
-• $38,990 per person
-• Total: *$194,950 CLP*
+• $42,990 per person
+• Total: *$214,950 CLP*
 
 👥 *6 people*
-• $32,990 per person
-• Total: *$197,940 CLP*
+• $36,990 per person
+• Total: *$221,940 CLP*
 
 👥 *7 people*
-• $29,990 per person
-• Total: *$209,930 CLP*
+• $33,990 per person
+• Total: *$237,930 CLP*
 
 _*children pay from 6 years old_
 
 Book your time slot here 👇
 https://whatsapp.hotboat.cl/booking""",
-        
+
         "pt": """💰 *Preços HotBoat:*
 
 👥 *2 pessoas*
-• $69.990 por pessoa
-• Total: *$139.980 CLP*
+• $76.990 por pessoa
+• Total: *$153.980 CLP*
 
 👥 *3 pessoas*
-• $54.990 por pessoa
-• Total: *$164.970 CLP*
+• $59.990 por pessoa
+• Total: *$179.970 CLP*
 
 👥 *4 pessoas*
-• $44.990 por pessoa
-• Total: *$179.960 CLP*
+• $48.990 por pessoa
+• Total: *$195.960 CLP*
 
 👥 *5 pessoas*
-• $38.990 por pessoa
-• Total: *$194.950 CLP*
+• $42.990 por pessoa
+• Total: *$214.950 CLP*
 
 👥 *6 pessoas*
-• $32.990 por pessoa
-• Total: *$197.940 CLP*
+• $36.990 por pessoa
+• Total: *$221.940 CLP*
 
 👥 *7 pessoas*
-• $29.990 por pessoa
-• Total: *$209.930 CLP*
+• $33.990 por pessoa
+• Total: *$237.930 CLP*
 
 _*crianças pagam a partir dos 6 anos_
 
