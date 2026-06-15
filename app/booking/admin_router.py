@@ -93,6 +93,11 @@ def _check_auth(key: str):
 async def admin_login(x_admin_key: str = Header("")):
     """Return user info (name + allowed sections) for the given key.
     If no users are configured, grants full access to any key."""
+    # Master key from env var always grants super admin access
+    master_key = os.environ.get("ADMIN_MASTER_KEY", "")
+    if master_key and x_admin_key == master_key:
+        return {"name": "Admin", "sections": None, "is_super": True}
+
     users = _get_admin_users()
     if not users:
         return {"name": "Admin", "sections": None, "is_super": True}
