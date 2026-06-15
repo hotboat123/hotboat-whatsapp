@@ -3301,7 +3301,18 @@ async function init(){
     renderLangSwitcher();
     mc.innerHTML = `<div class="card" style="text-align:center"><p>${t('loading')}</p></div>`;
     await Promise.all([loadPricesAndAvail(), loadDynamicContent()]);
-    renderMenu();
+
+    // Auto-select date+time from URL params (e.g. links sent by WhatsApp bot)
+    const _preDate = _queryParam(['date','fecha']);
+    const _preTime = _queryParam(['time','hora']);
+    if(_preDate && S.availability[_preDate] && S.availability[_preDate].length > 0){
+      selectDate(_preDate);
+      if(_preTime && S.availability[_preDate].includes(_preTime)){
+        selectTime(_preTime);
+      }
+    } else {
+      renderMenu();
+    }
 
     // Track page exit via sendBeacon (survives page unload)
     window.addEventListener('visibilitychange', ()=>{

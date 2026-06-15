@@ -2541,14 +2541,13 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             logger.warning(f"Error validating reservation datetime: {exc}")
             return get_text("time_invalid_format", language)
 
-        pending["time"] = normalized_time
-        metadata["pending_reservation"] = pending
-        metadata["awaiting_reservation_time"] = False
-        metadata["awaiting_party_size"] = True
-        metadata["awaiting_date_time_selection"] = False
+        date_iso = pending.get("date_obj_iso", "")[:10]  # YYYY-MM-DD
+        booking_url = f"https://whatsapp.hotboat.cl/booking?date={date_iso}&time={normalized_time}"
+
+        self._reset_reservation_flow(conversation)
 
         return get_text("time_confirmed_ask_party", language).format(
-            date=pending.get('date'), time=normalized_time
+            date=pending.get('date'), time=normalized_time, booking_url=booking_url
         )
 
     def _parse_reservation_date(self, message_lower: str) -> Optional[Dict[str, object]]:

@@ -1660,9 +1660,9 @@ Obrigado por escolher HotBoat! 🚤🌊"""
     },
 
     "time_confirmed_ask_party": {
-        "es": "⏰ ¡Listo! El {date} a las {time}.\n\n¿Para cuántas personas será la navegación? (2 a 7 personas)",
-        "en": "⏰ Great! On {date} at {time}.\n\nHow many people will be on the cruise? (2 to 7 people)",
-        "pt": "⏰ Ótimo! Em {date} às {time}.\n\nPara quantas pessoas será a navegação? (2 a 7 pessoas)"
+        "es": "⏰ ¡Perfecto! *{date} a las {time}*.\n\nSi quieres ver más disponibilidades o continuar con tu reserva, podés hacerlo directamente aquí:\n🔗 {booking_url}",
+        "en": "⏰ Perfect! *{date} at {time}*.\n\nIf you'd like to see more availability or continue with your booking, you can do so here:\n🔗 {booking_url}",
+        "pt": "⏰ Perfeito! *{date} às {time}*.\n\nSe quiser ver mais disponibilidades ou continuar com sua reserva, pode fazer isso aqui:\n🔗 {booking_url}"
     },
 
     "time_too_soon": {
