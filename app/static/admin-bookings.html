@@ -431,7 +431,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <input type="number" id="year-sel" value="2026" min="2024" max="2030"
       style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;width:80px;font-size:.85rem;outline:none"
       onchange="reloadAll()">
-    <button class="sync-btn" onclick="openNewReservaModal()" style="background:var(--green);margin-right:.3rem">+ Nueva reserva</button>
+    <button class="sync-btn" id="new-reserva-btn" onclick="openNewReservaModal()" style="background:var(--green);margin-right:.3rem">+ Nueva reserva</button>
     <button class="sync-btn" onclick="doSync()" id="sync-btn">🔄 Sincronizar</button>
   </div>
 
@@ -4553,20 +4553,20 @@ function showSection(name){
   document.getElementById('sidebar').classList.remove('open');
   const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
   document.getElementById('section-title').textContent = titles[name]||name;
-  const contentEl = document.getElementById('content');
-  const topbarEl  = document.getElementById('topbar');
+  const contentEl  = document.getElementById('content');
+  const topbarBtns = ['year-sel','new-reserva-btn','sync-btn'];
   if(name==='whatsapp'){
     if(contentEl){ contentEl.style.padding='0'; contentEl.style.height='100%'; }
-    if(topbarEl)  topbarEl.style.display='none';
+    topbarBtns.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
     const ifr = document.getElementById('whatsapp-iframe');
-    if(ifr) ifr.style.height='100vh';
+    if(ifr) ifr.style.height='calc(100vh - 57px)';
     if(ifr && ifr.getAttribute('src') !== '/chat'){
       fetch('/api/admin/chat-login', {method:'POST', headers:{'x-admin-key': KEY}})
         .finally(()=>{ ifr.src = '/chat'; });
     }
   } else {
     if(contentEl){ contentEl.style.padding=''; contentEl.style.height=''; }
-    if(topbarEl)  topbarEl.style.display='';
+    topbarBtns.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display=''; });
     const ifr = document.getElementById('whatsapp-iframe');
     if(ifr) ifr.style.height='calc(100vh - 57px)';
   }
