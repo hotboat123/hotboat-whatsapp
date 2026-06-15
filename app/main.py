@@ -20,6 +20,7 @@ from app.booking.gastos_router import gastos_router, _ensure_tables as _ensure_g
 from app.booking.tabla_router import tabla_router, _ensure_tabla_table, _seed_tabla_products, _ensure_catalog_table, _seed_catalog_defaults
 from app.meta_pixel import apply_meta_pixel_placeholder, is_meta_pixel_enabled
 from app.config import get_settings
+from app.booking.operator_settings import get_setting as _get_operator_setting
 from app.whatsapp.webhook import handle_webhook, verify_webhook
 from app.whatsapp.client import whatsapp_client
 from app.bot.conversation import ConversationManager
@@ -753,6 +754,25 @@ async def logout():
     from fastapi.responses import RedirectResponse
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie("kia_auth")
+    return response
+
+@app.post("/api/admin/chat-login")
+async def admin_chat_login(x_admin_key: str = Header("")):
+    """Sets kia_auth cookie when called with a valid admin key (for WhatsApp iframe)."""
+    import json as _json
+    master_key = os.environ.get("ADMIN_MASTER_KEY", "")
+    if master_key and x_admin_key == master_key:
+        valid = True
+    else:
+        raw = _get_operator_setting("admin_users") or "[]"
+        users = _json.loads(raw)
+        valid = not users or any(u.get("key") == x_admin_key for u in users)
+    if not valid:
+        raise HTTPException(status_code=401)
+    token = _make_session_token("admin")
+    response = JSONResponse({"ok": True})
+    response.set_cookie(key="kia_auth", value=token, max_age=60*60*24*30,
+                        httponly=True, samesite="lax", secure=settings.is_production)
     return response
 
 @app.get("/", response_class=HTMLResponse)

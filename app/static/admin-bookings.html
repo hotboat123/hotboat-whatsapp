@@ -4537,7 +4537,10 @@ function showSection(name){
   if(name==='whatsapp'){
     if(contentEl){ contentEl.style.padding='0'; contentEl.style.height='100%'; }
     const ifr = document.getElementById('whatsapp-iframe');
-    if(ifr && ifr.getAttribute('src') !== '/chat') ifr.src = '/chat';
+    if(ifr && ifr.getAttribute('src') !== '/chat'){
+      fetch('/api/admin/chat-login', {method:'POST', headers:{'x-admin-key': KEY}})
+        .finally(()=>{ ifr.src = '/chat'; });
+    }
   } else {
     if(contentEl){ contentEl.style.padding=''; contentEl.style.height=''; }
   }
