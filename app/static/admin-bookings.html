@@ -4554,15 +4554,21 @@ function showSection(name){
   const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
   document.getElementById('section-title').textContent = titles[name]||name;
   const contentEl = document.getElementById('content');
+  const topbarEl  = document.getElementById('topbar');
   if(name==='whatsapp'){
     if(contentEl){ contentEl.style.padding='0'; contentEl.style.height='100%'; }
+    if(topbarEl)  topbarEl.style.display='none';
     const ifr = document.getElementById('whatsapp-iframe');
+    if(ifr) ifr.style.height='100vh';
     if(ifr && ifr.getAttribute('src') !== '/chat'){
       fetch('/api/admin/chat-login', {method:'POST', headers:{'x-admin-key': KEY}})
         .finally(()=>{ ifr.src = '/chat'; });
     }
   } else {
     if(contentEl){ contentEl.style.padding=''; contentEl.style.height=''; }
+    if(topbarEl)  topbarEl.style.display='';
+    const ifr = document.getElementById('whatsapp-iframe');
+    if(ifr) ifr.style.height='calc(100vh - 57px)';
   }
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
