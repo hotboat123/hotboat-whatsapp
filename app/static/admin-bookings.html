@@ -343,6 +343,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div><strong>HotBoat</strong><small>Panel Admin</small></div>
   </div>
   <div class="sb-nav">
+    <div class="nav-item" onclick="showSection('whatsapp')" id="nav-whatsapp">
+      <span class="ni">💬</span> WhatsApp
+    </div>
     <div class="nav-item active" onclick="showSection('calendar')" id="nav-calendar">
       <span class="ni">📅</span> Calendario
     </div>
@@ -396,9 +399,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div>
     <div class="nav-item" onclick="showSection('gastos');loadGastos()" id="nav-gastos">
       <span class="ni">🧾</span> Gastos
-    </div>
-    <div class="nav-item" onclick="showSection('whatsapp')" id="nav-whatsapp">
-      <span class="ni">💬</span> WhatsApp
     </div>
     <div class="nav-item" onclick="showSection('chatbot')" id="nav-chatbot">
       <span class="ni">🤖</span> Chatbot
@@ -4510,6 +4510,7 @@ function _enterDashboard(pw, loginData){
   document.getElementById('menu-btn').style.display='';
   return _applyUserSession(pw, loginData).then(()=>{
     loadExtrasCatalog(); loadAlojExpCatalogs(); reloadAll();
+    showSection('whatsapp');
   });
 }
 
