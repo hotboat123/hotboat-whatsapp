@@ -3283,7 +3283,7 @@ async def admin_put_menu_settings(body: MenuSettingsBody, x_admin_key: str = Hea
 
 # ── HotBoat prices per person ──────────────────────────────────────────────────
 
-PRICES_DEFAULT = {2: 69990, 3: 54990, 4: 44990, 5: 38990, 6: 32990, 7: 29990}
+PRICES_DEFAULT = {2: 76990, 3: 59990, 4: 48990, 5: 42990, 6: 36990, 7: 33990}
 
 
 @admin_router.get("/api/admin/prices-config")

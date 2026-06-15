@@ -11,8 +11,7 @@ from app.db.connection import get_connection
 
 CHILE_TZ = ZoneInfo("America/Santiago")
 logger = logging.getLogger(__name__)
-PRICES = {2: 69990, 3: 54990, 4: 44990, 5: 38990, 6: 32990, 7: 29990}
-
+PRICES = {2: 76990, 3: 59990, 4: 48990, 5: 42990, 6: 36990, 7: 33990}
 
 def _parse_booking_date(val: Any) -> date_type:
     if isinstance(val, date_type):
@@ -107,15 +106,25 @@ def _legacy_booking_from_aa(d: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+_OLD_PRICES = {2: 69990, 3: 54990, 4: 44990, 5: 38990, 6: 32990, 7: 29990}
+
 def load_prices_from_db() -> None:
-    """Load prices per person from hotboat_settings into the live PRICES dict."""
+    """Load prices per person from hotboat_settings into the live PRICES dict.
+    If the DB still holds the old pre-2026-06 prices, auto-migrate to new ones."""
     import json as _json
     try:
-        from app.booking.operator_settings import get_setting
+        from app.booking.operator_settings import get_setting, set_setting
         raw = get_setting("prices_per_person", "")
         if raw:
-            stored = _json.loads(raw)
-            PRICES.update({int(k): int(v) for k, v in stored.items()})
+            stored = {int(k): int(v) for k, v in _json.loads(raw).items()}
+            if stored == _OLD_PRICES:
+                # Auto-migrate stale prices to current defaults
+                set_setting("prices_per_person", _json.dumps({str(k): v for k, v in PRICES.items()}))
+                logger.info("load_prices_from_db: migrated prices to 2026-06 schedule")
+            else:
+                PRICES.update(stored)
+        else:
+            set_setting("prices_per_person", _json.dumps({str(k): v for k, v in PRICES.items()}))
     except Exception as e:
         logger.warning(f"load_prices_from_db: {e}")
 
