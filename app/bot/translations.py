@@ -1660,7 +1660,7 @@ Obrigado por escolher HotBoat! 🚤🌊"""
     },
 
     "time_confirmed_ask_party": {
-        "es": "⏰ ¡Perfecto! *{date} a las {time}*.\n\nSi quieres ver más disponibilidades o continuar con tu reserva, podés hacerlo directamente aquí:\n🔗 {booking_url}",
+        "es": "⏰ ¡Perfecto! *{date} a las {time}*.\n\nSi quieres ver más disponibilidades o continuar con tu reserva, puedes hacerlo directamente aquí:\n🔗 {booking_url}",
         "en": "⏰ Perfect! *{date} at {time}*.\n\nIf you'd like to see more availability or continue with your booking, you can do so here:\n🔗 {booking_url}",
         "pt": "⏰ Perfeito! *{date} às {time}*.\n\nSe quiser ver mais disponibilidades ou continuar com sua reserva, pode fazer isso aqui:\n🔗 {booking_url}"
     },
