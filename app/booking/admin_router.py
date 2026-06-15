@@ -176,12 +176,8 @@ async def delete_admin_user(idx: int, x_admin_key: str = Header("")):
 
 @admin_router.get("/admin/reservas", response_class=HTMLResponse)
 async def admin_page():
-    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "admin-bookings.html")
-    try:
-        with open(path, encoding="utf-8") as f:
-            return HTMLResponse(f.read())
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="admin-bookings.html not found")
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/", status_code=302)
 
 
 # ── List reservations ─────────────────────────────────────────────────────────

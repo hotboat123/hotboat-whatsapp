@@ -756,20 +756,21 @@ async def logout():
     return response
 
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
-    if not _is_authenticated(request):
-        return _serve_login_html("/")
-    return _serve_chat_html()
+async def root():
+    """Admin panel — auth handled client-side via x-admin-key"""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    path = os.path.join(static_dir, "admin-bookings.html")
+    with open(path, encoding="utf-8") as f:
+        return HTMLResponse(f.read())
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_redirect():
-    """Redirect /admin to admin reservas panel"""
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/admin/reservas", status_code=302)
+    return RedirectResponse(url="/", status_code=302)
 
 @app.get("/chat", response_class=HTMLResponse)
 async def chat_ui(request: Request):
-    """Serve Kia-Ai chat interface"""
+    """Serve WhatsApp chat interface"""
     if not _is_authenticated(request):
         return _serve_login_html("/chat")
     return _serve_chat_html()

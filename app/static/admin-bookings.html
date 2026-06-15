@@ -397,6 +397,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('gastos');loadGastos()" id="nav-gastos">
       <span class="ni">🧾</span> Gastos
     </div>
+    <div class="nav-item" onclick="showSection('whatsapp')" id="nav-whatsapp">
+      <span class="ni">💬</span> WhatsApp
+    </div>
     <div class="nav-item" onclick="showSection('chatbot')" id="nav-chatbot">
       <span class="ni">🤖</span> Chatbot
     </div>
@@ -412,6 +415,12 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
   </div>
   <div class="sb-footer">
     <small id="sync-status">Sin sincronizar</small>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)">
+      <small id="sb-username" style="color:var(--muted);font-size:.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px"></small>
+      <button onclick="doLogout()" title="Cerrar sesión"
+        style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;padding:.2rem .4rem;border-radius:6px;flex-shrink:0"
+        onmouseenter="this.style.color='#ff6b6b'" onmouseleave="this.style.color='var(--muted)'">↩ Salir</button>
+    </div>
   </div>
 </nav>
 
@@ -4336,6 +4345,12 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
     </div><!-- /section-logs -->
 
+    <!-- WHATSAPP -->
+    <div id="section-whatsapp" class="section" style="height:calc(100vh - 56px);padding:0;overflow:hidden">
+      <iframe id="whatsapp-iframe" src="" style="width:100%;height:100%;border:none;display:block"
+        allow="microphone; camera"></iframe>
+    </div><!-- /section-whatsapp -->
+
   </div><!-- /content -->
 
 </div><!-- /main -->
@@ -4450,13 +4465,31 @@ async function _applyUserSession(key, prefetched){
     _userIsSuper  = d.is_super !== false;
     _userName     = d.name || 'Admin';
   }
+  const sbName = document.getElementById('sb-username');
+  if(sbName) sbName.textContent = _userName;
   _applyNavPermissions();
+}
+
+function doLogout(){
+  KEY = '__no_auth__';
+  _userSections = null;
+  _userIsSuper = true;
+  _userName = 'Admin';
+  // Reset WhatsApp iframe so it reloads on next open
+  const ifr = document.getElementById('whatsapp-iframe');
+  if(ifr) ifr.src = '';
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('pw-input').value='';
+  document.getElementById('pw-err').style.display='none';
+  const mb = document.getElementById('menu-btn');
+  if(mb) mb.style.display='none';
 }
 
 function _applyNavPermissions(){
   const allSections = ['calendar','lista','clientes','stats','extras-cat','stock','tablas-admin',
     'coupons','emails','alojamientos-admin','aloj-bookings','experiencias','packs-admin',
-    'cal-extras','financial','simulator','sueldos','gastos','chatbot','payment-test','logs','settings'];
+    'cal-extras','financial','simulator','sueldos','gastos','whatsapp','chatbot','payment-test','logs','settings'];
   allSections.forEach(sec=>{
     const el = document.getElementById('nav-'+sec);
     if(!el) return;
@@ -4498,8 +4531,12 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',chatbot:'Chatbot',logs:'Logs del servidor'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
   document.getElementById('section-title').textContent = titles[name]||name;
+  if(name==='whatsapp'){
+    const ifr = document.getElementById('whatsapp-iframe');
+    if(!ifr.src) ifr.src = '/chat';
+  }
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
   if(name==='clientes') loadClients();
@@ -12299,7 +12336,7 @@ const _SECTION_LABELS = {
   'alojamientos-admin':'🏠 Alojamientos','aloj-bookings':'📋 Reservas Aloj.',
   'experiencias':'🏔️ Experiencias','packs-admin':'🎁 Packs','cal-extras':'🗓️ Cal. Extras',
   'financial':'💰 Finanzas','simulator':'🎯 Simulador','sueldos':'👷 Sueldos',
-  'gastos':'🧾 Gastos','chatbot':'🤖 Chatbot','payment-test':'💳 Test Pagos',
+  'gastos':'🧾 Gastos','whatsapp':'💬 WhatsApp','chatbot':'🤖 Chatbot','payment-test':'💳 Test Pagos',
   'logs':'🔍 Logs','settings':'⚙️ Configuración',
 };
 
