@@ -296,7 +296,7 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         n = request.num_people
         if not (2 <= n <= 7):
             raise HTTPException(status_code=400, detail="Capacidad: 2-7 personas")
-        price_pp = PRICES.get(n, 69990)
+        price_pp = PRICES.get(n, 76990)
         subtotal = price_pp * n
         extras_list = [e.dict() for e in request.extras]
         extras_total = sum(e["price"] * e["quantity"] for e in extras_list)
@@ -1442,7 +1442,7 @@ async def create_accommodation_booking(request: AlojBookingRequest):
     elif request.hotboat_date and request.hotboat_time and request.hotboat_people:
         from app.booking.db import create_booking, PRICES
         n        = int(request.hotboat_people)
-        price_pp = PRICES.get(n, 69990)
+        price_pp = PRICES.get(n, 76990)
         hb_sub   = price_pp * n
         hotboat_deposit = round(hb_sub * 0.5)
         hb_result = create_booking({

@@ -37,42 +37,42 @@ SERVICES = [
         capacity_min=2,
         capacity_max=2,
         duration_hours=2.0,
-        price_per_person=69990
+        price_per_person=76990
     ),
     ServiceConfig(
         name="HotBoat Trip 3 people",
         capacity_min=3,
         capacity_max=3,
         duration_hours=2.0,
-        price_per_person=54990
+        price_per_person=59990
     ),
     ServiceConfig(
         name="HotBoat Trip 4 people",
         capacity_min=4,
         capacity_max=4,
         duration_hours=2.0,
-        price_per_person=44990
+        price_per_person=48990
     ),
     ServiceConfig(
         name="HotBoat Trip 5 people",
         capacity_min=5,
         capacity_max=5,
         duration_hours=2.0,
-        price_per_person=38990
+        price_per_person=42990
     ),
     ServiceConfig(
         name="HotBoat Trip 6 people",
         capacity_min=6,
         capacity_max=6,
         duration_hours=2.0,
-        price_per_person=32990
+        price_per_person=36990
     ),
     ServiceConfig(
         name="HotBoat Trip 7 people",
         capacity_min=7,
         capacity_max=7,
         duration_hours=2.0,
-        price_per_person=29990
+        price_per_person=33990
     ),
 ]
 

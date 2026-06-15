@@ -1155,7 +1155,7 @@ async function loadDynamicContent(){
     // Sync ACTIVIDADES for arma-tu-pack using dynamic experiences
     if(DYN_EXPERIENCIAS.length){
       ACTIVIDADES.length = 0;
-      ACTIVIDADES.push({id:'hotboat',icon:'🚤',name:'HotBoat',desc:'Paseo 2 horas en el lago',pricePP:69990,flat:false});
+      ACTIVIDADES.push({id:'hotboat',icon:'🚤',name:'HotBoat',desc:'Paseo 2 horas en el lago',pricePP:76990,flat:false});
       DYN_EXPERIENCIAS.forEach(e=>{
         ACTIVIDADES.push({id:e.slug,icon:e.icon,name:e.name,desc:e.description||'',pricePP:e.price_per_person||0,flat:e.slug==='auto'});
       });
@@ -1627,7 +1627,7 @@ const PACKS = [
 ];
 
 const ACTIVIDADES = [
-  {id:'hotboat', icon:'🚤', name:'HotBoat',           desc:'Paseo 2 horas en el lago', pricePP:69990,  flat:false},
+  {id:'hotboat', icon:'🚤', name:'HotBoat',           desc:'Paseo 2 horas en el lago', pricePP:76990,  flat:false},
   {id:'rafting', icon:'🚣', name:'Rafting',            desc:'Rio Trancura · Bajo o Alto', pricePP:35000, flat:false},
   {id:'volcan',  icon:'🌋', name:'Subida al Volcan',   desc:'Trek guiado',               pricePP:40000,  flat:false},
   {id:'cabalgata',icon:'🐴',name:'Cabalgata',          desc:'Ojos del Caburguá',         pricePP:35000,  flat:false},
@@ -2591,7 +2591,7 @@ function selectTime(t){
 
 function renderPeopleSelect(){
   function update(){
-    const basepp = S.prices[S.numPeople] || 69990;
+    const basepp = S.prices[S.numPeople] || 76990;
     const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
     const pp = Math.round(basepp * mult / 1000) * 1000;
     const total = pp * S.numPeople;
@@ -2689,7 +2689,7 @@ function renderExtras(){
   }).join('');
   const flexCls = S.hasFlex ? 'selected' : '';
   // Calculate actual flex price to display (same formula as renderForm)
-  const _basepp = S.prices[S.numPeople] || 69990;
+  const _basepp = S.prices[S.numPeople] || 76990;
   const _mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const _pp = Math.round(_basepp * _mult / 1000) * 1000;
   const _sub = _pp * S.numPeople;
@@ -2730,7 +2730,7 @@ function toggleFlex(){
 
 function renderForm(){
   window._lastSummaryFn = renderForm;   // so applyCoupon can re-render
-  const basepp = S.prices[S.numPeople] || 69990;
+  const basepp = S.prices[S.numPeople] || 76990;
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const pp = Math.round(basepp * mult / 1000) * 1000;
   const sub = pp * S.numPeople;
@@ -2946,7 +2946,7 @@ async function applyCoupon(){
   S.couponCode = ''; S.couponDiscount = 0; S.couponExtra = ''; S.couponPercent = 0;
   if(btn){ btn.disabled=true; btn.textContent='...'; }
 
-  const pp = S.prices[S.numPeople] || 69990;
+  const pp = S.prices[S.numPeople] || 76990;
   const sub = pp * S.numPeople;   // base boat price only — coupon applies to this
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
   // Discount base: only the boat reservation (sub), NOT extras
@@ -3001,7 +3001,7 @@ async function submitBooking(){
     return;
   }
   _isSubmittingBooking = true;
-  const basepp = S.prices[S.numPeople] || 69990;
+  const basepp = S.prices[S.numPeople] || 76990;
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const pp = Math.round(basepp * mult / 1000) * 1000;
   const sub = pp * S.numPeople;

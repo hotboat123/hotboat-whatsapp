@@ -248,12 +248,12 @@ class CartManager:
 
     # Prices per person based on capacity
     PRICES_PER_PERSON = {
-        2: 69990,
-        3: 54990,
-        4: 44990,
-        5: 38990,
-        6: 32990,
-        7: 29990,
+        2: 76990,
+        3: 59990,
+        4: 48990,
+        5: 42990,
+        6: 36990,
+        7: 33990,
     }
     
     def __init__(self):
@@ -528,7 +528,7 @@ class CartManager:
         service_name: str = "HotBoat Trip"
     ) -> CartItem:
         """Create a reservation cart item"""
-        price_per_person = self.PRICES_PER_PERSON.get(capacity, 69990)
+        price_per_person = self.PRICES_PER_PERSON.get(capacity, 76990)
         
         return CartItem(
             item_type="reservation",
