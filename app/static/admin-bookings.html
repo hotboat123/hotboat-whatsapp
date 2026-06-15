@@ -4346,8 +4346,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div><!-- /section-logs -->
 
     <!-- WHATSAPP -->
-    <div id="section-whatsapp" class="section" style="height:calc(100vh - 56px);padding:0;overflow:hidden">
-      <iframe id="whatsapp-iframe" src="" style="width:100%;height:100%;border:none;display:block"
+    <div id="section-whatsapp" class="section" style="height:100%;padding:0;overflow:hidden">
+      <iframe id="whatsapp-iframe" src="" style="width:100%;height:calc(100vh - 57px);border:none;display:block"
         allow="microphone; camera"></iframe>
     </div><!-- /section-whatsapp -->
 
@@ -4533,9 +4533,13 @@ function showSection(name){
   document.getElementById('sidebar').classList.remove('open');
   const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
   document.getElementById('section-title').textContent = titles[name]||name;
+  const contentEl = document.getElementById('content');
   if(name==='whatsapp'){
+    if(contentEl){ contentEl.style.padding='0'; contentEl.style.height='100%'; }
     const ifr = document.getElementById('whatsapp-iframe');
-    if(!ifr.src) ifr.src = '/chat';
+    if(ifr && ifr.getAttribute('src') !== '/chat') ifr.src = '/chat';
+  } else {
+    if(contentEl){ contentEl.style.padding=''; contentEl.style.height=''; }
   }
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
