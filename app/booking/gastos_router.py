@@ -337,7 +337,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}",
                 json=payload,
                 headers={"content-type": "application/json"},
             )
@@ -354,7 +354,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         if status == 400 and "API_KEY" in last_body.upper():
             raise HTTPException(status_code=502, detail="GOOGLE_API_KEY inválida — verificá la key en Railway")
         if status == 429:
-            raise HTTPException(status_code=429, detail="Límite de Gemini alcanzado — intentá en unos segundos")
+            raise HTTPException(status_code=429, detail=f"Límite de Gemini (429): {last_body[:300]}")
         raise HTTPException(status_code=502, detail=f"Error de Gemini ({status}): {last_body[:200]}")
     except (json.JSONDecodeError, KeyError, IndexError) as e:
         logger.error(f"Gemini parse error: {e} — raw: {last_body[:200]}")
