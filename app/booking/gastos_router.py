@@ -337,7 +337,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}",
+                f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}",
                 json=payload,
                 headers={"content-type": "application/json"},
             )
