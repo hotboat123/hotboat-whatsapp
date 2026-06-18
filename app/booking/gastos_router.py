@@ -292,9 +292,9 @@ async def delete_categoria(cat_id: int, x_admin_key: str = Header("")):
 async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     settings = get_settings()
-    api_key = settings.anthropic_api_key
+    api_key = settings.gemini_api_key
     if not api_key:
-        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY no configurado en Railway")
+        raise HTTPException(status_code=503, detail="GOOGLE_API_KEY no configurado en Railway")
 
     prompt = (
         "Analiza esta boleta o ticket de Chile. Extrae: "
@@ -323,18 +323,13 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         scan_b64 = body.imagen_base64
 
     payload = {
-        "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 300,
-        "messages": [{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": "image/jpeg", "data": scan_b64},
-                },
-                {"type": "text", "text": prompt},
-            ],
+        "contents": [{
+            "parts": [
+                {"inline_data": {"mime_type": "image/jpeg", "data": scan_b64}},
+                {"text": prompt},
+            ]
         }],
+        "generationConfig": {"maxOutputTokens": 300, "temperature": 0},
     }
 
     extracted = None
@@ -342,35 +337,31 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                "https://api.anthropic.com/v1/messages",
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
                 json=payload,
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
+                headers={"content-type": "application/json"},
             )
             last_body = resp.text[:400]
             resp.raise_for_status()
-            raw_text = resp.json()["content"][0]["text"].strip()
+            raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             extracted = json.loads(raw_text)
-            logger.info("Claude scan OK")
+            logger.info("Gemini scan OK")
     except httpx.HTTPStatusError as e:
-        logger.error(f"Claude API error {e.response.status_code}: {last_body}")
+        logger.error(f"Gemini API error {e.response.status_code}: {last_body}")
         status = e.response.status_code
-        if status == 401:
-            raise HTTPException(status_code=502, detail="ANTHROPIC_API_KEY inválida — verificá la key en Railway")
+        if status == 400 and "API_KEY" in last_body.upper():
+            raise HTTPException(status_code=502, detail="GOOGLE_API_KEY inválida — verificá la key en Railway")
         if status == 429:
-            raise HTTPException(status_code=429, detail="Límite de Claude alcanzado — intentá en unos segundos")
-        raise HTTPException(status_code=502, detail=f"Error de Claude ({status}): {last_body[:200]}")
+            raise HTTPException(status_code=429, detail="Límite de Gemini alcanzado — intentá en unos segundos")
+        raise HTTPException(status_code=502, detail=f"Error de Gemini ({status}): {last_body[:200]}")
     except (json.JSONDecodeError, KeyError, IndexError) as e:
-        logger.error(f"Claude parse error: {e} — raw: {last_body[:200]}")
-        raise HTTPException(status_code=502, detail="Claude respondió en formato inesperado")
+        logger.error(f"Gemini parse error: {e} — raw: {last_body[:200]}")
+        raise HTTPException(status_code=502, detail="Gemini respondió en formato inesperado")
     except httpx.HTTPError as e:
-        logger.error(f"Claude http error: {e}")
-        raise HTTPException(status_code=502, detail=f"Error de red al conectar con Claude: {e}")
+        logger.error(f"Gemini http error: {e}")
+        raise HTTPException(status_code=502, detail=f"Error de red al conectar con Gemini: {e}")
 
     # Keyword-based category matching
     with get_connection() as conn:
