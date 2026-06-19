@@ -280,6 +280,12 @@ Digite o idioma que deseja usar:
         "en": "🛒 Your cart is empty, sailor ⚓\n\nWhat would you like to add? 🚤",
         "pt": "🛒 Seu carrinho está vazio, marujo ⚓\n\nO que você gostaria de adicionar? 🚤"
     },
+
+    "extras_web_redirect": {
+        "es": "🛒 Los extras se agregan directamente desde nuestra página de reservas:\n\n👉 https://whatsapp.hotboat.cl/booking\n\n¡Ahí puedes elegir fecha, horario, personas y agregar todos los extras que quieras! ⚓",
+        "en": "🛒 Extras are added directly from our booking page:\n\n👉 https://whatsapp.hotboat.cl/booking\n\nThere you can choose date, time, people and add all the extras you want! ⚓",
+        "pt": "🛒 Os extras são adicionados diretamente na nossa página de reservas:\n\n👉 https://whatsapp.hotboat.cl/booking\n\nLá você pode escolher data, horário, pessoas e adicionar todos os extras que quiser! ⚓"
+    },
     
     "cart_needs_reservation": {
         "es": "📅 Necesitas agregar una reserva primero. Usa la opción 1 del menú principal para elegir fecha y horario.",

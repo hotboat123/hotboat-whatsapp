@@ -596,33 +596,14 @@ class ConversationManager:
             elif conversation.get("metadata", {}).get("awaiting_ice_cream_flavor"):
                 logger.info("User responding with ice cream flavor")
                 response = await self._handle_ice_cream_flavor_response(message_text, from_number, contact_name, conversation)
-            # PRIORITY 1.6: Check if user is selecting an extra by number (after viewing extras menu)
+            # PRIORITY 1.6: extras selection via number — disabled, cart is managed from the web
             elif conversation.get("metadata", {}).get("awaiting_extra_selection"):
-                logger.info(f"User awaiting extra selection, processing: {message_text}")
-                extra_response = await self._handle_extra_number_selection(message_text, from_number, contact_name, conversation)
-                if extra_response:
-                    response = extra_response
-                else:
-                    # If not a valid extra number, try to parse with text/AI (e.g., "2 jugos")
-                    logger.info("Not a pure ID selection, trying text-based parsing")
-                    text_response = await self._try_parse_extra_with_ai(message_text, from_number, contact_name, conversation)
-                    if text_response:
-                        response = text_response
-                    else:
-                        # If still can't parse, tell them what's expected
-                        conversation["metadata"]["awaiting_extra_selection"] = False
-                        response = f"""❌ Por favor escribe un número válido del 1 al 17 para seleccionar un extra.
-
-O elige:
-1️⃣8️⃣ Ver extras (menú completo de nuevo)
-1️⃣9️⃣ Menu principal
-2️⃣0️⃣ Proceder con el pago
-
-¿Qué número eliges? 🚤"""
+                conversation["metadata"]["awaiting_extra_selection"] = False
+                language = conversation.get("metadata", {}).get("language", "es")
+                response = get_text("extras_web_redirect", language)
             # PRIORITY 2: Check for global shortcuts (18, 19, 20) - work anywhere
             elif message_text.strip() == "18":
-                logger.info("Global shortcut 18: Ver extras")
-                conversation["metadata"]["awaiting_extra_selection"] = True
+                logger.info("Global shortcut 18: Ver extras (info only)")
                 language = conversation.get("metadata", {}).get("language", "es")
                 response = self.faq_handler.get_response("extras", language)
             elif message_text.strip() == "19":
@@ -631,51 +612,9 @@ O elige:
                 language = conversation.get("metadata", {}).get("language", "es")
                 response = self._get_main_menu_message(language)
             elif message_text.strip() == "20":
-                logger.info("Global shortcut 20: Ver/proceder con carrito")
-                conversation["metadata"]["awaiting_extra_selection"] = False
-                cart = await self.cart_manager.get_cart(from_number)
+                # Cart is now managed from the web page
                 language = conversation.get("metadata", {}).get("language", "es")
-                if not cart:
-                    response = get_text("cart_empty", language)
-                else:
-                    # Check if has reservation to proceed with payment
-                    has_reservation = any(item.item_type == "reservation" for item in cart)
-                    if has_reservation:
-                        # Proceed with payment
-                        total = self.cart_manager.calculate_total(cart)
-                        reservation = next((item for item in cart if item.item_type == "reservation"), None)
-                        
-                        confirm_message = "✅ *Solicitud de Reserva Recibida*\n\n"
-                        confirm_message += f"📅 *Detalles de tu Solicitud:*\n"
-                        confirm_message += f"   Fecha: {reservation.metadata.get('date')}\n"
-                        confirm_message += f"   Horario: {reservation.metadata.get('time')}\n"
-                        confirm_message += f"   Personas: {reservation.quantity}\n\n"
-                        
-                        if len(cart) > 1:
-                            confirm_message += f"✨ *Extras solicitados:*\n"
-                            for item in cart:
-                                if item.item_type == "extra":
-                                    confirm_message += f"   • {item.name}\n"
-                            confirm_message += "\n"
-                        
-                        confirm_message += f"💰 *Total estimado: ${total:,}*\n\n"
-                        confirm_message += f"📞 *El Capitán Tomás se comunicará contigo pronto por WhatsApp o teléfono para confirmar tu reserva y coordinar el pago* 👨‍✈️\n\n"
-                        confirm_message += f"Por mientras, envíanos tu *email* y *nombre completo* por favor 📝\n\n"
-                        confirm_message += f"¡Gracias por elegir HotBoat! 🚤🌊"
-                        
-                        # Send confirmation immediately to user and trigger notifications in background
-                        notification_cart = list(cart)
-                        asyncio.create_task(
-                            self._notify_capitan_tomas(contact_name, from_number, notification_cart, reason="reservation")
-                        )
-                        
-                        # Clear cart after confirmation
-                        await self.cart_manager.clear_cart(from_number)
-                        
-                        response = confirm_message
-                    else:
-                        # Just show cart
-                        response = f"{self.cart_manager.format_cart_message(cart)}\n\n{self._cart_needs_reservation_message(conversation)}"
+                response = get_text("extras_web_redirect", language)
             # PRIORITY 2.5: Check if user wants to change language
             elif detect_language_command(message_text):
                 logger.info("User requesting language change instructions")
@@ -706,10 +645,7 @@ O elige:
                     # Option 3: Características Experiencia HotBoat
                     response = self.faq_handler.get_response("caracteristicas", language)
                 elif menu_number == 4:
-                    # Option 4: Extras HotBoat
-                    conversation["metadata"]["awaiting_extra_selection"] = True
-                    logger.info(f"Set awaiting_extra_selection=True for {from_number}")
-                    logger.info(f"Metadata: {conversation.get('metadata', {})}")
+                    # Option 4: Extras HotBoat — solo info, carrito se gestiona desde la web
                     response = self.faq_handler.get_response("extras", language)
                 elif menu_number == 5:
                     # Option 5: Ubicación y Reseñas HotBoat
