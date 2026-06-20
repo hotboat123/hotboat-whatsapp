@@ -1558,11 +1558,8 @@ async def get_forecast_table(
 @financial_router.get("/api/admin/financial/debug-compare/{year}/{month}")
 async def debug_compare(year: int, month: int, x_admin_key: str = Header("")):
     """Return booking-level breakdown showing Forecast vs P&L calculation side by side."""
-    import calendar as _cal
-    from .financial_breakdown import booking_discount_total_clp, split_booking_financials
-
     structure    = get_financial_structure()
-    commissions  = _load_commissions()
+    commissions  = _get_commissions()
     cpr          = float(structure.get("costo_operativo_por_reserva") or 18000)
     wl           = set(structure.get("experience_slug_whitelist") or [])
     cc           = load_extra_cost_catalog()
