@@ -316,14 +316,15 @@ def _get_budget(year: int, month: int) -> Dict:
     with get_connection() as conn:
         with conn.cursor() as cur:
             # Idempotent migration — adds zone columns if they don't exist yet
-            for col in ("aloj_budget", "exp_budget", "extra_budget"):
+            for col in ("aloj_budget", "exp_budget", "extra_budget", "reserva_budget"):
                 cur.execute(
                     f"ALTER TABLE financial_budget ADD COLUMN IF NOT EXISTS {col} NUMERIC DEFAULT 0"
                 )
             conn.commit()
             cur.execute("""
                 SELECT income_budget, costs_budget, marketing_budget, notes,
-                       COALESCE(aloj_budget,0), COALESCE(exp_budget,0), COALESCE(extra_budget,0)
+                       COALESCE(aloj_budget,0), COALESCE(exp_budget,0),
+                       COALESCE(extra_budget,0), COALESCE(reserva_budget,0)
                 FROM financial_budget WHERE year=%s AND month=%s
             """, (year, month))
             r = cur.fetchone()
@@ -331,9 +332,9 @@ def _get_budget(year: int, month: int) -> Dict:
                 return {"income_budget": float(r[0]), "costs_budget": float(r[1]),
                         "marketing_budget": float(r[2]), "notes": r[3] or "",
                         "aloj_budget": float(r[4]), "exp_budget": float(r[5]),
-                        "extra_budget": float(r[6])}
+                        "extra_budget": float(r[6]), "reserva_budget": float(r[7])}
             return {"income_budget": 0, "costs_budget": 0, "marketing_budget": 0, "notes": "",
-                    "aloj_budget": 0, "exp_budget": 0, "extra_budget": 0}
+                    "aloj_budget": 0, "exp_budget": 0, "extra_budget": 0, "reserva_budget": 0}
 
 
 # ── P&L calculation core ──────────────────────────────────────────────────────
@@ -1096,6 +1097,7 @@ class BudgetIn(BaseModel):
     aloj_budget:      float = 0
     exp_budget:       float = 0
     extra_budget:     float = 0
+    reserva_budget:   float = 0
 
 
 @financial_router.get("/api/admin/financial/budget/{year}/{month}")
@@ -1111,23 +1113,24 @@ async def upsert_budget(year: int, month: int, body: BudgetIn,
             # Ensure zone columns exist (idempotent migration)
             cur.execute("""
                 ALTER TABLE financial_budget
-                    ADD COLUMN IF NOT EXISTS aloj_budget  NUMERIC DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS exp_budget   NUMERIC DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS extra_budget NUMERIC DEFAULT 0
+                    ADD COLUMN IF NOT EXISTS aloj_budget    NUMERIC DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS exp_budget     NUMERIC DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS extra_budget   NUMERIC DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS reserva_budget NUMERIC DEFAULT 0
             """)
             cur.execute("""
                 INSERT INTO financial_budget (year, month, income_budget, costs_budget,
-                    marketing_budget, notes, aloj_budget, exp_budget, extra_budget)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    marketing_budget, notes, aloj_budget, exp_budget, extra_budget, reserva_budget)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (year, month) DO UPDATE
                     SET income_budget=%s, costs_budget=%s, marketing_budget=%s,
                         notes=%s, aloj_budget=%s, exp_budget=%s, extra_budget=%s,
-                        updated_at=NOW()
+                        reserva_budget=%s, updated_at=NOW()
             """, (year, month,
                   body.income_budget, body.costs_budget, body.marketing_budget, body.notes,
-                  body.aloj_budget, body.exp_budget, body.extra_budget,
+                  body.aloj_budget, body.exp_budget, body.extra_budget, body.reserva_budget,
                   body.income_budget, body.costs_budget, body.marketing_budget, body.notes,
-                  body.aloj_budget, body.exp_budget, body.extra_budget))
+                  body.aloj_budget, body.exp_budget, body.extra_budget, body.reserva_budget))
             conn.commit()
     return {"year": year, "month": month, **body.dict()}
 
@@ -1535,6 +1538,7 @@ async def get_forecast_table(
                 "cv_aloj":          _zd.get("cv_aloj", 0),
                 "cv_exp":           _zd.get("cv_exp", 0),
                 "cv_extra":         _zd.get("cv_extra", 0),
+                "budget_reserva":   int(budget.get("reserva_budget", 0)),
                 "budget_aloj":      int(budget.get("aloj_budget", 0)),
                 "budget_exp":       int(budget.get("exp_budget", 0)),
                 "budget_extra":     int(budget.get("extra_budget", 0)),

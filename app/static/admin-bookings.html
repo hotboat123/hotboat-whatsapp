@@ -10157,7 +10157,11 @@ document.addEventListener('DOMContentLoaded', () => {
           style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
       <div style="margin-top:.5rem;padding:.6rem;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid var(--border)">
         <div style="font-size:.7rem;color:var(--muted);margin-bottom:.4rem">Desglose por zona (opcional)</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.4rem">
+          <div>
+            <label style="font-size:.67rem;color:var(--muted)">📋 Reservas</label>
+            <input type="number" id="fin-budget-reserva" placeholder="0" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .5rem;font-size:.8rem;box-sizing:border-box">
+          </div>
           <div>
             <label style="font-size:.67rem;color:var(--muted)">🏠 Alojamiento</label>
             <input type="number" id="fin-budget-aloj" placeholder="0" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .5rem;font-size:.8rem;box-sizing:border-box">
@@ -11523,10 +11527,10 @@ function renderForecast(data, view){
 }
 
 const _ZONES_FC = [
-  { label:'📋 Reservas',     aKey:'actual_reserva', bKey:null,           cvKey:null,       color:'#22d3ee' },
-  { label:'🏠 Alojamiento',  aKey:'actual_aloj',    bKey:'budget_aloj',  cvKey:'cv_aloj',  color:'#5dade2' },
-  { label:'🎯 Experiencias', aKey:'actual_exp',     bKey:'budget_exp',   cvKey:'cv_exp',   color:'#a78bfa' },
-  { label:'📦 Extras',       aKey:'actual_extra',   bKey:'budget_extra', cvKey:'cv_extra', color:'#fbbf24' },
+  { label:'📋 Reservas',     aKey:'actual_reserva', bKey:'budget_reserva', cvKey:null,       color:'#22d3ee' },
+  { label:'🏠 Alojamiento',  aKey:'actual_aloj',    bKey:'budget_aloj',    cvKey:'cv_aloj',  color:'#5dade2' },
+  { label:'🎯 Experiencias', aKey:'actual_exp',     bKey:'budget_exp',     cvKey:'cv_exp',   color:'#a78bfa' },
+  { label:'📦 Extras',       aKey:'actual_extra',   bKey:'budget_extra',   cvKey:'cv_extra', color:'#fbbf24' },
 ];
 
 function renderForecastZones(data, view){
@@ -11662,6 +11666,7 @@ async function fcEditZoneBudget(periodKey, monthKey, budgetField, currentVal){
     costs_budget:     existing.costs_budget     || 0,
     marketing_budget: existing.marketing_budget || 0,
     notes:            existing.notes            || '',
+    reserva_budget:   existing.reserva_budget   || 0,
     aloj_budget:      existing.aloj_budget      || 0,
     exp_budget:       existing.exp_budget       || 0,
     extra_budget:     existing.extra_budget     || 0,
@@ -11890,6 +11895,7 @@ async function openBudgetModal(year, month){
   document.getElementById('fin-budget-costs').value     = d.costs_budget     || '';
   document.getElementById('fin-budget-marketing').value = d.marketing_budget || '';
   document.getElementById('fin-budget-notes').value     = d.notes            || '';
+  document.getElementById('fin-budget-reserva').value   = d.reserva_budget   || '';
   document.getElementById('fin-budget-aloj').value      = d.aloj_budget      || '';
   document.getElementById('fin-budget-exp').value       = d.exp_budget       || '';
   document.getElementById('fin-budget-extra').value     = d.extra_budget     || '';
@@ -11906,6 +11912,7 @@ async function saveBudget(){
       costs_budget:     parseFloat(document.getElementById('fin-budget-costs').value)     || 0,
       marketing_budget: parseFloat(document.getElementById('fin-budget-marketing').value) || 0,
       notes:            document.getElementById('fin-budget-notes').value || '',
+      reserva_budget:   parseFloat(document.getElementById('fin-budget-reserva').value)   || 0,
       aloj_budget:      parseFloat(document.getElementById('fin-budget-aloj').value)      || 0,
       exp_budget:       parseFloat(document.getElementById('fin-budget-exp').value)       || 0,
       extra_budget:     parseFloat(document.getElementById('fin-budget-extra').value)     || 0,
