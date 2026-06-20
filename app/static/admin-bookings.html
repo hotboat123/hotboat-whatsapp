@@ -11535,74 +11535,106 @@ function renderForecastZones(data, view){
   if(!data||!data.length){ el.innerHTML=''; return; }
   if(view === 'weekly'){ el.innerHTML=''; return; }
 
+  const MON = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const labelFn = (row) => {
     const [y,m] = (row.month||'').split('-');
-    return m ? ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1]+' '+y : (row.month||'');
+    return m ? MON[parseInt(m)-1]+' '+y : (row.month||'');
+  };
+  const fmtDelta = (val, budget) => {
+    if(!budget) return '<span style="color:var(--muted)">—</span>';
+    const pct = Math.round((val / budget - 1) * 100);
+    const c = pct >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<span style="color:${c}">${pct>0?'+':''}${pct}%</span>`;
   };
 
   const sections = _ZONES_FC.map(z => {
-    const totActual  = data.reduce((s,r) => s + (Number(r[z.aKey])||0), 0);
-    const totBudget  = z.bKey  ? data.reduce((s,r) => s + (Number(r[z.bKey])||0),  0) : 0;
-    const totCv      = z.cvKey ? data.reduce((s,r) => s + (Number(r[z.cvKey])||0), 0) : 0;
-    const totUtilPast = data.filter(r=>r.is_past).reduce((s,r) => s + (Number(r[z.aKey])||0) - (z.cvKey ? Number(r[z.cvKey])||0 : 0), 0);
+    const hasCv  = !!z.cvKey;
+    const hasBgt = !!z.bKey;
+
+    const totInc   = data.reduce((s,r) => s+(Number(r[z.aKey])||0), 0);
+    const totBgt   = hasBgt ? data.reduce((s,r) => s+(Number(r[z.bKey])||0), 0) : 0;
+    const totCv    = hasCv  ? data.filter(r=>r.is_past).reduce((s,r) => s+(Number(r[z.cvKey])||0), 0) : 0;
+    const totUtil  = totInc - totCv;
 
     const rows = data.map(row => {
-      const actual  = Math.round(Number(row[z.aKey])          || 0);
-      const budget  = z.bKey  ? Math.round(Number(row[z.bKey])  || 0) : 0;
-      const cv      = z.cvKey ? Math.round(Number(row[z.cvKey]) || 0) : 0;
-      const isPast  = row.is_past;
-      // Forecast = actual for past months; budget for future (if set)
-      const fcVal   = isPast ? actual : (budget > 0 ? budget : null);
-      const util    = actual - cv;
-      const utilFc  = fcVal !== null ? fcVal - cv : null;
-      const uc      = util   >= 0 ? 'var(--green)' : 'var(--red)';
-      const ufc     = utilFc !== null ? (utilFc >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--muted)';
+      const inc  = Math.round(Number(row[z.aKey]) || 0);
+      const bgt  = hasBgt ? Math.round(Number(row[z.bKey])  || 0) : 0;
+      const cv   = hasCv  ? Math.round(Number(row[z.cvKey]) || 0) : 0;
+      const isPast = row.is_past;
+      const fc   = isPast ? inc : (bgt > 0 ? bgt : null);  // Forecast
+      const util = inc - cv;
+      const utilFc = fc !== null ? fc - cv : null;
       const periodKey = row.month || row.week;
       const monthKey  = row.month_key || row.month;
 
-      const budgetCell = z.bKey
-        ? (budget
-            ? `<span style="cursor:pointer;color:var(--muted)" onclick="fcEditZoneBudget('${periodKey}','${monthKey}','${z.bKey}',${budget})">${fmtClp(budget)}</span>`
-            : `<span style="cursor:pointer;color:var(--muted);opacity:.5;font-size:.7rem" onclick="fcEditZoneBudget('${periodKey}','${monthKey}','${z.bKey}',0)">+ budget</span>`)
+      const bgtCell = hasBgt
+        ? (bgt
+            ? `<span style="cursor:pointer;color:var(--muted)" onclick="fcEditZoneBudget('${periodKey}','${monthKey}','${z.bKey}',${bgt})">${fmtClp(bgt)}</span>`
+            : `<span style="cursor:pointer;opacity:.4;font-size:.7rem" onclick="fcEditZoneBudget('${periodKey}','${monthKey}','${z.bKey}',0)">+ budget</span>`)
         : '<span style="color:var(--muted);opacity:.4">—</span>';
 
-      const cvCell = z.cvKey
-        ? `<span style="color:var(--red)">−${fmtClp(cv)}</span>`
-        : '<span style="color:var(--muted);opacity:.4">—</span>';
+      const uc  = util   >= 0 ? 'var(--green)' : 'var(--red)';
+      const ufc = utilFc !== null ? (utilFc >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--muted)';
+
+      // Δ: only meaningful for past (actual vs budget) or future (forecast vs budget)
+      const deltaInc  = hasBgt && bgt ? fmtDelta(isPast ? inc : (fc||0), bgt) : '<span style="color:var(--muted)">—</span>';
+      const deltaUtil = hasBgt && bgt ? fmtDelta(isPast ? util : (utilFc||0), bgt - cv) : '<span style="color:var(--muted)">—</span>';
+
+      const utilCols = hasCv ? `
+        <td style="padding:.34rem .5rem;text-align:right;font-size:.76rem;font-weight:600;color:${isPast?uc:'var(--muted)'}">${isPast?fmtClp(util):'<span style="color:var(--muted)">—</span>'}</td>
+        <td style="padding:.34rem .5rem;text-align:right;font-size:.76rem;color:var(--muted)">—</td>
+        <td style="padding:.34rem .5rem;text-align:right;font-size:.76rem;color:${ufc};font-weight:${isPast?400:500}">${fc!==null?fmtClp(utilFc):'<span style="color:var(--muted)">—</span>'}</td>
+        <td style="padding:.34rem .4rem;text-align:right;font-size:.73rem">${deltaUtil}</td>` : '';
 
       return `<tr style="border-top:1px solid var(--border)">
-        <td style="padding:.36rem .55rem;font-size:.76rem;color:var(--muted);white-space:nowrap">${labelFn(row)}</td>
-        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem">${isPast ? fmtClp(actual) : '<span style="color:var(--muted)">—</span>'}</td>
-        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem;color:${isPast?'inherit':'#60a5fa'};font-weight:${isPast?400:500}">${fcVal !== null ? fmtClp(fcVal) : '<span style="color:var(--muted)">—</span>'}</td>
-        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem">${budgetCell}</td>
-        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem">${cvCell}</td>
-        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem;font-weight:600;color:${isPast?uc:'var(--muted)'}">${isPast ? fmtClp(util) : '<span style="color:var(--muted)">—</span>'}</td>
-        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem;font-weight:${isPast?400:500};color:${ufc}">${utilFc !== null ? fmtClp(utilFc) : '<span style="color:var(--muted)">—</span>'}</td>
+        <td style="padding:.34rem .6rem;font-size:.76rem;color:var(--muted);white-space:nowrap">${labelFn(row)}</td>
+        <td style="padding:.34rem .5rem;text-align:right;font-size:.76rem">${isPast?fmtClp(inc):'<span style="color:var(--muted)">—</span>'}</td>
+        <td style="padding:.34rem .5rem;text-align:right;font-size:.76rem;color:var(--muted)">${bgtCell}</td>
+        <td style="padding:.34rem .5rem;text-align:right;font-size:.76rem;color:#60a5fa;font-weight:${isPast?400:500}">${fc!==null?fmtClp(fc):'<span style="color:var(--muted)">—</span>'}</td>
+        <td style="padding:.34rem .4rem;text-align:right;font-size:.73rem">${deltaInc}</td>
+        ${utilCols}
       </tr>`;
     }).join('');
 
-    const thS = 'padding:.33rem .5rem;text-align:right;font-size:.63rem;color:var(--muted)';
-    const hasCv = !!z.cvKey;
+    // ── header ──────────────────────────────────────────────────────────────
+    const thR = 'padding:.28rem .5rem;text-align:right;font-size:.62rem;color:var(--muted);font-weight:500';
+    const thL = 'padding:.28rem .6rem;text-align:left;font-size:.62rem;color:var(--muted);font-weight:500';
+    const grp = 'padding:.26rem .5rem;text-align:center;font-size:.62rem;font-weight:700;letter-spacing:.06em;border-bottom:2px solid';
+
+    const utilHead = hasCv ? `
+      <th colspan="4" style="${grp} var(--green);color:var(--green)">💰 UTILIDAD</th>` : '';
+    const utilSubHead = hasCv ? `
+      <th style="${thR}">Real</th>
+      <th style="${thR}">Budget</th>
+      <th style="${thR};color:#60a5fa">Forecast</th>
+      <th style="${thR}">Δ</th>` : '';
+
+    const groupRow = `<tr style="background:var(--card)">
+      <th></th>
+      <th colspan="4" style="${grp} #60a5fa;color:#60a5fa">📊 INGRESOS</th>
+      ${utilHead}
+    </tr>`;
+    const subRow = `<tr style="background:var(--card)">
+      <th style="${thL}">MES</th>
+      <th style="${thR}">Real</th>
+      <th style="${thR}">Budget</th>
+      <th style="${thR};color:#60a5fa">Forecast</th>
+      <th style="${thR}">Δ</th>
+      ${utilSubHead}
+    </tr>`;
+
+    const sumLine = `Ingresos: ${fmtClp(Math.round(totInc))}`
+      + (totBgt ? ` · Budget: ${fmtClp(Math.round(totBgt))}` : '')
+      + (hasCv ? ` · Utilidad: <span style="color:${totUtil>=0?'var(--green)':'var(--red)'}">${fmtClp(Math.round(totUtil))}</span>` : '');
+
     return `<details style="background:var(--surface);border:1px solid var(--border);border-top:3px solid ${z.color};border-radius:12px;overflow:hidden;margin-bottom:.7rem">
       <summary style="padding:.7rem 1rem;cursor:pointer;font-weight:600;font-size:.86rem;list-style:none;display:flex;justify-content:space-between;align-items:center">
         <span>${z.label}</span>
-        <span style="font-size:.78rem;font-weight:400;color:var(--muted)">
-          Ingresos: ${fmtClp(Math.round(totActual))}${totBudget ? ' · Budget: '+fmtClp(Math.round(totBudget)) : ''}${hasCv ? ' · Utilidad: <span style="color:'+(totUtilPast>=0?'var(--green)':'var(--red)')+'">'+fmtClp(Math.round(totUtilPast))+'</span>' : ''}
-        </span>
+        <span style="font-size:.78rem;font-weight:400;color:var(--muted)">${sumLine}</span>
       </summary>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr style="background:var(--card)">
-              <th style="padding:.33rem .55rem;text-align:left;font-size:.63rem;color:var(--muted)">Período</th>
-              <th style="${thS}">Ingresos</th>
-              <th style="${thS};color:#60a5fa">Forecast</th>
-              <th style="${thS}">Budget</th>
-              <th style="${thS}">C.Variable</th>
-              <th style="${thS}">Utilidad</th>
-              <th style="${thS};color:#60a5fa">Util. Forecast</th>
-            </tr>
-          </thead>
+          <thead>${groupRow}${subRow}</thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
