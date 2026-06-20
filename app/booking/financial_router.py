@@ -966,7 +966,8 @@ async def get_forecast(
                     COALESCE(ingreso_total, 0),
                     COALESCE(costo_operativo_total, 0),
                     COALESCE(pagos, '[]'::jsonb),
-                    status
+                    status,
+                    COALESCE(descuentos, '[]'::jsonb)
                 FROM all_appointments
                 WHERE fecha BETWEEN %s AND %s
                   AND status = ANY(%s)
@@ -976,9 +977,9 @@ async def get_forecast(
 
     months_data: Dict[str, Dict] = {}
     for r in rows:
-        day_str, gross, costo, pagos_raw, status = r
+        day_str, gross, costo, pagos_raw, status, desc_raw = r
         month_key = day_str[:7]
-        gross = float(gross)
+        gross = float(gross) - _sum_descuentos(desc_raw)
         costo = float(costo)
         pagos = pagos_raw if isinstance(pagos_raw, list) else json.loads(pagos_raw or "[]")
 
@@ -1121,6 +1122,15 @@ def _calc_net(gross: float, pagos_raw, commissions: Dict) -> float:
     return gross - commission
 
 
+def _sum_descuentos(raw: Any) -> float:
+    """Sum manual descuentos[] amounts (coupon_discount already baked into ingreso_total)."""
+    try:
+        items = raw if isinstance(raw, list) else json.loads(raw or "[]")
+        return max(0.0, sum(float(d.get("amount") or 0) for d in items if isinstance(d, dict)))
+    except Exception:
+        return 0.0
+
+
 def _load_plan() -> Dict:
     raw = get_setting("financial_plan", "")
     try:
@@ -1233,18 +1243,20 @@ async def get_forecast_table(
                 with conn.cursor() as cur:
                     cur.execute("""
                         SELECT COALESCE(fecha::text,''), COALESCE(ingreso_total,0),
-                               COALESCE(costo_operativo_total,0), COALESCE(pagos,'[]'::jsonb)
+                               COALESCE(costo_operativo_total,0), COALESCE(pagos,'[]'::jsonb),
+                               COALESCE(descuentos,'[]'::jsonb)
                         FROM all_appointments
                         WHERE fecha BETWEEN %s AND %s AND status = ANY(%s)
                         ORDER BY fecha
                     """, (d_from_w, d_to_w, list(CONFIRMED_STATUSES)))
-                    for fecha_str, gross, costo, pagos_raw in cur.fetchall():
+                    for fecha_str, gross, costo, pagos_raw, desc_raw in cur.fetchall():
                         if not fecha_str:
                             continue
                         dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
                         iso = dobj.isocalendar()
                         wk = f"{iso.year}-W{iso.week:02d}"
-                        net = _calc_net(float(gross), pagos_raw, commissions)
+                        adj_gross = float(gross) - _sum_descuentos(desc_raw)
+                        net = _calc_net(adj_gross, pagos_raw, commissions)
                         if wk not in by_week:
                             by_week[wk] = {"income": 0, "costs": 0, "bookings": 0}
                         by_week[wk]["income"]   += int(net)
@@ -1389,18 +1401,20 @@ async def get_forecast_table(
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT COALESCE(fecha::text,''), COALESCE(ingreso_total,0),
-                           COALESCE(costo_operativo_total,0), COALESCE(pagos,'[]'::jsonb)
+                           COALESCE(costo_operativo_total,0), COALESCE(pagos,'[]'::jsonb),
+                           COALESCE(descuentos,'[]'::jsonb)
                     FROM all_appointments
                     WHERE fecha BETWEEN %s AND %s AND status = ANY(%s)
                     ORDER BY fecha
                 """, (d_from, d_to, list(CONFIRMED_STATUSES)))
-                for fecha_str, gross, costo, pagos_raw in cur.fetchall():
+                for fecha_str, gross, costo, pagos_raw, desc_raw in cur.fetchall():
                     if not fecha_str:
                         continue
                     dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
                     key = (dobj.year, dobj.month)
-                    gross, costo = float(gross), float(costo)
-                    net = _calc_net(gross, pagos_raw, commissions)
+                    adj_gross = float(gross) - _sum_descuentos(desc_raw)
+                    costo = float(costo)
+                    net = _calc_net(adj_gross, pagos_raw, commissions)
                     if key not in by_month:
                         by_month[key] = {"income": 0, "costs": 0, "result": 0, "bookings": 0}
                     by_month[key]["income"]   += int(net)
