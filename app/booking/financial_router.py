@@ -1437,9 +1437,9 @@ async def get_forecast_table(
                     net = _calc_net(adj_gross, pagos_raw, commissions)
                     if key not in by_month:
                         by_month[key] = {"income": 0, "costs": 0, "result": 0, "bookings": 0}
-                    by_month[key]["income"]   += int(net)
+                    by_month[key]["income"]   += int(adj_gross)           # GROSS (= P&L I.BRUTO)
                     by_month[key]["costs"]    += int(costo_por_reserva_fc)
-                    by_month[key]["result"]   += int(net - costo_por_reserva_fc)
+                    by_month[key]["result"]   += int(net - costo_por_reserva_fc)  # net for correct result
                     by_month[key]["bookings"] += 1
                     by_month[key]["has_data"]  = True
 
