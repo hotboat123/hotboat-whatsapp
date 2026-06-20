@@ -1426,19 +1426,22 @@ async def get_forecast_table(
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT COALESCE(fecha::text,''), COALESCE(ingreso_total,0),
-                           COALESCE(costo_operativo_total,0), COALESCE(pagos,'[]'::jsonb),
+                    SELECT COALESCE(fecha::text,''),
+                           COALESCE(ingreso_reserva,0) + COALESCE(ingreso_extras,0),
+                           COALESCE(coupon_discount,0),
+                           COALESCE(pagos,'[]'::jsonb),
                            COALESCE(descuentos,'[]'::jsonb)
                     FROM all_appointments
                     WHERE fecha BETWEEN %s AND %s AND status = ANY(%s)
                     ORDER BY fecha
                 """, (d_from, d_to, list(CONFIRMED_STATUSES)))
-                for fecha_str, gross, costo, pagos_raw, desc_raw in cur.fetchall():
+                for fecha_str, base_inc, coupon, pagos_raw, desc_raw in cur.fetchall():
                     if not fecha_str:
                         continue
                     dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
                     key = (dobj.year, dobj.month)
-                    adj_gross = float(gross) - _sum_descuentos(desc_raw)
+                    # same as P&L: base_inc - coupon - manual_descuentos
+                    adj_gross = float(base_inc) - float(coupon) - _sum_descuentos(desc_raw)
                     net = _calc_net(adj_gross, pagos_raw, commissions)
                     if key not in by_month:
                         by_month[key] = {"income": 0, "costs": 0, "result": 0, "bookings": 0}
