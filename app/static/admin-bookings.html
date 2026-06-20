@@ -11527,10 +11527,10 @@ function renderForecast(data, view){
 }
 
 const _ZONES_FC = [
-  { label:'📋 Reservas',     aKey:'actual_reserva', bKey:'budget_reserva', cvKey:null,       color:'#22d3ee' },
-  { label:'🏠 Alojamiento',  aKey:'actual_aloj',    bKey:'budget_aloj',    cvKey:'cv_aloj',  color:'#5dade2' },
-  { label:'🎯 Experiencias', aKey:'actual_exp',     bKey:'budget_exp',     cvKey:'cv_exp',   color:'#a78bfa' },
-  { label:'📦 Extras',       aKey:'actual_extra',   bKey:'budget_extra',   cvKey:'cv_extra', color:'#fbbf24' },
+  { label:'📋 Reservas',     aKey:'actual_reserva', bKey:'budget_reserva', cvKey:null,       showUtil:true, color:'#22d3ee' },
+  { label:'🏠 Alojamiento',  aKey:'actual_aloj',    bKey:'budget_aloj',    cvKey:'cv_aloj',  showUtil:true, color:'#5dade2' },
+  { label:'🎯 Experiencias', aKey:'actual_exp',     bKey:'budget_exp',     cvKey:'cv_exp',   showUtil:true, color:'#a78bfa' },
+  { label:'📦 Extras',       aKey:'actual_extra',   bKey:'budget_extra',   cvKey:'cv_extra', showUtil:true, color:'#fbbf24' },
 ];
 
 function renderForecastZones(data, view){
@@ -11552,8 +11552,9 @@ function renderForecastZones(data, view){
   };
 
   const sections = _ZONES_FC.map(z => {
-    const hasCv  = !!z.cvKey;
-    const hasBgt = !!z.bKey;
+    const hasCv    = !!z.cvKey;
+    const showUtil = !!z.showUtil;
+    const hasBgt   = !!z.bKey;
 
     const totInc   = data.reduce((s,r) => s+(Number(r[z.aKey])||0), 0);
     const totBgt   = hasBgt ? data.reduce((s,r) => s+(Number(r[z.bKey])||0), 0) : 0;
@@ -11584,7 +11585,7 @@ function renderForecastZones(data, view){
       const deltaInc  = hasBgt && bgt ? fmtDelta(isPast ? inc : (fc||0), bgt) : '<span style="color:var(--muted)">—</span>';
       const deltaUtil = hasBgt && bgt ? fmtDelta(isPast ? util : (utilFc||0), bgt - cv) : '<span style="color:var(--muted)">—</span>';
 
-      const utilCols = hasCv ? `
+      const utilCols = showUtil ? `
         <td style="padding:.34rem .5rem;text-align:right;font-size:.76rem;font-weight:600;color:${isPast?uc:'var(--muted)'}">${isPast?fmtClp(util):'<span style="color:var(--muted)">—</span>'}</td>
         <td style="padding:.34rem .5rem;text-align:right;font-size:.76rem;color:var(--muted)">—</td>
         <td style="padding:.34rem .5rem;text-align:right;font-size:.76rem;color:${ufc};font-weight:${isPast?400:500}">${fc!==null?fmtClp(utilFc):'<span style="color:var(--muted)">—</span>'}</td>
@@ -11605,9 +11606,9 @@ function renderForecastZones(data, view){
     const thL = 'padding:.28rem .6rem;text-align:left;font-size:.62rem;color:var(--muted);font-weight:500';
     const grp = 'padding:.26rem .5rem;text-align:center;font-size:.62rem;font-weight:700;letter-spacing:.06em;border-bottom:2px solid';
 
-    const utilHead = hasCv ? `
+    const utilHead = showUtil ? `
       <th colspan="4" style="${grp} var(--green);color:var(--green)">💰 UTILIDAD</th>` : '';
-    const utilSubHead = hasCv ? `
+    const utilSubHead = showUtil ? `
       <th style="${thR}">Real</th>
       <th style="${thR}">Budget</th>
       <th style="${thR};color:#60a5fa">Forecast</th>
@@ -11629,7 +11630,7 @@ function renderForecastZones(data, view){
 
     const sumLine = `Ingresos: ${fmtClp(Math.round(totInc))}`
       + (totBgt ? ` · Budget: ${fmtClp(Math.round(totBgt))}` : '')
-      + (hasCv ? ` · Utilidad: <span style="color:${totUtil>=0?'var(--green)':'var(--red)'}">${fmtClp(Math.round(totUtil))}</span>` : '');
+      + (showUtil ? ` · Utilidad: <span style="color:${totUtil>=0?'var(--green)':'var(--red)'}">${fmtClp(Math.round(totUtil))}</span>` : '');
 
     return `<details style="background:var(--surface);border:1px solid var(--border);border-top:3px solid ${z.color};border-radius:12px;overflow:hidden;margin-bottom:.7rem">
       <summary style="padding:.7rem 1rem;cursor:pointer;font-weight:600;font-size:.86rem;list-style:none;display:flex;justify-content:space-between;align-items:center">
