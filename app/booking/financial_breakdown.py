@@ -382,11 +382,14 @@ def apply_structural_to_days(
 
 
 def finalize_pnl_day(d: Dict[str, Any]) -> None:
-    """resultado = net - opex reservas - marketing - estructura."""
+    """resultado = net - opex - cv_aloj - cv_exp - cv_extra - marketing - estructura."""
     struct = int(d.get("costo_estructural") or 0)
     d["resultado"] = (
         int(d["net_income"])
         - int(d["costo_operacional"])
+        - int(d.get("cv_aloj") or 0)
+        - int(d.get("cv_exp") or 0)
+        - int(d.get("cv_extra") or 0)
         - int(d["marketing"])
         - struct
     )
