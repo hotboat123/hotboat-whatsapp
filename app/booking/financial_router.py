@@ -425,7 +425,11 @@ def _build_pnl_days(
             "cv_extra":         sp["cv_extra"],
         })
 
-    apply_structural_to_days(days, d_from, d_to, daily_struct)
+    # Apply structural cost over full calendar months so partial-range filters still
+    # get the complete month's fixed cost (not just the days inside the filter window).
+    _struct_from = date(d_from.year, d_from.month, 1)
+    _struct_to   = date(d_to.year, d_to.month, _cal.monthrange(d_to.year, d_to.month)[1])
+    apply_structural_to_days(days, _struct_from, _struct_to, daily_struct)
 
     all_days_with_mkt = set(days.keys()) | set(mkt_by_day.keys())
     for day in all_days_with_mkt:
@@ -1212,6 +1216,18 @@ async def get_forecast_table(
             d_from_w = weeks_list[0]["ws"] - timedelta(weeks=104)
             d_to_w   = weeks_list[-1]["we"]
 
+            # Load marketing spend aggregated by ISO week key
+            _mkt_raw_w = _get_marketing_costs_range(d_from_w, d_to_w)
+            mkt_by_week: Dict[str, float] = {}
+            for _mr in _mkt_raw_w:
+                try:
+                    _dobj = date.fromisoformat(_mr["fecha"][:10])
+                    _iso  = _dobj.isocalendar()
+                    _wk   = f"{_iso.year}-W{_iso.week:02d}"
+                    mkt_by_week[_wk] = mkt_by_week.get(_wk, 0.0) + float(_mr["amount"])
+                except Exception:
+                    pass
+
             by_week: Dict = {}
             with get_connection() as conn:
                 with conn.cursor() as cur:
@@ -1309,7 +1325,8 @@ async def get_forecast_table(
                 sug_val, sug_src = _week_suggested(w["iso_year"], w["iso_week"], w["is_past"])
                 actual_costs  = data["costs"]  if data else None
                 week_fixed    = daily_struct * 7
-                actual_result = (data["income"] - data["costs"] - week_fixed) if data else None
+                week_mkt      = int(mkt_by_week.get(w["key"], 0))
+                actual_result = (data["income"] - data["costs"] - week_fixed - week_mkt) if data else None
                 result.append({
                     "month":            w["key"],
                     "week_label":       lbl,
@@ -1359,6 +1376,13 @@ async def get_forecast_table(
         end_y, end_m = months_range[-1]
         nxt_y, nxt_m = _madd(end_y, end_m, 1)
         d_to = date(nxt_y, nxt_m, 1) - timedelta(days=1)
+
+        # Load marketing spend for the full range and aggregate by YYYY-MM
+        _mkt_raw_m = _get_marketing_costs_range(d_from, d_to)
+        mkt_by_month: Dict[str, float] = {}
+        for _mr in _mkt_raw_m:
+            _mk = _mr["fecha"][:7]
+            mkt_by_month[_mk] = mkt_by_month.get(_mk, 0.0) + float(_mr["amount"])
 
         by_month: Dict = {}
         with get_connection() as conn:
@@ -1422,10 +1446,11 @@ async def get_forecast_table(
             fc_val = int(fc_val) if fc_val is not None else None
             fc_cost_val = month_cost_fc_plan.get(mk)
             fc_cost_val = int(fc_cost_val) if fc_cost_val is not None else None
-            # actual_result includes prorated fixed costs (daily_struct × days in month)
+            # actual_result: variable costs already in data["result"]; add fixed + marketing
             month_days   = _calendar.monthrange(y, m)[1]
             month_fixed  = int(daily_struct * month_days)
-            actual_result = int(data["result"] - month_fixed) if data else None
+            month_mkt    = int(mkt_by_month.get(mk, 0))
+            actual_result = int(data["result"] - month_fixed - month_mkt) if data else None
             result.append({
                 "month":            mk,
                 "week_label":       None,
