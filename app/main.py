@@ -1502,15 +1502,12 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             if not response_text:
                 raise HTTPException(status_code=400, detail="Invalid menu option")
         
-        # Translate if requested, then send
-        if tgt_lang:
-            response_text = await asyncio.to_thread(_translate_text, response_text, tgt_lang)
-        result = await whatsapp_client.send_text_message(to=phone_number, message=response_text)
-        await save_conversation(phone_number=phone_number, customer_name=customer_name,
-                                message_text="", response_text=response_text,
-                                message_type="text", direction="outgoing")
-        conversation["messages"].append({"role": "assistant", "content": response_text,
-                                         "timestamp": datetime.now(CHILE_TZ).isoformat()})
+        # Split on --- separator to support multi-message responses, then send
+        sequence = [p.strip() for p in response_text.split("\n---\n") if p.strip()]
+        for i, msg in enumerate(sequence):
+            if i > 0:
+                await asyncio.sleep(1.5)
+            await _send(msg)
         
         # Update last interaction
         conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
@@ -1519,8 +1516,7 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             "status": "success",
             "phone_number": phone_number,
             "menu_option": menu_option,
-            "message_sent": response_text[:100] + "..." if len(response_text) > 100 else response_text,
-            "whatsapp_response": result
+            "message_sent": f"{len(sequence)} mensaje(s) enviado(s)" if len(sequence) > 1 else (response_text[:100] + "..." if len(response_text) > 100 else response_text),
         }
         
     except HTTPException:
