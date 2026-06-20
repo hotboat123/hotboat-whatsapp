@@ -1414,8 +1414,24 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                 "$20.000 → Pack de 4 cervezas artesanales"
             )
         elif menu_option == 9:
-            # Solo alojamientos — link directo a página de reservas
-            response_text = (
+            # Alojamientos — read from bot_responses so it's editable from admin panel
+            _col9 = {"en": "content_en", "pt": "content_pt"}.get(language, "content_es")
+            _db9  = None
+            try:
+                from app.db.connection import get_connection as _gc9
+                with _gc9() as _c9:
+                    with _c9.cursor() as _cur9:
+                        _cur9.execute(
+                            f"SELECT COALESCE({_col9}, content_es) FROM bot_responses "
+                            "WHERE menu_option = %s AND active = TRUE LIMIT 1",
+                            (menu_option,)
+                        )
+                        _r9 = _cur9.fetchone()
+                        if _r9 and _r9[0]:
+                            _db9 = _r9[0]
+            except Exception as _e9:
+                logger.warning(f"alojamientos quick-reply DB lookup failed: {_e9}")
+            response_text = _db9 or (
                 "🏠 Para ver nuestros alojamientos disponibles y hacer tu reserva, visita nuestra página de reservas:\n\n"
                 "👉 https://whatsapp.hotboat.cl/booking\n\n"
                 "¡Ahí podrás ver disponibilidad, fotos y reservar directamente! ⚓"
