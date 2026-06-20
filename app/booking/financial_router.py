@@ -1207,9 +1207,10 @@ async def get_forecast_table(
         month_forecast_plan    = plan.get("month_forecast", {})
         week_cost_fc_plan      = plan.get("week_cost_forecast", {})
         month_cost_fc_plan     = plan.get("month_cost_forecast", {})
-        structure    = get_financial_structure()
-        daily_struct = float(structure.get("costo_fijo_diario_prorrateado") or 0)
-        cost_pct     = float(structure.get("costo_pct_forecast") or 0)  # % of income for forecast/budget costs
+        structure          = get_financial_structure()
+        daily_struct       = float(structure.get("costo_fijo_diario_prorrateado") or 0)
+        costo_por_reserva_fc = float(structure.get("costo_operativo_por_reserva") or 18000)
+        cost_pct           = float(structure.get("costo_pct_forecast") or 0)  # % of income for forecast/budget costs
 
         # ── WEEKLY VIEW ───────────────────────────────────────────────────────
         if view == "weekly":
@@ -1438,20 +1439,18 @@ async def get_forecast_table(
                     dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
                     key = (dobj.year, dobj.month)
                     adj_gross = float(gross) - _sum_descuentos(desc_raw)
-                    costo = float(costo)
                     net = _calc_net(adj_gross, pagos_raw, commissions)
                     if key not in by_month:
                         by_month[key] = {"income": 0, "costs": 0, "result": 0, "bookings": 0}
                     by_month[key]["income"]   += int(net)
-                    by_month[key]["costs"]    += int(costo)
-                    by_month[key]["result"]   += int(net - costo)
+                    by_month[key]["costs"]    += int(costo_por_reserva_fc)
+                    by_month[key]["result"]   += int(net - costo_por_reserva_fc)
                     by_month[key]["bookings"] += 1
                     by_month[key]["has_data"]  = True
 
         # ── Zone actuals (ingreso_aloj / exp / extra) per month ─────────────
-        _zone_struct     = get_financial_structure()
-        _wl              = set((_zone_struct.get("experience_slug_whitelist") or []))
-        _costo_x_reserva = float(_zone_struct.get("costo_operativo_por_reserva") or 18000)
+        _wl              = set((structure.get("experience_slug_whitelist") or []))
+        _costo_x_reserva = costo_por_reserva_fc
         _cc  = load_extra_cost_catalog()
         _ac  = load_aloj_cost_catalog()
         zone_by_month: Dict = {}
@@ -1509,12 +1508,13 @@ async def get_forecast_table(
             fc_val = int(fc_val) if fc_val is not None else None
             fc_cost_val = month_cost_fc_plan.get(mk)
             fc_cost_val = int(fc_cost_val) if fc_cost_val is not None else None
-            # actual_result: variable costs already in data["result"]; add fixed + marketing
             month_days   = _calendar.monthrange(y, m)[1]
             month_fixed  = int(daily_struct * month_days)
             month_mkt    = int(mkt_by_month.get(mk, 0))
-            actual_result = int(data["result"] - month_fixed - month_mkt) if data else None
-            _zd = zone_by_month.get(mk, {})
+            _zd          = zone_by_month.get(mk, {})
+            _cv_total    = (int(_zd.get("cv_aloj", 0)) + int(_zd.get("cv_exp", 0))
+                            + int(_zd.get("cv_extra", 0)))
+            actual_result = int(data["result"] - month_fixed - month_mkt - _cv_total) if data else None
             result.append({
                 "month":            mk,
                 "week_label":       None,
