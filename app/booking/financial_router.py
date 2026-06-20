@@ -1455,14 +1455,16 @@ async def get_forecast_table(
             _mk = str(_bk["fecha"])[:7]
             _sp = split_booking_financials(_bk, _cc, _wl, _ac)
             if _mk not in zone_by_month:
-                zone_by_month[_mk] = {"actual_aloj": 0, "actual_exp": 0, "actual_extra": 0,
+                zone_by_month[_mk] = {"actual_reserva": 0,
+                                       "actual_aloj": 0, "actual_exp": 0, "actual_extra": 0,
                                        "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0}
-            zone_by_month[_mk]["actual_aloj"]  += _sp["ingreso_aloj"]
-            zone_by_month[_mk]["actual_exp"]   += _sp["ingreso_exp"]
-            zone_by_month[_mk]["actual_extra"] += _sp["ingreso_extra"]
-            zone_by_month[_mk]["cv_aloj"]      += _sp["cv_aloj"]
-            zone_by_month[_mk]["cv_exp"]       += _sp["cv_exp"]
-            zone_by_month[_mk]["cv_extra"]     += _sp["cv_extra"]
+            zone_by_month[_mk]["actual_reserva"] += _sp["ingreso_reserva"]
+            zone_by_month[_mk]["actual_aloj"]    += _sp["ingreso_aloj"]
+            zone_by_month[_mk]["actual_exp"]     += _sp["ingreso_exp"]
+            zone_by_month[_mk]["actual_extra"]   += _sp["ingreso_extra"]
+            zone_by_month[_mk]["cv_aloj"]        += _sp["cv_aloj"]
+            zone_by_month[_mk]["cv_exp"]         += _sp["cv_exp"]
+            zone_by_month[_mk]["cv_extra"]       += _sp["cv_extra"]
 
         budgets: Dict = {ym: _get_budget(ym[0], ym[1]) for ym in months_range}
 
@@ -1526,6 +1528,7 @@ async def get_forecast_table(
                 "suggested_income": sug_val,
                 "suggested_source": sug_src,
                 "is_weekly":        False,
+                "actual_reserva":   _zd.get("actual_reserva", 0),
                 "actual_aloj":      _zd.get("actual_aloj", 0),
                 "actual_exp":       _zd.get("actual_exp", 0),
                 "actual_extra":     _zd.get("actual_extra", 0),
