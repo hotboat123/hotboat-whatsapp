@@ -1637,6 +1637,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
         </div>
         <div id="fin-fc-content" style="padding:1rem"></div>
+        <div id="fin-forecast-zones" style="margin-top:1.2rem;padding:0 1rem 1rem"></div>
       </div>
     </div>
 
@@ -10154,6 +10155,23 @@ document.addEventListener('DOMContentLoaded', () => {
       <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Ingreso presupuestado</label>
         <input type="number" id="fin-budget-income" placeholder="0"
           style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
+      <div style="margin-top:.5rem;padding:.6rem;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:.7rem;color:var(--muted);margin-bottom:.4rem">Desglose por zona (opcional)</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem">
+          <div>
+            <label style="font-size:.67rem;color:var(--muted)">🏠 Alojamiento</label>
+            <input type="number" id="fin-budget-aloj" placeholder="0" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .5rem;font-size:.8rem;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:.67rem;color:var(--muted)">🎯 Experiencias</label>
+            <input type="number" id="fin-budget-exp" placeholder="0" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .5rem;font-size:.8rem;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:.67rem;color:var(--muted)">📦 Extras</label>
+            <input type="number" id="fin-budget-extra" placeholder="0" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .5rem;font-size:.8rem;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
       <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Costos operativos presupuestados</label>
         <input type="number" id="fin-budget-costs" placeholder="0"
           style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
@@ -11271,6 +11289,7 @@ async function loadForecast(view){
     _finLastForecast = d.data || [];
     _fcCostPct = d.cost_pct || 0;
     renderForecast(_finLastForecast, view);
+    renderForecastZones(_finLastForecast, view);
   } catch(e){
     el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar: '+e.message+'</div>';
   }
@@ -11503,6 +11522,111 @@ function renderForecast(data, view){
   </div>`;
 }
 
+const _ZONES_FC = [
+  { label:'🏠 Alojamiento', aKey:'actual_aloj',  bKey:'budget_aloj',  cvKey:'cv_aloj',  color:'#5dade2' },
+  { label:'🎯 Experiencias', aKey:'actual_exp',   bKey:'budget_exp',   cvKey:'cv_exp',   color:'#a78bfa' },
+  { label:'📦 Extras',       aKey:'actual_extra', bKey:'budget_extra', cvKey:'cv_extra', color:'#fbbf24' },
+];
+
+function renderForecastZones(data, view){
+  const el = document.getElementById('fin-forecast-zones');
+  if(!el) return;
+  if(!data||!data.length){ el.innerHTML=''; return; }
+  // Only show in monthly view
+  if(view === 'weekly'){ el.innerHTML=''; return; }
+
+  const labelFn = (row) => {
+    if(view==='weekly') return row.month||'';
+    const [y,m] = (row.month||'').split('-');
+    return m ? ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1]+' '+y : (row.month||'');
+  };
+
+  const sections = _ZONES_FC.map(z => {
+    const totActual = data.reduce((s,r) => s + (Number(r[z.aKey])||0), 0);
+    const totBudget = data.reduce((s,r) => s + (Number(r[z.bKey])||0), 0);
+    const totCv     = data.reduce((s,r) => s + (Number(r[z.cvKey])||0), 0);
+    const totMargen = totActual - totCv;
+
+    const rows = data.map(row => {
+      const actual  = Math.round(Number(row[z.aKey]) || 0);
+      const budget  = Math.round(Number(row[z.bKey]) || 0);
+      const cv      = Math.round(Number(row[z.cvKey]) || 0);
+      const margen  = actual - cv;
+      const mc      = margen >= 0 ? 'var(--green)' : 'var(--red)';
+      const isPast  = row.is_past;
+      const periodKey = row.month || row.week;
+      const monthKey  = row.month_key || row.month;
+      const budgetCell = budget
+        ? `<span style="cursor:pointer;color:var(--muted)" onclick="fcEditZoneBudget('${periodKey}','${monthKey}','${z.bKey}',${budget})">${fmtClp(budget)}</span>`
+        : `<span style="cursor:pointer;color:var(--muted);opacity:.5;font-size:.7rem" onclick="fcEditZoneBudget('${periodKey}','${monthKey}','${z.bKey}',0)">+ budget</span>`;
+      return `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:.36rem .55rem;font-size:.76rem;color:var(--muted);white-space:nowrap">${labelFn(row)}</td>
+        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem">${isPast ? fmtClp(actual) : '—'}</td>
+        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem;color:var(--muted)">${budgetCell}</td>
+        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem;color:var(--red)">−${fmtClp(cv)}</td>
+        <td style="padding:.36rem .5rem;text-align:right;font-size:.76rem;font-weight:600;color:${mc}">${isPast ? fmtClp(margen) : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    const thS = 'padding:.33rem .5rem;text-align:right;font-size:.63rem;color:var(--muted)';
+    return `<details style="background:var(--surface);border:1px solid var(--border);border-top:3px solid ${z.color};border-radius:12px;overflow:hidden;margin-bottom:.7rem">
+      <summary style="padding:.7rem 1rem;cursor:pointer;font-weight:600;font-size:.86rem;list-style:none;display:flex;justify-content:space-between;align-items:center">
+        <span>${z.label}</span>
+        <span style="font-size:.78rem;font-weight:400;color:var(--muted)">
+          Real: ${fmtClp(Math.round(totActual))} · Budget: ${totBudget ? fmtClp(Math.round(totBudget)) : '—'} · Margen: <span style="color:${totMargen>=0?'var(--green)':'var(--red)'}">${fmtClp(Math.round(totMargen))}</span>
+        </span>
+      </summary>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:var(--card)">
+              <th style="padding:.33rem .55rem;text-align:left;font-size:.63rem;color:var(--muted)">Período</th>
+              <th style="${thS}">Real</th>
+              <th style="${thS}">Budget</th>
+              <th style="${thS}">C.Variable</th>
+              <th style="${thS}">Margen</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </details>`;
+  }).join('');
+
+  el.innerHTML = `<div style="margin-top:.5rem">
+    <div style="font-weight:600;font-size:.88rem;margin-bottom:.7rem;padding:.5rem 0;border-bottom:1px solid var(--border)">Desglose por zona</div>
+    ${sections}
+  </div>`;
+}
+
+async function fcEditZoneBudget(periodKey, monthKey, budgetField, currentVal){
+  const val = prompt('Nuevo budget para este período:', currentVal || 0);
+  if(val === null) return;
+  const num = parseInt(val) || 0;
+  const [yr, mo] = (monthKey||'').split('-');
+  if(!yr||!mo) return;
+  // Load existing budget to merge zone field
+  const existing = await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`, {
+    headers: {'x-admin-key': getKey()}
+  }).then(r=>r.json()).catch(()=>({}));
+  const body = {
+    income_budget:    existing.income_budget    || 0,
+    costs_budget:     existing.costs_budget     || 0,
+    marketing_budget: existing.marketing_budget || 0,
+    notes:            existing.notes            || '',
+    aloj_budget:      existing.aloj_budget      || 0,
+    exp_budget:       existing.exp_budget       || 0,
+    extra_budget:     existing.extra_budget     || 0,
+  };
+  body[budgetField] = num;
+  await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json','x-admin-key': getKey()},
+    body: JSON.stringify(body),
+  });
+  loadForecast();
+}
+
 async function fcEditBudget(weekOrMonthKey, monthKey, currentVal, isWeekly){
   const spanId = `fc-b-${weekOrMonthKey}`;
   _fcInlineEdit(spanId, currentVal, async (val)=>{
@@ -11718,6 +11842,9 @@ async function openBudgetModal(year, month){
   document.getElementById('fin-budget-costs').value     = d.costs_budget     || '';
   document.getElementById('fin-budget-marketing').value = d.marketing_budget || '';
   document.getElementById('fin-budget-notes').value     = d.notes            || '';
+  document.getElementById('fin-budget-aloj').value      = d.aloj_budget      || '';
+  document.getElementById('fin-budget-exp').value       = d.exp_budget       || '';
+  document.getElementById('fin-budget-extra').value     = d.extra_budget     || '';
   document.getElementById('fin-budget-modal').style.display = '';
 }
 
@@ -11731,6 +11858,9 @@ async function saveBudget(){
       costs_budget:     parseFloat(document.getElementById('fin-budget-costs').value)     || 0,
       marketing_budget: parseFloat(document.getElementById('fin-budget-marketing').value) || 0,
       notes:            document.getElementById('fin-budget-notes').value || '',
+      aloj_budget:      parseFloat(document.getElementById('fin-budget-aloj').value)      || 0,
+      exp_budget:       parseFloat(document.getElementById('fin-budget-exp').value)       || 0,
+      extra_budget:     parseFloat(document.getElementById('fin-budget-extra').value)     || 0,
     })
   });
   document.getElementById('fin-budget-modal').style.display = 'none';
