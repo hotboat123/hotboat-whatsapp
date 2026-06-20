@@ -1449,7 +1449,9 @@ async def get_forecast_table(
                     by_month[key]["has_data"]  = True
 
         # ── Zone actuals (ingreso_aloj / exp / extra) per month ─────────────
-        _wl  = set((get_financial_structure().get("experience_slug_whitelist") or []))
+        _zone_struct     = get_financial_structure()
+        _wl              = set((_zone_struct.get("experience_slug_whitelist") or []))
+        _costo_x_reserva = float(_zone_struct.get("costo_operativo_por_reserva") or 18000)
         _cc  = load_extra_cost_catalog()
         _ac  = load_aloj_cost_catalog()
         zone_by_month: Dict = {}
@@ -1462,7 +1464,7 @@ async def get_forecast_table(
                                        "actual_aloj": 0, "actual_exp": 0, "actual_extra": 0,
                                        "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0}
             zone_by_month[_mk]["actual_reserva"] += _sp["ingreso_reserva"]
-            zone_by_month[_mk]["cv_reserva"]     += float(_bk.get("costo_total") or 0)
+            zone_by_month[_mk]["cv_reserva"]     += _costo_x_reserva  # mismo criterio que P&L C.OP
             zone_by_month[_mk]["actual_aloj"]    += _sp["ingreso_aloj"]
             zone_by_month[_mk]["actual_exp"]     += _sp["ingreso_exp"]
             zone_by_month[_mk]["actual_extra"]   += _sp["ingreso_extra"]
