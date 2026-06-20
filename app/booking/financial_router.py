@@ -1553,8 +1553,88 @@ async def get_forecast_table(
         raise
 
 
+# ── Debug: compare Forecast vs P&L for a single month ───────────────────────
 
-# ── P&L structure (fixed daily + experience whitelist) ───────────────────────
+@financial_router.get("/api/admin/financial/debug-compare/{year}/{month}")
+async def debug_compare(year: int, month: int, x_admin_key: str = Header("")):
+    """Return booking-level breakdown showing Forecast vs P&L calculation side by side."""
+    import calendar as _cal
+    from .financial_breakdown import booking_discount_total_clp, split_booking_financials
+
+    structure    = get_financial_structure()
+    commissions  = _load_commissions()
+    cpr          = float(structure.get("costo_operativo_por_reserva") or 18000)
+    wl           = set(structure.get("experience_slug_whitelist") or [])
+    cc           = load_extra_cost_catalog()
+    ac           = load_aloj_cost_catalog()
+
+    d_from = date(year, month, 1)
+    d_to   = date(year, month, _cal.monthrange(year, month)[1])
+    bookings = _get_bookings_range(d_from, d_to)
+
+    rows = []
+    for b in bookings:
+        # ── Forecast path ──────────────────────────────────────────────────
+        ingreso_total   = float(b.get("ingreso_total") or 0)
+        desc_raw        = b.get("descuentos") or []
+        manual_desc     = _sum_descuentos(desc_raw)
+        coupon          = float(b.get("coupon_discount") or 0)
+        adj_gross_fc    = ingreso_total - manual_desc
+        net_fc          = _calc_net(adj_gross_fc, b.get("pagos") or [], commissions)
+        comm_fc         = adj_gross_fc - net_fc
+
+        # ── P&L path ───────────────────────────────────────────────────────
+        sp              = split_booking_financials(b, cc, wl, ac)
+        base_inc        = (float(sp["ingreso_reserva"]) + float(sp["ingreso_aloj"])
+                           + float(sp["ingreso_exp"])   + float(sp["ingreso_extra"]))
+        disc_pnl        = booking_discount_total_clp(b)   # coupon + manual
+        gross_pnl       = base_inc - disc_pnl
+        pnl_r           = _calc_booking_pnl(b, commissions, gross_override=gross_pnl,
+                                             costo_override=cpr)
+        net_pnl         = float(pnl_r["net_income"])
+        comm_pnl        = float(pnl_r["commission_deduction"])
+
+        rows.append({
+            "id":             b["id"],
+            "fecha":          str(b["fecha"]),
+            "cliente":        b.get("nombre_cliente", ""),
+            # income components
+            "ingreso_total":  int(ingreso_total),
+            "ingreso_reserva":int(sp["ingreso_reserva"]),
+            "ingreso_extras": int(b.get("ingreso_extras") or 0),
+            "coupon":         int(coupon),
+            "manual_desc":    int(manual_desc),
+            "disc_pnl":       int(disc_pnl),
+            "base_inc_pnl":   int(base_inc),
+            # forecast
+            "fc_adj_gross":   int(adj_gross_fc),
+            "fc_comm":        int(comm_fc),
+            "fc_net":         int(net_fc),
+            # pnl
+            "pnl_gross":      int(gross_pnl),
+            "pnl_comm":       int(comm_pnl),
+            "pnl_net":        int(net_pnl),
+            # diff
+            "diff_gross":     int(adj_gross_fc) - int(gross_pnl),
+            "diff_net":       int(net_fc) - int(net_pnl),
+            # split
+            "split_aloj":     int(sp["ingreso_aloj"]),
+            "split_exp":      int(sp["ingreso_exp"]),
+            "split_extra":    int(sp["ingreso_extra"]),
+            "cv_aloj":        int(sp["cv_aloj"]),
+            "cv_exp":         int(sp["cv_exp"]),
+            "cv_extra":       int(sp["cv_extra"]),
+        })
+
+    totals = {k: sum(r[k] for r in rows)
+              for k in ("ingreso_total","base_inc_pnl","coupon","manual_desc","disc_pnl",
+                        "fc_adj_gross","fc_comm","fc_net",
+                        "pnl_gross","pnl_comm","pnl_net",
+                        "diff_gross","diff_net",
+                        "split_aloj","split_exp","split_extra",
+                        "cv_aloj","cv_exp","cv_extra")}
+    return {"year": year, "month": month, "bookings": rows, "totals": totals,
+            "costo_por_reserva": cpr, "n": len(rows)}
 
 @financial_router.get("/api/admin/financial/structure")
 async def get_financial_structure_endpoint(x_admin_key: str = Header("")):
