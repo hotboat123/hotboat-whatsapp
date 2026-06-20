@@ -10094,6 +10094,15 @@ document.addEventListener('DOMContentLoaded', () => {
           style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box">
       </div>
       <div>
+        <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">% costos estimados para Forecast &amp; Budget (ej: 55 = 55% de las ventas)</label>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <input type="number" id="fin-str-cost-pct" min="0" max="100" step="0.1" placeholder="55"
+            style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box">
+          <span style="color:var(--muted);font-size:.85rem;white-space:nowrap">%</span>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.25rem">Utilidad forecast/budget = Ingreso × (1 − este %)</div>
+      </div>
+      <div>
         <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Lista blanca de slugs (experiencias), separados por coma</label>
         <textarea id="fin-str-whitelist" rows="3" placeholder="ej: pack_vip, tour_marina"
           style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.82rem;outline:none;box-sizing:border-box;resize:vertical;font-family:monospace"></textarea>
@@ -10927,6 +10936,7 @@ async function openFinStructureModal(){
     document.getElementById('fin-str-daily').value = s.costo_fijo_diario_prorrateado ?? 21700;
     document.getElementById('fin-str-per-booking').value = s.costo_operativo_por_reserva ?? 18000;
     document.getElementById('fin-str-whitelist').value = (s.experience_slug_whitelist || []).join(', ');
+    document.getElementById('fin-str-cost-pct').value = ((s.costo_pct_forecast ?? 0) * 100).toFixed(1);
   } catch(e) { console.error(e); }
 }
 
@@ -10943,6 +10953,7 @@ async function saveFinStructure(){
         costo_fijo_diario_prorrateado: daily,
         costo_operativo_por_reserva: perBooking,
         experience_slug_whitelist: wl,
+        costo_pct_forecast: (parseFloat(document.getElementById('fin-str-cost-pct').value) || 0) / 100,
       }),
     });
     if (!r.ok) {
@@ -10961,6 +10972,7 @@ async function saveFinStructure(){
 const _FC_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 let _fcView = 'monthly';
 let _fcDateFrom = null, _fcDateTo = null;
+let _fcCostPct = 0;  // decimal fraction from structure (e.g. 0.55 = 55% of income)
 
 function fmtClpK(n){
   const v = Math.abs(Math.round(Number(n)||0));
@@ -10996,6 +11008,7 @@ async function loadForecast(view){
     if(!r.ok) throw new Error(await r.text());
     const d = await r.json();
     _finLastForecast = d.data || [];
+    _fcCostPct = d.cost_pct || 0;
     renderForecast(_finLastForecast, view);
   } catch(e){
     el.innerHTML = '<div style="color:var(--red);font-size:.82rem">Error al cargar: '+e.message+'</div>';
@@ -11140,57 +11153,48 @@ function renderForecast(data, view){
       if(isCurrent && !isWeekly) uRealHtml += `<br><span style="font-size:.63rem;color:var(--muted)">parcial</span>`;
     }
 
-    // Budget utilidad = income_budget - costs_budget - marketing_budget
+    // Budget utilidad = income_budget × (1 - cost_pct)
     let uBudgetHtml = '—';
     const bi = m.manual_income || 0;
-    const bc = (m.manual_costs || 0) + (m.manual_marketing || 0);
-    if(bi || bc){
-      const ub = bi - bc;
+    if(bi){
+      const ub = Math.round(bi * (1 - _fcCostPct));
       const col = ub >= 0 ? 'var(--green)' : 'var(--red)';
+      const pctHint = _fcCostPct ? `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">${Math.round(_fcCostPct*100)}% costos</span>` : '';
       if(isPast){
-        uBudgetHtml = `<span style="color:${col}">${fmtClp(ub)}</span>`;
+        uBudgetHtml = `<span style="color:${col}">${fmtClp(ub)}</span>${pctHint}`;
       } else {
-        const hint = isWeekly && !(m.manual_is_override) && bi ? `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">del mensual</span>` : '';
-        uBudgetHtml = `<span style="color:${bi?col:'var(--muted)'};">${bi ? fmtClp(ub) : '—'}</span>${hint}`;
+        const hint = (isWeekly && !(m.manual_is_override)) ? `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">del mensual</span>` : pctHint;
+        uBudgetHtml = `<span style="color:${col}">${fmtClp(ub)}</span>${hint}`;
       }
     }
 
-    // Forecast utilidad = forecast_income - forecast_costs (editable cost forecast)
-    const fcCostType = isWeekly ? 'week_cost_forecast' : 'month_cost_forecast';
-    const fcCostSpanId = `fc-cf-${m.month}`;
+    // Forecast utilidad = forecast_income × (1 - cost_pct)
     let uFcHtml = '—';
     if(isPast){
-      // Show forecast utility if both values recorded
-      const fi = m.forecast_income, fc = m.forecast_costs;
+      const fi = m.forecast_income;
       if(fi !== null && fi !== undefined){
-        const uf = fi - (fc || 0);
+        const uf = Math.round(fi * (1 - _fcCostPct));
         const col = uf >= 0 ? 'var(--green)' : 'var(--red)';
         uFcHtml = `<span style="color:${col}">${fmtClp(uf)}</span>`;
-        if(fc) uFcHtml += `<br><span style="font-size:.62rem;color:var(--muted)">costos: ${fmtClpK(fc)}</span>`;
+        if(_fcCostPct) uFcHtml += `<br><span style="font-size:.62rem;color:var(--muted)">${Math.round(_fcCostPct*100)}% costos</span>`;
       }
     } else {
       const fi = m.forecast_income;
-      const cv = m.forecast_costs;
       if(fi !== null && fi !== undefined){
-        const uf = fi - (cv || 0);
+        const uf = Math.round(fi * (1 - _fcCostPct));
         const col = uf >= 0 ? 'var(--green)' : 'var(--red)';
         uFcHtml = `<span style="color:${col};font-weight:600">${fmtClp(uf)}</span>`;
+        if(_fcCostPct) uFcHtml += `<br><span style="font-size:.6rem;color:var(--muted);opacity:.7">${Math.round(_fcCostPct*100)}% costos</span>`;
       } else {
-        uFcHtml = '';
+        uFcHtml = _fcCostPct ? `<span style="font-size:.7rem;color:var(--muted);opacity:.5">${Math.round(_fcCostPct*100)}% costos</span>` : '';
       }
-      uFcHtml += `<br><span id="${fcCostSpanId}"
-        onclick="fcEditCostForecast('${m.month}','${fcCostType}',${cv||0})"
-        style="cursor:pointer;display:inline-block;min-width:70px;text-align:right;padding:.12rem .35rem;
-               border-radius:5px;border:1px dashed ${cv?'var(--border)':'rgba(255,255,255,.1)'};
-               color:${cv?'var(--muted)':'rgba(255,255,255,.3)'};font-size:.7rem"
-        title="Click para editar forecast costos">${cv ? '- '+fmtClpK(cv) : '− costos'}</span>`;
     }
 
     // Δ utilidad
     let uDeltaHtml = '—';
     const fuResult = (m.forecast_income !== null && m.forecast_income !== undefined)
-      ? (m.forecast_income - (m.forecast_costs || 0)) : null;
-    const buResult = bi - bc;
+      ? Math.round(m.forecast_income * (1 - _fcCostPct)) : null;
+    const buResult = Math.round(bi * (1 - _fcCostPct));
     if(isPast && fuResult !== null && m.actual_result !== null && m.actual_result !== undefined){
       const d2 = m.actual_result - fuResult;
       uDeltaHtml = `<span style="color:${d2>=0?'var(--green)':'var(--red)'};font-size:.78rem">${d2>=0?'+':''}${fmtClpK(d2)}<br><span style="font-size:.6rem;opacity:.7">real vs fc</span></span>`;

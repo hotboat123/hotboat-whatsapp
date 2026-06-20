@@ -1158,6 +1158,7 @@ async def get_forecast_table(
 ):
     """Rolling view: actuals + budget + forecast + suggested. Supports monthly and weekly views."""
     try:
+        import calendar as _calendar
         today = date.today()
         cy, cm = today.year, today.month
         commissions = _get_commissions()
@@ -1167,6 +1168,9 @@ async def get_forecast_table(
         month_forecast_plan    = plan.get("month_forecast", {})
         week_cost_fc_plan      = plan.get("week_cost_forecast", {})
         month_cost_fc_plan     = plan.get("month_cost_forecast", {})
+        structure    = get_financial_structure()
+        daily_struct = float(structure.get("costo_fijo_diario_prorrateado") or 0)
+        cost_pct     = float(structure.get("costo_pct_forecast") or 0)  # % of income for forecast/budget costs
 
         # ── WEEKLY VIEW ───────────────────────────────────────────────────────
         if view == "weekly":
@@ -1304,7 +1308,8 @@ async def get_forecast_table(
                 wcb_val = _week_cost_budget_fallback(ws)
                 sug_val, sug_src = _week_suggested(w["iso_year"], w["iso_week"], w["is_past"])
                 actual_costs  = data["costs"]  if data else None
-                actual_result = (data["income"] - data["costs"]) if data else None
+                week_fixed    = daily_struct * 7
+                actual_result = (data["income"] - data["costs"] - week_fixed) if data else None
                 result.append({
                     "month":            w["key"],
                     "week_label":       lbl,
@@ -1325,7 +1330,7 @@ async def get_forecast_table(
                     "suggested_source": sug_src,
                     "is_weekly":        True,
                 })
-            return {"data": result, "view": "weekly"}
+            return {"data": result, "view": "weekly", "cost_pct": cost_pct}
 
         # ── MONTHLY VIEW ──────────────────────────────────────────────────────
         def _madd(y: int, m: int, delta: int):
@@ -1378,6 +1383,7 @@ async def get_forecast_table(
                     by_month[key]["costs"]    += int(costo)
                     by_month[key]["result"]   += int(net - costo)
                     by_month[key]["bookings"] += 1
+                    by_month[key]["has_data"]  = True
 
         budgets: Dict = {ym: _get_budget(ym[0], ym[1]) for ym in months_range}
 
@@ -1416,6 +1422,10 @@ async def get_forecast_table(
             fc_val = int(fc_val) if fc_val is not None else None
             fc_cost_val = month_cost_fc_plan.get(mk)
             fc_cost_val = int(fc_cost_val) if fc_cost_val is not None else None
+            # actual_result includes prorated fixed costs (daily_struct × days in month)
+            month_days   = _calendar.monthrange(y, m)[1]
+            month_fixed  = int(daily_struct * month_days)
+            actual_result = int(data["result"] - month_fixed) if data else None
             result.append({
                 "month":            mk,
                 "week_label":       None,
@@ -1424,7 +1434,7 @@ async def get_forecast_table(
                 "is_current":       is_current,
                 "actual_income":    data["income"]   if data else None,
                 "actual_costs":     data["costs"]    if data else None,
-                "actual_result":    data["result"]   if data else None,
+                "actual_result":    actual_result,
                 "actual_bookings":  data["bookings"] if data else None,
                 "manual_income":    int(budget["income_budget"])    if budget["income_budget"]    else None,
                 "manual_costs":     int(budget["costs_budget"])     if budget["costs_budget"]     else None,
@@ -1436,7 +1446,7 @@ async def get_forecast_table(
                 "suggested_source": sug_src,
                 "is_weekly":        False,
             })
-        return {"data": result, "view": "monthly"}
+        return {"data": result, "view": "monthly", "cost_pct": cost_pct}
     except Exception:
         logger.exception("forecast-table error")
         raise
