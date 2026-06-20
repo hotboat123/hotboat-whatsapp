@@ -1527,6 +1527,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </table>
         </div>
       </div>
+
+      <!-- Zone breakdown (added below, table above untouched) -->
+      <div id="fin-pnl-zones" style="margin-top:1rem"></div>
     </div>
 
     <!-- ── Cash Flow Panel ────────────────────────────────────────────── -->
@@ -1570,6 +1573,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </table>
         </div>
       </div>
+
+      <!-- Zone breakdown (added below, table above untouched) -->
+      <div id="fin-cf-zones" style="margin-top:1rem"></div>
 
       <!-- Entradas por método de pago -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-top:1rem">
@@ -10447,6 +10453,7 @@ async function loadPnl(){
     };
     renderPnlKpis(d.totals, d.period_calendar_days, d.structure);
     renderPnlTable(d.data || [], d.view, d.totals);
+    renderPnlZones(d.data || [], d.totals, d.view);
     const pd = d.period_calendar_days || 0;
     const dr = (d.structure && d.structure.costo_fijo_diario_prorrateado) || 0;
     document.getElementById('fin-pnl-loading').textContent =
@@ -10592,6 +10599,157 @@ function togglePnlDetail(id){
   }
 }
 
+// ── Zone breakdowns ───────────────────────────────────────────
+const _ZONES_PNL = [
+  { label:'🏠 Alojamiento', iKey:'ingreso_aloj',  cvKey:'cv_aloj',  color:'#5dade2' },
+  { label:'🎯 Experiencias', iKey:'ingreso_exp',   cvKey:'cv_exp',   color:'#a78bfa' },
+  { label:'📦 Extras',       iKey:'ingreso_extra', cvKey:'cv_extra', color:'#fbbf24' },
+];
+
+function renderPnlZones(data, totals, view){
+  const el = document.getElementById('fin-pnl-zones');
+  if(!el) return;
+  if(!data||!data.length||!totals){ el.innerHTML=''; return; }
+  const gross = totals.gross || 1;
+  const SEP = ';border-left:2px solid rgba(255,255,255,.08)';
+
+  const summaryCards = _ZONES_PNL.map(z => {
+    const ing  = Math.round(Number(totals[z.iKey])  || 0);
+    const cv   = Math.round(Number(totals[z.cvKey]) || 0);
+    const marg = ing - cv;
+    const pct  = Math.round(ing / gross * 100);
+    const mc   = marg >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid ${z.color};border-radius:10px;padding:.8rem 1rem">
+      <div style="font-size:.73rem;font-weight:700;color:${z.color};margin-bottom:.55rem">${z.label}</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:.2rem .5rem;font-size:.77rem;align-items:baseline">
+        <span style="color:var(--muted)">Ingreso</span><span style="text-align:right">${fmtClp(ing)}</span>
+        <span style="color:var(--muted)">C. Variable</span><span style="text-align:right;color:var(--red)">−${fmtClp(cv)}</span>
+        <span style="color:var(--muted)">Margen</span><span style="text-align:right;font-weight:700;color:${mc}">${fmtClp(marg)}</span>
+        <span style="color:var(--muted)">% bruto</span><span style="text-align:right;color:${z.color}">${pct}%</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  const labelFn = (row) => {
+    if(view==='daily')  return row.fecha||'';
+    if(view==='weekly') return row.week||'';
+    const [y,m] = (row.month||'').split('-');
+    return m ? ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1]+' '+y : (row.month||'');
+  };
+
+  const rows = data.map(row => {
+    const cells = _ZONES_PNL.map((z, i) => {
+      const ing  = Math.round(Number(row[z.iKey])  || 0);
+      const cv   = Math.round(Number(row[z.cvKey]) || 0);
+      const marg = ing - cv;
+      const mc   = marg >= 0 ? 'var(--green)' : 'var(--red)';
+      const sep  = i === 0 ? SEP : '';
+      return `<td style="padding:.38rem .4rem;text-align:right;font-size:.76rem${sep}">${fmtClp(ing)}</td>
+              <td style="padding:.38rem .3rem;text-align:right;font-size:.76rem;color:var(--red)">−${fmtClp(cv)}</td>
+              <td style="padding:.38rem .45rem;text-align:right;font-size:.76rem;font-weight:600;color:${mc}">${fmtClp(marg)}</td>`;
+    }).join('');
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.38rem .55rem;font-size:.77rem;color:var(--muted);white-space:nowrap">${labelFn(row)}</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  const zoneHeaders = _ZONES_PNL.map((z, i) =>
+    `<th colspan="3" style="padding:.32rem .4rem;text-align:center;font-size:.64rem;color:${z.color}${i===0?SEP:''}">${z.label}</th>`
+  ).join('');
+  const subHeaders = _ZONES_PNL.map((z, i) => {
+    const s = i===0 ? SEP : '';
+    return `<th style="padding:.3rem .4rem;text-align:right;font-size:.62rem;color:var(--muted)${s}">Ingreso</th>
+            <th style="padding:.3rem .3rem;text-align:right;font-size:.62rem;color:var(--muted)">C.Var.</th>
+            <th style="padding:.3rem .45rem;text-align:right;font-size:.62rem;color:var(--muted)">Margen</th>`;
+  }).join('');
+
+  el.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+    <div style="padding:.7rem 1.1rem;border-bottom:1px solid var(--border)">
+      <span style="font-weight:600;font-size:.88rem">Desglose por zona</span>
+    </div>
+    <div style="padding:.8rem 1rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:.7rem;border-bottom:1px solid var(--border)">
+      ${summaryCards}
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--card)">${'<th></th>'}${zoneHeaders}</tr>
+          <tr style="background:var(--card)"><th style="padding:.3rem .55rem;text-align:left;font-size:.62rem;color:var(--muted)">Período</th>${subHeaders}</tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+const _ZONES_CF = [
+  { label:'🏠 Alojamiento', cvKey:'outflow_cv_aloj',  color:'#5dade2' },
+  { label:'🎯 Experiencias', cvKey:'outflow_cv_exp',   color:'#a78bfa' },
+  { label:'📦 Extras',       cvKey:'outflow_cv_extra', color:'#fbbf24' },
+];
+
+function renderCfZones(data, view){
+  const el = document.getElementById('fin-cf-zones');
+  if(!el) return;
+  if(!data||!data.length){ el.innerHTML=''; return; }
+
+  const totals = {};
+  _ZONES_CF.forEach(z => {
+    totals[z.cvKey] = data.reduce((s, r) => s + (Math.round(Number(r[z.cvKey])||0)), 0);
+  });
+  const totalCv = _ZONES_CF.reduce((s, z) => s + totals[z.cvKey], 0) || 1;
+
+  const summaryCards = _ZONES_CF.map(z => {
+    const cv  = totals[z.cvKey];
+    const pct = Math.round(cv / totalCv * 100);
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid ${z.color};border-radius:10px;padding:.8rem 1rem">
+      <div style="font-size:.73rem;font-weight:700;color:${z.color};margin-bottom:.45rem">${z.label}</div>
+      <div style="font-size:.88rem;color:var(--red);font-weight:700">−${fmtClp(cv)}</div>
+      <div style="font-size:.71rem;color:var(--muted);margin-top:.2rem">${pct}% del C.Var. total</div>
+    </div>`;
+  }).join('');
+
+  const labelFn = (row) => {
+    if(view==='daily')  return row.fecha||'';
+    if(view==='weekly') return row.week||'';
+    const [y,m] = (row.month||'').split('-');
+    return m ? ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1]+' '+y : (row.month||'');
+  };
+
+  const rows = data.map(row =>
+    `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.38rem .55rem;font-size:.77rem;color:var(--muted);white-space:nowrap">${labelFn(row)}</td>
+      ${_ZONES_CF.map((z, i) => {
+        const cv = Math.round(Number(row[z.cvKey])||0);
+        return `<td style="padding:.38rem .45rem;text-align:right;font-size:.77rem;color:var(--red)${i===0?';border-left:2px solid rgba(255,255,255,.08)':''}">−${fmtClp(cv)}</td>`;
+      }).join('')}
+    </tr>`
+  ).join('');
+
+  const thStyle = (i) => `padding:.32rem .45rem;text-align:right;font-size:.64rem;color:var(--muted)${i===0?';border-left:2px solid rgba(255,255,255,.08)':''}`;
+
+  el.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+    <div style="padding:.7rem 1.1rem;border-bottom:1px solid var(--border)">
+      <span style="font-weight:600;font-size:.88rem">Costos variables por zona</span>
+    </div>
+    <div style="padding:.8rem 1rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.7rem;border-bottom:1px solid var(--border)">
+      ${summaryCards}
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--card)">
+            <th style="padding:.32rem .55rem;text-align:left;font-size:.62rem;color:var(--muted)">Período</th>
+            ${_ZONES_CF.map((z, i) => `<th style="${thStyle(i)};color:${z.color}">${z.label}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
 // ── Cash Flow ─────────────────────────────────────────────────
 async function loadCashFlow(){
   const from = document.getElementById('fin-date-from').value;
@@ -10619,6 +10777,7 @@ async function loadCashFlow(){
     };
     renderCfKpis(d.data);
     renderCfTable(d.data, d.view);
+    renderCfZones(d.data, d.view);
     loadCfMethodsBreakdown(from, to);
     document.getElementById('fin-cf-loading').textContent =
       (d.data||[]).length === 0 ? 'Sin movimientos en este período' : '';
