@@ -1467,7 +1467,24 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
                     "menu_option": menu_option, "message_sent": f"{len(sequence)} mensajes enviados",
                     "whatsapp_response": {}}
         else:
-            raise HTTPException(status_code=400, detail="Invalid menu option")
+            # Fallback: look up the response_key from bot_responses for this menu_option
+            response_text = None
+            try:
+                with __import__('app.db.connection', fromlist=['get_connection']).get_connection() as _conn:
+                    with _conn.cursor() as _cur:
+                        _col = {"en": "content_en", "pt": "content_pt"}.get(language, "content_es")
+                        _cur.execute(
+                            f"SELECT COALESCE({_col}, content_es) FROM bot_responses "
+                            "WHERE menu_option = %s AND active = TRUE LIMIT 1",
+                            (menu_option,)
+                        )
+                        _row = _cur.fetchone()
+                        if _row and _row[0]:
+                            response_text = _row[0]
+            except Exception as _e:
+                logger.warning(f"Custom quick-reply DB lookup failed: {_e}")
+            if not response_text:
+                raise HTTPException(status_code=400, detail="Invalid menu option")
         
         # Translate if requested, then send
         if tgt_lang:
