@@ -4288,7 +4288,34 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <span style="font-weight:600;font-size:.95rem">💬 Mensajes del chatbot</span>
             <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Usa <code>---</code> en línea sola para separar en múltiples mensajes · <b>Chat</b> = botón admin · <b>Menú</b> = aparece en el menú de bienvenida al cliente</span>
             <button onclick="rebuildWelcomeMenu()" title="Reconstruir el mensaje de bienvenida automáticamente desde los ítems con Menú activado" style="margin-left:auto;background:rgba(56,189,248,.15);border:1px solid #38bdf8;color:#38bdf8;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">🔄 Reconstruir menú</button>
+            <button onclick="toggleNewResponseForm()" style="background:rgba(16,185,129,.15);border:1px solid #10b981;color:#10b981;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">+ Nueva respuesta</button>
             <button onclick="loadBotResponses()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
+          </div>
+          <!-- New response form -->
+          <div id="new-response-form" style="display:none;padding:.9rem 1.2rem;border-bottom:1px solid var(--border);background:rgba(16,185,129,.05)">
+            <div style="font-size:.82rem;font-weight:600;color:#10b981;margin-bottom:.6rem">Nueva respuesta</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem">
+              <div>
+                <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem">Clave (sin espacios) *</label>
+                <input id="nr-key" type="text" placeholder="ej: horarios" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none">
+              </div>
+              <div>
+                <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem">Nombre visible</label>
+                <input id="nr-label" type="text" placeholder="ej: Horarios de atención" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none">
+              </div>
+            </div>
+            <div style="margin-bottom:.5rem">
+              <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem">Respuesta en español *</label>
+              <textarea id="nr-es" rows="3" placeholder="Texto que verá el cliente en español…" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.82rem;font-family:inherit;resize:vertical;outline:none"></textarea>
+            </div>
+            <div style="display:flex;gap:.4rem;margin-bottom:.6rem">
+              <textarea id="nr-en" rows="2" placeholder="English (opcional)…" style="flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none"></textarea>
+              <textarea id="nr-pt" rows="2" placeholder="Português (opcional)…" style="flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none"></textarea>
+            </div>
+            <div style="display:flex;gap:.5rem;justify-content:flex-end">
+              <button onclick="toggleNewResponseForm()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer">Cancelar</button>
+              <button onclick="createNewBotResponse()" style="background:#10b981;color:#fff;border:none;border-radius:7px;padding:.35rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600">Crear respuesta</button>
+            </div>
           </div>
           <div id="bot-responses-list" style="padding:.8rem 1.2rem;display:flex;flex-direction:column;gap:.8rem"></div>
         </div>
@@ -12235,6 +12262,38 @@ async function loadBotResponses(){
 }
 
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function toggleNewResponseForm(){
+  const f = document.getElementById('new-response-form');
+  const open = f.style.display === 'none';
+  f.style.display = open ? 'block' : 'none';
+  if(open) document.getElementById('nr-key').focus();
+}
+
+async function createNewBotResponse(){
+  const key = (document.getElementById('nr-key').value || '').trim().toLowerCase().replace(/\s+/g,'_');
+  const label = (document.getElementById('nr-label').value || '').trim();
+  const content_es = document.getElementById('nr-es').value || null;
+  const content_en = document.getElementById('nr-en').value || null;
+  const content_pt = document.getElementById('nr-pt').value || null;
+  if(!key){ showToast('❌ La clave es obligatoria', true); return; }
+  if(!content_es){ showToast('❌ El texto en español es obligatorio', true); return; }
+  try {
+    const r = await fetch(`/api/admin/bot/responses/${encodeURIComponent(key)}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({content_es, content_en, content_pt, label: label||key, active:true, show_in_menu:false})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Respuesta creada: ' + key);
+    document.getElementById('nr-key').value = '';
+    document.getElementById('nr-label').value = '';
+    document.getElementById('nr-es').value = '';
+    document.getElementById('nr-en').value = '';
+    document.getElementById('nr-pt').value = '';
+    document.getElementById('new-response-form').style.display = 'none';
+    loadBotResponses();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
 
 async function saveBotResponse(key, safeKey){
   const content_es = document.getElementById(`br-es-${safeKey}`)?.value || null;
