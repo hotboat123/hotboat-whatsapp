@@ -1276,7 +1276,7 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
 
         async def _send(msg: str) -> None:
             """Translate (if requested) then send a WhatsApp text message."""
-            out = await asyncio.to_thread(_translate_text, msg, tgt_lang) if tgt_lang else msg
+            out = await asyncio.to_thread(_translate_text, msg.strip(), tgt_lang) if tgt_lang else msg.strip()
             await whatsapp_client.send_text_message(to=phone_number, message=out)
             await save_conversation(phone_number=phone_number, customer_name=customer_name,
                                     message_text="", response_text=out,
