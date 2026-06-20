@@ -316,14 +316,18 @@ def _get_budget(year: int, month: int) -> Dict:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT income_budget, costs_budget, marketing_budget, notes
+                SELECT income_budget, costs_budget, marketing_budget, notes,
+                       COALESCE(aloj_budget,0), COALESCE(exp_budget,0), COALESCE(extra_budget,0)
                 FROM financial_budget WHERE year=%s AND month=%s
             """, (year, month))
             r = cur.fetchone()
             if r:
                 return {"income_budget": float(r[0]), "costs_budget": float(r[1]),
-                        "marketing_budget": float(r[2]), "notes": r[3] or ""}
-            return {"income_budget": 0, "costs_budget": 0, "marketing_budget": 0, "notes": ""}
+                        "marketing_budget": float(r[2]), "notes": r[3] or "",
+                        "aloj_budget": float(r[4]), "exp_budget": float(r[5]),
+                        "extra_budget": float(r[6])}
+            return {"income_budget": 0, "costs_budget": 0, "marketing_budget": 0, "notes": "",
+                    "aloj_budget": 0, "exp_budget": 0, "extra_budget": 0}
 
 
 # ── P&L calculation core ──────────────────────────────────────────────────────
@@ -1083,6 +1087,9 @@ class BudgetIn(BaseModel):
     costs_budget:     float = 0
     marketing_budget: float = 0
     notes:            str   = ""
+    aloj_budget:      float = 0
+    exp_budget:       float = 0
+    extra_budget:     float = 0
 
 
 @financial_router.get("/api/admin/financial/budget/{year}/{month}")
@@ -1095,17 +1102,26 @@ async def upsert_budget(year: int, month: int, body: BudgetIn,
                         x_admin_key: str = Header("")):
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Ensure zone columns exist (idempotent migration)
+            cur.execute("""
+                ALTER TABLE financial_budget
+                    ADD COLUMN IF NOT EXISTS aloj_budget  NUMERIC DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS exp_budget   NUMERIC DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS extra_budget NUMERIC DEFAULT 0
+            """)
             cur.execute("""
                 INSERT INTO financial_budget (year, month, income_budget, costs_budget,
-                    marketing_budget, notes)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                    marketing_budget, notes, aloj_budget, exp_budget, extra_budget)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (year, month) DO UPDATE
                     SET income_budget=%s, costs_budget=%s, marketing_budget=%s,
-                        notes=%s, updated_at=NOW()
-            """, (year, month, body.income_budget, body.costs_budget,
-                  body.marketing_budget, body.notes,
-                  body.income_budget, body.costs_budget,
-                  body.marketing_budget, body.notes))
+                        notes=%s, aloj_budget=%s, exp_budget=%s, extra_budget=%s,
+                        updated_at=NOW()
+            """, (year, month,
+                  body.income_budget, body.costs_budget, body.marketing_budget, body.notes,
+                  body.aloj_budget, body.exp_budget, body.extra_budget,
+                  body.income_budget, body.costs_budget, body.marketing_budget, body.notes,
+                  body.aloj_budget, body.exp_budget, body.extra_budget))
             conn.commit()
     return {"year": year, "month": month, **body.dict()}
 
@@ -1423,6 +1439,25 @@ async def get_forecast_table(
                     by_month[key]["bookings"] += 1
                     by_month[key]["has_data"]  = True
 
+        # ── Zone actuals (ingreso_aloj / exp / extra) per month ─────────────
+        _wl  = set((get_financial_structure().get("experience_slug_whitelist") or []))
+        _cc  = load_extra_cost_catalog()
+        _ac  = load_aloj_cost_catalog()
+        zone_by_month: Dict = {}
+        _bk_for_zones = _get_bookings_range(d_from, d_to)
+        for _bk in _bk_for_zones:
+            _mk = str(_bk["fecha"])[:7]
+            _sp = split_booking_financials(_bk, _cc, _wl, _ac)
+            if _mk not in zone_by_month:
+                zone_by_month[_mk] = {"actual_aloj": 0, "actual_exp": 0, "actual_extra": 0,
+                                       "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0}
+            zone_by_month[_mk]["actual_aloj"]  += _sp["ingreso_aloj"]
+            zone_by_month[_mk]["actual_exp"]   += _sp["ingreso_exp"]
+            zone_by_month[_mk]["actual_extra"] += _sp["ingreso_extra"]
+            zone_by_month[_mk]["cv_aloj"]      += _sp["cv_aloj"]
+            zone_by_month[_mk]["cv_exp"]       += _sp["cv_exp"]
+            zone_by_month[_mk]["cv_extra"]     += _sp["cv_extra"]
+
         budgets: Dict = {ym: _get_budget(ym[0], ym[1]) for ym in months_range}
 
         def _suggested(y: int, m: int):
@@ -1465,6 +1500,7 @@ async def get_forecast_table(
             month_fixed  = int(daily_struct * month_days)
             month_mkt    = int(mkt_by_month.get(mk, 0))
             actual_result = int(data["result"] - month_fixed - month_mkt) if data else None
+            _zd = zone_by_month.get(mk, {})
             result.append({
                 "month":            mk,
                 "week_label":       None,
@@ -1484,6 +1520,15 @@ async def get_forecast_table(
                 "suggested_income": sug_val,
                 "suggested_source": sug_src,
                 "is_weekly":        False,
+                "actual_aloj":      _zd.get("actual_aloj", 0),
+                "actual_exp":       _zd.get("actual_exp", 0),
+                "actual_extra":     _zd.get("actual_extra", 0),
+                "cv_aloj":          _zd.get("cv_aloj", 0),
+                "cv_exp":           _zd.get("cv_exp", 0),
+                "cv_extra":         _zd.get("cv_extra", 0),
+                "budget_aloj":      int(budget.get("aloj_budget", 0)),
+                "budget_exp":       int(budget.get("exp_budget", 0)),
+                "budget_extra":     int(budget.get("extra_budget", 0)),
             })
         return {"data": result, "view": "monthly", "cost_pct": cost_pct}
     except Exception:
