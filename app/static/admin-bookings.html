@@ -1530,6 +1530,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
       <!-- Zone breakdown (added below, table above untouched) -->
       <div id="fin-pnl-zones" style="margin-top:1rem"></div>
+      <!-- Reservas-only P&L -->
+      <div id="fin-pnl-reservas" style="margin-top:1rem"></div>
     </div>
 
     <!-- ── Cash Flow Panel ────────────────────────────────────────────── -->
@@ -10454,6 +10456,7 @@ async function loadPnl(){
     renderPnlKpis(d.totals, d.period_calendar_days, d.structure);
     renderPnlTable(d.data || [], d.view, d.totals);
     renderPnlZones(d.data || [], d.totals, d.view);
+    renderReservasPnl(d.data || [], d.totals, d.view);
     const pd = d.period_calendar_days || 0;
     const dr = (d.structure && d.structure.costo_fijo_diario_prorrateado) || 0;
     document.getElementById('fin-pnl-loading').textContent =
@@ -10678,6 +10681,103 @@ function renderPnlZones(data, totals, view){
           <tr style="background:var(--card)"><th style="padding:.3rem .55rem;text-align:left;font-size:.62rem;color:var(--muted)">Período</th>${subHeaders}</tr>
         </thead>
         <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderReservasPnl(data, totals, view){
+  const el = document.getElementById('fin-pnl-reservas');
+  if(!el) return;
+  if(!data||!data.length||!totals){ el.innerHTML=''; return; }
+
+  const labelFn = (row) => {
+    if(view==='daily')  return row.fecha||'';
+    if(view==='weekly') return row.week||'';
+    const [y,m] = (row.month||'').split('-');
+    return m ? ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1]+' '+y : (row.month||'');
+  };
+
+  const calcRow = (r) => {
+    const ing   = Math.round(Number(r.ingreso_reserva)     || 0);
+    const comis = Math.round(Number(r.commission_deduction) || 0);
+    const neto  = ing - comis;
+    const cvExp = Math.round(Number(r.cv_exp)              || 0);
+    const opex  = Math.round(Number(r.costo_operacional)   || 0);
+    const str   = Math.round(Number(r.costo_estructural)   || 0);
+    const mkt   = Math.round(Number(r.marketing)           || 0);
+    const res   = neto - cvExp - opex - str - mkt;
+    return { ing, comis, neto, cvExp, opex, str, mkt, res };
+  };
+
+  const t = calcRow(totals);
+  const resCol = t.res >= 0 ? 'var(--green)' : 'var(--red)';
+
+  const kpiData = [
+    { label:'Ing. Reservas',    val: t.ing,    neg: false, color:'var(--blue)' },
+    { label:'Comisión',         val: t.comis,  neg: true,  color:'var(--muted)' },
+    { label:'Ingreso Neto',     val: t.neto,   neg: false, color:'#5dade2' },
+    { label:'C.Var. Exp.',      val: t.cvExp,  neg: true,  color:'var(--muted)' },
+    { label:'Op./Reserva',      val: t.opex,   neg: true,  color:'var(--muted)' },
+    { label:'Estructural',      val: t.str,    neg: true,  color:'var(--muted)' },
+    { label:'Marketing',        val: t.mkt,    neg: true,  color:'var(--muted)' },
+    { label:'Resultado',        val: t.res,    neg: false, color: resCol },
+  ];
+
+  const kpiCards = kpiData.map(k => {
+    const display = k.neg ? `−${fmtClp(k.val)}` : fmtClp(k.val);
+    const col     = k.neg ? 'var(--red)' : k.color;
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.65rem .85rem;min-width:110px">
+      <div style="font-size:.67rem;color:var(--muted);margin-bottom:.25rem">${k.label}</div>
+      <div style="font-size:.83rem;font-weight:700;color:${col}">${display}</div>
+    </div>`;
+  }).join('');
+
+  const thS = 'padding:.35rem .4rem;text-align:right;font-size:.63rem;color:var(--muted)';
+  const rows = data.map(row => {
+    const r = calcRow(row);
+    const rc = r.res >= 0 ? 'var(--green)' : 'var(--red)';
+    const td = (v, neg=false) => `<td style="padding:.36rem .4rem;text-align:right;font-size:.75rem${neg?';color:var(--red)':''}">${neg?'−':''}${fmtClp(v)}</td>`;
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.36rem .55rem;font-size:.76rem;color:var(--muted);white-space:nowrap">${labelFn(row)}</td>
+      ${td(r.ing)}${td(r.comis,true)}${td(r.neto)}${td(r.cvExp,true)}${td(r.opex,true)}${td(r.str,true)}${td(r.mkt,true)}
+      <td style="padding:.36rem .5rem;text-align:right;font-size:.75rem;font-weight:700;color:${rc}">${fmtClp(r.res)}</td>
+    </tr>`;
+  }).join('');
+
+  const ftd = (v, neg=false) => `<td style="padding:.4rem .4rem;text-align:right;font-size:.73rem;font-weight:700${neg?';color:var(--red)':''}">${neg?'−':''}${fmtClp(v)}</td>`;
+
+  el.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+    <div style="padding:.7rem 1.1rem;border-bottom:1px solid var(--border)">
+      <span style="font-weight:600;font-size:.88rem">⛵ P&L Reservas</span>
+      <span style="font-size:.73rem;color:var(--muted);margin-left:.6rem">Ingreso base · costos estructurales 100%</span>
+    </div>
+    <div style="padding:.75rem 1rem;display:flex;flex-wrap:wrap;gap:.5rem;border-bottom:1px solid var(--border)">
+      ${kpiCards}
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--card)">
+            <th style="padding:.35rem .55rem;text-align:left;font-size:.63rem;color:var(--muted)">Período</th>
+            <th style="${thS}">Ing. Reservas</th>
+            <th style="${thS}">Comisión</th>
+            <th style="${thS}">I. Neto</th>
+            <th style="${thS}">C.Var. Exp.</th>
+            <th style="${thS}">Op./Reserva</th>
+            <th style="${thS}">Estructural</th>
+            <th style="${thS}">Marketing</th>
+            <th style="${thS}">Resultado</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);background:var(--card)">
+            <td style="padding:.4rem .55rem;font-size:.73rem;font-weight:700;color:var(--muted)">TOTAL</td>
+            ${ftd(t.ing)}${ftd(t.comis,true)}${ftd(t.neto)}${ftd(t.cvExp,true)}${ftd(t.opex,true)}${ftd(t.str,true)}${ftd(t.mkt,true)}
+            <td style="padding:.4rem .5rem;text-align:right;font-size:.73rem;font-weight:700;color:${resCol}">${fmtClp(t.res)}</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   </div>`;
