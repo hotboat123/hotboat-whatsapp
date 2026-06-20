@@ -10514,6 +10514,7 @@ function _pnlRowTds(row, sm){
     <td style="${p};text-align:right">${fmtClp(v('ingreso_aloj'))}</td>
     <td style="${p};text-align:right">${fmtClp(v('ingreso_exp'))}</td>
     <td style="${p};text-align:right">${fmtClp(v('ingreso_extra'))}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('total_descuentos'))}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.commission_deduction)}</td>
     <td style="${p};text-align:right;color:var(--gold)">${fmtClp(row.net_income)}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.costo_operacional)}</td>
@@ -10529,7 +10530,7 @@ function _pnlRowTds(row, sm){
 function renderPnlTable(data, view, totals){
   const tbody = document.getElementById('fin-pnl-tbody');
   const tfoot = document.getElementById('fin-pnl-tfoot');
-  const COLSP = 17;
+  const COLSP = 18;
   tbody.innerHTML = '';
 
   data.forEach((row, idx) => {
@@ -10574,6 +10575,7 @@ function renderPnlTable(data, view, totals){
       <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_aloj'))}</td>
       <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_exp'))}</td>
       <td style="padding:.5rem .4rem;text-align:right">${fmtClp(tv('ingreso_extra'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('total_descuentos'))}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.commission_deduction)}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--gold)">${fmtClp(t.net_income)}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.costo_operacional)}</td>
