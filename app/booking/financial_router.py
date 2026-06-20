@@ -315,6 +315,12 @@ def _get_marketing_costs_range(date_from: date, date_to: date) -> List[Dict]:
 def _get_budget(year: int, month: int) -> Dict:
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Idempotent migration — adds zone columns if they don't exist yet
+            for col in ("aloj_budget", "exp_budget", "extra_budget"):
+                cur.execute(
+                    f"ALTER TABLE financial_budget ADD COLUMN IF NOT EXISTS {col} NUMERIC DEFAULT 0"
+                )
+            conn.commit()
             cur.execute("""
                 SELECT income_budget, costs_budget, marketing_budget, notes,
                        COALESCE(aloj_budget,0), COALESCE(exp_budget,0), COALESCE(extra_budget,0)
