@@ -10,9 +10,47 @@ from app.bot.translations import get_text
 logger = logging.getLogger(__name__)
 
 
+def _lookup_db_keyword(message_lower: str, lang: str) -> Optional[str]:
+    """Check bot_keywords table for a match and return the response content."""
+    try:
+        from app.db.connection import get_connection
+        col = {"en": "content_en", "pt": "content_pt"}.get(lang, "content_es")
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT k.keyword, COALESCE(r.content_es), r.active "
+                    "FROM bot_keywords k "
+                    "JOIN bot_responses r ON r.response_key = k.response_key "
+                    "WHERE r.active = TRUE",
+                )
+                rows = cur.fetchall()
+                # Find longest matching keyword (most specific wins)
+                best = None
+                for keyword, _, __ in rows:
+                    if keyword.lower() in message_lower:
+                        if best is None or len(keyword) > len(best[0]):
+                            best = (keyword,)
+                if best:
+                    # Fetch with correct language column
+                    cur.execute(
+                        f"SELECT COALESCE(r.{col}, r.content_es) "
+                        "FROM bot_keywords k "
+                        "JOIN bot_responses r ON r.response_key = k.response_key "
+                        "WHERE k.keyword = %s AND r.active = TRUE",
+                        (best[0],),
+                    )
+                    row = cur.fetchone()
+                    if row and row[0]:
+                        logger.info(f"DB keyword match: '{best[0]}' → response")
+                        return row[0]
+    except Exception as e:
+        logger.warning(f"DB keyword lookup failed: {e}")
+    return None
+
+
 class FAQHandler:
     """Handle frequently asked questions with predefined answers"""
-    
+
     def __init__(self):
         self.language = "es"  # Default language
         self.faqs = {
@@ -422,7 +460,12 @@ Quer adicionar algo especial ao seu HotBoat?
         """
         lang = language or self.language
         message_lower = message.lower().strip()
-        
+
+        # Check DB-configured keywords first (admin panel customizations take priority)
+        db_response = _lookup_db_keyword(message_lower, lang)
+        if db_response:
+            return db_response
+
         # Map FAQ keys to translation keys
         faq_to_translation = {
             "caracteristicas": "features",
