@@ -1458,10 +1458,11 @@ async def get_forecast_table(
             _mk = str(_bk["fecha"])[:7]
             _sp = split_booking_financials(_bk, _cc, _wl, _ac)
             if _mk not in zone_by_month:
-                zone_by_month[_mk] = {"actual_reserva": 0,
+                zone_by_month[_mk] = {"actual_reserva": 0, "cv_reserva": 0,
                                        "actual_aloj": 0, "actual_exp": 0, "actual_extra": 0,
                                        "cv_aloj": 0, "cv_exp": 0, "cv_extra": 0}
             zone_by_month[_mk]["actual_reserva"] += _sp["ingreso_reserva"]
+            zone_by_month[_mk]["cv_reserva"]     += float(_bk.get("costo_total") or 0)
             zone_by_month[_mk]["actual_aloj"]    += _sp["ingreso_aloj"]
             zone_by_month[_mk]["actual_exp"]     += _sp["ingreso_exp"]
             zone_by_month[_mk]["actual_extra"]   += _sp["ingreso_extra"]
@@ -1532,6 +1533,7 @@ async def get_forecast_table(
                 "suggested_source": sug_src,
                 "is_weekly":        False,
                 "actual_reserva":   _zd.get("actual_reserva", 0),
+                "cv_reserva":       _zd.get("cv_reserva", 0),
                 "actual_aloj":      _zd.get("actual_aloj", 0),
                 "actual_exp":       _zd.get("actual_exp", 0),
                 "actual_extra":     _zd.get("actual_extra", 0),
