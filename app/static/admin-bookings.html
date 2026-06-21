@@ -6410,9 +6410,12 @@ function ecGetRow(id){
   return data;
 }
 
+const _ecAutoSaveTimers = {};
 function ecMarkDirty(id){
   const btn = document.getElementById(`ec-btn-${id}`);
-  if(btn){ btn.textContent='Guardar'; btn.classList.remove('saved'); btn.style.background=''; }
+  if(btn){ btn.textContent='⏳'; btn.classList.remove('saved'); btn.style.background=''; btn.style.color='var(--muted)'; btn.disabled=false; }
+  clearTimeout(_ecAutoSaveTimers[id]);
+  _ecAutoSaveTimers[id] = setTimeout(() => saveExtra(id), 800);
 }
 
 function ecUpdateRow(id){
