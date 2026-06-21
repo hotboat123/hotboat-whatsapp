@@ -1618,7 +1618,7 @@ async def debug_compare(year: int, month: int, x_admin_key: str = Header("")):
         })
 
     totals = {k: sum(r[k] for r in rows)
-              for k in ("ingreso_total","base_inc_pnl","coupon","manual_desc","disc_pnl",
+              for k in ("ingreso_total","coupon","manual_desc_fc","manual_desc_pnl",
                         "fc_adj_gross","fc_comm","fc_net",
                         "pnl_gross","pnl_comm","pnl_net",
                         "diff_gross","diff_net",
