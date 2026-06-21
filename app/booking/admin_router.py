@@ -1630,7 +1630,7 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         new_name_lower = name.lower()
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # If key changed (rename), update the PK
+                # If key changed (rename), update the PK and cascade to BOM slugs
                 if extra_id != new_name_lower:
                     cur.execute("""
                         UPDATE extras_visibility
@@ -1646,6 +1646,11 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
                           name_en or None, name_pt or None,
                           description_en or None, description_pt or None,
                           extra_id))
+                    # Cascade rename to extras_bom so stock deduction keeps working
+                    cur.execute(
+                        "UPDATE extras_bom SET extra_slug = %s WHERE extra_slug = %s",
+                        (new_name_lower, extra_id)
+                    )
                     if cur.rowcount == 0:
                         # Row didn't exist under old key — upsert under new key
                         cur.execute("""
