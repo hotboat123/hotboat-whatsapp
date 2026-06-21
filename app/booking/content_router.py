@@ -69,14 +69,7 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
                            COALESCE(NULLIF(TRIM(ev.name_pt), ''), '') AS name_pt,
                            COALESCE(NULLIF(TRIM(ev.description_en), ''), '') AS description_en,
                            COALESCE(NULLIF(TRIM(ev.description_pt), ''), '') AS description_pt,
-                           COALESCE(ev.sort_order, 999)           AS sort_order,
-                           EXISTS(
-                               SELECT 1 FROM extras_bom b
-                               JOIN stock_products sp ON sp.id = b.product_id
-                               WHERE b.extra_slug = ev.extra_name_lower
-                                 AND b.is_variant = TRUE
-                                 AND sp.current_stock > 0
-                           ) AS has_variants
+                           COALESCE(ev.sort_order, 999)           AS sort_order
                     FROM extras_visibility ev
                     WHERE ev.show_in_booking = TRUE
                     ORDER BY ev.sort_order, ev.extra_name_lower
@@ -84,8 +77,7 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
                 extras = []
                 for row in cur.fetchall():
                     (name_lower, name_es, price, icon, description_es,
-                     name_en, name_pt, description_en, description_pt, sort_order,
-                     has_variants) = row
+                     name_en, name_pt, description_en, description_pt, sort_order) = row
                     if lang == "en":
                         name = (name_en or "").strip() or name_es
                         description = (description_en or "").strip() or description_es
@@ -105,8 +97,28 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
                         "icon": resolved_icon,
                         "description": description,
                         "sort_order": int(sort_order),
-                        "has_variants": bool(has_variants),
+                        "has_variants": False,   # filled below
                     })
+
+                # Determine which extras have in-stock variant options.
+                # extras_bom.extra_slug can be stored as either the DB pk (extra_name_lower)
+                # or the slugified display name (key).  Check both to be robust.
+                if extras:
+                    all_slugs = list({s for e in extras for s in (e["key"], e["id"])})
+                    cur.execute("""
+                        SELECT DISTINCT b.extra_slug
+                        FROM extras_bom b
+                        JOIN stock_products sp ON sp.id = b.product_id
+                        WHERE b.extra_slug = ANY(%s)
+                          AND b.is_variant = TRUE
+                          AND sp.current_stock > 0
+                    """, (all_slugs,))
+                    variant_slugs = {r[0] for r in cur.fetchall()}
+                    for e in extras:
+                        e["has_variants"] = bool(
+                            e["key"] in variant_slugs or e["id"] in variant_slugs
+                        )
+
         # already sorted by DB ORDER BY
         return {"extras": extras}
     except Exception as e:
@@ -116,19 +128,27 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
 
 @content_router.get("/api/content/extras/{slug}/variants")
 def list_extra_variants(slug: str):
-    """Public: variant ingredient options for an extra, only those with current_stock > 0."""
+    """Public: variant ingredient options for an extra, only those with current_stock > 0.
+    Accepts both the slugified key and the raw extra_name_lower as slug formats."""
     try:
+        from app.booking.admin_router import _slugify_extra
+        # The slug received is the EXTRAS_CATALOG id (e.key || e.id = key).
+        # The BOM may be stored with either the key OR the extra_name_lower.
+        # We try both to be robust.
+        alt_slug = _slugify_extra(slug)   # in case slug is raw name_lower
+        slugs = list({slug, alt_slug})
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT b.product_id, b.variant_label, sp.current_stock, sp.name
+                    SELECT DISTINCT ON (sp.id)
+                           b.product_id, b.variant_label, sp.current_stock, sp.name
                     FROM extras_bom b
                     JOIN stock_products sp ON sp.id = b.product_id
-                    WHERE b.extra_slug = %s
+                    WHERE b.extra_slug = ANY(%s)
                       AND b.is_variant = TRUE
                       AND sp.current_stock > 0
-                    ORDER BY b.id
-                """, (slug,))
+                    ORDER BY sp.id, b.id
+                """, (slugs,))
                 variants = [
                     {"product_id": r[0], "label": r[1] or r[3], "stock": float(r[2])}
                     for r in cur.fetchall()
