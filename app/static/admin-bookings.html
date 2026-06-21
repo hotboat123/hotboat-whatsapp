@@ -9872,12 +9872,7 @@ async function triggerAutoConsumeStock(){
   finally{ btn.textContent = orig; btn.disabled = false; }
 }
 
-// Load stock section when switching to it
-const _origShowSection = typeof showSection === 'function' ? showSection : null;
-document.addEventListener('DOMContentLoaded', ()=>{
-  const stockNavItem = document.getElementById('nav-stock');
-  if(stockNavItem) stockNavItem.addEventListener('click', ()=>{ loadStockSection(); });
-});
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
