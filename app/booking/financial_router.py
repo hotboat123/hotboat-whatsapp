@@ -399,6 +399,17 @@ def _build_pnl_days(
         disc_applied = min(max(0, int(round(manual_disc))), max(0, int(round(gross_total))))
         gross_split  = gross_total - float(disc_applied)
 
+        # Scale zone incomes so they sum to gross_split (applies coupon + manual discount
+        # proportionally across reserva/aloj/exp/extra).  CV costs are not touched.
+        _split_raw = (sp["ingreso_reserva"] + sp["ingreso_aloj"]
+                      + sp["ingreso_exp"]   + sp["ingreso_extra"])
+        if _split_raw > 0:
+            _scale = gross_split / _split_raw
+            sp["ingreso_reserva"] = int(round(sp["ingreso_reserva"] * _scale))
+            sp["ingreso_aloj"]    = int(round(sp["ingreso_aloj"]    * _scale))
+            sp["ingreso_exp"]     = int(round(sp["ingreso_exp"]     * _scale))
+            sp["ingreso_extra"]   = int(round(sp["ingreso_extra"]   * _scale))
+
         pnl = _calc_booking_pnl(
             b,
             commissions,
@@ -1464,6 +1475,19 @@ async def get_forecast_table(
         for _bk in _bk_for_zones:
             _mk = str(_bk["fecha"])[:7]
             _sp = split_booking_financials(_bk, _cc, _wl, _ac)
+            # Apply same discount scaling as P&L so zone actuals reflect discounted income
+            _ing_total  = float(_bk.get("ingreso_total") or 0)
+            _man_disc   = _sum_descuentos(_bk.get("descuentos") or [])
+            _disc_cap   = min(max(0.0, _man_disc), max(0.0, _ing_total))
+            _gross_bk   = _ing_total - _disc_cap
+            _split_raw  = (_sp["ingreso_reserva"] + _sp["ingreso_aloj"]
+                           + _sp["ingreso_exp"]   + _sp["ingreso_extra"])
+            if _split_raw > 0:
+                _sc = _gross_bk / _split_raw
+                _sp["ingreso_reserva"] = int(round(_sp["ingreso_reserva"] * _sc))
+                _sp["ingreso_aloj"]    = int(round(_sp["ingreso_aloj"]    * _sc))
+                _sp["ingreso_exp"]     = int(round(_sp["ingreso_exp"]     * _sc))
+                _sp["ingreso_extra"]   = int(round(_sp["ingreso_extra"]   * _sc))
             if _mk not in zone_by_month:
                 zone_by_month[_mk] = {"actual_reserva": 0, "cv_reserva": 0,
                                        "actual_aloj": 0, "actual_exp": 0, "actual_extra": 0,
