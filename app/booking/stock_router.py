@@ -544,12 +544,11 @@ def auto_consume_past_bookings() -> dict:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Query both web bookings and all_appointments
-                # hotboat_appointments: web reservations
+                # hotboat_appointments uses different column names
                 cur.execute("""
-                    SELECT id, source_id, fecha, extras_json, stock_consumed_at
+                    SELECT id, booking_ref, booking_date, extras, stock_consumed_at
                     FROM hotboat_appointments
-                    WHERE fecha <= %s
+                    WHERE booking_date <= %s
                       AND status IN ('confirmed', 'CONFIRMED', 'pending', 'PENDING')
                       AND stock_consumed_at IS NULL
                 """, (today,))
@@ -569,7 +568,7 @@ def auto_consume_past_bookings() -> dict:
 
             for table_name, rows in [("hotboat_appointments", web_rows), ("all_appointments", all_rows)]:
                 for (row_id, source_id, fecha, extras_json, _) in rows:
-                    ref = source_id or f"AA-{row_id}"
+                    ref = source_id or (f"HA-{row_id}" if table_name == "hotboat_appointments" else f"AA-{row_id}")
                     if ref in processed_refs:
                         continue
                     processed_refs.add(ref)
