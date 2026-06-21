@@ -1575,41 +1575,40 @@ async def debug_compare(year: int, month: int, x_admin_key: str = Header("")):
         net_fc          = _calc_net(adj_gross_fc, b.get("pagos") or [], commissions)
         comm_fc         = adj_gross_fc - net_fc
 
-        # ── P&L path ───────────────────────────────────────────────────────
-        sp              = split_booking_financials(b, cc, wl, ac)
-        base_inc        = (float(sp["ingreso_reserva"]) + float(sp["ingreso_aloj"])
-                           + float(sp["ingreso_exp"])   + float(sp["ingreso_extra"]))
-        disc_pnl        = booking_discount_total_clp(b)   # coupon + manual
-        gross_pnl       = base_inc - disc_pnl
+        # ── P&L path (current formula: ingreso_total - manual_desc) ──────────
+        manual_disc_pnl = _sum_descuentos(b.get("descuentos") or [])
+        disc_pnl_capped = min(max(0, round(manual_disc_pnl)), max(0, round(ingreso_total)))
+        gross_pnl       = ingreso_total - disc_pnl_capped
         pnl_r           = _calc_booking_pnl(b, commissions, gross_override=gross_pnl,
                                              costo_override=cpr)
         net_pnl         = float(pnl_r["net_income"])
         comm_pnl        = float(pnl_r["commission_deduction"])
+        sp              = split_booking_financials(b, cc, wl, ac)
 
         rows.append({
             "id":             b["id"],
             "fecha":          str(b["fecha"]),
             "cliente":        b.get("nombre_cliente", ""),
-            # income components
+            # raw fields
             "ingreso_total":  int(ingreso_total),
-            "ingreso_reserva":int(sp["ingreso_reserva"]),
+            "ingreso_reserva":int(b.get("ingreso_reserva") or 0),
             "ingreso_extras": int(b.get("ingreso_extras") or 0),
             "coupon":         int(coupon),
-            "manual_desc":    int(manual_desc),
-            "disc_pnl":       int(disc_pnl),
-            "base_inc_pnl":   int(base_inc),
+            "manual_desc_fc": int(manual_desc),      # _sum_descuentos used in Forecast
+            "manual_desc_pnl":int(manual_disc_pnl),  # _sum_descuentos used in P&L
             # forecast
             "fc_adj_gross":   int(adj_gross_fc),
             "fc_comm":        int(comm_fc),
             "fc_net":         int(net_fc),
-            # pnl
+            # pnl (current formula)
             "pnl_gross":      int(gross_pnl),
             "pnl_comm":       int(comm_pnl),
             "pnl_net":        int(net_pnl),
-            # diff
+            # diffs
             "diff_gross":     int(adj_gross_fc) - int(gross_pnl),
             "diff_net":       int(net_fc) - int(net_pnl),
-            # split
+            # split (for reference)
+            "split_reserva":  int(sp["ingreso_reserva"]),
             "split_aloj":     int(sp["ingreso_aloj"]),
             "split_exp":      int(sp["ingreso_exp"]),
             "split_extra":    int(sp["ingreso_extra"]),
