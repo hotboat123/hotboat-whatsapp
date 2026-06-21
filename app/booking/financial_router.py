@@ -844,6 +844,13 @@ async def get_pnl(
         data = _aggregate_weeks(days)
     elif view == "monthly":
         data = _aggregate_months(days)
+        # Strip days outside the query range from the drill-down list.
+        # Structural costs are intentionally expanded to the full month in the
+        # monthly total, but daily sub-rows outside the range confuse the user.
+        d_from_str = d_from.isoformat()
+        d_to_str   = d_to.isoformat()
+        for m in data:
+            m["days"] = [d for d in m["days"] if d_from_str <= d["fecha"] <= d_to_str]
     else:
         data = sorted(days.values(), key=lambda x: x["fecha"])
 
