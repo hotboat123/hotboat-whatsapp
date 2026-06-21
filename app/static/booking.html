@@ -196,6 +196,7 @@ const S = {
   selectedTime: null,
   numPeople: 2,
   extras: {},
+  extraVariants: {},
   hasFlex: true,
   customerName: '',
   customerPhone: '',
@@ -716,6 +717,7 @@ async function fetchExtrasCatalog(){
     price: e.price,
     icon: e.icon || '⭐',
     description: e.description || '',
+    has_variants: !!e.has_variants,
   }));
 }
 
@@ -2649,13 +2651,14 @@ function renderExtras(){
   const items = EXTRAS_CATALOG.map(e=>{
     const qty = S.extras[e.id] || 0;
     const sel = qty > 0;
-    const totalPrice = e.price * (qty || 1);
-    const priceStr = e.price > 0 ? `+$${(e.price*(sel?qty:1)).toLocaleString('es-CL')}` : '+$0';
+    const v = S.extraVariants[e.id];
+    const variantLabel = v ? v.label : '';
     return `
     <div class="extra-item ${sel?'selected':''}" style="cursor:default;gap:.5rem">
       <div style="flex:1;min-width:0;cursor:pointer" onclick="addExtra('${e.id}')">
         <div class="extra-name">${e.icon} ${e.name}</div>
-        ${e.description?`<div style="font-size:.75rem;color:var(--muted);margin-top:.15rem">${e.description}</div>`:''}
+        ${variantLabel?`<div style="font-size:.75rem;color:var(--gold);margin-top:.15rem">🍽 ${variantLabel}</div>`
+          :(e.description?`<div style="font-size:.75rem;color:var(--muted);margin-top:.15rem">${e.description}</div>`:'')}
       </div>
       <div style="display:flex;align-items:center;gap:.35rem;flex-shrink:0">
         ${sel?`
@@ -2693,14 +2696,53 @@ function renderExtras(){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderPeopleSelect()">${t('back')}</button>`;
 }
 
-function addExtra(id){
+async function addExtra(id){
+  const e = EXTRAS_CATALOG.find(x=>x.id===id);
+  if(e && e.has_variants && !(S.extras[id]>0)){
+    await openVariantPicker(id, e.name);
+    return;
+  }
   S.extras[id] = (S.extras[id] || 0) + 1;
   renderExtras();
 }
 function removeExtra(id){
-  if((S.extras[id] || 0) <= 1) delete S.extras[id];
+  if((S.extras[id] || 0) <= 1){ delete S.extras[id]; delete S.extraVariants[id]; }
   else S.extras[id]--;
   renderExtras();
+}
+
+async function openVariantPicker(extraId, extraName){
+  const ov = document.getElementById('variant-picker-overlay');
+  const body = document.getElementById('variant-picker-body');
+  if(!ov||!body) return;
+  body.innerHTML = '<p style="color:var(--muted);text-align:center;padding:1rem">Cargando opciones...</p>';
+  ov.style.display='flex';
+  try{
+    const r = await fetch(`/api/content/extras/${encodeURIComponent(extraId)}/variants`).then(x=>x.json());
+    const variants = r.variants || [];
+    if(!variants.length){
+      body.innerHTML='<p style="color:var(--muted);text-align:center;padding:1rem">Sin opciones disponibles</p>';
+      return;
+    }
+    body.innerHTML = variants.map(v=>`
+      <button onclick="_pickVariant('${extraId}',${v.product_id},${JSON.stringify(v.label).replace(/"/g,'&quot;')});closeVariantPicker()"
+        style="width:100%;padding:.75rem 1rem;background:var(--input);border:1px solid var(--border);border-radius:10px;
+               color:var(--text);font-size:.95rem;cursor:pointer;text-align:left;margin-bottom:.4rem">
+        ${v.label}
+      </button>`).join('');
+  }catch(err){
+    body.innerHTML=`<p style="color:var(--muted);text-align:center;padding:1rem">Error cargando opciones</p>`;
+  }
+  document.getElementById('variant-picker-title').textContent = `Elige tu ${extraName}`;
+}
+function _pickVariant(extraId, productId, label){
+  S.extras[extraId] = 1;
+  S.extraVariants[extraId] = {product_id: productId, label: label};
+  renderExtras();
+}
+function closeVariantPicker(){
+  const ov = document.getElementById('variant-picker-overlay');
+  if(ov) ov.style.display='none';
 }
 function toggleFlex(){
   S.hasFlex = !S.hasFlex;
@@ -2718,7 +2760,9 @@ function renderForm(){
     const qty = S.extras[e.id];
     const linePrice = e.price * qty;
     extTotal += linePrice;
-    return `<div class="summary-row"><span>${e.icon} ${e.name}${qty>1?` <span style="opacity:.7">×${qty}</span>`:''}</span><span>$${linePrice.toLocaleString('es-CL')}</span></div>`;
+    const vLabel = S.extraVariants[e.id]?.label;
+    return `<div class="summary-row"><span>${e.icon} ${e.name}${qty>1?` <span style="opacity:.7">×${qty}</span>`:''}</span><span>$${linePrice.toLocaleString('es-CL')}</span></div>${vLabel?`<div class="summary-row" style="font-size:.78rem;color:var(--gold);padding-top:0;margin-top:-.2rem"><span style="padding-left:1.2rem">🍽 ${vLabel}</span><span></span></div>`:''}`;
+
   }).join('');
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
   const hbTotal = sub + extTotal + flex - (S.couponDiscount||0);
@@ -2984,7 +3028,10 @@ async function submitBooking(){
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const pp = Math.round(basepp * mult / 1000) * 1000;
   const sub = pp * S.numPeople;
-  const extrasArr = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>({name:e.name,price:e.price,quantity:S.extras[e.id]}));
+  const extrasArr = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>({
+    name:e.name, price:e.price, quantity:S.extras[e.id],
+    ...(S.extraVariants[e.id] ? {variant_label:S.extraVariants[e.id].label, variant_product_id:S.extraVariants[e.id].product_id} : {}),
+  }));
   const extTotal = extrasArr.reduce((a,e)=>a+e.price*e.quantity,0);
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
   const total = sub + extTotal + flex - (S.couponDiscount||0);
@@ -3304,5 +3351,20 @@ async function init(){
 
 init();
 </script>
+
+<!-- Variant ingredient picker overlay -->
+<div id="variant-picker-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);
+     z-index:9999;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--card);border-radius:16px;max-width:380px;width:100%;
+              box-shadow:0 8px 32px rgba(0,0,0,.5);overflow:hidden">
+    <div style="padding:1.2rem 1.2rem .4rem;display:flex;align-items:center;justify-content:space-between">
+      <div id="variant-picker-title" style="font-weight:700;font-size:1.05rem">Elige tu opción</div>
+      <button onclick="closeVariantPicker()"
+        style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div id="variant-picker-body" style="padding:.6rem 1.2rem 1.2rem"></div>
+  </div>
+</div>
+
 </body>
 </html>
