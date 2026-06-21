@@ -1276,7 +1276,9 @@ async def get_forecast_table(
                         dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
                         iso = dobj.isocalendar()
                         wk = f"{iso.year}-W{iso.week:02d}"
-                        adj_gross = float(gross) - _sum_descuentos(desc_raw)
+                        _gf = float(gross)
+                        _disc = min(max(0.0, _sum_descuentos(desc_raw)), max(0.0, _gf))
+                        adj_gross = _gf - _disc
                         net = _calc_net(adj_gross, pagos_raw, commissions)
                         if wk not in by_week:
                             by_week[wk] = {"income": 0, "costs": 0, "bookings": 0}
@@ -1433,7 +1435,9 @@ async def get_forecast_table(
                         continue
                     dobj = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
                     key = (dobj.year, dobj.month)
-                    adj_gross = float(gross) - _sum_descuentos(desc_raw)
+                    _gf = float(gross)
+                    _disc = min(max(0.0, _sum_descuentos(desc_raw)), max(0.0, _gf))
+                    adj_gross = _gf - _disc
                     net = _calc_net(adj_gross, pagos_raw, commissions)
                     if key not in by_month:
                         by_month[key] = {"income": 0, "costs": 0, "result": 0, "bookings": 0}
