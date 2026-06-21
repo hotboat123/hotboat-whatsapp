@@ -375,10 +375,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       <span class="ni">📊</span> Estadisticas
     </div>
     <div class="nav-item" onclick="showSection('extras-cat')" id="nav-extras-cat">
-      <span class="ni">🏷️</span> Precios Extras
-    </div>
-    <div class="nav-item" onclick="showSection('stock')" id="nav-stock">
-      <span class="ni">📦</span> Control de Stock
+      <span class="ni">🏷️</span> Extras
     </div>
     <div class="nav-item" onclick="showSection('tablas-admin');loadTablasCatalogAdmin()" id="nav-tablas-admin">
       <span class="ni">🍽</span> Tablas
@@ -593,14 +590,23 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </style>
     </div>
 
-    <!-- PRECIOS EXTRAS -->
+    <!-- EXTRAS (Precios Extras + Control de Stock) -->
     <div id="section-extras-cat" class="section">
-      <div style="display:flex;gap:.6rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+      <div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.8rem;flex-wrap:wrap">
         <input type="text" id="ec-search" placeholder="Buscar extra..." oninput="filterExtrasCat()"
           style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.5rem .8rem;font-size:.82rem;outline:none;flex:1;min-width:160px">
         <button class="btn-primary" onclick="openNewExtraModal()" style="white-space:nowrap">+ Nuevo extra</button>
+        <button class="btn-secondary" onclick="openStockProductModal()" style="white-space:nowrap;font-size:.78rem">+ Nuevo producto stock</button>
+        <button onclick="triggerAutoConsumeStock()" style="background:rgba(74,222,128,.12);border:1px solid #4ade80;color:#4ade80;border-radius:8px;padding:.38rem .85rem;font-size:.78rem;cursor:pointer;font-weight:600;white-space:nowrap">📦 Consumir reservas pasadas</button>
         <span id="ec-count" style="color:var(--muted);font-size:.78rem"></span>
       </div>
+
+      <!-- Alertas stock bajo -->
+      <div id="stock-alerts-box" style="display:none;margin-bottom:.8rem;padding:.8rem 1rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px">
+        <div style="font-weight:700;color:#f87171;margin-bottom:.4rem">⚠️ Productos bajo stock mínimo</div>
+        <div id="stock-alerts-list" style="font-size:.82rem;color:#fca5a5;line-height:1.8"></div>
+      </div>
+
       <div class="tbl-wrap">
         <table class="ec-table">
           <thead>
@@ -617,65 +623,25 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th style="text-align:right">Costo</th>
               <th style="text-align:right">Utilidad</th>
               <th style="text-align:right">Margen</th>
+              <th style="text-align:center;color:var(--muted)">Stock<br>actual</th>
+              <th style="text-align:center;color:var(--muted)">Mín.</th>
+              <th style="text-align:center;color:var(--muted)">Estado</th>
+              <th style="text-align:center;color:var(--muted)">Ajuste rápido</th>
               <th style="text-align:center;color:#a78bfa" title="Ingredientes de stock">🧪</th>
             </tr>
           </thead>
-          <tbody id="ec-tbody"><tr><td colspan="12" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="ec-tbody"><tr><td colspan="17" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
-      </div>
-    </div>
-
-    <!-- CONTROL DE STOCK -->
-    <div id="section-stock" class="section">
-
-      <!-- Header -->
-      <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:1.2rem">
-        <div style="flex:1">
-          <h2 style="margin:0;font-size:1.1rem">📦 Control de Stock</h2>
-          <p style="margin:.2rem 0 0;color:var(--muted);font-size:.8rem">Gestiona el inventario de productos y su relación con los extras.</p>
-        </div>
-        <button class="btn-primary" onclick="openStockProductModal()">+ Nuevo Producto</button>
-        <button onclick="triggerAutoConsumeStock()" title="Descuenta el stock de todas las reservas cuya fecha ya pasó y aún no habían descontado" style="background:rgba(74,222,128,.12);border:1px solid #4ade80;color:#4ade80;border-radius:8px;padding:.38rem .85rem;font-size:.8rem;cursor:pointer;font-weight:600">📦 Consumir stock de reservas pasadas</button>
-        <button class="btn-secondary" onclick="loadStockSection()" style="padding:.4rem .8rem;font-size:.78rem">↺ Actualizar</button>
-      </div>
-
-      <!-- Alertas stock bajo -->
-      <div id="stock-alerts-box" style="display:none;margin-bottom:1rem;padding:.8rem 1rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px">
-        <div style="font-weight:700;color:#f87171;margin-bottom:.4rem">⚠️ Productos bajo stock mínimo</div>
-        <div id="stock-alerts-list" style="font-size:.82rem;color:#fca5a5;line-height:1.8"></div>
-      </div>
-
-      <!-- Tabla de productos -->
-      <div class="chart-wrap" style="margin-bottom:1.2rem;padding:0;overflow:hidden">
-        <div style="padding:.8rem 1rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:700;font-size:.9rem">🏷️ Catálogo de Productos</span>
-          <input type="text" id="stock-search" placeholder="Buscar..." oninput="filterStockProducts()"
-            style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .6rem;font-size:.78rem;width:160px">
-        </div>
-        <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:.82rem">
-            <thead>
-              <tr style="background:var(--input)">
-                <th style="padding:.6rem .8rem;text-align:left;color:var(--muted);font-weight:600">Producto</th>
-                <th style="padding:.6rem .8rem;text-align:left;color:var(--muted);font-weight:600">Categoría</th>
-                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Unidad</th>
-                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Stock actual</th>
-                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Mínimo</th>
-                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Estado</th>
-                <th style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-weight:600">Ajuste rápido</th>
-                <th style="padding:.6rem;color:var(--muted)"></th>
-              </tr>
-            </thead>
-            <tbody id="stock-products-tbody"><tr><td colspan="8" style="text-align:center;padding:1.5rem;color:var(--muted)">Cargando...</td></tr></tbody>
-          </table>
-        </div>
       </div>
 
       <!-- Historial de movimientos -->
-      <div class="chart-wrap" style="padding:0;overflow:hidden">
+      <div class="chart-wrap" style="margin-top:1.4rem;padding:0;overflow:hidden">
         <div style="padding:.8rem 1rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:700;font-size:.9rem">📋 Historial de Movimientos</span>
-          <span id="stock-hist-product" style="color:var(--muted);font-size:.78rem">Todos los productos</span>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <span id="stock-hist-product" style="color:var(--muted);font-size:.78rem">Todos los productos</span>
+            <button onclick="loadExtrasCat()" style="background:var(--input);border:1px solid var(--border);border-radius:6px;padding:.2rem .5rem;font-size:.75rem;cursor:pointer;color:var(--muted)">↺</button>
+          </div>
         </div>
         <div class="tbl-wrap" style="max-height:320px;overflow-y:auto">
           <table style="width:100%;border-collapse:collapse;font-size:.8rem">
@@ -694,7 +660,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
-    </div><!-- /section-stock -->
+    </div>
 
     <!-- TABLAS ADMIN -->
     <div id="section-tablas-admin" class="section">
@@ -4524,7 +4490,7 @@ function doLogout(){
 }
 
 function _applyNavPermissions(){
-  const allSections = ['calendar','lista','clientes','stats','extras-cat','stock','tablas-admin',
+  const allSections = ['calendar','lista','clientes','stats','extras-cat','tablas-admin',
     'coupons','emails','alojamientos-admin','aloj-bookings','experiencias','packs-admin',
     'cal-extras','financial','simulator','sueldos','gastos','whatsapp','chatbot','payment-test','logs','settings'];
   allSections.forEach(sec=>{
@@ -4586,7 +4552,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Precios Extras',stock:'Control de Stock','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Extras','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
   document.getElementById('section-title').textContent = titles[name]||name;
   const contentEl  = document.getElementById('content');
   const topbarBtns = ['year-sel','new-reserva-btn','sync-btn'];
@@ -7434,14 +7400,22 @@ let _extrasCatData = [];   // full list loaded from API
 async function loadExtrasCat(){
   const tbody = document.getElementById('ec-tbody');
   if(!tbody) return;
-  tbody.innerHTML='<tr><td colspan="12" class="loading-msg">Cargando...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="17" class="loading-msg">Cargando...</td></tr>';
   try{
-    const d = await api('/api/admin/precios-extras');
-    EXTRAS_CATALOG = d.extras||[];   // also refresh catalog for modal dropdowns
+    const [d, pr, mr, ar] = await Promise.all([
+      api('/api/admin/precios-extras'),
+      api('/api/admin/stock/products'),
+      api('/api/admin/stock/movements?limit=80'),
+      api('/api/admin/stock/alerts'),
+    ]);
+    EXTRAS_CATALOG = d.extras||[];
     _extrasCatData = d.extras||[];
+    _stockProducts = pr.products||[];
     renderExtrasCat(_extrasCatData);
+    renderStockMovements(mr.movements||[]);
+    renderStockAlerts(ar.alerts||[]);
   }catch(e){
-    tbody.innerHTML=`<tr><td colspan="12" class="no-data">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="17" class="no-data">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -7451,7 +7425,7 @@ function renderExtrasCat(list){
   if(!tbody) return;
   if(countEl) countEl.textContent = `${list.length} extras`;
   if(!list.length){
-    tbody.innerHTML='<tr><td colspan="12" class="no-data">Sin extras</td></tr>';
+    tbody.innerHTML='<tr><td colspan="17" class="no-data">Sin extras</td></tr>';
     return;
   }
   tbody.innerHTML = list.map((e,i)=>{
@@ -7525,12 +7499,36 @@ function renderExtrasCat(list){
       </td>
       <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
       <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
-      <td style="display:flex;gap:.35rem;align-items:center;padding:.5rem .35rem;white-space:nowrap;flex-wrap:wrap;justify-content:flex-end">
-        <button type="button" class="ec-save-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .45rem"
-          onclick="autoTranslateExtra('${e.id}')" title="Generar inglés y portugués desde nombre y descripción en español (IA)">✨ IA</button>
-        <button class="ec-save-btn" id="ec-btn-${e.id}" onclick="saveExtra('${e.id}')">Guardar</button>
+      ${(()=>{
+        const sp = e.stock_product_id ? _stockProducts.find(p=>p.id===e.stock_product_id) : null;
+        if(!sp) return '<td style="text-align:center;color:var(--muted);font-size:.8rem">—</td><td style="text-align:center;color:var(--muted);font-size:.8rem">—</td><td></td><td></td>';
+        const isLow = sp.min_stock > 0 && sp.current_stock <= sp.min_stock;
+        const badge = isLow
+          ? `<span style="background:rgba(239,68,68,.15);color:#f87171;border-radius:12px;padding:2px 6px;font-size:.7rem;font-weight:700;white-space:nowrap">⚠️ Bajo</span>`
+          : `<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 6px;font-size:.7rem;white-space:nowrap">✓ OK</span>`;
+        return `
+          <td style="text-align:center;font-weight:700;color:${isLow?'#f87171':'#4ade80'};font-size:.9rem">${sp.current_stock}</td>
+          <td style="text-align:center;color:var(--muted);font-size:.8rem">${sp.min_stock}</td>
+          <td style="text-align:center">${badge}</td>
+          <td style="text-align:center;padding:.3rem .4rem">
+            <div style="display:inline-flex;gap:.2rem;align-items:center">
+              <button onclick="quickAdjust(${sp.id},-1,'${sp.unit}')"
+                style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;width:24px;height:24px;cursor:pointer;font-weight:700;font-size:.9rem">−</button>
+              <input type="number" id="qa-${sp.id}" value="1" min="0.5" step="0.5"
+                style="width:40px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.1rem;font-size:.78rem">
+              <button onclick="quickAdjust(${sp.id},1,'${sp.unit}')"
+                style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.3);border-radius:6px;width:24px;height:24px;cursor:pointer;font-weight:700;font-size:.9rem">+</button>
+            </div>
+          </td>`;
+      })()}
+      <td style="text-align:center;padding:.3rem">
         <button onclick="openBomModal('${escHtml(e.key||e.name.toLowerCase().replace(/\s+/g,'_'))}','${escHtml(e.name)}')"
           title="Ingredientes / stock" style="background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer">🧪</button>
+      </td>
+      <td style="display:flex;gap:.3rem;align-items:center;padding:.5rem .3rem;white-space:nowrap;flex-wrap:wrap;justify-content:flex-end">
+        <button type="button" class="ec-save-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .45rem"
+          onclick="autoTranslateExtra('${e.id}')" title="Generar inglés y portugués">✨ IA</button>
+        <button class="ec-save-btn" id="ec-btn-${e.id}" onclick="saveExtra('${e.id}')">Guardar</button>
         <button class="ec-del-btn" onclick="deleteExtra('${e.id}','${escHtml(e.name)}')" title="Eliminar">🗑</button>
       </td>
     </tr>`;
@@ -9710,7 +9708,7 @@ async function quickAdjust(pid, sign, unit){
   try{
     await api('/api/admin/stock/adjust', {method:'POST', body:JSON.stringify({product_id:pid, delta, reason, notes})});
     showToast(`Stock ajustado: ${sign>0?'+':''}${delta} ${unit}`);
-    await loadStockSection();
+    await loadExtrasCat();
   }catch(e){ showToast('Error: '+e.message); }
 }
 
@@ -9750,7 +9748,7 @@ async function saveStockProduct(){
     const url = id ? `/api/admin/stock/products/${id}` : '/api/admin/stock/products';
     await api(url, {method: id?'PUT':'POST', body:JSON.stringify(body)});
     closeStockProductModal();
-    await loadStockSection();
+    await loadExtrasCat();
     showToast('Producto guardado ✅');
   }catch(e){ showToast('Error: '+e.message); }
 }
@@ -9758,7 +9756,7 @@ async function saveStockProduct(){
 async function deleteStockProduct(id, name){
   if(!confirm(`¿Eliminar "${name}"? Se perderá el historial de movimientos.`)) return;
   await api(`/api/admin/stock/products/${id}`, {method:'DELETE'});
-  await loadStockSection();
+  await loadExtrasCat();
   showToast('Producto eliminado');
 }
 
@@ -9857,7 +9855,7 @@ async function consumeStockForBooking(){
     await api('/api/admin/stock/consume', {method:'POST', body:JSON.stringify({booking_ref:ref, extras:items})});
     showToast(`✅ Stock consumido para ${ref}`);
     // Refresh stock table if visible
-    if(document.getElementById('section-stock')?.style.display !== 'none') await loadStockSection();
+    if(document.getElementById('section-extras-cat')?.style.display !== 'none') await loadExtrasCat();
   }catch(e){ showToast('❌ Error: '+e.message); }
 }
 
@@ -9869,7 +9867,7 @@ async function triggerAutoConsumeStock(){
     const res = await api('/api/admin/stock/auto-consume-past', {method:'POST'});
     const n = (res.consumed||[]).length;
     showToast(n > 0 ? `✅ Stock descontado para ${n} reserva(s)` : '✅ Todo al día — sin reservas pendientes');
-    await loadStockSection();
+    await loadExtrasCat();
   }catch(e){ showToast('❌ Error: '+e.message); }
   finally{ btn.textContent = orig; btn.disabled = false; }
 }
@@ -12901,7 +12899,7 @@ async function deleteBotKeyword(id){
 
 const _SECTION_LABELS = {
   'calendar':'📅 Calendario','lista':'📋 Reservas','clientes':'👥 Clientes',
-  'stats':'📊 Estadísticas','extras-cat':'🏷️ Precios Extras','stock':'📦 Stock',
+  'stats':'📊 Estadísticas','extras-cat':'🏷️ Extras',
   'tablas-admin':'🍽 Tablas','coupons':'🎟️ Cupones','emails':'✉️ Emails reservas',
   'alojamientos-admin':'🏠 Alojamientos','aloj-bookings':'📋 Reservas Aloj.',
   'experiencias':'🏔️ Experiencias','packs-admin':'🎁 Packs','cal-extras':'🗓️ Cal. Extras',
