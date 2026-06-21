@@ -101,8 +101,8 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
                         "has_variants": False,   # filled below
                     })
 
-                # Check both slug formats (extra_name_lower and slugified key)
-                # because extras_bom.extra_slug can be stored in either format.
+                # extras_bom.extra_slug can be stored as either the DB pk (extra_name_lower)
+                # or the slugified display name (key). Check both to be robust.
                 if extras:
                     all_slugs = list({s for e in extras for s in (e["key"], e["id"])})
                     cur.execute("""
