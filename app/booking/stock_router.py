@@ -448,9 +448,33 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
         extras_json = {}
 
     items = []
+    extracted_tabla_ingredients = []
 
-    # Regular booking extras (key → qty)
-    for slug, qty in extras_json.items():
+    for slug, val in extras_json.items():
+        if slug.startswith("tabla__"):
+            # Tabla keys are handled via ingredient list, not BOM.
+            # If tabla_selections DB lookup failed, fall back to elige_* in the dict.
+            if not tabla_selection and isinstance(val, dict):
+                elig1 = val.get("elige_1")
+                elig2 = val.get("elige_2") or []
+                elig3 = val.get("elige_3") or []
+                if isinstance(elig2, str):
+                    try:
+                        elig2 = _json.loads(elig2)
+                    except Exception:
+                        elig2 = []
+                if isinstance(elig3, str):
+                    try:
+                        elig3 = _json.loads(elig3)
+                    except Exception:
+                        elig3 = []
+                if elig1:
+                    extracted_tabla_ingredients.append(elig1)
+                extracted_tabla_ingredients.extend([x for x in elig2 if x])
+                extracted_tabla_ingredients.extend([x for x in elig3 if x])
+            continue  # never add tabla__ to BOM items list
+
+        qty = val
         try:
             qty = int(qty)
         except (TypeError, ValueError):
@@ -458,25 +482,25 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
         if qty > 0:
             items.append({"extra_slug": slug, "quantity": qty, "variant_product_id": None})
 
-    # Tabla ingredients (chosen by client)
-    if tabla_selection:
-        for ingredient_name in tabla_selection:
-            name_lower = ingredient_name.lower()
-            # Check if this ingredient has a stock product linked
-            cur.execute(
-                "SELECT id FROM stock_products WHERE LOWER(name)=%s LIMIT 1",
-                (name_lower,)
-            )
-            row = cur.fetchone()
-            if row:
-                _apply_movement(cur, row[0], -1, "booking", booking_ref,
-                                name_lower, f"Tabla — {ingredient_name}")
-        return len(tabla_selection)
-
-    if not items:
-        return 0
+    # Use DB-provided list first; fall back to what was embedded in extras_json
+    all_tabla_ingredients = tabla_selection or extracted_tabla_ingredients or []
 
     movements = 0
+
+    # Tabla ingredients (chosen by client)
+    for ingredient_name in all_tabla_ingredients:
+        name_lower = ingredient_name.lower()
+        cur.execute(
+            "SELECT id FROM stock_products WHERE LOWER(name)=%s LIMIT 1",
+            (name_lower,)
+        )
+        row = cur.fetchone()
+        if row:
+            _apply_movement(cur, row[0], -1, "booking", booking_ref,
+                            name_lower, f"Tabla — {ingredient_name}")
+            movements += 1
+
+    # BOM-based deduction for regular extras
     for item in items:
         cur.execute(
             "SELECT product_id, quantity, is_variant, variant_label FROM extras_bom WHERE extra_slug=%s",
