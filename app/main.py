@@ -397,13 +397,17 @@ async def _run_yesterday_weekly_scheduler():
 
 
 async def _run_stock_consume_scheduler():
-    """Daily at 06:00 Santiago: deduct stock for reservations whose date has passed."""
+    """
+    Stock scheduler — runs twice daily (Santiago time):
+      09:00  consume past bookings + alert if today's tabla ingredients are short
+      23:30  consume today's completed bookings
+    Also runs once 45 s after startup to catch anything missed.
+    """
     from zoneinfo import ZoneInfo
     from datetime import datetime, timedelta
     CHILE_TZ = ZoneInfo("America/Santiago")
-    SEND_HOUR = 6
 
-    # Run once at startup (with a short delay to let DB settle)
+    # ── startup pass ──────────────────────────────────────────────────────────
     await asyncio.sleep(45)
     try:
         from app.booking.stock_router import auto_consume_past_bookings
@@ -412,18 +416,43 @@ async def _run_stock_consume_scheduler():
     except Exception as _e:
         logger.warning("Stock auto-consume startup skipped: %s", _e)
 
+    # ── scheduled passes ──────────────────────────────────────────────────────
+    # (hour, minute, run_tabla_check)
+    SCHEDULE = [(9, 0, True), (23, 30, False)]
+
     while True:
         now = datetime.now(CHILE_TZ)
-        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
-        if now >= target:
-            target += timedelta(days=1)
-        await asyncio.sleep((target - now).total_seconds())
+
+        # Find the next scheduled slot
+        next_target = None
+        next_check = False
+        for h, m, do_check in SCHEDULE:
+            candidate = now.replace(hour=h, minute=m, second=0, microsecond=0)
+            if now >= candidate:
+                candidate += timedelta(days=1)
+            if next_target is None or candidate < next_target:
+                next_target = candidate
+                next_check  = do_check
+
+        await asyncio.sleep((next_target - datetime.now(CHILE_TZ)).total_seconds())
+
+        # ── consume past bookings ──────────────────────────────────────────
         try:
             from app.booking.stock_router import auto_consume_past_bookings
             result = await asyncio.to_thread(auto_consume_past_bookings)
-            logger.info("📦 Stock auto-consume (daily): %s", result)
+            label = "09:00" if next_check else "23:30"
+            logger.info("📦 Stock auto-consume (%s): %s", label, result)
         except Exception as _e:
             logger.error("Stock auto-consume scheduler error: %s", _e)
+
+        # ── morning ingredient check (09:00 only) ─────────────────────────
+        if next_check:
+            try:
+                from app.booking.stock_router import check_and_alert_tabla_ingredients
+                await asyncio.to_thread(check_and_alert_tabla_ingredients)
+            except Exception as _e:
+                logger.error("Tabla ingredient check error: %s", _e)
+
         await asyncio.sleep(60)
 
 

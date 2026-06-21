@@ -639,10 +639,158 @@ def auto_consume_past_bookings() -> dict:
         return {"error": str(e), "consumed": [], "skipped": []}
 
 
+_CONFIRMED = ('confirmed', 'paid', 'aprobado', 'CONFIRMED')
+
+
+def check_and_alert_tabla_ingredients() -> dict:
+    """
+    Look at today's confirmed tabla bookings and alert if any ingredient
+    is short. Called at 09:00 each morning so there's time to restock.
+    """
+    import json as _json
+    from datetime import date
+
+    today = date.today().isoformat()
+    needed: dict[str, int] = {}   # ingredient_lower → total units needed today
+    booking_count = 0
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT aa.id, aa.source_id, aa.extras_json,
+                       ts.elige_1, ts.elige_2, ts.elige_3
+                FROM all_appointments aa
+                LEFT JOIN tabla_selections ts
+                    ON ts.booking_ref = COALESCE(aa.source_id, 'AA-' || aa.id::text)
+                WHERE aa.fecha = %s
+                  AND aa.status = ANY(%s)
+            """, (today, list(_CONFIRMED)))
+            rows = cur.fetchall()
+
+        for row_id, source_id, extras_json, elig1, elig2, elig3 in rows:
+            ingredients = []
+
+            # Primary: tabla_selections
+            if elig1:
+                ingredients.append(elig1)
+            for field in (elig2, elig3):
+                if field:
+                    try:
+                        parsed = _json.loads(field) if isinstance(field, str) else field
+                        ingredients.extend([x for x in parsed if x])
+                    except Exception:
+                        pass
+
+            # Fallback: elige_* embedded in extras_json["tabla__*"]
+            if not ingredients and isinstance(extras_json, dict):
+                for slug, val in extras_json.items():
+                    if slug.startswith("tabla__") and isinstance(val, dict):
+                        if val.get("elige_1"):
+                            ingredients.append(val["elige_1"])
+                        for fn in ("elige_2", "elige_3"):
+                            fv = val.get(fn) or []
+                            if isinstance(fv, str):
+                                try:
+                                    fv = _json.loads(fv)
+                                except Exception:
+                                    fv = []
+                            ingredients.extend([x for x in fv if x])
+
+            if ingredients:
+                booking_count += 1
+                for name in ingredients:
+                    key = name.lower()
+                    needed[key] = needed.get(key, 0) + 1
+
+    if not needed:
+        logger.info("Tabla ingredient check: no tablas today")
+        return {"bookings_with_tabla": 0, "shortfalls": []}
+
+    shortfalls = []
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for name_lower, qty_needed in needed.items():
+                cur.execute(
+                    "SELECT name, current_stock, unit FROM stock_products WHERE LOWER(name)=%s LIMIT 1",
+                    (name_lower,)
+                )
+                sp = cur.fetchone()
+                current = sp[1] if sp else 0
+                if current is None:
+                    current = 0
+                if current < qty_needed:
+                    shortfalls.append({
+                        "ingredient": sp[0] if sp else name_lower,
+                        "needed":     qty_needed,
+                        "current":    current,
+                        "unit":       sp[2] if sp else "",
+                        "falta":      qty_needed - current,
+                    })
+
+    if shortfalls:
+        _send_tabla_shortfall_alert(shortfalls, booking_count, today)
+    else:
+        logger.info("Tabla ingredient check: all OK for %d bookings", booking_count)
+
+    return {"bookings_with_tabla": booking_count, "shortfalls": shortfalls}
+
+
+def _send_tabla_shortfall_alert(shortfalls: list, booking_count: int, today: str):
+    try:
+        import resend, os
+        resend.api_key = os.getenv("RESEND_API_KEY", "")
+        rows_html = "".join(f"""
+            <tr>
+              <td style="padding:8px 10px;border-bottom:1px solid #1e2d45;color:#f1f5f9">{s['ingredient']}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #1e2d45;color:#fbbf24;text-align:center">{s['current']} {s['unit']}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #1e2d45;color:#94a3b8;text-align:center">{s['needed']} {s['unit']}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #1e2d45;color:#f87171;text-align:center;font-weight:700">-{s['falta']} {s['unit']}</td>
+            </tr>""" for s in shortfalls)
+        html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;background:#0b1120;margin:0;padding:24px">
+<div style="background:#131c2e;border-radius:14px;max-width:560px;margin:auto;overflow:hidden">
+  <div style="height:4px;background:linear-gradient(90deg,#f59e0b,#ef4444)"></div>
+  <div style="padding:22px 26px">
+    <h2 style="color:#fbbf24;margin:0 0 4px">🥗 Ingredientes insuficientes para tablas de hoy</h2>
+    <p style="color:#94a3b8;margin:0 0 18px;font-size:14px">
+      {today} · {booking_count} reserva(s) con tabla · {len(shortfalls)} ingrediente(s) con stock insuficiente
+    </p>
+    <table width="100%" cellspacing="0" style="border-collapse:collapse">
+      <tr style="background:#1e2d45">
+        <th style="padding:8px 10px;text-align:left;color:#64748b;font-size:11px;text-transform:uppercase">Ingrediente</th>
+        <th style="padding:8px 10px;color:#64748b;font-size:11px;text-transform:uppercase">Stock</th>
+        <th style="padding:8px 10px;color:#64748b;font-size:11px;text-transform:uppercase">Necesario</th>
+        <th style="padding:8px 10px;color:#64748b;font-size:11px;text-transform:uppercase">Falta</th>
+      </tr>
+      {rows_html}
+    </table>
+  </div>
+  <div style="padding:12px 26px 18px;color:#475569;font-size:12px;border-top:1px solid #1e2d45">
+    HotBoat Chile · alerta automática de stock
+  </div>
+</div></body></html>"""
+        resend.Emails.send({
+            "from": os.getenv("RESEND_FROM_CONFIRMATIONS", os.getenv("EMAIL_FROM", "reservas@reservas.hotboat.cl")),
+            "to":   [ADMIN_NOTIFICATION_EMAIL],
+            "subject": f"🥗 Faltan ingredientes para tablas de hoy ({today})",
+            "html": html,
+        })
+        logger.info("Tabla shortfall alert sent: %d shortfalls for %s", len(shortfalls), today)
+    except Exception as e:
+        logger.error("Tabla shortfall alert failed: %s", e)
+
+
 @stock_router.post("/api/admin/stock/auto-consume-past")
 def trigger_auto_consume(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     return auto_consume_past_bookings()
+
+
+@stock_router.post("/api/admin/stock/check-tabla-ingredients")
+def trigger_tabla_check(x_admin_key: str = Header("")):
+    """Manual trigger for the morning tabla ingredient check."""
+    _check_auth(x_admin_key)
+    return check_and_alert_tabla_ingredients()
 
 
 @stock_router.get("/api/admin/stock/debug-booking/{booking_ref}")
