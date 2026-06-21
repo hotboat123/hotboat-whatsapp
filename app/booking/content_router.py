@@ -60,19 +60,20 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT extra_name_lower,
-                           COALESCE(name, extra_name_lower) AS name_es,
-                           COALESCE(precio_venta, 0)        AS price,
-                           COALESCE(icon, '')               AS icon,
-                           COALESCE(description, '')        AS description_es,
-                           COALESCE(NULLIF(TRIM(name_en), ''), '') AS name_en,
-                           COALESCE(NULLIF(TRIM(name_pt), ''), '') AS name_pt,
-                           COALESCE(NULLIF(TRIM(description_en), ''), '') AS description_en,
-                           COALESCE(NULLIF(TRIM(description_pt), ''), '') AS description_pt,
-                           COALESCE(sort_order, 999)        AS sort_order
-                    FROM extras_visibility
-                    WHERE show_in_booking = TRUE AND COALESCE(user_hidden, FALSE) = FALSE
-                    ORDER BY sort_order, extra_name_lower
+                    SELECT ev.extra_name_lower,
+                           COALESCE(ev.name, ev.extra_name_lower) AS name_es,
+                           COALESCE(ev.precio_venta, 0)           AS price,
+                           COALESCE(ev.icon, '')                  AS icon,
+                           COALESCE(ev.description, '')           AS description_es,
+                           COALESCE(NULLIF(TRIM(ev.name_en), ''), '') AS name_en,
+                           COALESCE(NULLIF(TRIM(ev.name_pt), ''), '') AS name_pt,
+                           COALESCE(NULLIF(TRIM(ev.description_en), ''), '') AS description_en,
+                           COALESCE(NULLIF(TRIM(ev.description_pt), ''), '') AS description_pt,
+                           COALESCE(ev.sort_order, 999)           AS sort_order
+                    FROM extras_visibility ev
+                    WHERE ev.show_in_booking = TRUE
+                      AND COALESCE(ev.user_hidden, FALSE) = FALSE
+                    ORDER BY ev.sort_order, ev.extra_name_lower
                 """)
                 extras = []
                 for row in cur.fetchall():
@@ -97,11 +98,61 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
                         "icon": resolved_icon,
                         "description": description,
                         "sort_order": int(sort_order),
+                        "has_variants": False,   # filled below
                     })
+
+                # Check both slug formats (extra_name_lower and slugified key)
+                # because extras_bom.extra_slug can be stored in either format.
+                if extras:
+                    all_slugs = list({s for e in extras for s in (e["key"], e["id"])})
+                    cur.execute("""
+                        SELECT DISTINCT b.extra_slug
+                        FROM extras_bom b
+                        JOIN stock_products sp ON sp.id = b.product_id
+                        WHERE b.extra_slug = ANY(%s)
+                          AND b.is_variant = TRUE
+                          AND sp.current_stock > 0
+                    """, (all_slugs,))
+                    variant_slugs = {r[0] for r in cur.fetchall()}
+                    for e in extras:
+                        e["has_variants"] = bool(
+                            e["key"] in variant_slugs or e["id"] in variant_slugs
+                        )
+
         # already sorted by DB ORDER BY
         return {"extras": extras}
     except Exception as e:
         logger.error(f"Error fetching public extras: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@content_router.get("/api/content/extras/{slug}/variants")
+def list_extra_variants(slug: str):
+    """Public: variant ingredient options for an extra, only those with current_stock > 0.
+    Accepts both the slugified key and the raw extra_name_lower as slug formats."""
+    try:
+        from app.booking.admin_router import _slugify_extra
+        alt_slug = _slugify_extra(slug)
+        slugs = list({slug, alt_slug})
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT DISTINCT ON (sp.id)
+                           b.product_id, b.variant_label, sp.current_stock, sp.name
+                    FROM extras_bom b
+                    JOIN stock_products sp ON sp.id = b.product_id
+                    WHERE b.extra_slug = ANY(%s)
+                      AND b.is_variant = TRUE
+                      AND sp.current_stock > 0
+                    ORDER BY sp.id, b.id
+                """, (slugs,))
+                variants = [
+                    {"product_id": r[0], "label": r[1] or r[3], "stock": float(r[2])}
+                    for r in cur.fetchall()
+                ]
+        return {"variants": variants}
+    except Exception as e:
+        logger.error(f"Error fetching variants for {slug}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
