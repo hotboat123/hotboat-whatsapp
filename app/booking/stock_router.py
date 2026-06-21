@@ -644,3 +644,137 @@ def auto_consume_past_bookings() -> dict:
 def trigger_auto_consume(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     return auto_consume_past_bookings()
+
+
+@stock_router.get("/api/admin/stock/debug-booking/{booking_ref}")
+def debug_booking_stock(booking_ref: str, x_admin_key: str = Header("")):
+    """Dry-run: show what stock movements would be applied for one booking."""
+    _check_auth(x_admin_key)
+    import json as _json
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Fetch booking from all_appointments
+            cur.execute("""
+                SELECT id, source_id, nombre_cliente, fecha, status, extras_json,
+                       stock_consumed_at
+                FROM all_appointments
+                WHERE (source_id = %s OR id::text = %s)
+                ORDER BY id LIMIT 1
+            """, (booking_ref, booking_ref.replace("AA-", "").lstrip("0") or "0"))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(404, f"Booking {booking_ref!r} not found")
+
+            row_id, source_id, cliente, fecha, status, extras_json, consumed_at = row
+            ref = source_id or f"AA-{row_id}"
+
+            ej = extras_json
+            if isinstance(ej, str):
+                try:
+                    ej = _json.loads(ej)
+                except Exception:
+                    ej = {}
+            if not isinstance(ej, dict):
+                ej = {}
+
+            # Check tabla_selections
+            cur.execute(
+                "SELECT elige_1, elige_2, elige_3 FROM tabla_selections WHERE booking_ref=%s",
+                (ref,)
+            )
+            tabla_row = cur.fetchone()
+            tabla_ingredients_db = []
+            if tabla_row:
+                elig1, elig2, elig3 = tabla_row
+                if elig1:
+                    tabla_ingredients_db.append(elig1)
+                for field in (elig2, elig3):
+                    if field:
+                        try:
+                            tabla_ingredients_db.extend(
+                                _json.loads(field) if isinstance(field, str) else field
+                            )
+                        except Exception:
+                            pass
+
+            # Extract from extras_json as fallback
+            tabla_ingredients_json = []
+            tabla_keys = []
+            for slug, val in ej.items():
+                if slug.startswith("tabla__") and isinstance(val, dict):
+                    tabla_keys.append(slug)
+                    for field_name in ("elige_1", "elige_2", "elige_3"):
+                        fv = val.get(field_name) or []
+                        if isinstance(fv, str) and field_name != "elige_1":
+                            try:
+                                fv = _json.loads(fv)
+                            except Exception:
+                                fv = []
+                        if isinstance(fv, str):
+                            fv = [fv]
+                        tabla_ingredients_json.extend([x for x in fv if x])
+
+            all_ingredients = tabla_ingredients_db or tabla_ingredients_json
+
+            # Check which ingredients have stock products
+            ingredient_results = []
+            for name in all_ingredients:
+                cur.execute(
+                    "SELECT id, name, current_stock FROM stock_products WHERE LOWER(name)=%s LIMIT 1",
+                    (name.lower(),)
+                )
+                sp = cur.fetchone()
+                ingredient_results.append({
+                    "ingredient": name,
+                    "stock_product_found": sp is not None,
+                    "stock_product_id": sp[0] if sp else None,
+                    "stock_product_name": sp[1] if sp else None,
+                    "current_stock": sp[2] if sp else None,
+                    "would_deduct": sp is not None,
+                })
+
+            # Check regular extras BOM
+            bom_results = []
+            for slug, val in ej.items():
+                if slug.startswith("tabla__"):
+                    continue
+                cur.execute(
+                    "SELECT product_id, quantity FROM extras_bom WHERE extra_slug=%s",
+                    (slug,)
+                )
+                bom = cur.fetchall()
+                bom_results.append({
+                    "extra_slug": slug,
+                    "bom_found": len(bom) > 0,
+                    "bom_products": [{"product_id": r[0], "qty": r[1]} for r in bom],
+                })
+
+            already_consumed_count = 0
+            cur.execute(
+                "SELECT COUNT(*) FROM stock_movements WHERE booking_ref=%s AND reason='booking'",
+                (ref,)
+            )
+            already_consumed_count = cur.fetchone()[0]
+
+    return {
+        "booking_ref": ref,
+        "cliente": cliente,
+        "fecha": str(fecha),
+        "status": status,
+        "already_consumed": already_consumed_count > 0,
+        "consumed_at": str(consumed_at) if consumed_at else None,
+        "tabla_keys_in_extras_json": tabla_keys,
+        "tabla_ingredients_from_db": tabla_ingredients_db,
+        "tabla_ingredients_from_json": tabla_ingredients_json,
+        "ingredients_used": all_ingredients,
+        "ingredient_stock_check": ingredient_results,
+        "regular_extras_bom": bom_results,
+        "verdict": (
+            "OK — se descontaría el stock de los ingredientes encontrados"
+            if any(r["would_deduct"] for r in ingredient_results)
+            else ("SIN TABLA en extras_json ni en tabla_selections"
+                  if not all_ingredients
+                  else "PROBLEMA — ingredientes encontrados pero ninguno tiene stock_product coincidente")
+        ),
+    }
