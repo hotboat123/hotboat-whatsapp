@@ -200,10 +200,11 @@ def update_product(pid: int, body: ProductBody, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Read old stock to compute delta for the movement log
+            # Read old stock and name to detect changes
             cur.execute("SELECT current_stock, name FROM stock_products WHERE id=%s", (pid,))
             row = cur.fetchone()
             old_stock = float(row[0]) if row else 0.0
+            old_name = row[1] if row else None
             # Update all fields including current_stock
             cur.execute(
                 """UPDATE stock_products
@@ -213,6 +214,12 @@ def update_product(pid: int, body: ProductBody, x_admin_key: str = Header("")):
                 (body.name, body.category, body.unit, body.current_stock,
                  body.min_stock, body.cost_per_unit, body.notes, body.is_active, pid)
             )
+            # Cascade name rename to movement history snapshots
+            if old_name and old_name != body.name:
+                cur.execute(
+                    "UPDATE stock_movements SET product_name = %s WHERE product_id = %s",
+                    (body.name, pid)
+                )
             # Log only if stock actually changed
             delta = round(body.current_stock - old_stock, 4)
             if delta != 0:

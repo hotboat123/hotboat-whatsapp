@@ -1903,9 +1903,11 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Hard delete — soft-delete caused PK conflicts on rename/upsert
+                # Soft-delete so seeded items (tabla ingredients) don't come back on restart.
+                # ON CONFLICT DO NOTHING in the seed skips rows that already exist — including
+                # hidden ones — so user_hidden=TRUE acts as a permanent "don't re-seed" flag.
                 cur.execute(
-                    "DELETE FROM extras_visibility WHERE extra_name_lower = %s",
+                    "UPDATE extras_visibility SET user_hidden = TRUE, updated_at = NOW() WHERE extra_name_lower = %s",
                     (extra_id,),
                 )
                 conn.commit()
