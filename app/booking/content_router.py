@@ -71,8 +71,10 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
                            COALESCE(NULLIF(TRIM(ev.description_pt), ''), '') AS description_pt,
                            COALESCE(ev.sort_order, 999)           AS sort_order
                     FROM extras_visibility ev
+                    LEFT JOIN stock_products sp ON sp.id = ev.stock_product_id
                     WHERE ev.show_in_booking = TRUE
                       AND COALESCE(ev.user_hidden, FALSE) = FALSE
+                      AND (ev.stock_product_id IS NULL OR sp.current_stock > 0)
                     ORDER BY ev.sort_order, ev.extra_name_lower
                 """)
                 extras = []
@@ -101,23 +103,47 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
                         "has_variants": False,   # filled below
                     })
 
-                # extras_bom.extra_slug can be stored as either the DB pk (extra_name_lower)
-                # or the slugified display name (key). Check both to be robust.
+                # Stock-aware filtering via the BOM (bill of materials).
+                # An extra's stock can be tracked through extras_bom in two ways:
+                #   - non-variant rows: every component is consumed (all must be in stock)
+                #   - variant rows: the customer picks ONE (at least one must be in stock)
+                # extras_bom.extra_slug may be stored as either the DB pk
+                # (extra_name_lower) or the slugified display name (key), so we
+                # gather both formats per extra.
                 if extras:
                     all_slugs = list({s for e in extras for s in (e["key"], e["id"])})
                     cur.execute("""
-                        SELECT DISTINCT b.extra_slug
+                        SELECT b.extra_slug, b.is_variant,
+                               COALESCE(sp.current_stock, 0) AS stock
                         FROM extras_bom b
-                        JOIN stock_products sp ON sp.id = b.product_id
+                        LEFT JOIN stock_products sp ON sp.id = b.product_id
                         WHERE b.extra_slug = ANY(%s)
-                          AND b.is_variant = TRUE
-                          AND sp.current_stock > 0
                     """, (all_slugs,))
-                    variant_slugs = {r[0] for r in cur.fetchall()}
+                    bom_by_slug = {}
+                    for slug, is_var, stock in cur.fetchall():
+                        bom_by_slug.setdefault(slug, []).append((bool(is_var), float(stock)))
+
+                    visible = []
                     for e in extras:
-                        e["has_variants"] = bool(
-                            e["key"] in variant_slugs or e["id"] in variant_slugs
-                        )
+                        rows = []
+                        for s in {e["key"], e["id"]}:
+                            rows.extend(bom_by_slug.get(s, []))
+                        variant_rows = [r for r in rows if r[0]]
+                        nonvariant_rows = [r for r in rows if not r[0]]
+                        in_stock_variants = [r for r in variant_rows if r[1] > 0]
+                        e["has_variants"] = bool(in_stock_variants)
+
+                        out_of_stock = False
+                        # Any required (non-variant) component depleted → can't make it
+                        if nonvariant_rows and any(r[1] <= 0 for r in nonvariant_rows):
+                            out_of_stock = True
+                        # Only stock source is variants and every one is depleted
+                        elif variant_rows and not nonvariant_rows and not in_stock_variants:
+                            out_of_stock = True
+
+                        if not out_of_stock:
+                            visible.append(e)
+                    extras = visible
 
         # already sorted by DB ORDER BY
         return {"extras": extras}

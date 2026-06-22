@@ -147,12 +147,48 @@ def _seed_catalog_defaults() -> None:
         conn.commit()
 
 
-def _get_catalog_from_db() -> dict:
-    """Return catalog in same format as TABLA_CATALOG, reading from DB.
-    Falls back to hardcoded TABLA_CATALOG if DB not ready or empty."""
+def _out_of_stock_ingredients() -> set:
+    """Return a set of lowercased ingredient names whose linked stock product
+    is depleted (current_stock <= 0). Matching mirrors the deduction logic,
+    which looks up stock_products by LOWER(name)."""
     from app.db.connection import get_connection
 
-    result = {k: {**v, "tier1": [], "tier2": [], "tier3": []} for k, v in TABLA_CATALOG.items()}
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT LOWER(name) FROM stock_products WHERE current_stock <= 0")
+                return {r[0] for r in cur.fetchall()}
+    except Exception as e:
+        logger.warning("_out_of_stock_ingredients skipped: %s", e)
+        return set()
+
+
+def _filter_catalog_by_stock(catalog: dict) -> dict:
+    """Remove ingredients whose linked stock product is out of stock so clients
+    can't pick items we can't serve. Ingredients with no matching stock product
+    (no tracking) are always kept. Builds fresh lists to avoid mutating
+    TABLA_CATALOG defaults."""
+    out = _out_of_stock_ingredients()
+    if not out:
+        return catalog
+    result = {}
+    for t_type, cat in catalog.items():
+        new_cat = {**cat}
+        for key in ("tier1", "tier2", "tier3"):
+            if key in new_cat:
+                new_cat[key] = [ing for ing in new_cat[key] if ing.lower() not in out]
+        result[t_type] = new_cat
+    return result
+
+
+def _get_catalog_from_db(filter_stock: bool = True) -> dict:
+    """Return catalog in same format as TABLA_CATALOG, reading from DB.
+    Falls back to hardcoded TABLA_CATALOG if DB not ready or empty.
+    When filter_stock=True (default), ingredients whose linked stock product is
+    at 0 are removed so out-of-stock items don't appear in the tabla picker."""
+    from app.db.connection import get_connection
+
+    catalog = None
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -160,16 +196,21 @@ def _get_catalog_from_db() -> dict:
                     "SELECT tabla_type, tier, ingredient FROM tabla_catalog_items ORDER BY tabla_type, tier, sort_order, ingredient"
                 )
                 rows = cur.fetchall()
-        if not rows:
-            # DB table is empty — return hardcoded defaults so the picker always works
-            return {k: {**v} for k, v in TABLA_CATALOG.items()}
-        for t_type, tier_num, ing in rows:
-            if t_type in result:
-                result[t_type][f"tier{tier_num}"].append(ing)
+        if rows:
+            catalog = {k: {**v, "tier1": [], "tier2": [], "tier3": []} for k, v in TABLA_CATALOG.items()}
+            for t_type, tier_num, ing in rows:
+                if t_type in catalog:
+                    catalog[t_type][f"tier{tier_num}"].append(ing)
     except Exception as e:
         logger.warning("_get_catalog_from_db fallback to hardcoded: %s", e)
-        return {k: {**v} for k, v in TABLA_CATALOG.items()}
-    return result
+
+    if catalog is None:
+        # DB table empty or unavailable — use hardcoded defaults so the picker always works
+        catalog = {k: {**v} for k, v in TABLA_CATALOG.items()}
+
+    if filter_stock:
+        catalog = _filter_catalog_by_stock(catalog)
+    return catalog
 
 
 def _seed_tabla_products() -> None:
@@ -366,7 +407,9 @@ async def submit_tabla(booking_ref: str, payload: TablaPayload):
     if not booking:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
-    live_catalog = _get_catalog_from_db()
+    # Validate against the full catalog (not stock-filtered) so a valid
+    # ingredient name isn't rejected just because it momentarily ran out.
+    live_catalog = _get_catalog_from_db(filter_stock=False)
     if payload.tabla_type not in live_catalog:
         raise HTTPException(status_code=400, detail="Tipo de tabla inválido")
 
