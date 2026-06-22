@@ -1789,12 +1789,15 @@ def _build_daily_summary_html(today_str: str, bookings: List[dict], settings) ->
 
     # Header
     html = f"""<!DOCTYPE html>
-<html><body style="margin:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;">
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Resumen del día — {business}</title></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-  style="background:#0f172a;padding:28px 16px;">
+  style="background:#0f172a;padding:28px 12px;">
 <tr><td align="center">
-<table role="presentation" width="600" cellspacing="0" cellpadding="0"
-  style="max-width:600px;background:#1e293b;border-radius:16px;overflow:hidden;
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+  style="max-width:600px;width:100%;background:#1e293b;border-radius:16px;overflow:hidden;
          box-shadow:0 8px 40px rgba(0,0,0,.5);">
 
 <!-- HEADER -->
@@ -2260,6 +2263,7 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
         body_content = '<p style="color:#94a3b8;text-align:center;padding:32px 0;font-size:15px;">😴 Sin reservas el día anterior</p>'
 
     html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Resumen {yesterday_str}</title></head>
 <body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
 <table width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
@@ -2365,6 +2369,7 @@ def send_weekly_summary_email() -> Dict[str, Any]:
         body_content = '<p style="color:#94a3b8;text-align:center;padding:32px 0;font-size:15px;">📭 Sin reservas esta semana</p>'
 
     html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Semana {week_start_str}–{week_end_str}</title></head>
 <body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
 <table width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
