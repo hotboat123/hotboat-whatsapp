@@ -574,6 +574,7 @@ async function selectConversation(phoneNumber) {
         updatePriorityUI(currentConversation.priority);
 
         loadLeadInfo(phoneNumber);
+        loadBookingContext(phoneNumber);
 
         renderCurrentChat({ scrollToBottom: true });
         renderConversations();
@@ -1012,6 +1013,102 @@ function renderLeadInfo(lead) {
             </div>
         ` : ''}
     `;
+}
+
+// Booking context panel — quick-create reservation from chat data
+async function loadBookingContext(phoneNumber) {
+    try {
+        const r = await fetch(`${API_BASE}/conversations/${phoneNumber}/booking-context`);
+        if (!r.ok) return;
+        const ctx = await r.json();
+        renderBookingContext(ctx);
+    } catch (e) {
+        console.error('Error loading booking context:', e);
+    }
+}
+
+function renderBookingContext(ctx) {
+    const existing = document.getElementById('bookingContextCard');
+    if (existing) existing.remove();
+
+    const container = document.getElementById('leadInfo');
+    if (!container) return;
+
+    const hasAny = ctx.name || ctx.email || ctx.date_display || ctx.time || ctx.quantity;
+
+    const card = document.createElement('div');
+    card.id = 'bookingContextCard';
+    card.style.cssText = 'margin-top:1rem;background:var(--surface-2,#1e2535);border:1px solid var(--border,#2a3347);border-radius:10px;padding:.85rem .9rem;';
+
+    const row = (icon, label, val) => val
+        ? `<div style="display:flex;align-items:center;gap:.5rem;margin:.25rem 0;font-size:.8rem;">
+             <span style="color:var(--muted,#8899aa);width:14px;text-align:center">${icon}</span>
+             <span style="color:var(--muted,#8899aa);width:52px;flex-shrink:0">${label}</span>
+             <span style="color:var(--text,#e0e6f0);font-weight:500;word-break:break-all">${escapeHtml(String(val))}</span>
+           </div>`
+        : '';
+
+    card.innerHTML = `
+        <div style="font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted,#8899aa);margin-bottom:.6rem;">
+            📋 Datos de reserva
+        </div>
+        ${row('👤','Nombre', ctx.name)}
+        ${row('📱','Teléfono', ctx.phone)}
+        ${row('📧','Email', ctx.email)}
+        ${row('📅','Fecha', ctx.date_display)}
+        ${row('⏰','Hora', ctx.time)}
+        ${row('👥','Personas', ctx.quantity)}
+        ${!hasAny ? '<div style="font-size:.78rem;color:var(--muted,#8899aa)">Sin datos aún</div>' : ''}
+        <div style="display:flex;gap:.5rem;margin-top:.75rem;">
+            <button onclick="copyBookingData()" title="Copiar datos al portapapeles"
+                style="flex:1;padding:.45rem .5rem;font-size:.78rem;background:var(--surface,#151c2c);border:1px solid var(--border,#2a3347);color:var(--text,#e0e6f0);border-radius:7px;cursor:pointer;">
+                📋 Copiar
+            </button>
+            <button onclick="openBookingFromContext()" title="Crear reserva con estos datos"
+                style="flex:1;padding:.45rem .5rem;font-size:.78rem;background:#2563eb;border:none;color:#fff;border-radius:7px;cursor:pointer;font-weight:600;">
+                📅 Crear reserva
+            </button>
+        </div>`;
+
+    container.insertBefore(card, container.firstChild);
+    window._lastBookingCtx = ctx;
+}
+
+function copyBookingData() {
+    const ctx = window._lastBookingCtx;
+    if (!ctx) return;
+    const lines = [
+        ctx.name      ? `Nombre: ${ctx.name}` : null,
+        ctx.phone     ? `Teléfono: ${ctx.phone}` : null,
+        ctx.email     ? `Email: ${ctx.email}` : null,
+        ctx.date_display ? `Fecha: ${ctx.date_display}` : null,
+        ctx.time      ? `Hora: ${ctx.time}` : null,
+        ctx.quantity  ? `Personas: ${ctx.quantity}` : null,
+    ].filter(Boolean);
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        showToast('Datos copiados al portapapeles ✓', 'success');
+    }).catch(() => {
+        showToast('Error al copiar', 'error');
+    });
+}
+
+function openBookingFromContext() {
+    const ctx = window._lastBookingCtx;
+    if (!ctx) return;
+    const msg = {
+        type: 'hotboat-open-booking',
+        prefill: {
+            nombre:   ctx.name || '',
+            telefono: ctx.phone || '',
+            email:    ctx.email || '',
+            fecha:    ctx.date_iso || '',
+            hora:     ctx.time || '',
+            personas: ctx.quantity || '',
+        }
+    };
+    // If running inside the admin iframe, send to parent; otherwise broadcast
+    try { window.parent.postMessage(msg, '*'); } catch(e) {}
+    try { window.postMessage(msg, '*'); } catch(e) {}
 }
 
 // Toggle Bot for Lead (from input area)

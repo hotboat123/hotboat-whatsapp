@@ -1869,6 +1869,41 @@ async def search_messages(q: str = Query(..., min_length=2)):
         }
 
 
+@app.get("/api/conversations/{phone_number}/booking-context")
+async def get_booking_context(phone_number: str):
+    """Return name/phone/email + pending reservation date-time for the chat admin panel."""
+    import re as _re
+    lead = await get_or_create_lead(phone_number)
+
+    # Pull pending_reservation from in-memory conversation state if available
+    pending: dict = {}
+    if phone_number in conversation_manager.conversations:
+        meta = conversation_manager.conversations[phone_number].get("metadata", {})
+        pending = meta.get("pending_reservation") or {}
+
+    # Scan recent messages for an email address
+    email = ""
+    email_rx = _re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+    history = await get_conversation_history(phone_number, limit=60)
+    for msg in reversed(history):
+        text = msg.get("content", "") or ""
+        if isinstance(text, str):
+            m = email_rx.search(text)
+            if m:
+                email = m.group(0)
+                break
+
+    return {
+        "name": lead.get("customer_name", ""),
+        "phone": phone_number,
+        "email": email,
+        "date_display": pending.get("date"),
+        "date_iso": (pending.get("date_obj_iso") or "")[:10] or None,
+        "time": pending.get("time"),
+        "quantity": pending.get("quantity"),
+    }
+
+
 @app.get("/api/conversations/{phone_number}")
 async def get_conversation_detail(
     phone_number: str,
