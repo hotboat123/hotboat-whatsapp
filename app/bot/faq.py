@@ -140,22 +140,9 @@ https://maps.app.goo.gl/jVYVHRzekkmFRjEH7
             "donde estan": "ubicación",  # Alias
             "donde están": "ubicación",  # Alias
             
-            # Duration
-            "duración": """⏱️ *Duración del tour:*
+            # Duration questions → answered by características (incluye "⏱️ Duración: 2 horas")
+            "cuanto tiempo": "caracteristicas",  # Alias
 
-El tour Hot Boat tiene una duración aproximada de:
-• 1.5 a 2 horas en el lago
-
-Incluye:
-• Briefing de seguridad
-• Recorrido por puntos destacados
-• Tiempo para fotos
-• Experiencia completa
-
-¿Alguna otra duda?""",
-            
-            "cuanto tiempo": "duración",  # Alias
-            
             # What to bring
             "traer": """🎒 *¿Qué traer?*
 
@@ -478,7 +465,6 @@ Quer adicionar algo especial ao seu HotBoat?
             "ubicación": "location",
             "extras": "extras_menu",
             "llamar a tomas": "call_captain",
-            "duración": "duration",
             "traer": "what_to_bring",
             "clima": "weather",
             "contacto": "contact_info",

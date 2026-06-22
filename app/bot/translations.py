@@ -686,49 +686,7 @@ Enquanto isso, se você tiver alguma dúvida urgente, pode me escrever e tentare
             
 Obrigado pela sua paciência!"""
     },
-    
-    # Duration
-    "duration": {
-        "es": """⏱️ *Duración del tour:*
 
-El tour Hot Boat tiene una duración aproximada de:
-• 1.5 a 2 horas en el lago
-
-Incluye:
-• Briefing de seguridad
-• Recorrido por puntos destacados
-• Tiempo para fotos
-• Experiencia completa
-
-¿Alguna otra duda?""",
-        
-        "en": """⏱️ *Tour duration:*
-
-The Hot Boat tour lasts approximately:
-• 1.5 to 2 hours on the lake
-
-Includes:
-• Safety briefing
-• Tour of highlights
-• Time for photos
-• Complete experience
-
-Any other questions?""",
-        
-        "pt": """⏱️ *Duração do passeio:*
-
-O passeio Hot Boat tem duração aproximada de:
-• 1,5 a 2 horas no lago
-
-Inclui:
-• Briefing de segurança
-• Passeio pelos pontos destacados
-• Tempo para fotos
-• Experiência completa
-
-Alguma outra dúvida?"""
-    },
-    
     # What to bring
     "what_to_bring": {
         "es": """🎒 *¿Qué traer?*
