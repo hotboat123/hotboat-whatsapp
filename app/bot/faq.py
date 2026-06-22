@@ -76,9 +76,6 @@ class FAQHandler:
             "incluye": "caracteristicas",  # Alias
             "info": "caracteristicas",  # Alias
             "información": "caracteristicas",  # Alias
-            "dura": "caracteristicas",  # Alias
-            "duración": "caracteristicas",  # Alias
-            "tiempo": "caracteristicas",  # Alias
 
 
             
