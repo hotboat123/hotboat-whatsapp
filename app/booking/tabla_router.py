@@ -34,7 +34,7 @@ TABLA_CATALOG = {
         "label": "Arma tu Tabla",
         "emoji": "🎨",
         "tier1": ["Aceitunas sevillanas 200gr", "Hummus Buka 220g", "Papas Lay's 150g",
-                  "Chocolate sahnenuss 90gr", "Jamón serrano 60gr"],
+                  "Chocolate sahnenuss 90gr"],
         "tier2": ["Salame premium", "Castañas de Cajú", "Cranberries 150gr", "Pepinillos 200gr",
                   "Queso crema + mermelada pimentón", "Queso crema + soya y sésamo", "Grisines 120gr"],
         "tier3": ["Chocolate vegano 140gr", "Maní 150gr", "Alfajor entrelagos",
@@ -62,7 +62,6 @@ _TABLA_INGREDIENTS = [
     ("Galletas Chip Choco 150gr",           2599, "🍪"),
     ("Chocolate sahnenuss 90gr",            2495, "🍫"),
     ("Jamón serrano",                       2100, "🥩"),
-    ("Jamón serrano 60gr",                  2100, "🥩"),
     ("Salame premium",                      2100, "🍖"),
     ("Castañas de Cajú",                     2100, "🥜"),
     ("Queso crema + mermelada pimentón",    2000, "🧀"),
@@ -118,6 +117,17 @@ def _ensure_catalog_table() -> None:
                   UNIQUE (tabla_type, tier, ingredient)
                 );
                 CREATE INDEX IF NOT EXISTS idx_tci_type ON tabla_catalog_items(tabla_type, tier);
+
+                -- Tombstones: ingredients deliberately removed by the admin.
+                -- _seed_catalog_defaults() consults this so deleted ingredients
+                -- are not re-inserted from the hardcoded TABLA_CATALOG on restart.
+                CREATE TABLE IF NOT EXISTS tabla_catalog_deletions (
+                  tabla_type  VARCHAR(50) NOT NULL,
+                  tier        INTEGER NOT NULL,
+                  ingredient_lower TEXT NOT NULL,
+                  deleted_at  TIMESTAMPTZ DEFAULT NOW(),
+                  PRIMARY KEY (tabla_type, tier, ingredient_lower)
+                );
             """)
             conn.commit()
 
@@ -164,8 +174,16 @@ def _seed_catalog_defaults() -> None:
                     (new_name, old_lower, new_name),
                 )
 
-            # Seed canonical names
+            # Load admin deletions so we don't re-seed removed ingredients
+            cur.execute(
+                "SELECT tabla_type, tier, ingredient_lower FROM tabla_catalog_deletions"
+            )
+            deleted = {(r[0], r[1], r[2]) for r in cur.fetchall()}
+
+            # Seed canonical names, skipping anything the admin deleted
             for t_type, tier_num, ing, sort_order in rows:
+                if (t_type, tier_num, ing.lower()) in deleted:
+                    continue
                 cur.execute(
                     """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order)
                        VALUES (%s, %s, %s, %s)
@@ -601,6 +619,12 @@ async def admin_add_catalog_item(request: Request):
 
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Re-adding clears any prior tombstone for this exact ingredient
+            cur.execute(
+                "DELETE FROM tabla_catalog_deletions"
+                " WHERE tabla_type=%s AND tier=%s AND ingredient_lower=%s",
+                (tabla_type, tier, ingredient.lower()),
+            )
             cur.execute(
                 """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order)
                    VALUES (%s, %s, %s,
@@ -621,6 +645,19 @@ async def admin_delete_catalog_item(item_id: int):
 
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Record a tombstone so the seed won't re-add this ingredient on restart
+            cur.execute(
+                "SELECT tabla_type, tier, ingredient FROM tabla_catalog_items WHERE id=%s",
+                (item_id,),
+            )
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    """INSERT INTO tabla_catalog_deletions (tabla_type, tier, ingredient_lower)
+                       VALUES (%s, %s, %s)
+                       ON CONFLICT DO NOTHING""",
+                    (row[0], row[1], (row[2] or "").lower()),
+                )
             cur.execute("DELETE FROM tabla_catalog_items WHERE id=%s", (item_id,))
         conn.commit()
     return {"ok": True}
