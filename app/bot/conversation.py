@@ -556,6 +556,12 @@ class ConversationManager:
                 response = await self._handle_reservation_date_response(
                     message_text, from_number, contact_name, conversation
                 )
+            # PRIORITY 0.9: FAQ keywords always win, even inside active booking flows.
+            # Placed before all awaiting_* states so that e.g. "Precios" sent during
+            # time-slot selection gets the pricing answer instead of "No reconocí el horario".
+            elif faq_hit := self.faq_handler.get_response(message_text, metadata.get("language", "es")):
+                logger.info("FAQ keyword matched — answering regardless of active flow")
+                response = faq_hit
             # PRIORITY 1: Check if user is responding with number of people (after selecting date/time)
             # This MUST come before menu options to avoid confusion when user types a number
             elif conversation.get("metadata", {}).get("awaiting_party_size"):
@@ -684,11 +690,6 @@ class ConversationManager:
                 if not faq_response:
                     faq_response = self.faq_handler.get_response("llamar a tomas", _lang)
                 response = faq_response or "👨‍✈️ ¡Entendido! El Capitán Tomás te contactará a la brevedad."
-            # Check if it's a FAQ question
-            elif faq_hit := self.faq_handler.get_response(message_text, metadata.get("language", "es")):
-                logger.info("Responding with FAQ answer")
-                response = faq_hit
-            
             # PRIORITY: Check if user is making a complete reservation (date, time, AND party size)
             # This should happen BEFORE AI handler to catch reservation intents
             elif reservation_item := await self._try_parse_reservation_from_message(message_text, from_number, conversation):
