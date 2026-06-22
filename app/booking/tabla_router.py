@@ -510,6 +510,52 @@ async def admin_get_catalog():
     return {"items": rows, "types_meta": types_meta}
 
 
+@tabla_router.get("/api/admin/tabla/stock-debug")
+async def admin_tabla_stock_debug():
+    """Diagnostic (read-only): for every tabla ingredient, show which stock_products
+    rows match by LOWER(name), their stock, and whether the picker currently hides
+    it. Also lists duplicate stock_products (same name appearing more than once).
+    Open directly in the browser at /api/admin/tabla/stock-debug."""
+    from app.db.connection import get_connection
+
+    out_set = _out_of_stock_ingredients()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # All distinct ingredient names used in the catalog
+            cur.execute("SELECT DISTINCT ingredient FROM tabla_catalog_items ORDER BY ingredient")
+            ingredients = [r[0] for r in cur.fetchall()]
+
+            # All stock products grouped by lowercased name → list of (id, name, stock)
+            cur.execute("SELECT id, name, current_stock FROM stock_products ORDER BY LOWER(name), id")
+            by_name = {}
+            for pid, name, stock in cur.fetchall():
+                by_name.setdefault((name or "").lower(), []).append(
+                    {"id": pid, "name": name, "stock": float(stock)}
+                )
+
+    ingredient_report = []
+    for ing in ingredients:
+        matches = by_name.get(ing.lower(), [])
+        ingredient_report.append({
+            "ingredient": ing,
+            "matched_products": matches,
+            "has_stock_link": bool(matches),
+            "max_stock": max((m["stock"] for m in matches), default=None),
+            "hidden_in_picker": ing.lower() in out_set,
+        })
+
+    duplicates = {
+        name: rows for name, rows in by_name.items() if len(rows) > 1
+    }
+
+    return {
+        "ingredients": ingredient_report,
+        "duplicate_products": duplicates,
+        "out_of_stock_names": sorted(out_set),
+    }
+
+
 @tabla_router.post("/api/admin/tabla/catalog/item")
 async def admin_add_catalog_item(request: Request):
     from app.db.connection import get_connection

@@ -7397,10 +7397,14 @@ async function deleteReserva(id, nombre){
 
 let _extrasCatData = [];   // full list loaded from API
 
-async function loadExtrasCat(){
+async function loadExtrasCat(opts){
+  opts = opts || {};
   const tbody = document.getElementById('ec-tbody');
   if(!tbody) return;
-  tbody.innerHTML='<tr><td colspan="17" class="loading-msg">Cargando...</td></tr>';
+  // Silent refresh (e.g. after quick stock adjust) keeps the current rows and
+  // scroll position instead of flashing "Cargando..." and jumping to the top.
+  const scrollY = window.scrollY;
+  if(!opts.silent) tbody.innerHTML='<tr><td colspan="17" class="loading-msg">Cargando...</td></tr>';
   try{
     const [d, pr, mr, ar] = await Promise.all([
       api('/api/admin/precios-extras'),
@@ -7414,6 +7418,7 @@ async function loadExtrasCat(){
     renderExtrasCat(_extrasCatData);
     renderStockMovements(mr.movements||[]);
     renderStockAlerts(ar.alerts||[]);
+    if(opts.silent) window.scrollTo(0, scrollY);
   }catch(e){
     tbody.innerHTML=`<tr><td colspan="17" class="no-data">Error: ${e.message}</td></tr>`;
   }
@@ -9708,7 +9713,7 @@ async function quickAdjust(pid, sign, unit){
   try{
     await api('/api/admin/stock/adjust', {method:'POST', body:JSON.stringify({product_id:pid, delta, reason, notes})});
     showToast(`Stock ajustado: ${sign>0?'+':''}${delta} ${unit}`);
-    await loadExtrasCat();
+    await loadExtrasCat({silent:true});
   }catch(e){ showToast('Error: '+e.message); }
 }
 
