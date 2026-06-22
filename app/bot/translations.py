@@ -1648,19 +1648,19 @@ Obrigado por escolher HotBoat! 🚤🌊"""
     },
 
     "date_has_availability": {
-        "es": "✅ *El {date} tenemos cupos disponibles.*\n\n⏰ Horarios: {times}\n\n¿Qué horario prefieres? (ej: 15:00)",
+        "es": "✅ *El {date} tenemos cupos disponibles.*\n\n⏰ Horarios: {times}\n\n¿Qué horario prefieres? (ej: 15:00)\n\nSi quieres volver al menú principal envía \"menú\". O puedes también preguntar por \"precios\", \"características\", etc🙂",
         "en": "✅ *We have availability on {date}.*\n\n⏰ Times: {times}\n\nWhich time do you prefer? (e.g. 15:00)",
         "pt": "✅ *Temos vagas disponíveis em {date}.*\n\n⏰ Horários: {times}\n\nQual horário você prefere? (ex: 15:00)"
     },
 
     "time_not_recognized": {
-        "es": "No reconocí el horario ⚓\n\nRecuerda elegir uno de estos:\n{times_list}\n\nEscribe por ejemplo: 15:00",
+        "es": "No reconocí el horario ⚓\n\nRecuerda elegir uno de estos:\n{times_list}\n\nEscribe por ejemplo: 15:00\n\nSi quieres volver al menú principal envía \"menú\". O puedes también preguntar por \"precios\", \"características\", etc🙂",
         "en": "I didn't recognize that time ⚓\n\nRemember to choose one of these:\n{times_list}\n\nWrite for example: 15:00",
         "pt": "Não reconheci o horário ⚓\n\nLembre-se de escolher um destes:\n{times_list}\n\nEscreva por exemplo: 15:00"
     },
 
     "time_not_available": {
-        "es": "Ese horario no está disponible para {date} ⚓\n\nHorarios disponibles:\n{times_list}\n\n¿Cuál prefieres?",
+        "es": "Ese horario no está disponible para {date} ⚓\n\nHorarios disponibles:\n{times_list}\n\n¿Cuál prefieres?\n\nSi quieres volver al menú principal envía \"menú\". O puedes también preguntar por \"precios\", \"características\", etc🙂",
         "en": "That time is not available for {date} ⚓\n\nAvailable times:\n{times_list}\n\nWhich one do you prefer?",
         "pt": "Esse horário não está disponível para {date} ⚓\n\nHorários disponíveis:\n{times_list}\n\nQual você prefere?"
     },
