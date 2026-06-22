@@ -7446,6 +7446,8 @@ function renderExtrasCat(list){
     const margen = e.cost ? Math.round((e.price/e.cost-1)*100) : null;
     const utilCls = util>0?'pos':util<0?'neg':'';
     const icon = e.icon || defaultExtraIcon(e.key||'');
+    const eid = jsArg(e.id);      // safe for single-quoted JS string args (handles ' in "Papas Lay's")
+    const ename = jsArg(e.name);
     return `<tr id="ec-row-${e.id}" data-idx="${i}">
       <td style="text-align:center;white-space:nowrap">
         <button onclick="moveExtra(${i},-1)" title="Subir" style="background:none;border:1px solid var(--border);border-radius:5px;padding:.1rem .4rem;cursor:pointer;font-size:.85rem;color:var(--text)" ${i===0?'disabled':''}>↑</button>
@@ -7453,49 +7455,49 @@ function renderExtrasCat(list){
       </td>
       <td style="text-align:center">
         <input class="ec-input" value="${escHtml(icon)}" data-field="icon"
-          oninput="ecMarkDirty('${e.id}')"
+          oninput="ecMarkDirty('${eid}')"
           style="width:3rem;text-align:center;font-size:1.1rem;padding:.2rem">
       </td>
       <td>
         <input class="ec-input ec-name-input" value="${escHtml(e.name)}"
-          oninput="ecMarkDirty('${e.id}')" data-field="name" style="min-width:180px">
+          oninput="ecMarkDirty('${eid}')" data-field="name" style="min-width:180px">
       </td>
       <td>
         <input class="ec-input" value="${escHtml(e.description||'')}" data-field="description"
           placeholder="Texto informativo visible en la app"
-          oninput="ecMarkDirty('${e.id}')" style="min-width:220px;font-size:.8rem">
+          oninput="ecMarkDirty('${eid}')" style="min-width:220px;font-size:.8rem">
       </td>
       <td style="vertical-align:top;padding:.35rem .45rem">
         <input class="ec-input" value="${escHtml(e.name_en||'')}" data-field="name_en"
           placeholder="English name"
-          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.78rem;margin-bottom:.22rem">
+          oninput="ecMarkDirty('${eid}')" style="width:100%;font-size:.78rem;margin-bottom:.22rem">
         <input class="ec-input" value="${escHtml(e.description_en||'')}" data-field="description_en"
           placeholder="English description"
-          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.72rem">
+          oninput="ecMarkDirty('${eid}')" style="width:100%;font-size:.72rem">
       </td>
       <td style="vertical-align:top;padding:.35rem .45rem">
         <input class="ec-input" value="${escHtml(e.name_pt||'')}" data-field="name_pt"
           placeholder="Nome (PT)"
-          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.78rem;margin-bottom:.22rem">
+          oninput="ecMarkDirty('${eid}')" style="width:100%;font-size:.78rem;margin-bottom:.22rem">
         <input class="ec-input" value="${escHtml(e.description_pt||'')}" data-field="description_pt"
           placeholder="Descrição (PT)"
-          oninput="ecMarkDirty('${e.id}')" style="width:100%;font-size:.72rem">
+          oninput="ecMarkDirty('${eid}')" style="width:100%;font-size:.72rem">
       </td>
       <td style="text-align:center">
         <label class="toggle-wrap" title="Mostrar en app de reservas">
           <input type="checkbox" ${e.show_in_booking!==false?'checked':''} data-field="show_in_booking"
-            onchange="saveExtraVisibility('${e.id}', this.checked)">
+            onchange="saveExtraVisibility('${eid}', this.checked)">
           <span class="toggle-slider"></span>
         </label>
       </td>
       <td style="text-align:center">
         ${e.stock_product_id
-          ? `<button onclick="toggleExtraStock('${e.id}',${e.stock_product_id})"
+          ? `<button onclick="toggleExtraStock('${eid}',${e.stock_product_id})"
                title="En stock — clic para quitar"
                style="background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.4);border-radius:6px;padding:.22rem .5rem;font-size:.78rem;cursor:pointer;font-weight:700;white-space:nowrap">
                📦 ✓
              </button>`
-          : `<button onclick="toggleExtraStock('${e.id}',null)"
+          : `<button onclick="toggleExtraStock('${eid}',null)"
                title="Agregar a control de stock"
                style="background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.22rem .5rem;font-size:.78rem;cursor:pointer;white-space:nowrap">
                📦 +
@@ -7504,11 +7506,11 @@ function renderExtrasCat(list){
       </td>
       <td>
         <input class="ec-input" type="number" min="0" value="${e.price||0}"
-          oninput="ecMarkDirty('${e.id}');ecUpdateRow('${e.id}')" data-field="price">
+          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="price">
       </td>
       <td>
         <input class="ec-input" type="number" min="0" value="${e.cost||0}"
-          oninput="ecMarkDirty('${e.id}');ecUpdateRow('${e.id}')" data-field="cost">
+          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="cost">
       </td>
       <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
       <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
@@ -7535,14 +7537,14 @@ function renderExtrasCat(list){
           </td>`;
       })()}
       <td style="text-align:center;padding:.3rem">
-        <button onclick="openBomModal('${escHtml(e.key||e.name.toLowerCase().replace(/\s+/g,'_'))}','${escHtml(e.name)}')"
+        <button onclick="openBomModal('${jsArg(e.key||e.name.toLowerCase().replace(/\s+/g,'_'))}','${ename}')"
           title="Ingredientes / stock" style="background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer">🧪</button>
       </td>
       <td style="display:flex;gap:.3rem;align-items:center;padding:.5rem .3rem;white-space:nowrap;flex-wrap:wrap;justify-content:flex-end">
         <button type="button" class="ec-save-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .45rem"
-          onclick="autoTranslateExtra('${e.id}')" title="Generar inglés y portugués">✨ IA</button>
-        <button class="ec-save-btn" id="ec-btn-${e.id}" onclick="saveExtra('${e.id}')">Guardar</button>
-        <button class="ec-del-btn" onclick="deleteExtra('${e.id}','${escHtml(e.name)}')" title="Eliminar">🗑</button>
+          onclick="autoTranslateExtra('${eid}')" title="Generar inglés y portugués">✨ IA</button>
+        <button class="ec-save-btn" id="ec-btn-${e.id}" onclick="saveExtra('${eid}')">Guardar</button>
+        <button class="ec-del-btn" onclick="deleteExtra('${eid}','${ename}')" title="Eliminar">🗑</button>
       </td>
     </tr>`;
   }).join('');
@@ -7711,6 +7713,19 @@ async function createExtra(){
 }
 
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// Escape a value for use as a single-quoted JS string argument inside an HTML
+// attribute (e.g. onclick="fn('${jsArg(v)}')"). Handles apostrophes (which
+// otherwise break names like "Papas Lay's"), backslashes and double quotes.
+function jsArg(s){
+  return String(s==null?'':s)
+    .replace(/\\/g,'\\\\')
+    .replace(/&/g,'&amp;')
+    .replace(/"/g,'&quot;')
+    .replace(/</g,'&lt;')
+    .replace(/'/g,"\\'")
+    .replace(/\r?\n/g,' ');
+}
 
 // ── Descuentos ────────────────────────────────────────────────────────────────
 const TIPOS_DESC = ['pack','cupon','otro'];
