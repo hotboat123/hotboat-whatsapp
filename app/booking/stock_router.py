@@ -221,11 +221,15 @@ def update_product(pid: int, body: ProductBody, x_admin_key: str = Header("")):
                 (body.name, body.category, body.unit, body.current_stock,
                  body.min_stock, body.cost_per_unit, body.notes, body.is_active, pid)
             )
-            # Cascade name rename to movement history snapshots
+            # Cascade name rename to movement history snapshots and tabla catalog
             if old_name and old_name != body.name:
                 cur.execute(
                     "UPDATE stock_movements SET product_name = %s WHERE product_id = %s",
                     (body.name, pid)
+                )
+                cur.execute(
+                    "UPDATE tabla_catalog_items SET ingredient = %s WHERE LOWER(ingredient) = LOWER(%s)",
+                    (body.name, old_name)
                 )
             # Log only if stock actually changed
             delta = round(body.current_stock - old_stock, 4)
