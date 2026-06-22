@@ -148,15 +148,22 @@ def _seed_catalog_defaults() -> None:
 
 
 def _out_of_stock_ingredients() -> set:
-    """Return a set of lowercased ingredient names whose linked stock product
-    is depleted (current_stock <= 0). Matching mirrors the deduction logic,
-    which looks up stock_products by LOWER(name)."""
+    """Return a set of lowercased ingredient names that are out of stock across
+    ALL matching stock products. Matching mirrors the deduction logic, which
+    looks up stock_products by LOWER(name). When duplicate products share a
+    name, the ingredient is considered out of stock only if every duplicate is
+    depleted (MAX current_stock <= 0) — so a name with stock in any row stays."""
     from app.db.connection import get_connection
 
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT LOWER(name) FROM stock_products WHERE current_stock <= 0")
+                cur.execute("""
+                    SELECT LOWER(name)
+                    FROM stock_products
+                    GROUP BY LOWER(name)
+                    HAVING MAX(current_stock) <= 0
+                """)
                 return {r[0] for r in cur.fetchall()}
     except Exception as e:
         logger.warning("_out_of_stock_ingredients skipped: %s", e)
