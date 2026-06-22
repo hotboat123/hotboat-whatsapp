@@ -124,9 +124,24 @@ def _ensure_catalog_table() -> None:
 
 def _seed_catalog_defaults() -> None:
     """Seed the DB catalog from hardcoded TABLA_CATALOG defaults.
-    Updates sort_order on conflict so existing admin-added ingredients are preserved
-    but the canonical defaults always have correct ordering."""
+    Runs a name-normalization migration first so any renamed ingredients
+    are kept in sync before seeding new rows."""
     from app.db.connection import get_connection
+
+    # Canonical renames: any old variant → current name.
+    # Applied to both tabla_catalog_items and stock_products so the names
+    # stay in sync regardless of what was typed in the admin panel.
+    RENAMES = {
+        "cajú premium":       "Castañas de Cajú",
+        "caju premium":       "Castañas de Cajú",
+        "castaña de caju":    "Castañas de Cajú",
+        "castaña de cajú":    "Castañas de Cajú",
+        "castañas de caju":   "Castañas de Cajú",
+        "castaña de cahu":    "Castañas de Cajú",
+        "castañas de cahu":   "Castañas de Cajú",
+        "castaña de kahoot":  "Castañas de Cajú",
+        "castañas de kahoot": "Castañas de Cajú",
+    }
 
     rows = []
     for t_type, cat in TABLA_CATALOG.items():
@@ -136,19 +151,21 @@ def _seed_catalog_defaults() -> None:
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Fetch active stock product names so we can skip re-seeding
-            # ingredients that were renamed (old hardcoded name no longer exists).
-            # Empty result means fresh install → seed everything as normal.
-            cur.execute(
-                "SELECT LOWER(name) FROM stock_products WHERE is_active = TRUE"
-            )
-            sp_names = {r[0] for r in cur.fetchall()}
+            # Apply renames to keep both tables consistent
+            for old_lower, new_name in RENAMES.items():
+                cur.execute(
+                    "UPDATE tabla_catalog_items SET ingredient = %s"
+                    " WHERE LOWER(ingredient) = %s AND ingredient != %s",
+                    (new_name, old_lower, new_name),
+                )
+                cur.execute(
+                    "UPDATE stock_products SET name = %s, updated_at = NOW()"
+                    " WHERE LOWER(name) = %s AND name != %s",
+                    (new_name, old_lower, new_name),
+                )
 
+            # Seed canonical names
             for t_type, tier_num, ing, sort_order in rows:
-                # If stock is set up AND this name was renamed, don't re-insert
-                # the old hardcoded name (it would appear as an orphan in the picker).
-                if sp_names and ing.lower() not in sp_names:
-                    continue
                 cur.execute(
                     """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order)
                        VALUES (%s, %s, %s, %s)
@@ -182,45 +199,18 @@ def _out_of_stock_ingredients() -> set:
         return set()
 
 
-def _known_stock_ingredient_names() -> set:
-    """Return lowercased names of ALL active stock products.
-    Used to detect orphaned catalog entries (ingredient was renamed in stock
-    but the old name got re-seeded on redeploy). Returns empty set when
-    stock_products is empty so fresh installs are not affected."""
-    from app.db.connection import get_connection
-
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT LOWER(name) FROM stock_products WHERE is_active = TRUE"
-                )
-                return {r[0] for r in cur.fetchall()}
-    except Exception as e:
-        logger.warning("_known_stock_ingredient_names skipped: %s", e)
-    return set()
-
-
 def _filter_catalog_by_stock(catalog: dict) -> dict:
-    """Remove ingredients whose linked stock product is out of stock OR whose
-    name no longer exists in stock_products (renamed/deleted). Ingredients on
-    a fresh install (empty stock_products) are always kept. Builds fresh lists
-    to avoid mutating TABLA_CATALOG defaults."""
-    out   = _out_of_stock_ingredients()
-    known = _known_stock_ingredient_names()
-    # If known is empty the stock table isn't set up yet — show everything.
-    apply_existence_filter = bool(known)
-
+    """Remove ingredients whose linked stock product is out of stock.
+    Builds fresh lists to avoid mutating TABLA_CATALOG defaults."""
+    out = _out_of_stock_ingredients()
+    if not out:
+        return catalog
     result = {}
     for t_type, cat in catalog.items():
         new_cat = {**cat}
         for key in ("tier1", "tier2", "tier3"):
             if key in new_cat:
-                new_cat[key] = [
-                    ing for ing in new_cat[key]
-                    if ing.lower() not in out
-                    and (not apply_existence_filter or ing.lower() in known)
-                ]
+                new_cat[key] = [ing for ing in new_cat[key] if ing.lower() not in out]
         result[t_type] = new_cat
     return result
 
