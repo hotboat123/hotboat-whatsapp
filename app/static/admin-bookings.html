@@ -237,10 +237,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .desc-row .d-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;padding:.2rem .4rem;border-radius:6px;flex-shrink:0}
 .desc-row .d-del:hover{background:rgba(231,76,60,.1)}
 /* Extras editor */
-.extras-row{display:grid;grid-template-columns:1fr 64px 90px 80px 28px;gap:.4rem;align-items:center;
+.extras-row{display:grid;grid-template-columns:1fr 64px 90px 80px 28px;gap:.4rem;align-items:start;
   border-bottom:1px solid var(--border);padding:.4rem 0}
 .extras-row:first-child{border-top:1px solid var(--border)}
-.extras-row .ex-name{font-size:.82rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.extras-row .ex-name{font-size:.82rem;color:var(--text);word-break:break-word;white-space:normal}
 .extras-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);
   border-radius:6px;padding:.3rem .5rem;outline:none;font-size:.82rem;text-align:right;width:100%}
 .extras-row input:focus{border-color:var(--gold)}
@@ -296,6 +296,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
   .form-row{grid-template-columns:1fr}
   .bar-lbl{display:none}
   .gastos-form-grid{grid-template-columns:1fr!important}
+  /* On narrow screens: name spans full width on its own line, then
+     qty / unit-price / subtotal / delete sit in a row below it. */
+  .extras-row{display:flex;flex-wrap:wrap;gap:.25rem .4rem;align-items:center}
+  .extras-row .ex-name{flex:0 0 100%;order:-1;white-space:normal;word-break:break-word}
+  .extras-row input{flex:0 0 54px}
+  .extras-row .ex-sub{flex:1;text-align:right;min-width:60px}
+  .extras-hdr{display:none}
 }
 .gasto-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.85rem 1rem;margin-bottom:.6rem;transition:border-color .15s}
 .gasto-card:active{border-color:var(--gold)}
