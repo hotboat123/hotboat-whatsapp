@@ -3,11 +3,17 @@ FAQ Handler - predefined responses for common questions
 """
 import logging
 import re
+import unicodedata
 from typing import Optional
 
 from app.bot.translations import get_text
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_accents(text: str) -> str:
+    """Fold accents so 'características' matches the unaccented key 'caracteristicas'."""
+    return unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode("ascii")
 
 
 def _lookup_all_db_keywords(message_lower: str, lang: str) -> list:
@@ -28,10 +34,11 @@ def _lookup_all_db_keywords(message_lower: str, lang: str) -> list:
                     "WHERE r.active = TRUE",
                 )
                 rows = cur.fetchall()
+                message_norm = _strip_accents(message_lower)
                 seen_keys: set = set()
                 results = []
                 for keyword, resp_key, content in rows:
-                    if keyword.lower() in message_lower and resp_key not in seen_keys:
+                    if _strip_accents(keyword.lower()) in message_norm and resp_key not in seen_keys:
                         seen_keys.add(resp_key)
                         if content:
                             logger.info(f"DB keyword match: '{keyword}' → {resp_key}")
@@ -454,19 +461,18 @@ Quer adicionar algo especial ao seu HotBoat?
         """
         lang = language or self.language
         message_lower = message.lower().strip()
+        message_norm = _strip_accents(message_lower)
 
         collected: list = []
         seen_keys: set = set()
 
-        # DB-configured keywords take priority; collect ALL distinct matches
+        # DB-configured keywords — collect ALL distinct matches (highest priority)
         db_hits = _lookup_all_db_keywords(message_lower, lang)
         for resp_key, content in db_hits:
             seen_keys.add(resp_key)
             collected.append(content)
-
-        # If the DB returned anything, skip the hardcoded FAQ (same priority rule as before)
-        if collected:
-            return "\n\n".join(collected)
+        # NOTE: we do NOT bail out here — hardcoded FAQ may cover additional topics
+        # not present in the DB (e.g. "precio" when "horarios" DB keyword also fired).
 
         # Map FAQ keys to translation keys
         faq_to_translation = {
@@ -482,13 +488,14 @@ Quer adicionar algo especial ao seu HotBoat?
             "cancelar": "cancellation",
         }
 
-        # Collect ALL distinct keyword matches from hardcoded FAQ
+        # Collect ALL distinct keyword matches from hardcoded FAQ.
+        # Use accent-stripped comparison so "características" matches key "caracteristicas".
         for keyword, response in self.faqs.items():
             # "info" must be a whole word to avoid false positives with "información"
             if keyword == "info":
-                matched = re.search(r"\binfo\b", message_lower) is not None
+                matched = re.search(r"\binfo\b", message_norm) is not None
             else:
-                matched = keyword in message_lower
+                matched = _strip_accents(keyword) in message_norm
             if not matched:
                 continue
 
