@@ -244,6 +244,93 @@ def delete_product(pid: int, x_admin_key: str = Header("")):
     return {"ok": True}
 
 
+@stock_router.post("/api/admin/stock/dedup")
+def dedup_products(x_admin_key: str = Header(""), apply: bool = False):
+    """Merge duplicate stock_products that share the same name (case-insensitive).
+
+    For each group of duplicates the row with the most stock is kept (ties → lowest
+    id). All references in extras_bom, stock_movements and extras_visibility are
+    re-pointed to the keeper BEFORE the duplicate rows are deleted (extras_bom has
+    ON DELETE CASCADE, so re-pointing first prevents losing BOM links). Duplicate
+    BOM rows created by the merge are then collapsed.
+
+    Defaults to a DRY RUN: pass ?apply=true to actually perform the merge.
+    Always returns the plan so it can be previewed first.
+    """
+    _check_auth(x_admin_key)
+    plan = []
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Identify duplicate name groups
+            cur.execute("""
+                SELECT LOWER(name) AS lname
+                FROM stock_products
+                GROUP BY LOWER(name)
+                HAVING COUNT(*) > 1
+            """)
+            dup_names = [r[0] for r in cur.fetchall()]
+
+            for lname in dup_names:
+                cur.execute(
+                    """SELECT id, name, current_stock
+                       FROM stock_products
+                       WHERE LOWER(name) = %s
+                       ORDER BY current_stock DESC, id ASC""",
+                    (lname,),
+                )
+                rows = cur.fetchall()
+                if len(rows) < 2:
+                    continue
+                keeper_id, keeper_name, keeper_stock = rows[0][0], rows[0][1], float(rows[0][2])
+                dupes = [{"id": r[0], "name": r[1], "stock": float(r[2])} for r in rows[1:]]
+                plan.append({
+                    "name": keeper_name,
+                    "keeper": {"id": keeper_id, "stock": keeper_stock},
+                    "removed": dupes,
+                })
+
+                if apply:
+                    dupe_ids = [d["id"] for d in dupes]
+                    # Re-point all references to the keeper before deleting dupes
+                    cur.execute(
+                        "UPDATE extras_bom SET product_id=%s WHERE product_id = ANY(%s)",
+                        (keeper_id, dupe_ids),
+                    )
+                    cur.execute(
+                        "UPDATE stock_movements SET product_id=%s WHERE product_id = ANY(%s)",
+                        (keeper_id, dupe_ids),
+                    )
+                    cur.execute(
+                        "UPDATE extras_visibility SET stock_product_id=%s WHERE stock_product_id = ANY(%s)",
+                        (keeper_id, dupe_ids),
+                    )
+                    cur.execute(
+                        "DELETE FROM stock_products WHERE id = ANY(%s)",
+                        (dupe_ids,),
+                    )
+
+            if apply:
+                # Collapse duplicate BOM rows that the merge may have created
+                cur.execute("""
+                    DELETE FROM extras_bom a
+                    USING extras_bom b
+                    WHERE a.id > b.id
+                      AND a.extra_slug = b.extra_slug
+                      AND a.product_id = b.product_id
+                      AND COALESCE(a.is_variant,FALSE) = COALESCE(b.is_variant,FALSE)
+                      AND COALESCE(a.variant_label,'') = COALESCE(b.variant_label,'')
+                """)
+                conn.commit()
+
+    return {
+        "ok": True,
+        "applied": apply,
+        "groups": len(plan),
+        "duplicates_removed": sum(len(g["removed"]) for g in plan),
+        "plan": plan,
+    }
+
+
 # ─────────────────────────── Stock adjustment ───────────────────────────────
 
 class AdjustBody(BaseModel):

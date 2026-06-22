@@ -598,6 +598,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <button class="btn-primary" onclick="openNewExtraModal()" style="white-space:nowrap">+ Nuevo extra</button>
         <button class="btn-secondary" onclick="openStockProductModal()" style="white-space:nowrap;font-size:.78rem">+ Nuevo producto stock</button>
         <button onclick="triggerAutoConsumeStock()" style="background:rgba(74,222,128,.12);border:1px solid #4ade80;color:#4ade80;border-radius:8px;padding:.38rem .85rem;font-size:.78rem;cursor:pointer;font-weight:600;white-space:nowrap">📦 Consumir reservas pasadas</button>
+        <button onclick="dedupStockProducts()" style="background:rgba(251,191,36,.12);border:1px solid #fbbf24;color:#fbbf24;border-radius:8px;padding:.38rem .85rem;font-size:.78rem;cursor:pointer;font-weight:600;white-space:nowrap">🧹 Limpiar duplicados</button>
         <span id="ec-count" style="color:var(--muted);font-size:.78rem"></span>
       </div>
 
@@ -9714,6 +9715,32 @@ async function quickAdjust(pid, sign, unit){
     await api('/api/admin/stock/adjust', {method:'POST', body:JSON.stringify({product_id:pid, delta, reason, notes})});
     showToast(`Stock ajustado: ${sign>0?'+':''}${delta} ${unit}`);
     await loadExtrasCat({silent:true});
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function dedupStockProducts(){
+  try{
+    // 1) Preview (dry run)
+    const preview = await api('/api/admin/stock/dedup', {method:'POST'});
+    if(!preview.groups){
+      showToast('✓ No hay productos duplicados');
+      return;
+    }
+    const lines = preview.plan.map(g=>{
+      const removed = g.removed.map(r=>`#${r.id} (stock ${r.stock})`).join(', ');
+      return `• ${g.name}: se conserva #${g.keeper.id} (stock ${g.keeper.stock}); se elimina ${removed}`;
+    }).join('\n');
+    const ok = confirm(
+      `Se encontraron ${preview.groups} producto(s) duplicado(s) `+
+      `(${preview.duplicates_removed} fila(s) a eliminar).\n\n${lines}\n\n`+
+      `Se re-vincularán las recetas, el historial y los extras al producto que se conserva, `+
+      `y luego se eliminarán los duplicados. ¿Aplicar la limpieza?`
+    );
+    if(!ok) return;
+    // 2) Apply
+    const res = await api('/api/admin/stock/dedup?apply=true', {method:'POST'});
+    showToast(`🧹 Limpieza aplicada: ${res.duplicates_removed} duplicado(s) eliminado(s)`);
+    await loadExtrasCat();
   }catch(e){ showToast('Error: '+e.message); }
 }
 
