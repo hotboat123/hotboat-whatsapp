@@ -1910,6 +1910,14 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
                     "UPDATE extras_visibility SET user_hidden = TRUE, updated_at = NOW() WHERE extra_name_lower = %s",
                     (extra_id,),
                 )
+                # Deactivate the linked stock product so it stops triggering
+                # low-stock alerts once the extra is removed.
+                cur.execute(
+                    """UPDATE stock_products SET is_active = FALSE, updated_at = NOW()
+                       WHERE id = (SELECT stock_product_id FROM extras_visibility
+                                   WHERE extra_name_lower = %s)""",
+                    (extra_id,),
+                )
                 conn.commit()
         return {"ok": True}
     except Exception as e:

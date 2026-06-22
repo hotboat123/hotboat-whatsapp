@@ -83,13 +83,20 @@ def _apply_movement(cur, product_id: int, delta: float, reason: str,
 
 
 def _check_low_stock(conn):
-    """Return list of products at or below min_stock."""
+    """Return list of products at or below min_stock.
+    Excludes products linked to a deleted/hidden extra so alerts don't keep
+    flagging items the user already removed."""
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT id, name, category, unit, current_stock, min_stock
-            FROM stock_products
-            WHERE is_active AND current_stock <= min_stock AND min_stock > 0
-            ORDER BY (current_stock - min_stock), name
+            SELECT sp.id, sp.name, sp.category, sp.unit, sp.current_stock, sp.min_stock
+            FROM stock_products sp
+            WHERE sp.is_active AND sp.current_stock <= sp.min_stock AND sp.min_stock > 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM extras_visibility ev
+                  WHERE ev.stock_product_id = sp.id
+                    AND COALESCE(ev.user_hidden, FALSE) = TRUE
+              )
+            ORDER BY (sp.current_stock - sp.min_stock), sp.name
         """)
         cols = [d.name for d in cur.description]
         return [dict(zip(cols, r)) for r in cur.fetchall()]
