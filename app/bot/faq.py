@@ -10,42 +10,36 @@ from app.bot.translations import get_text
 logger = logging.getLogger(__name__)
 
 
-def _lookup_db_keyword(message_lower: str, lang: str) -> Optional[str]:
-    """Check bot_keywords table for a match and return the response content."""
+def _lookup_all_db_keywords(message_lower: str, lang: str) -> list:
+    """Return all distinct DB keyword responses that match the message.
+
+    Deduplicates by response_key so the same answer isn't included twice
+    even if multiple keywords point to it.
+    """
     try:
         from app.db.connection import get_connection
         col = {"en": "content_en", "pt": "content_pt"}.get(lang, "content_es")
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT k.keyword, COALESCE(r.content_es), r.active "
+                    f"SELECT k.keyword, k.response_key, COALESCE(r.{col}, r.content_es) "
                     "FROM bot_keywords k "
                     "JOIN bot_responses r ON r.response_key = k.response_key "
                     "WHERE r.active = TRUE",
                 )
                 rows = cur.fetchall()
-                # Find longest matching keyword (most specific wins)
-                best = None
-                for keyword, _, __ in rows:
-                    if keyword.lower() in message_lower:
-                        if best is None or len(keyword) > len(best[0]):
-                            best = (keyword,)
-                if best:
-                    # Fetch with correct language column
-                    cur.execute(
-                        f"SELECT COALESCE(r.{col}, r.content_es) "
-                        "FROM bot_keywords k "
-                        "JOIN bot_responses r ON r.response_key = k.response_key "
-                        "WHERE k.keyword = %s AND r.active = TRUE",
-                        (best[0],),
-                    )
-                    row = cur.fetchone()
-                    if row and row[0]:
-                        logger.info(f"DB keyword match: '{best[0]}' → response")
-                        return row[0]
+                seen_keys: set = set()
+                results = []
+                for keyword, resp_key, content in rows:
+                    if keyword.lower() in message_lower and resp_key not in seen_keys:
+                        seen_keys.add(resp_key)
+                        if content:
+                            logger.info(f"DB keyword match: '{keyword}' → {resp_key}")
+                            results.append((resp_key, content))
+                return results
     except Exception as e:
         logger.warning(f"DB keyword lookup failed: {e}")
-    return None
+    return []
 
 
 class FAQHandler:
@@ -461,10 +455,18 @@ Quer adicionar algo especial ao seu HotBoat?
         lang = language or self.language
         message_lower = message.lower().strip()
 
-        # Check DB-configured keywords first (admin panel customizations take priority)
-        db_response = _lookup_db_keyword(message_lower, lang)
-        if db_response:
-            return db_response
+        collected: list = []
+        seen_keys: set = set()
+
+        # DB-configured keywords take priority; collect ALL distinct matches
+        db_hits = _lookup_all_db_keywords(message_lower, lang)
+        for resp_key, content in db_hits:
+            seen_keys.add(resp_key)
+            collected.append(content)
+
+        # If the DB returned anything, skip the hardcoded FAQ (same priority rule as before)
+        if collected:
+            return "\n\n".join(collected)
 
         # Map FAQ keys to translation keys
         faq_to_translation = {
@@ -479,39 +481,45 @@ Quer adicionar algo especial ao seu HotBoat?
             "contacto": "contact_info",
             "cancelar": "cancellation",
         }
-        
-        # Check for exact matches or keywords
+
+        # Collect ALL distinct keyword matches from hardcoded FAQ
         for keyword, response in self.faqs.items():
-            # "info" must be a whole word — otherwise "information" / "información" false-positive to features
+            # "info" must be a whole word to avoid false positives with "información"
             if keyword == "info":
                 matched = re.search(r"\binfo\b", message_lower) is not None
             else:
                 matched = keyword in message_lower
             if not matched:
                 continue
-            # If response is an alias, resolve it
+
+            # Resolve alias to actual keyword
             actual_keyword = keyword
             if isinstance(response, str) and response in self.faqs:
                 actual_keyword = response
 
-            # Check if we have a translation for this keyword
+            # Deduplicate: skip if we already have a response for this key
+            if actual_keyword in seen_keys:
+                continue
+            seen_keys.add(actual_keyword)
+
+            # Build response text
             if actual_keyword in faq_to_translation:
                 translation_key = faq_to_translation[actual_keyword]
-                logger.info(f"FAQ match found for keyword: {keyword} -> {translation_key}")
-                # For extras: build dynamically from DB so prices are always current
+                logger.info(f"FAQ match: '{keyword}' → {translation_key}")
                 if actual_keyword == "extras":
                     dynamic = self._build_extras_from_db(lang)
                     if dynamic:
-                        return dynamic
-                return get_text(translation_key, lang)
+                        collected.append(dynamic)
+                        continue
+                collected.append(get_text(translation_key, lang))
             else:
-                # Fallback to original response if no translation available
-                if isinstance(response, str) and response in self.faqs:
-                    response = self.faqs[response]
-                logger.info(f"FAQ match found for keyword: {keyword} (no translation)")
-                return response
+                actual_response = self.faqs[actual_keyword] if isinstance(response, str) and response in self.faqs else response
+                logger.info(f"FAQ match: '{keyword}' (no translation)")
+                collected.append(actual_response)
 
-        return None
+        if not collected:
+            return None
+        return "\n\n".join(collected)
     
     def is_menu_number(self, message: str) -> Optional[int]:
         """
