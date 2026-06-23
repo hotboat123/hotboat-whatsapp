@@ -574,6 +574,7 @@ async function selectConversation(phoneNumber) {
         updatePriorityUI(currentConversation.priority);
 
         loadLeadInfo(phoneNumber);
+        loadBookingContext(phoneNumber);
 
         renderCurrentChat({ scrollToBottom: true });
         renderConversations();
@@ -1012,6 +1013,83 @@ function renderLeadInfo(lead) {
             </div>
         ` : ''}
     `;
+}
+
+// Booking Context Card
+async function loadBookingContext(phoneNumber) {
+    try {
+        const r = await fetch(`${API_BASE}/conversations/${phoneNumber}/booking-context`);
+        if (!r.ok) return;
+        const ctx = await r.json();
+        renderBookingContext(ctx);
+    } catch (e) {
+        console.error('Error loading booking context:', e);
+    }
+}
+
+function renderBookingContext(ctx) {
+    const existing = document.getElementById('bookingContextCard');
+    if (existing) existing.remove();
+    const container = document.getElementById('leadInfo');
+    if (!container) return;
+    const hasAny = ctx.name || ctx.email || ctx.date_display || ctx.time || ctx.quantity;
+    if (!hasAny) return;
+    window._lastBookingCtx = ctx;
+
+    const row = (label, value) => value
+        ? `<div style="display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.3rem;font-size:.8rem">
+             <span style="color:var(--muted)">${label}</span>
+             <span style="color:var(--text);font-weight:500;text-align:right">${escapeHtml(String(value))}</span>
+           </div>`
+        : '';
+
+    const card = document.createElement('div');
+    card.id = 'bookingContextCard';
+    card.style.cssText = 'margin-top:.8rem;background:var(--surface-2,#1e2535);border:1px solid var(--border,#2a3347);border-radius:10px;padding:.75rem .85rem;';
+    card.innerHTML = `
+        <div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-bottom:.55rem">Datos de reserva</div>
+        ${row('Nombre', ctx.name)}
+        ${row('Teléfono', ctx.phone)}
+        ${row('Email', ctx.email)}
+        ${row('Fecha', ctx.date_display)}
+        ${row('Hora', ctx.time)}
+        ${row('Personas', ctx.quantity)}
+        <div style="display:flex;gap:.5rem;margin-top:.65rem">
+            <button onclick="copyBookingData()" style="flex:1;padding:.4rem .6rem;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;cursor:pointer;font-size:.78rem">📋 Copiar</button>
+            <button onclick="openBookingFromContext()" style="flex:1;padding:.4rem .6rem;background:var(--primary,#4a9fff);border:none;color:#fff;border-radius:7px;cursor:pointer;font-size:.78rem">📅 Crear reserva</button>
+        </div>`;
+    container.insertBefore(card, container.firstChild);
+}
+
+function copyBookingData() {
+    const ctx = window._lastBookingCtx;
+    if (!ctx) return;
+    const lines = [];
+    if (ctx.name) lines.push(`Nombre: ${ctx.name}`);
+    if (ctx.phone) lines.push(`Teléfono: ${ctx.phone}`);
+    if (ctx.email) lines.push(`Email: ${ctx.email}`);
+    if (ctx.date_display) lines.push(`Fecha: ${ctx.date_display}`);
+    if (ctx.time) lines.push(`Hora: ${ctx.time}`);
+    if (ctx.quantity) lines.push(`Personas: ${ctx.quantity}`);
+    navigator.clipboard.writeText(lines.join('\n')).then(() => showToast('Datos copiados', 'success')).catch(() => showToast('No se pudo copiar', 'error'));
+}
+
+function openBookingFromContext() {
+    const ctx = window._lastBookingCtx;
+    if (!ctx) return;
+    const msg = {
+        type: 'hotboat-open-booking',
+        prefill: {
+            nombre: ctx.name || '',
+            telefono: ctx.phone || '',
+            email: ctx.email || '',
+            fecha: ctx.date_iso || '',
+            hora: ctx.time || '',
+            personas: ctx.quantity ? String(ctx.quantity) : '',
+        }
+    };
+    try { window.parent.postMessage(msg, '*'); } catch(e) {}
+    try { window.postMessage(msg, '*'); } catch(e) {}
 }
 
 // Toggle Bot for Lead (from input area)
