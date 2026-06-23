@@ -1869,9 +1869,79 @@ async def search_messages(q: str = Query(..., min_length=2)):
         }
 
 
+# In-memory cache so we only call the LLM when there are new messages.
+# phone_number -> {"key": <last msg timestamp>, "data": {...}}
+_booking_ctx_ai_cache: Dict[str, dict] = {}
+
+
+def _ai_extract_booking(history: list) -> dict:
+    """Use Groq/llama to extract reservation date/time/people from natural language.
+
+    Handles relative dates like 'mañana', 'jueves 25', 'a las 19' and always uses
+    the most recent mention. Returns {} on any failure so the panel still renders.
+    """
+    import json as _json
+    from openai import OpenAI
+
+    msgs = [m for m in history
+            if isinstance(m.get("message_text"), str) and m.get("message_text").strip()]
+    recent = msgs[-30:]
+    if not recent:
+        return {}
+
+    lines = []
+    for m in recent:
+        who = "Cliente" if m.get("direction") == "incoming" else "Bot"
+        lines.append(f"{who}: {m['message_text'].strip()}")
+    transcript = "\n".join(lines)
+
+    today = datetime.now(CHILE_TZ)
+    weekdays = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    today_str = f"{today.strftime('%Y-%m-%d')} ({weekdays[today.weekday()]})"
+
+    system = (
+        "Eres un extractor de datos de reserva para una empresa de paseos en bote en Chile. "
+        f"Hoy es {today_str}. "
+        "Del chat, identifica la fecha, hora y número de personas que el CLIENTE quiere reservar. "
+        "El cliente puede usar lenguaje natural (ej: 'mañana', 'jueves 25', 'a las 19'). "
+        "Usa SIEMPRE la mención más reciente del cliente. Resuelve fechas relativas usando la fecha de hoy. "
+        "Ignora los precios y la lista de tarifas del bot (ahí aparecen 2 a 7 personas como ejemplo). "
+        "Responde SOLO un objeto JSON con las claves: "
+        "date_iso (YYYY-MM-DD o null), date_display (texto corto en español ej '25 de junio' o null), "
+        "time (HH:MM en 24h o null), people (entero o null). "
+        "Si un dato no se menciona, usa null."
+    )
+
+    try:
+        client = OpenAI(
+            api_key=settings.groq_api_key,
+            base_url="https://api.groq.com/openai/v1",
+        )
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": transcript},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_tokens=200,
+        )
+        data = _json.loads(resp.choices[0].message.content)
+        return {
+            "date_iso": data.get("date_iso") or None,
+            "date_display": data.get("date_display") or None,
+            "time": data.get("time") or None,
+            "quantity": data.get("people") or None,
+        }
+    except Exception as e:
+        logger.warning(f"AI booking extraction failed for: {e}")
+        return {}
+
+
 @app.get("/api/conversations/{phone_number}/booking-context")
 async def get_booking_context(phone_number: str):
-    """Return name/phone/email + pending reservation date-time for the chat admin panel."""
+    """Return name/phone/email + reservation date/time/people for the chat admin panel."""
     import re as _re
     lead = await get_or_create_lead(phone_number)
 
@@ -1881,47 +1951,33 @@ async def get_booking_context(phone_number: str):
         meta = conversation_manager.conversations[phone_number].get("metadata", {})
         pending = meta.get("pending_reservation") or {}
 
-    # Start from live pending_reservation (most accurate when the flow is active)
-    email = ""
-    date_display = pending.get("date")
-    time_val = pending.get("time")
-    quantity = pending.get("quantity")
-    date_iso = (pending.get("date_obj_iso") or "")[:10] or None
-
-    # Fall back to scanning the chat history for any data not already captured.
-    # The bot emits lines like "Fecha: ...", "Horario: ...", "Personas: N".
-    email_rx = _re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
-    date_rx = _re.compile(r"Fecha:?\*?\s*([^\n*]+)", _re.IGNORECASE)
-    time_rx = _re.compile(r"Horario:?\*?\s*([^\n*]+)", _re.IGNORECASE)
-    people_rx = _re.compile(r"Personas:?\*?\s*(\d+)", _re.IGNORECASE)
-
-    def _clean(v):
-        v = (v or "").strip()
-        return v if v and v.upper() != "N/A" else None
-
     history = await get_conversation_history(phone_number, limit=80)
-    for msg in reversed(history):  # newest first → first match wins
+
+    # Email via cheap regex (reliable)
+    email = ""
+    email_rx = _re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+    for msg in reversed(history):
         text = msg.get("message_text", "") or ""
-        if not isinstance(text, str):
-            continue
-        if not email:
+        if isinstance(text, str):
             m = email_rx.search(text)
             if m:
                 email = m.group(0)
-        if not date_display:
-            m = date_rx.search(text)
-            if m:
-                date_display = _clean(m.group(1))
-        if not time_val:
-            m = time_rx.search(text)
-            if m:
-                time_val = _clean(m.group(1))
-        if not quantity:
-            m = people_rx.search(text)
-            if m:
-                quantity = m.group(1).strip()
-        if email and date_display and time_val and quantity:
-            break
+                break
+
+    # Date/time/people via AI (handles natural language), cached by last message
+    last_key = history[-1].get("timestamp") if history else None
+    cached = _booking_ctx_ai_cache.get(phone_number)
+    if cached and cached.get("key") == last_key:
+        ai_data = cached["data"]
+    else:
+        ai_data = await asyncio.to_thread(_ai_extract_booking, history)
+        _booking_ctx_ai_cache[phone_number] = {"key": last_key, "data": ai_data}
+
+    # Live pending_reservation takes priority; AI fills the rest
+    date_display = pending.get("date") or ai_data.get("date_display")
+    time_val = pending.get("time") or ai_data.get("time")
+    quantity = pending.get("quantity") or ai_data.get("quantity")
+    date_iso = (pending.get("date_obj_iso") or "")[:10] or ai_data.get("date_iso")
 
     return {
         "name": lead.get("customer_name", ""),
