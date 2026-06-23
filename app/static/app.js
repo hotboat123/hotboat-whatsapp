@@ -1019,7 +1019,7 @@ function renderLeadInfo(lead) {
 // Booking context panel — quick-create reservation from chat data
 async function loadBookingContext(phoneNumber) {
     try {
-        const r = await fetch(`${API_BASE}/conversations/${phoneNumber}/booking-context`);
+        const r = await fetch(`${API_BASE}/api/conversations/${phoneNumber}/booking-context`);
         if (!r.ok) return;
         const ctx = await r.json();
         renderBookingContext(ctx);
