@@ -591,6 +591,13 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
     all_tabla_ingredients = tabla_selection or extracted_tabla_ingredients or []
 
     movements = 0
+    unmatched = []  # tabla ingredients that didn't match any stock_products row
+
+    # Pre-load all product names once for close-match suggestions on misses
+    all_product_names = []
+    if all_tabla_ingredients:
+        cur.execute("SELECT name FROM stock_products")
+        all_product_names = [r[0] for r in cur.fetchall()]
 
     # Tabla ingredients (chosen by client)
     for ingredient_name in all_tabla_ingredients:
@@ -604,6 +611,18 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
             _apply_movement(cur, row[0], -1, "booking", booking_ref,
                             name_lower, f"Tabla — {ingredient_name}")
             movements += 1
+        else:
+            # Name mismatch — log loudly with the closest product name so it's
+            # easy to spot (e.g. "Castaña de caju" vs "Castañas de Cajú").
+            import difflib
+            close = difflib.get_close_matches(ingredient_name, all_product_names, n=1, cutoff=0.6)
+            suggestion = f" ¿Quizás '{close[0]}'?" if close else ""
+            logger.warning(
+                "⚠️ Stock NO descontado para reserva %s: ingrediente '%s' no coincide "
+                "con ningún producto en stock_products.%s",
+                booking_ref, ingredient_name, suggestion
+            )
+            unmatched.append(ingredient_name)
 
     # BOM-based deduction for regular extras
     for item in items:
@@ -629,7 +648,7 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
                                 "booking", booking_ref, item["extra_slug"],
                                 f"Reserva {booking_ref}")
                 movements += 1
-    return movements
+    return movements, unmatched
 
 
 # A HotBoat trip lasts 2 hours; stock is consumed once the trip has ended.
@@ -655,6 +674,7 @@ def auto_consume_past_bookings() -> dict:
     consumed = []
     skipped = []
     not_finished = []
+    unmatched_ingredients = []
 
     def _has_finished(fecha_val, hora_val) -> bool:
         """True if booking date+time+duration is already in the past (Chile)."""
@@ -756,7 +776,9 @@ def auto_consume_past_bookings() -> dict:
                                 except Exception:
                                     pass
 
-                        mvts = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None)
+                        mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None)
+                        if unmatched:
+                            unmatched_ingredients.extend(unmatched)
 
                         # Mark as consumed
                         cur.execute(
@@ -775,11 +797,22 @@ def auto_consume_past_bookings() -> dict:
         if alerts:
             _send_low_stock_alert(alerts)
 
+        if unmatched_ingredients:
+            logger.warning(
+                "⚠️ %d ingrediente(s) de tabla sin descontar por nombre que no coincide: %s",
+                len(unmatched_ingredients), unmatched_ingredients
+            )
+
         logger.info(
-            "Stock auto-consume: %d consumed, %d skipped (no BOM), %d not finished yet",
-            len(consumed), len(skipped), len(not_finished)
+            "Stock auto-consume: %d consumed, %d skipped (no BOM), %d not finished yet, %d unmatched",
+            len(consumed), len(skipped), len(not_finished), len(unmatched_ingredients)
         )
-        return {"consumed": consumed, "skipped": skipped, "not_finished": not_finished}
+        return {
+            "consumed": consumed,
+            "skipped": skipped,
+            "not_finished": not_finished,
+            "unmatched_ingredients": unmatched_ingredients,
+        }
 
     except Exception as e:
         logger.error("auto_consume_past_bookings error: %s", e)
