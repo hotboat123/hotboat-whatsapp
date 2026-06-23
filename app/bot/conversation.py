@@ -379,7 +379,8 @@ class ConversationManager:
         from_number: str,
         message_text: str,
         contact_name: str,
-        message_id: str
+        message_id: str,
+        quoted_text: Optional[str] = None,
     ) -> Union[Optional[str], Dict]:
         """
         Process incoming message and generate response
@@ -411,10 +412,15 @@ class ConversationManager:
             # Check BEFORE adding the message to history
             is_first = self._is_first_message(conversation)
             
-            # Add message to history
+            # Add message to history. When the user replied to a specific
+            # bot message, prepend the cited text so the LLM knows which
+            # exact message they are reacting to.
+            effective_text = message_text
+            if quoted_text:
+                effective_text = f'[Respondiendo a: "{quoted_text}"]\n{message_text}'
             conversation["messages"].append({
                 "role": "user",
-                "content": message_text,
+                "content": effective_text,
                 "timestamp": datetime.now(CHILE_TZ).isoformat(),
                 "message_id": message_id
             })

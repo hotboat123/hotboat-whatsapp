@@ -64,6 +64,50 @@ def _schedule_followup(phone_number: str, contact_name: str) -> None:
     _pending_followups[phone_number] = task
 
 
+def _resolve_quoted_message(message: dict, conversation_manager, from_number: str) -> Optional[str]:
+    """
+    If the incoming message is a WhatsApp reply-to (quoted), return the text
+    of the message being quoted so the bot can use it as extra context.
+
+    Meta sends a 'context' object with the ID of the cited message.
+    We look it up first in the in-memory conversation history (fast), then
+    fall back to the saved conversation messages (covers older messages).
+    """
+    ctx = message.get("context")
+    if not ctx:
+        return None
+    quoted_id = ctx.get("id")
+    if not quoted_id:
+        return None
+
+    # 1. Search in-memory history (fastest path, covers recent exchanges)
+    conv = conversation_manager.conversations.get(from_number, {})
+    for msg in reversed(conv.get("messages", [])):
+        if msg.get("message_id") == quoted_id:
+            text = msg.get("content") or msg.get("message_text") or ""
+            return text[:500] if text else None
+
+    # 2. Fall back to DB (covers messages loaded from history on startup)
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT message_text, response_text FROM conversations WHERE message_id=%s LIMIT 1",
+                    (quoted_id,),
+                )
+                row = cur.fetchone()
+                if row:
+                    # Prefer whichever column has content; the quoted msg is
+                    # usually the bot's outgoing text (response_text).
+                    text = (row[1] or row[0] or "").strip()
+                    return text[:500] if text else None
+    except Exception as e:
+        logger.warning(f"Could not resolve quoted message {quoted_id}: {e}")
+
+    return None
+
+
 def verify_webhook(mode: Optional[str], token: Optional[str], expected_token: str) -> bool:
     """
     Verify webhook subscription request from Meta
@@ -154,6 +198,12 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             text_body = message.get("text", {}).get("body", "")
             logger.info(f"💬 Message text: {text_body}")
 
+            # Resolve quoted/replied-to message text so the bot knows which
+            # specific bot message the user is replying to.
+            quoted_text = _resolve_quoted_message(message, conversation_manager, from_number)
+            if quoted_text:
+                logger.info(f"↩️ Reply to quoted message: {quoted_text[:80]}")
+
             # Ensure lead exists before saving ad referral
             from app.db.leads import get_or_create_lead
             lead = await get_or_create_lead(from_number, contact_name)
@@ -220,7 +270,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     from_number=from_number,
                     message_text=text_body,
                     contact_name=contact_name,
-                    message_id=message_id
+                    message_id=message_id,
+                    quoted_text=quoted_text,
                 )
             except Exception as e:
                 logger.error(f"Error in conversation_manager.process_message: {e}")
