@@ -1875,41 +1875,51 @@ _booking_ctx_ai_cache: Dict[str, dict] = {}
 
 
 def _ai_extract_booking(history: list) -> dict:
-    """Use Groq/llama to extract reservation date/time/people from natural language.
+    """Use Groq/llama to extract reservation date/time/people from customer messages.
 
-    Handles relative dates like 'mañana', 'jueves 25', 'a las 19' and always uses
-    the most recent mention. Returns {} on any failure so the panel still renders.
+    Only customer (incoming) messages are sent to avoid bot noise like price lists
+    or 'Fecha: N/A' placeholders that confuse the model.
     """
     import json as _json
     from openai import OpenAI
 
-    msgs = [m for m in history
-            if isinstance(m.get("message_text"), str) and m.get("message_text").strip()]
-    recent = msgs[-30:]
+    # Only incoming (customer) messages — they are the source of date/time/people
+    customer_msgs = [
+        m["message_text"].strip()
+        for m in history
+        if m.get("direction") == "incoming"
+        and isinstance(m.get("message_text"), str)
+        and m.get("message_text").strip()
+    ]
+    recent = customer_msgs[-20:]  # last 20 customer turns is more than enough
     if not recent:
         return {}
 
-    lines = []
-    for m in recent:
-        who = "Cliente" if m.get("direction") == "incoming" else "Bot"
-        lines.append(f"{who}: {m['message_text'].strip()}")
-    transcript = "\n".join(lines)
+    transcript = "\n".join(f"- {t}" for t in recent)
 
     today = datetime.now(CHILE_TZ)
-    weekdays = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
-    today_str = f"{today.strftime('%Y-%m-%d')} ({weekdays[today.weekday()]})"
+    weekdays_es = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    today_str = f"{today.strftime('%Y-%m-%d')} ({weekdays_es[today.weekday()]})"
+
+    # Build next-weekday reference for the prompt so the model can resolve "miércoles" etc.
+    next_days = {}
+    for delta in range(1, 8):
+        d = today + timedelta(days=delta)
+        next_days[weekdays_es[d.weekday()]] = d.strftime("%Y-%m-%d")
+    next_days_hint = ", ".join(f"{k} → {v}" for k, v in next_days.items())
 
     system = (
         "Eres un extractor de datos de reserva para una empresa de paseos en bote en Chile. "
         f"Hoy es {today_str}. "
-        "Del chat, identifica la fecha, hora y número de personas que el CLIENTE quiere reservar. "
-        "El cliente puede usar lenguaje natural (ej: 'mañana', 'jueves 25', 'a las 19'). "
-        "Usa SIEMPRE la mención más reciente del cliente. Resuelve fechas relativas usando la fecha de hoy. "
-        "Ignora los precios y la lista de tarifas del bot (ahí aparecen 2 a 7 personas como ejemplo). "
-        "Responde SOLO un objeto JSON con las claves: "
+        f"Próximos días de semana: {next_days_hint}. "
+        "Lee los mensajes del CLIENTE (solo ellos) e identifica la fecha, hora y número de personas "
+        "que quiere reservar. Usa SIEMPRE la mención MÁS RECIENTE. "
+        "Resuelve fechas relativas con los datos de hoy: 'mañana', 'miércoles', 'jueves 25', etc. "
+        "El número de personas es lo que el cliente menciona querer reservar (ej: 'somos 4', 'para 3'). "
+        "Responde SOLO un objeto JSON con: "
         "date_iso (YYYY-MM-DD o null), date_display (texto corto en español ej '25 de junio' o null), "
         "time (HH:MM en 24h o null), people (entero o null). "
-        "Si un dato no se menciona, usa null."
+        "Si un dato no se menciona explícitamente, pon null."
     )
 
     try:
@@ -1921,21 +1931,21 @@ def _ai_extract_booking(history: list) -> dict:
             model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system},
-                {"role": "user", "content": transcript},
+                {"role": "user", "content": f"Mensajes del cliente:\n{transcript}"},
             ],
             response_format={"type": "json_object"},
             temperature=0,
-            max_tokens=200,
+            max_tokens=150,
         )
         data = _json.loads(resp.choices[0].message.content)
         return {
             "date_iso": data.get("date_iso") or None,
             "date_display": data.get("date_display") or None,
             "time": data.get("time") or None,
-            "quantity": data.get("people") or None,
+            "quantity": str(data["people"]) if data.get("people") else None,
         }
     except Exception as e:
-        logger.warning(f"AI booking extraction failed for: {e}")
+        logger.warning(f"AI booking extraction failed: {e}")
         return {}
 
 
