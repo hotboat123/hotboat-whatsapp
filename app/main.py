@@ -1886,7 +1886,7 @@ async def get_booking_context(phone_number: str):
     email_rx = _re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
     history = await get_conversation_history(phone_number, limit=60)
     for msg in reversed(history):
-        text = msg.get("content", "") or ""
+        text = msg.get("message_text", "") or ""
         if isinstance(text, str):
             m = email_rx.search(text)
             if m:
