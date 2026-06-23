@@ -1031,14 +1031,15 @@ function renderBookingContext(ctx) {
     const existing = document.getElementById('bookingContextCard');
     if (existing) existing.remove();
 
-    const container = document.getElementById('leadInfo');
+    // Dedicated container so renderLeadInfo's innerHTML reset never wipes the card
+    const container = document.getElementById('bookingContextContainer') || document.getElementById('leadInfo');
     if (!container) return;
 
     const hasAny = ctx.name || ctx.email || ctx.date_display || ctx.time || ctx.quantity;
 
     const card = document.createElement('div');
     card.id = 'bookingContextCard';
-    card.style.cssText = 'margin-top:1rem;background:var(--surface-2,#1e2535);border:1px solid var(--border,#2a3347);border-radius:10px;padding:.85rem .9rem;';
+    card.style.cssText = 'margin:.5rem .5rem 1rem;background:var(--surface-2,#1e2535);border:1px solid var(--border,#2a3347);border-radius:10px;padding:.85rem .9rem;';
 
     const row = (icon, label, val) => val
         ? `<div style="display:flex;align-items:center;gap:.5rem;margin:.25rem 0;font-size:.8rem;">
@@ -1070,7 +1071,7 @@ function renderBookingContext(ctx) {
             </button>
         </div>`;
 
-    container.insertBefore(card, container.firstChild);
+    container.appendChild(card);
     window._lastBookingCtx = ctx;
 }
 
