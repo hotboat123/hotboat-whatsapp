@@ -209,7 +209,7 @@ def get_urgency_days(
                     params.append(to_date)
                 where = "WHERE " + " AND ".join(wheres)
                 cur.execute(
-                    f"SELECT fecha, enabled, reason, entity_type, entity_slug FROM urgency_days {where} ORDER BY fecha",
+                    f"SELECT fecha, enabled, reason, entity_type, entity_slug, profile_key FROM urgency_days {where} ORDER BY fecha",
                     params,
                 )
                 return [
@@ -219,6 +219,7 @@ def get_urgency_days(
                         "reason": r[2] or "",
                         "entity_type": r[3],
                         "entity_slug": r[4] or "",
+                        "profile_key": r[5] or None,
                     }
                     for r in cur.fetchall()
                 ]
@@ -265,17 +266,20 @@ def set_urgency_day(
     *,
     entity_type: str = "hotboat",
     entity_slug: str = "",
+    profile_key: Optional[str] = None,
 ) -> bool:
     et, slug = normalize_urgency_entity(entity_type, entity_slug)
+    pk = (profile_key or "").strip() or None
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO urgency_days (entity_type, entity_slug, fecha, enabled, reason)
-                       VALUES (%s, %s, %s, %s, %s)
+                    """INSERT INTO urgency_days (entity_type, entity_slug, fecha, enabled, reason, profile_key)
+                       VALUES (%s, %s, %s, %s, %s, %s)
                        ON CONFLICT (entity_type, entity_slug, fecha)
-                       DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason""",
-                    (et, slug, d, enabled, reason),
+                       DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason,
+                                     profile_key=EXCLUDED.profile_key""",
+                    (et, slug, d, enabled, reason, pk),
                 )
                 conn.commit()
         return True
@@ -718,6 +722,47 @@ def get_operating_hours_as_ints() -> list:
         except Exception:
             pass
     return result
+
+
+def get_schedule_types() -> list:
+    """Return the saved schedule-type profiles: [{id, name, hours:[HH:MM]}]."""
+    raw = get_setting("schedule_types", "")
+    if not raw:
+        return []
+    try:
+        types = json.loads(raw)
+        return types if isinstance(types, list) else []
+    except Exception:
+        return []
+
+
+def get_day_schedule_hours_map(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+) -> dict:
+    """
+    Map of {date_str: [hour_ints]} for days whose assigned profile is a
+    schedule-type (custom hours). Days assigned an urgency-mode profile or no
+    profile are absent — those fall back to the global operating hours.
+    """
+    types_by_id = {t.get("id"): t for t in get_schedule_types() if isinstance(t, dict)}
+    if not types_by_id:
+        return {}
+    out: dict = {}
+    for v in get_urgency_days(from_date, to_date):
+        pk = v.get("profile_key")
+        if not pk or pk not in types_by_id:
+            continue
+        hours = types_by_id[pk].get("hours") or []
+        hour_ints = []
+        for h in hours:
+            try:
+                hour_ints.append(int(str(h).split(":")[0]))
+            except Exception:
+                pass
+        if hour_ints:
+            out[v["date"]] = sorted(set(hour_ints))
+    return out
 
 
 # ── Menu visibility settings ─────────────────────────────────────────────────

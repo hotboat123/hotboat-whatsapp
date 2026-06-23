@@ -222,10 +222,12 @@ class AvailabilityChecker:
             # real availability generation here).
             vacation_dates: set = set()
             db_operating_hours = None
+            day_schedule_hours: dict = {}
             try:
                 from app.booking.operator_settings import (
                     get_vacation_days,
                     get_operating_hours_as_ints,
+                    get_day_schedule_hours_map,
                 )
             except Exception as ie:
                 logger.error("operator_settings import failed: %s", ie, exc_info=True)
@@ -240,6 +242,13 @@ class AvailabilityChecker:
                     db_operating_hours = get_operating_hours_as_ints()
                 except Exception as e:
                     logger.warning("get_operating_hours_as_ints failed (continuing): %s", e, exc_info=True)
+                try:
+                    # Per-day custom hours from an assigned schedule-type profile
+                    day_schedule_hours = get_day_schedule_hours_map(
+                        start_date.date(), end_date.date()
+                    )
+                except Exception as e:
+                    logger.warning("get_day_schedule_hours_map failed (continuing): %s", e, exc_info=True)
 
             # If settings failed to load, fall back to static config (hour ints)
             if db_operating_hours is None:
@@ -256,7 +265,9 @@ class AvailabilityChecker:
                     current_date += timedelta(days=1)
                     continue
 
-                hours_to_generate = db_operating_hours
+                # A day with an assigned schedule-type profile uses its custom
+                # hours; otherwise fall back to the global operating hours.
+                hours_to_generate = day_schedule_hours.get(str(current_date)) or db_operating_hours
                 if not hours_to_generate:
                     hours_to_generate = list(self.config.operating_hours)
 

@@ -1148,6 +1148,9 @@ def ensure_db_columns() -> None:
                     ON booking_visitor_sessions (started_at);
                 CREATE INDEX IF NOT EXISTS idx_booking_visitor_sessions_class
                     ON booking_visitor_sessions (classification);
+
+                -- 036: per-day profile key (schedule type / urgency mode assigned to a day)
+                ALTER TABLE urgency_days ADD COLUMN IF NOT EXISTS profile_key TEXT DEFAULT NULL;
             """)
             conn.commit()
 
