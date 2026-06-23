@@ -976,6 +976,94 @@ async def update_op_hours(body: OperatingHoursRequest, x_admin_key: str = Header
     return {"ok": True, "hours": get_operating_hours()}
 
 
+# ── Schedule types & urgency modes (calendar day profiles) ─────────────────────
+# Both are simple JSON lists persisted in the generic settings KV store. The admin
+# calendar lets you assign one of these profiles to specific days.
+
+def _normalize_hhmm_list(values) -> list:
+    """Keep only valid 'HH:MM' strings, zero-padded, in original order."""
+    out = []
+    for v in (values or []):
+        s = str(v).strip()
+        parts = s.split(":")
+        if len(parts) < 2:
+            continue
+        try:
+            h, m = int(parts[0]), int(parts[1])
+        except ValueError:
+            continue
+        if 0 <= h <= 23 and 0 <= m <= 59:
+            out.append(f"{h:02d}:{m:02d}")
+    return out
+
+
+@admin_router.get("/api/admin/schedule-types")
+async def get_schedule_types(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    raw = get_setting("schedule_types", "")
+    try:
+        types = json.loads(raw) if raw else []
+    except Exception:
+        types = []
+    return {"schedule_types": types}
+
+
+class ScheduleTypesRequest(BaseModel):
+    schedule_types: list
+
+
+@admin_router.put("/api/admin/schedule-types")
+async def update_schedule_types(body: ScheduleTypesRequest, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    cleaned = []
+    for t in (body.schedule_types or []):
+        if not isinstance(t, dict):
+            continue
+        cleaned.append({
+            "id": str(t.get("id") or "").strip() or f"s{len(cleaned)+1}",
+            "name": str(t.get("name") or "").strip() or f"Horario {len(cleaned)+1}",
+            "hours": _normalize_hhmm_list(t.get("hours")),
+        })
+    set_setting("schedule_types", json.dumps(cleaned))
+    return {"ok": True, "schedule_types": cleaned}
+
+
+@admin_router.get("/api/admin/urgency-modes")
+async def get_urgency_modes(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    raw = get_setting("urgency_modes", "")
+    try:
+        modes = json.loads(raw) if raw else []
+    except Exception:
+        modes = []
+    return {"urgency_modes": modes}
+
+
+class UrgencyModesRequest(BaseModel):
+    urgency_modes: list
+
+
+@admin_router.put("/api/admin/urgency-modes")
+async def update_urgency_modes(body: UrgencyModesRequest, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    cleaned = []
+    for m in (body.urgency_modes or []):
+        if not isinstance(m, dict):
+            continue
+        try:
+            gap = float(m.get("gap_hours", 3) or 3)
+        except (TypeError, ValueError):
+            gap = 3
+        cleaned.append({
+            "id": str(m.get("id") or "").strip() or f"u{len(cleaned)+1}",
+            "name": str(m.get("name") or "").strip() or f"Urgencia {len(cleaned)+1}",
+            "seed_times": _normalize_hhmm_list(m.get("seed_times")),
+            "gap_hours": gap,
+        })
+    set_setting("urgency_modes", json.dumps(cleaned))
+    return {"ok": True, "urgency_modes": cleaned}
+
+
 @admin_router.get("/api/admin/availability-debug")
 async def availability_debug(
     x_admin_key: str = Header(""),
