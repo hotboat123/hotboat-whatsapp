@@ -632,26 +632,60 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
     return movements
 
 
+# A HotBoat trip lasts 2 hours; stock is consumed once the trip has ended.
+TRIP_DURATION_HOURS = 2
+
+
 def auto_consume_past_bookings() -> dict:
     """
-    Find all confirmed reservations whose date has already passed and whose
-    stock has not been consumed yet, then deduct their stock.
-    Called on startup and periodically by the background scheduler.
+    Deduct stock for confirmed/pending reservations that have ALREADY FINISHED
+    (booking date + time + trip duration is in the past, Chile time) and whose
+    stock has not been consumed yet.
+    Called on startup and every ~15 min by the background scheduler, so a tabla
+    is discounted shortly after that customer's reservation ends.
     Returns a summary dict.
     """
     import json as _json
-    from datetime import date
+    from datetime import datetime, time as _time, timedelta
+    from zoneinfo import ZoneInfo
 
-    today = date.today().isoformat()
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    now_chile = datetime.now(CHILE_TZ)
+    today = now_chile.date().isoformat()
     consumed = []
     skipped = []
+    not_finished = []
+
+    def _has_finished(fecha_val, hora_val) -> bool:
+        """True if booking date+time+duration is already in the past (Chile)."""
+        if fecha_val is None:
+            return False
+        # Parse date
+        try:
+            d = fecha_val if hasattr(fecha_val, "year") else datetime.fromisoformat(str(fecha_val)).date()
+        except Exception:
+            return False
+        # Parse time (default to end-of-day if missing, so it only fires next day)
+        if hora_val is None:
+            t = _time(23, 59)
+        elif hasattr(hora_val, "hour"):
+            t = hora_val
+        else:
+            try:
+                parts = str(hora_val).split(":")
+                t = _time(int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
+            except Exception:
+                t = _time(23, 59)
+        start_dt = datetime.combine(d, t).replace(tzinfo=CHILE_TZ)
+        end_dt = start_dt + timedelta(hours=TRIP_DURATION_HOURS)
+        return now_chile >= end_dt
 
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # hotboat_appointments uses different column names
                 cur.execute("""
-                    SELECT id, booking_ref, booking_date, extras, stock_consumed_at
+                    SELECT id, booking_ref, booking_date, booking_time, extras, stock_consumed_at
                     FROM hotboat_appointments
                     WHERE booking_date <= %s
                       AND status IN ('confirmed', 'CONFIRMED', 'pending', 'PENDING')
@@ -661,7 +695,7 @@ def auto_consume_past_bookings() -> dict:
 
                 # all_appointments: synced/historical reservations
                 cur.execute("""
-                    SELECT id, source_id, fecha, extras_json, stock_consumed_at
+                    SELECT id, source_id, fecha, hora, extras_json, stock_consumed_at
                     FROM all_appointments
                     WHERE fecha <= %s
                       AND status IN ('confirmed', 'CONFIRMED', 'pending', 'PENDING')
@@ -672,11 +706,16 @@ def auto_consume_past_bookings() -> dict:
             processed_refs = set()
 
             for table_name, rows in [("hotboat_appointments", web_rows), ("all_appointments", all_rows)]:
-                for (row_id, source_id, fecha, extras_json, _) in rows:
+                for (row_id, source_id, fecha, hora, extras_json, _) in rows:
                     ref = source_id or (f"HA-{row_id}" if table_name == "hotboat_appointments" else f"AA-{row_id}")
                     if ref in processed_refs:
                         continue
                     processed_refs.add(ref)
+
+                    # Only consume once the reservation has actually ended
+                    if not _has_finished(fecha, hora):
+                        not_finished.append(ref)
+                        continue
 
                     # Check if already consumed (via stock_movements)
                     with conn.cursor() as cur:
@@ -736,8 +775,11 @@ def auto_consume_past_bookings() -> dict:
         if alerts:
             _send_low_stock_alert(alerts)
 
-        logger.info("Stock auto-consume: %d consumed, %d skipped (no BOM)", len(consumed), len(skipped))
-        return {"consumed": consumed, "skipped": skipped}
+        logger.info(
+            "Stock auto-consume: %d consumed, %d skipped (no BOM), %d not finished yet",
+            len(consumed), len(skipped), len(not_finished)
+        )
+        return {"consumed": consumed, "skipped": skipped, "not_finished": not_finished}
 
     except Exception as e:
         logger.error("auto_consume_past_bookings error: %s", e)
