@@ -574,7 +574,6 @@ async function selectConversation(phoneNumber) {
         updatePriorityUI(currentConversation.priority);
 
         loadLeadInfo(phoneNumber);
-        loadBookingContext(phoneNumber);
 
         renderCurrentChat({ scrollToBottom: true });
         renderConversations();
@@ -948,10 +947,12 @@ async function loadLeadInfo(phoneNumber) {
     try {
         const response = await fetch(`${API_BASE}/leads/${phoneNumber}`);
         if (!response.ok) throw new Error('Failed to load lead info');
-        
+
         const data = await response.json();
         renderLeadInfo(data.lead);
-        
+        // Load booking card AFTER renderLeadInfo so innerHTML reset never wipes it
+        loadBookingContext(phoneNumber);
+
     } catch (error) {
         console.error('Error loading lead info:', error);
     }
@@ -1031,8 +1032,7 @@ function renderBookingContext(ctx) {
     const existing = document.getElementById('bookingContextCard');
     if (existing) existing.remove();
 
-    // Dedicated container so renderLeadInfo's innerHTML reset never wipes the card
-    const container = document.getElementById('bookingContextContainer') || document.getElementById('leadInfo');
+    const container = document.getElementById('leadInfo');
     if (!container) return;
 
     const hasAny = ctx.name || ctx.email || ctx.date_display || ctx.time || ctx.quantity;
