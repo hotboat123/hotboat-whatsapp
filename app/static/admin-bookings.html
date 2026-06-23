@@ -9930,11 +9930,60 @@ async function triggerAutoConsumeStock(){
   btn.textContent = '⏳ Procesando...'; btn.disabled = true;
   try{
     const res = await api('/api/admin/stock/auto-consume-past', {method:'POST'});
-    const n = (res.consumed||[]).length;
-    showToast(n > 0 ? `✅ Stock descontado para ${n} reserva(s)` : '✅ Todo al día — sin reservas pendientes');
     await loadExtrasCat();
+    _showConsumeResultModal(res);
   }catch(e){ showToast('❌ Error: '+e.message); }
   finally{ btn.textContent = orig; btn.disabled = false; }
+}
+
+function _showConsumeResultModal(res){
+  const consumed   = res.consumed   || [];
+  const skipped    = res.skipped    || [];
+  const notFin     = res.not_finished || [];
+  const unmatched  = res.unmatched_ingredients || [];
+
+  const section = (title, color, items, renderFn) => {
+    if(!items.length) return '';
+    return `<div style="margin-bottom:1rem">
+      <div style="font-weight:700;color:${color};margin-bottom:.4rem;font-size:.88rem">${title} (${items.length})</div>
+      <ul style="margin:0;padding-left:1.2rem;list-style:disc;font-size:.82rem;color:#cbd5e1;line-height:1.7">
+        ${items.map(renderFn).join('')}
+      </ul>
+    </div>`;
+  };
+
+  const body = `
+    ${consumed.length === 0 && unmatched.length === 0
+      ? `<p style="color:#4ade80;font-weight:600;margin:0 0 .8rem">✅ Todo al día — sin reservas pendientes por descontar.</p>`
+      : ''}
+    ${section('✅ Stock descontado', '#4ade80', consumed, r => `<li>${r}</li>`)}
+    ${section('⏳ Aún no terminan', '#fbbf24', notFin,   r => `<li>${r}</li>`)}
+    ${section('⚪ Sin ingredientes (sin BOM)', '#94a3b8', skipped, r => `<li>${r}</li>`)}
+    ${unmatched.length ? `<div style="margin-bottom:1rem">
+      <div style="font-weight:700;color:#f87171;margin-bottom:.4rem;font-size:.88rem">⚠️ Ingredientes sin coincidencia (${unmatched.length})</div>
+      <ul style="margin:0;padding-left:1.2rem;list-style:disc;font-size:.82rem;color:#fca5a5;line-height:1.8">
+        ${unmatched.map(u => {
+          const sug = u.suggestion ? ` → ¿Quizás <strong style="color:#fbbf24">${u.suggestion}</strong>?` : '';
+          return `<li><span style="color:#f87171">${u.ingredient}</span>${sug} <span style="color:#64748b;font-size:.78rem">(reserva ${u.booking_ref})</span></li>`;
+        }).join('')}
+      </ul>
+      <p style="margin:.6rem 0 0;font-size:.78rem;color:#94a3b8">⚙️ Estos ingredientes están en la selección de tabla pero su nombre no coincide exactamente con ningún producto en stock. Ajusta el nombre en Stock Productos o en la configuración de tabla.</p>
+    </div>` : ''}
+  `;
+
+  // Reuse generic modal pattern
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  overlay.innerHTML = `
+    <div style="background:#0d1117;border:1px solid #1e2d45;border-radius:14px;padding:1.5rem;max-width:520px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <h3 style="margin:0;font-size:1rem;color:#f1f5f9">📦 Resultado — Descontar reservas pasadas</h3>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:#94a3b8;font-size:1.2rem;cursor:pointer;padding:.2rem .5rem">✕</button>
+      </div>
+      ${body}
+    </div>`;
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 

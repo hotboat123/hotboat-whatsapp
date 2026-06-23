@@ -616,13 +616,14 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
             # easy to spot (e.g. "Castaña de caju" vs "Castañas de Cajú").
             import difflib
             close = difflib.get_close_matches(ingredient_name, all_product_names, n=1, cutoff=0.6)
-            suggestion = f" ¿Quizás '{close[0]}'?" if close else ""
+            suggestion = close[0] if close else None
             logger.warning(
                 "⚠️ Stock NO descontado para reserva %s: ingrediente '%s' no coincide "
                 "con ningún producto en stock_products.%s",
-                booking_ref, ingredient_name, suggestion
+                booking_ref, ingredient_name,
+                f" ¿Quizás '{suggestion}'?" if suggestion else "",
             )
-            unmatched.append(ingredient_name)
+            unmatched.append({"ingredient": ingredient_name, "suggestion": suggestion})
 
     # BOM-based deduction for regular extras
     for item in items:
@@ -778,7 +779,8 @@ def auto_consume_past_bookings() -> dict:
 
                         mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None)
                         if unmatched:
-                            unmatched_ingredients.extend(unmatched)
+                            for u in unmatched:
+                                unmatched_ingredients.append({"booking_ref": ref, **u})
 
                         # Mark as consumed
                         cur.execute(
