@@ -907,6 +907,19 @@ body {
     border-color: var(--primary-color);
     color: var(--primary-color);
 }
+/* Orange toggle for the lead/booking info panel (mobile only) */
+.btn-info-toggle {
+    color: #fff;
+    background: #ff8c1a;
+    border-color: #ff8c1a;
+    display: none; /* hidden on desktop where the right panel is always visible */
+}
+.btn-info-toggle:hover {
+    background: #ff7a00;
+    border-color: #ff7a00;
+    color: #fff;
+}
+
 .message-input-area.collapsed #messageForm {
     display: none;
 }
@@ -943,6 +956,25 @@ body {
 @media (max-width: 1024px) {
     .right-panel {
         display: none;
+    }
+    /* Show the orange toggle button on mobile/tablet */
+    .btn-info-toggle {
+        display: flex;
+    }
+    /* When toggled on, show the panel as a bottom sheet above the input */
+    .right-panel.mobile-visible {
+        display: block;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: auto;
+        max-height: 55vh;
+        z-index: 200;
+        border-left: none;
+        border-top: 2px solid #ff8c1a;
+        box-shadow: 0 -6px 20px rgba(0,0,0,0.45);
+        overflow-y: auto;
     }
 }
 

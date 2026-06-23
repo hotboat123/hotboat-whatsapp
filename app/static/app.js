@@ -1179,6 +1179,15 @@ function toggleInputCollapse() {
     if (btn) btn.textContent = collapsed ? '▲' : '▼';
 }
 
+// Show/hide the lead + booking info panel on mobile (bottom sheet)
+function toggleLeadPanel() {
+    const panel = document.getElementById('rightPanel');
+    const btn   = document.getElementById('toggleInfoBtn');
+    if (!panel) return;
+    const visible = panel.classList.toggle('mobile-visible');
+    if (btn) btn.textContent = visible ? '▼' : '▲';
+}
+
 // ── Translation language selector ──────────────────────────────────────────
 let activeTranslateLang = null;
 const translationCache = {}; // { messageId: translatedText }

@@ -98,7 +98,8 @@
                 </div>
 
                 <div class="message-input-area" id="messageInputArea" style="display: none;">
-                    <div style="display:flex;justify-content:flex-end;padding:0.15rem 0 0.1rem;">
+                    <div style="display:flex;justify-content:flex-end;gap:0.4rem;padding:0.15rem 0 0.1rem;">
+                        <button type="button" class="btn-collapse-input btn-info-toggle" id="toggleInfoBtn" onclick="toggleLeadPanel()" title="Mostrar / ocultar datos de reserva">▲</button>
                         <button type="button" class="btn-collapse-input" id="collapseInputBtn" onclick="toggleInputCollapse()" title="Ocultar / mostrar panel de escritura">▼</button>
                     </div>
                     <form onsubmit="sendMessage(event)" id="messageForm">
@@ -282,7 +283,7 @@
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="/static/app.js?v=20260623170000"></script>
+    <script src="/static/app.js?v=20260623180000"></script>
 </body>
 </html>
 
