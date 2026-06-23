@@ -1064,6 +1064,17 @@ async def update_urgency_modes(body: UrgencyModesRequest, x_admin_key: str = Hea
     return {"ok": True, "urgency_modes": cleaned}
 
 
+@admin_router.post("/api/admin/availability-cache-clear")
+async def clear_availability_cache(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    try:
+        from app.booking import router as _booking_router
+        _booking_router._avail_cache.clear()
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 @admin_router.get("/api/admin/availability-debug")
 async def availability_debug(
     x_admin_key: str = Header(""),
