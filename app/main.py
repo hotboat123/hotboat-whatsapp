@@ -1881,26 +1881,56 @@ async def get_booking_context(phone_number: str):
         meta = conversation_manager.conversations[phone_number].get("metadata", {})
         pending = meta.get("pending_reservation") or {}
 
-    # Scan recent messages for an email address
+    # Start from live pending_reservation (most accurate when the flow is active)
     email = ""
+    date_display = pending.get("date")
+    time_val = pending.get("time")
+    quantity = pending.get("quantity")
+    date_iso = (pending.get("date_obj_iso") or "")[:10] or None
+
+    # Fall back to scanning the chat history for any data not already captured.
+    # The bot emits lines like "Fecha: ...", "Horario: ...", "Personas: N".
     email_rx = _re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
-    history = await get_conversation_history(phone_number, limit=60)
-    for msg in reversed(history):
+    date_rx = _re.compile(r"Fecha:?\*?\s*([^\n*]+)", _re.IGNORECASE)
+    time_rx = _re.compile(r"Horario:?\*?\s*([^\n*]+)", _re.IGNORECASE)
+    people_rx = _re.compile(r"Personas:?\*?\s*(\d+)", _re.IGNORECASE)
+
+    def _clean(v):
+        v = (v or "").strip()
+        return v if v and v.upper() != "N/A" else None
+
+    history = await get_conversation_history(phone_number, limit=80)
+    for msg in reversed(history):  # newest first → first match wins
         text = msg.get("message_text", "") or ""
-        if isinstance(text, str):
+        if not isinstance(text, str):
+            continue
+        if not email:
             m = email_rx.search(text)
             if m:
                 email = m.group(0)
-                break
+        if not date_display:
+            m = date_rx.search(text)
+            if m:
+                date_display = _clean(m.group(1))
+        if not time_val:
+            m = time_rx.search(text)
+            if m:
+                time_val = _clean(m.group(1))
+        if not quantity:
+            m = people_rx.search(text)
+            if m:
+                quantity = m.group(1).strip()
+        if email and date_display and time_val and quantity:
+            break
 
     return {
         "name": lead.get("customer_name", ""),
         "phone": phone_number,
         "email": email,
-        "date_display": pending.get("date"),
-        "date_iso": (pending.get("date_obj_iso") or "")[:10] or None,
-        "time": pending.get("time"),
-        "quantity": pending.get("quantity"),
+        "date_display": date_display,
+        "date_iso": date_iso,
+        "time": time_val,
+        "quantity": quantity,
     }
 
 
