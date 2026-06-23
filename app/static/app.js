@@ -1183,9 +1183,11 @@ function toggleInputCollapse() {
 function toggleLeadPanel() {
     const panel = document.getElementById('rightPanel');
     const btn   = document.getElementById('toggleInfoBtn');
+    const btnP  = document.getElementById('toggleInfoBtnPanel');
     if (!panel) return;
     const visible = panel.classList.toggle('mobile-visible');
-    if (btn) btn.textContent = visible ? '▼' : '▲';
+    if (btn)  btn.textContent  = visible ? '▼' : '▲';
+    if (btnP) btnP.textContent = visible ? '▼' : '▲';
 }
 
 // ── Translation language selector ──────────────────────────────────────────

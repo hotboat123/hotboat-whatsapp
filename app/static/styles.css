@@ -587,6 +587,14 @@ body {
     padding: 0.4rem;
     background-color: var(--bg-light);
     border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+/* The orange arrow inside the panel header — only used on mobile */
+.btn-info-toggle-panel {
+    display: none;
 }
 
 .panel-header h3 {
@@ -957,8 +965,9 @@ body {
     .right-panel {
         display: none;
     }
-    /* Show the orange toggle button on mobile/tablet */
-    .btn-info-toggle {
+    /* Show the orange toggle buttons on mobile/tablet */
+    .btn-info-toggle,
+    .btn-info-toggle-panel {
         display: flex;
     }
     /* When toggled on, show the panel as a bottom sheet above the input */
@@ -975,6 +984,12 @@ body {
         border-top: 2px solid #ff8c1a;
         box-shadow: 0 -6px 20px rgba(0,0,0,0.45);
         overflow-y: auto;
+    }
+    /* Keep the header (with its orange close arrow) pinned at the top of the sheet */
+    .right-panel.mobile-visible .panel-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
     }
 }
 
