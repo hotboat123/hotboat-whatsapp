@@ -796,9 +796,8 @@ def auto_consume_past_bookings() -> dict:
 
             alerts = _check_low_stock(conn)
 
-        if alerts:
-            _send_low_stock_alert(alerts)
-
+        # Low-stock alert is NOT sent here; it's sent by the scheduler
+        # only at 09:00 and 21:00 to avoid flooding the inbox every 15 min.
         if unmatched_ingredients:
             logger.warning(
                 "⚠️ %d ingrediente(s) de tabla sin descontar por nombre que no coincide: %s",
@@ -814,11 +813,12 @@ def auto_consume_past_bookings() -> dict:
             "skipped": skipped,
             "not_finished": not_finished,
             "unmatched_ingredients": unmatched_ingredients,
+            "low_stock_alerts": alerts,
         }
 
     except Exception as e:
         logger.error("auto_consume_past_bookings error: %s", e)
-        return {"error": str(e), "consumed": [], "skipped": []}
+        return {"error": str(e), "consumed": [], "skipped": [], "low_stock_alerts": []}
 
 
 _CONFIRMED = ('confirmed', 'paid', 'aprobado', 'CONFIRMED')

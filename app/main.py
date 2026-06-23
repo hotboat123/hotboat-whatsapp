@@ -402,7 +402,9 @@ async def _run_stock_consume_scheduler():
       • Every 15 min: consume stock for reservations that have already FINISHED
         (date + time + trip duration in the past), so a tabla is discounted
         shortly after that customer's reservation ends.
-      • Once daily at 09:00: alert if today's tabla ingredients are short.
+      • 09:00 and 21:00: send low-stock alert email if any product is below
+        its minimum — twice a day avoids the inbox getting flooded every 15 min.
+      • Once daily at 09:00: also check today's tabla ingredient shortfalls.
     Also runs once 45 s after startup to catch anything missed.
     """
     from zoneinfo import ZoneInfo
@@ -410,7 +412,10 @@ async def _run_stock_consume_scheduler():
     CHILE_TZ = ZoneInfo("America/Santiago")
 
     CONSUME_INTERVAL_SECONDS = 15 * 60
-    last_morning_check_date = None  # so the 09:00 alert runs at most once a day
+    # Track the last (date, hour) pair for which each alert was sent
+    # so it fires at most once per window, even if the loop drifts.
+    last_morning_date = None   # 09:00 window
+    last_evening_date = None   # 21:00 window
 
     # ── startup pass ──────────────────────────────────────────────────────────
     await asyncio.sleep(45)
@@ -425,16 +430,35 @@ async def _run_stock_consume_scheduler():
     while True:
         # Consume finished reservations
         try:
-            from app.booking.stock_router import auto_consume_past_bookings
+            from app.booking.stock_router import auto_consume_past_bookings, _send_low_stock_alert
             result = await asyncio.to_thread(auto_consume_past_bookings)
             logger.info("📦 Stock auto-consume: %s", result)
         except Exception as _e:
             logger.error("Stock auto-consume scheduler error: %s", _e)
+            result = {}
 
-        # Morning ingredient shortfall alert — once per day, around 09:00
         now = datetime.now(CHILE_TZ)
-        if now.hour == 9 and last_morning_check_date != now.date():
-            last_morning_check_date = now.date()
+        today = now.date()
+
+        # ── Low-stock alert: 09:00 and 21:00 only ─────────────────────────────
+        is_morning = now.hour == 9  and last_morning_date != today
+        is_evening = now.hour == 21 and last_evening_date != today
+        if is_morning or is_evening:
+            low_alerts = result.get("low_stock_alerts", [])
+            if low_alerts:
+                try:
+                    await asyncio.to_thread(_send_low_stock_alert, low_alerts)
+                    logger.info("📧 Low-stock alert sent (%d productos) at %02d:xx",
+                                len(low_alerts), now.hour)
+                except Exception as _e:
+                    logger.error("Low-stock alert send failed: %s", _e)
+            if is_morning:
+                last_morning_date = today
+            if is_evening:
+                last_evening_date = today
+
+        # ── Morning tabla ingredient shortfall: 09:00 only ────────────────────
+        if is_morning:
             try:
                 from app.booking.stock_router import check_and_alert_tabla_ingredients
                 await asyncio.to_thread(check_and_alert_tabla_ingredients)
