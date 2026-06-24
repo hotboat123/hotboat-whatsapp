@@ -199,6 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupResponsiveLayout();
     initPWA();
     loadQuickReplyButtons();
+    _initParentMessages();
 });
 
 // ── PWA / Web Push ────────────────────────────────────────────────────────────
@@ -219,14 +220,25 @@ async function initPWA() {
             }
         });
 
-        // Auto-open conversation if app was opened from a notification
+        // Auto-open conversation from URL params (?phone=...&prefill=...)
         const urlParams = new URLSearchParams(window.location.search);
         const phoneParam = urlParams.get('phone');
+        const prefillParam = urlParams.get('prefill');
         if (phoneParam) {
             const trySelect = setInterval(() => {
                 if (conversations.length > 0) {
                     clearInterval(trySelect);
                     selectConversation(phoneParam);
+                    if (prefillParam) {
+                        setTimeout(() => {
+                            const input = document.getElementById('messageInput');
+                            if (input) {
+                                input.value = decodeURIComponent(prefillParam);
+                                input.dispatchEvent(new Event('input'));
+                                input.focus();
+                            }
+                        }, 600);
+                    }
                 }
             }, 300);
             setTimeout(() => clearInterval(trySelect), 5000);
@@ -237,6 +249,48 @@ async function initPWA() {
     } catch (err) {
         console.warn('Service Worker registration failed:', err);
     }
+}
+
+// ── Parent-frame message bridge ───────────────────────────────────────────────
+// Listens for window.postMessage from the admin panel (admin-bookings.html)
+// so the Popeye button can open a specific conversation and pre-fill a message.
+//
+// Supported message types:
+//   { type: 'OPEN_CHAT', phone: '56912345678' }
+//   { type: 'OPEN_CHAT', phone: '...', prefillMessage: 'Hola ...' }
+function _initParentMessages() {
+    window.addEventListener('message', (event) => {
+        const d = event.data;
+        if (!d || d.type !== 'OPEN_CHAT' || !d.phone) return;
+
+        const openAndPrefill = () => {
+            selectConversation(d.phone);
+            if (d.prefillMessage) {
+                // Wait a tick for selectConversation to finish rendering
+                setTimeout(() => {
+                    const input = document.getElementById('messageInput');
+                    if (input) {
+                        input.value = d.prefillMessage;
+                        input.dispatchEvent(new Event('input'));
+                        input.focus();
+                    }
+                }, 600);
+            }
+        };
+
+        if (conversations.length > 0) {
+            openAndPrefill();
+        } else {
+            // Conversations not loaded yet — wait for them
+            const t = setInterval(() => {
+                if (conversations.length > 0) {
+                    clearInterval(t);
+                    openAndPrefill();
+                }
+            }, 300);
+            setTimeout(() => clearInterval(t), 6000);
+        }
+    });
 }
 
 async function _checkPushState() {

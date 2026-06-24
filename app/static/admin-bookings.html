@@ -5864,21 +5864,31 @@ function openPopeye(){
   const ppBtn = document.getElementById('popeye-contact-btn');
   const phone = ppBtn?.dataset?.phone;
   if(!phone) return;
+
+  // Build the same greeting message as the WhatsApp button
+  const r = _currentReservaData || {};
+  const firstName = (r.nombre_cliente||'').trim().split(/\s+/)[0] || '';
+  const hora = (r.hora||'').substring(0,5);
+  const prefillMsg = `Hola ${firstName}! Cómo estas? Tomás de HotBoat por Aquí😊. Hoy tienes reserva a las ${hora}. Cualquier duda aquí estamos para ayudar, nos vemos!`;
+
   closeModal();
-  // If the chat iframe is already loaded, send a postMessage so it selects
-  // the conversation without a full reload.
   const ifr = document.getElementById('whatsapp-iframe');
-  const ifrLoaded = ifr && ifr.src && ifr.src.includes('/chat');
+  const ifrLoaded = ifr && (ifr.getAttribute('src')||'').startsWith('/chat');
   showSection('whatsapp');
+
   if(ifrLoaded){
-    // Give showSection time to make the iframe visible, then postMessage.
+    // Chat already loaded → postMessage (app.js _initParentMessages handles this)
     setTimeout(()=>{
-      try{ ifr.contentWindow.postMessage({type:'OPEN_CHAT', phone}, '*'); }catch(e){}
-    }, 150);
+      try{
+        ifr.contentWindow.postMessage({type:'OPEN_CHAT', phone, prefillMessage: prefillMsg}, '*');
+      }catch(e){}
+    }, 200);
   } else {
-    // First load: append phone param so the app auto-selects on init.
+    // First load → pass phone + prefill via URL params
     fetch('/api/admin/chat-login', {method:'POST', headers:{'x-admin-key': KEY}})
-      .finally(()=>{ if(ifr) ifr.src = `/chat?phone=${encodeURIComponent(phone)}`; });
+      .finally(()=>{
+        if(ifr) ifr.src = `/chat?phone=${encodeURIComponent(phone)}&prefill=${encodeURIComponent(prefillMsg)}`;
+      });
   }
 }
 
