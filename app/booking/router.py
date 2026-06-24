@@ -174,6 +174,7 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
         from app.booking.operator_settings import (
             get_vacation_days, is_urgency_mode, apply_urgency_filter,
             get_operating_hours, get_urgency_fake_slots, get_urgency_days,
+            get_urgency_config, get_day_urgency_config_map,
         )
         from app.db.connection import get_connection
 
@@ -217,7 +218,7 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
         fake_booked_by_day: dict = {}
         any_urgency_active = global_urgency or any(v for v in urgency_day_overrides.values())
         if any_urgency_active:
-            # Load actual bookings from BOTH sources for the fake-slot calculation
+            # Load actual bookings for the fake-slot calculation
             booked_by_day: dict = {}
             try:
                 with get_connection() as conn:
@@ -238,13 +239,20 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
             except Exception as e:
                 logger.warning(f"Urgency fake-slots: could not fetch booked: {e}")
 
-            fake_base = get_urgency_fake_slots()  # grey slots when no real bookings
-            from app.booking.operator_settings import get_urgency_config
-            gap_min = int(float(get_urgency_config().get("gap_hours", 3)) * 60)
+            # Global config as baseline; per-day profile overrides it when assigned
+            global_cfg = get_urgency_config()
+            day_urgency_cfg_map = get_day_urgency_config_map(start.date(), end.date())
 
             for dk, times in grouped.items():
                 if not _day_urgency_active(dk):
                     continue  # day has urgency off — no ghost slots
+
+                # Use urgency-mode profile assigned to this day, else global config
+                day_override = day_urgency_cfg_map.get(dk)
+                cfg = {**global_cfg, **day_override} if day_override else global_cfg
+                fake_base = get_urgency_fake_slots(config=cfg)
+                gap_min = int(float(cfg.get("gap_hours", 3)) * 60)
+
                 booked = booked_by_day.get(dk, [])
                 avail_set = set(times)
                 if not booked:

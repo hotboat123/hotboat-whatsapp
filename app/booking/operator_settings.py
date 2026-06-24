@@ -736,6 +736,18 @@ def get_schedule_types() -> list:
         return []
 
 
+def get_urgency_modes() -> list:
+    """Return the saved urgency-mode profiles: [{id, name, seed_times:[HH:MM], gap_hours:float}]."""
+    raw = get_setting("urgency_modes", "")
+    if not raw:
+        return []
+    try:
+        modes = json.loads(raw)
+        return modes if isinstance(modes, list) else []
+    except Exception:
+        return []
+
+
 def get_day_schedule_hours_map(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
@@ -762,6 +774,31 @@ def get_day_schedule_hours_map(
                 pass
         if hour_ints:
             out[v["date"]] = sorted(set(hour_ints))
+    return out
+
+
+def get_day_urgency_config_map(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+) -> dict:
+    """
+    Map of {date_str: {seed_times, gap_hours}} for days with an urgency-mode
+    profile assigned via profile_key. Days with no urgency profile (or a
+    schedule-type profile) are absent — those fall back to the global config.
+    """
+    modes_by_id = {m.get("id"): m for m in get_urgency_modes() if isinstance(m, dict)}
+    if not modes_by_id:
+        return {}
+    out: dict = {}
+    for v in get_urgency_days(from_date, to_date):
+        pk = v.get("profile_key")
+        if not pk or pk not in modes_by_id:
+            continue
+        mode = modes_by_id[pk]
+        out[v["date"]] = {
+            "seed_times": mode.get("seed_times") or [],
+            "gap_hours": float(mode.get("gap_hours") or 3),
+        }
     return out
 
 
