@@ -4377,6 +4377,12 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
              white-space:nowrap;line-height:1.5;flex-shrink:0">
       💬 Contactar
     </a>
+    <button id="popeye-contact-btn" onclick="openPopeye()" style="display:none;
+      background:#f97316;color:#fff;border:none;border-radius:8px;
+      padding:.38rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer;
+      white-space:nowrap;line-height:1.5;flex-shrink:0">
+      🦜 Popeye
+    </button>
     <button class="modal-close" onclick="closeModal()" style="position:static;top:auto;right:auto">✕</button>
   </div>
   <div id="modal-body"></div>
@@ -4569,7 +4575,8 @@ function showSection(name){
     topbarBtns.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
     const ifr = document.getElementById('whatsapp-iframe');
     if(ifr) ifr.style.height='calc(100vh - 57px)';
-    if(ifr && ifr.getAttribute('src') !== '/chat'){
+    const ifrSrc = ifr ? ifr.getAttribute('src') : '';
+    if(ifr && !ifrSrc.startsWith('/chat')){
       fetch('/api/admin/chat-login', {method:'POST', headers:{'x-admin-key': KEY}})
         .finally(()=>{ ifr.src = '/chat'; });
     }
@@ -4791,6 +4798,8 @@ async function openClientModal(tel){
   // Show loading state first
   const waBtn = document.getElementById('wa-contact-btn');
   if(waBtn) waBtn.style.display='none';
+  const ppBtn = document.getElementById('popeye-contact-btn');
+  if(ppBtn) ppBtn.style.display='none';
   document.getElementById('modal-title').textContent = 'Cargando...';
   document.getElementById('modal-body').innerHTML = '<div class="loading-msg">Cargando historial...</div>';
   document.getElementById('overlay').classList.add('show');
@@ -5458,6 +5467,7 @@ async function openModal(id){
       loadFirmas(r.booking_ref||'', parseInt(r.num_personas)||0);
     // WhatsApp contact button
     const waBtn = document.getElementById('wa-contact-btn');
+    const ppBtn = document.getElementById('popeye-contact-btn');
     if(waBtn){
       const phone = (r.telefono||'').replace(/[^\d]/g,'');
       if(phone){
@@ -5466,8 +5476,11 @@ async function openModal(id){
         const msg = `Hola ${firstName}! Cómo estas? Tomás de HotBoat por Aquí😊. Hoy tienes reserva a las ${hora}. Cualquier duda aquí estamos para ayudar, nos vemos!`;
         waBtn.href = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
         waBtn.style.display = '';
+        // Store phone for Popeye button
+        if(ppBtn){ ppBtn.dataset.phone = phone; ppBtn.style.display = ''; }
       } else {
         waBtn.style.display = 'none';
+        if(ppBtn) ppBtn.style.display = 'none';
       }
     }
 
@@ -5844,7 +5857,31 @@ function closeModal(e){
   document.getElementById('modal-body').innerHTML='';
   const waBtn = document.getElementById('wa-contact-btn');
   if(waBtn) waBtn.style.display='none';
+  const ppBtn = document.getElementById('popeye-contact-btn');
+  if(ppBtn) ppBtn.style.display='none';
 }
+function openPopeye(){
+  const ppBtn = document.getElementById('popeye-contact-btn');
+  const phone = ppBtn?.dataset?.phone;
+  if(!phone) return;
+  closeModal();
+  // If the chat iframe is already loaded, send a postMessage so it selects
+  // the conversation without a full reload.
+  const ifr = document.getElementById('whatsapp-iframe');
+  const ifrLoaded = ifr && ifr.src && ifr.src.includes('/chat');
+  showSection('whatsapp');
+  if(ifrLoaded){
+    // Give showSection time to make the iframe visible, then postMessage.
+    setTimeout(()=>{
+      try{ ifr.contentWindow.postMessage({type:'OPEN_CHAT', phone}, '*'); }catch(e){}
+    }, 150);
+  } else {
+    // First load: append phone param so the app auto-selects on init.
+    fetch('/api/admin/chat-login', {method:'POST', headers:{'x-admin-key': KEY}})
+      .finally(()=>{ if(ifr) ifr.src = `/chat?phone=${encodeURIComponent(phone)}`; });
+  }
+}
+
 async function saveModal(id){
   const g=id=>document.getElementById(id)?.value;
   // Build extras_json from editor + alojamientos + experiencias add-ons
