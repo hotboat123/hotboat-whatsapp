@@ -220,10 +220,11 @@ async function initPWA() {
             }
         });
 
-        // Auto-open conversation from URL params (?phone=...&prefill=...)
+        // Auto-open conversation from URL params (?phone=...&prefill=...&priority=N)
         const urlParams = new URLSearchParams(window.location.search);
         const phoneParam = urlParams.get('phone');
         const prefillParam = urlParams.get('prefill');
+        const priorityParam = urlParams.get('priority');
         if (phoneParam) {
             const trySelect = setInterval(() => {
                 if (conversations.length > 0) {
@@ -238,6 +239,9 @@ async function initPWA() {
                                 input.focus();
                             }
                         }, 600);
+                    }
+                    if (priorityParam !== null) {
+                        setTimeout(() => updatePriority(parseInt(priorityParam, 10)), 900);
                     }
                 }
             }, 300);
@@ -289,6 +293,11 @@ function _initParentMessages() {
                 }
             }, 300);
             setTimeout(() => clearInterval(t), 6000);
+        }
+
+        // Also set priority if requested
+        if (d.setPriority !== undefined) {
+            setTimeout(() => updatePriority(d.setPriority), 900);
         }
     });
 }
@@ -532,10 +541,11 @@ function renderConversations() {
         
         // Priority badge
         const priority = conv.priority || 0;
-        const priorityColors = ['#808080', '#dc3545', '#ffc107', '#28a745'];
-        const priorityNames = ['Sin prioridad', 'Alta', 'Media', 'Baja'];
-        const priorityBadge = priority > 0 ? 
-            `<span class="priority-badge" style="background-color: ${priorityColors[priority]}" title="Prioridad: ${priorityNames[priority]}">${priority}</span>` : '';
+        const priorityColors = ['#808080', '#dc3545', '#ffc107', '#28a745', '#1db954'];
+        const priorityNames = ['Sin prioridad', 'Alta', 'Media', 'Baja', 'Ya reservó'];
+        const priorityLabels = [null, '1', '2', '3', '0'];
+        const priorityBadge = priority > 0 ?
+            `<span class="priority-badge" style="background-color: ${priorityColors[priority]}" title="Prioridad: ${priorityNames[priority]}">${priorityLabels[priority]}</span>` : '';
 
         // Debug: log conversations with unread
         if (unreadCount > 0) {
@@ -2266,15 +2276,11 @@ async function updatePriority(priority) {
 
 // Update priority UI buttons
 function updatePriorityUI(priority) {
-    // Update button states
-    for (let i = 0; i <= 3; i++) {
+    for (let i = 0; i <= 4; i++) {
         const btn = document.getElementById(`priorityBtn${i}`);
         if (btn) {
-            if (i === priority) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
+            if (i === priority) btn.classList.add('active');
+            else btn.classList.remove('active');
         }
     }
 }

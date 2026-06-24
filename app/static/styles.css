@@ -1327,6 +1327,17 @@ audio::-webkit-media-controls-volume-slider {
     border-color: #ffd700;
 }
 
+.priority-btn-4 {
+    color: #1db954;
+    border-color: #1db954;
+}
+
+.priority-btn-4.active {
+    background-color: #1db954;
+    color: #fff;
+    border-color: #1db954;
+}
+
 /* Quick Reply Section */
 .quick-reply-section {
     display: flex;
@@ -1451,3 +1462,4 @@ audio::-webkit-media-controls-volume-slider {
 .pf-1.active { background: #dc3545; border-color: #dc3545; }
 .pf-2.active { background: #c48c00; border-color: #c48c00; }
 .pf-3.active { background: #28a745; border-color: #28a745; }
+.pf-4.active { background: #1db954; border-color: #1db954; }

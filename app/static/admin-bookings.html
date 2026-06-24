@@ -5880,14 +5880,14 @@ function openPopeye(){
     // Chat already loaded → postMessage (app.js _initParentMessages handles this)
     setTimeout(()=>{
       try{
-        ifr.contentWindow.postMessage({type:'OPEN_CHAT', phone, prefillMessage: prefillMsg}, '*');
+        ifr.contentWindow.postMessage({type:'OPEN_CHAT', phone, prefillMessage: prefillMsg, setPriority: 4}, '*');
       }catch(e){}
     }, 200);
   } else {
     // First load → pass phone + prefill via URL params
     fetch('/api/admin/chat-login', {method:'POST', headers:{'x-admin-key': KEY}})
       .finally(()=>{
-        if(ifr) ifr.src = `/chat?phone=${encodeURIComponent(phone)}&prefill=${encodeURIComponent(prefillMsg)}`;
+        if(ifr) ifr.src = `/chat?phone=${encodeURIComponent(phone)}&prefill=${encodeURIComponent(prefillMsg)}&priority=4`;
       });
   }
 }

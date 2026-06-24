@@ -60,9 +60,10 @@
                     <div class="priority-filter-row">
                         <span style="font-size:.7rem;color:var(--text-secondary);white-space:nowrap;">Filtrar:</span>
                         <button class="pf-btn" id="pfBtn0" onclick="togglePriorityFilter(0)" title="Todas">Todas</button>
+                        <button class="pf-btn pf-4" id="pfBtn4" onclick="togglePriorityFilter(4)" title="Ya reservó">🟢 Reservó</button>
                         <button class="pf-btn pf-1" id="pfBtn1" onclick="togglePriorityFilter(1)" title="Prioridad Alta">🔴 Alta</button>
                         <button class="pf-btn pf-2" id="pfBtn2" onclick="togglePriorityFilter(2)" title="Prioridad Media">🟡 Media</button>
-                        <button class="pf-btn pf-3" id="pfBtn3" onclick="togglePriorityFilter(3)" title="Prioridad Baja">🟢 Baja</button>
+                        <button class="pf-btn pf-3" id="pfBtn3" onclick="togglePriorityFilter(3)" title="Prioridad Baja">⚪ Baja</button>
                     </div>
                 </div>
 
@@ -160,6 +161,9 @@
                                     <div class="priority-buttons">
                                         <button type="button" id="priorityBtn0" class="priority-btn priority-btn-0 active" onclick="updatePriority(0)" title="Sin prioridad">
                                             ➖
+                                        </button>
+                                        <button type="button" id="priorityBtn4" class="priority-btn priority-btn-4" onclick="updatePriority(4)" title="Ya reservó">
+                                            0
                                         </button>
                                         <button type="button" id="priorityBtn1" class="priority-btn priority-btn-1" onclick="updatePriority(1)" title="Prioridad Alta">
                                             1
@@ -284,7 +288,7 @@
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="/static/app.js?v=20260624120000"></script>
+    <script src="/static/app.js?v=20260624150000"></script>
 </body>
 </html>
 
