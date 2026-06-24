@@ -18,6 +18,37 @@ FOLLOWUP_DELAY_S = 120  # 2 minutes
 
 _pending_followups: dict[str, asyncio.Task] = {}
 
+# ── Outgoing message ID cache ─────────────────────────────────────────────────
+# Maps wamid (outgoing) → message text so that when a customer uses WhatsApp's
+# "reply to" feature we can resolve which bot message they're citing.
+# Kept in insertion order; capped at 2 000 entries (~a few days of messages).
+_outgoing_wamid: dict[str, str] = {}
+_OUTGOING_WAMID_MAX = 2000
+
+
+def _register_outgoing(result: dict, text: str, conversation_manager=None, phone: str = "") -> None:
+    """Store the outgoing wamid returned by Meta's API and patch the in-memory
+    conversation history so _resolve_quoted_message can find it by ID."""
+    try:
+        wamid = (result or {}).get("messages", [{}])[0].get("id", "")
+        if not wamid:
+            return
+        _outgoing_wamid[wamid] = text
+        if len(_outgoing_wamid) > _OUTGOING_WAMID_MAX:
+            oldest = next(iter(_outgoing_wamid))
+            del _outgoing_wamid[oldest]
+        # Also patch the last assistant message in the in-memory conversation
+        # so future history searches also find it.
+        if conversation_manager and phone:
+            conv = conversation_manager.conversations.get(phone, {})
+            msgs = conv.get("messages", [])
+            for m in reversed(msgs):
+                if m.get("role") == "assistant" and not m.get("message_id"):
+                    m["message_id"] = wamid
+                    break
+    except Exception:
+        pass
+
 
 async def _menu_followup_task(phone_number: str, contact_name: str) -> None:
     """Wait FOLLOWUP_DELAY_S then send a friendly nudge if still pending."""
@@ -80,14 +111,21 @@ def _resolve_quoted_message(message: dict, conversation_manager, from_number: st
     if not quoted_id:
         return None
 
-    # 1. Search in-memory history (fastest path, covers recent exchanges)
+    # 1. Outgoing-message cache (captures bot responses in the current process)
+    if quoted_id in _outgoing_wamid:
+        return _outgoing_wamid[quoted_id][:500]
+
+    # 2. In-memory conversation history (bot responses patched with wamid,
+    #    and incoming messages saved with their original wamid)
     conv = conversation_manager.conversations.get(from_number, {})
     for msg in reversed(conv.get("messages", [])):
         if msg.get("message_id") == quoted_id:
             text = msg.get("content") or msg.get("message_text") or ""
             return text[:500] if text else None
 
-    # 2. Fall back to DB (covers messages loaded from history on startup)
+    # 3. DB fallback — covers incoming messages saved on previous sessions.
+    #    The conversations table stores the INCOMING message's wamid; the bot's
+    #    outgoing wamid is not persisted, so only customer messages are found here.
     try:
         from app.db.connection import get_connection
         with get_connection() as conn:
@@ -98,9 +136,7 @@ def _resolve_quoted_message(message: dict, conversation_manager, from_number: st
                 )
                 row = cur.fetchone()
                 if row:
-                    # Prefer whichever column has content; the quoted msg is
-                    # usually the bot's outgoing text (response_text).
-                    text = (row[1] or row[0] or "").strip()
+                    text = (row[0] or row[1] or "").strip()
                     return text[:500] if text else None
     except Exception as e:
         logger.warning(f"Could not resolve quoted message {quoted_id}: {e}")
@@ -543,8 +579,11 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 await increment_unread_count(from_number)
                 response_text = None  # Already saved above, skip the default save block
             elif response:
-                # Regular text response
-                await whatsapp_client.send_text_message(from_number, response)
+                # Regular text response — capture the wamid Meta returns so
+                # the customer can "reply to" this message and the bot will
+                # know which message is being cited.
+                _send_result = await whatsapp_client.send_text_message(from_number, response)
+                _register_outgoing(_send_result, str(response), conversation_manager, from_number)
                 response_text = response
             
             # Save conversation to database when we either responded or explicitly skipped due to manual handover
