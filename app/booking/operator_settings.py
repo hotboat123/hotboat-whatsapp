@@ -419,6 +419,12 @@ def get_urgency_fake_slots(config: Optional[dict] = None) -> list:
             if candidate not in seed_set:
                 fake.add(candidate)
 
+    # Explicit ghost_times: always grey regardless of seed/gap calculation
+    for g in (cfg.get("ghost_times") or []):
+        s = _normalize_seed_time(str(g))
+        if s and s not in seed_set:
+            fake.add(s)
+
     return sorted(fake, key=_to_min)
 
 

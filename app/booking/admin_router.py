@@ -1066,6 +1066,7 @@ async def update_urgency_modes(body: UrgencyModesRequest, x_admin_key: str = Hea
             "name": str(m.get("name") or "").strip() or f"Urgencia {len(cleaned)+1}",
             "seed_times": _normalize_hhmm_list(m.get("seed_times")),
             "gap_hours": gap,
+            "ghost_times": _normalize_hhmm_list(m.get("ghost_times")),
         })
     set_setting("urgency_modes", json.dumps(cleaned))
     return {"ok": True, "urgency_modes": cleaned}

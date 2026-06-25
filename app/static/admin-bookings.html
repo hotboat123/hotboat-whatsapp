@@ -7034,7 +7034,7 @@ function renderUrgencyModes(){
         <input value="${m.name}" onchange="urgencyModes[${i}].name=this.value;saveUrgencyModes()" style="background:transparent;border:none;border-bottom:1px solid rgba(245,200,66,.4);color:var(--text);font-size:.78rem;flex:1;outline:none" placeholder="Nombre">
         <button onclick="urgencyModes.splice(${i},1);saveUrgencyModes();renderUrgencyModes();renderProfileLegend();renderUrgCal()" style="background:none;border:none;color:#e08080;cursor:pointer;font-size:.85rem" title="Eliminar">✕</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;margin-bottom:.3rem">
         <div>
           <div style="color:var(--muted);font-size:.72rem">Seeds (HH:MM):</div>
           <input value="${(m.seed_times||[]).join(', ')}" onchange="urgencyModes[${i}].seed_times=this.value.split(',').map(h=>h.trim()).filter(Boolean);saveUrgencyModes()" style="background:rgba(0,0,0,.2);border:1px solid rgba(245,200,66,.2);border-radius:5px;color:var(--text);font-size:.75rem;width:100%;box-sizing:border-box;padding:.2rem .4rem;outline:none" placeholder="10:00, 18:00">
@@ -7044,12 +7044,16 @@ function renderUrgencyModes(){
           <input type="number" step="0.5" min="0.5" value="${m.gap_hours||3}" onchange="urgencyModes[${i}].gap_hours=parseFloat(this.value);saveUrgencyModes()" style="background:rgba(0,0,0,.2);border:1px solid rgba(245,200,66,.2);border-radius:5px;color:var(--text);font-size:.75rem;width:100%;box-sizing:border-box;padding:.2rem .4rem;outline:none">
         </div>
       </div>
+      <div>
+        <div style="color:var(--muted);font-size:.72rem">Fantasmas adicionales (HH:MM):</div>
+        <input value="${(m.ghost_times||[]).join(', ')}" onchange="urgencyModes[${i}].ghost_times=this.value.split(',').map(h=>h.trim()).filter(Boolean);saveUrgencyModes()" style="background:rgba(0,0,0,.2);border:1px solid rgba(245,200,66,.15);border-radius:5px;color:var(--text);font-size:.75rem;width:100%;box-sizing:border-box;padding:.2rem .4rem;outline:none" placeholder="22:00, 23:00">
+      </div>
     </div>`).join('');
 }
 
 function addUrgencyMode(){
   const id = 'u'+(Date.now()%10000);
-  urgencyModes.push({id, name:`Urgencia ${urgencyModes.length+1}`, seed_times:['10:00','18:00'], gap_hours:3});
+  urgencyModes.push({id, name:`Urgencia ${urgencyModes.length+1}`, seed_times:['10:00','18:00'], gap_hours:3, ghost_times:[]});
   saveUrgencyModes();
   renderUrgencyModes();
   renderProfileLegend();
