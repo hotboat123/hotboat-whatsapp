@@ -573,16 +573,49 @@ def _seed_extras_visibility():
 
 _CLOTHING_PRODUCTS_SEED = [
     # (slug, display_name, stock_name, initial_stock, cost, price, icon, sort)
-    ("polera_blanca",        "Polera Blanca",        "Polera Blanca",        10, 15000, 17990, "👕", 30),
-    ("polera_negra",         "Polera Negra",         "Polera Negra",         12, 18000, 17990, "👕", 31),
-    ("polera_verde",         "Polera Verde",         "Polera Verde",          6,  9000, 17990, "👕", 32),
-    ("poleron_negro",        "Polerón Negro",        "Polerón Negro",         6,  9000, 29990, "🧥", 33),
-    ("poleron_azul_marino",  "Polerón Azul Marino",  "Polerón Azul Marino",   6,  9000, 29990, "🧥", 34),
-    ("poleron_grueso_negro", "Polerón Grueso Negro", "Polerón Grueso Negro",  6,  9000, 34990, "🧥", 35),
-    ("gorro_verde",          "Gorro Verde",          "Gorro Verde",           8,  8000, 14990, "🧢", 36),
-    ("gorro_blanco",         "Gorro Blanco",         "Gorro Blanco",          8,  8000, 14990, "🧢", 37),
-    ("gorro_negro",          "Gorro Negro",          "Gorro Negro",           8,  8000, 14990, "🧢", 38),
+    ("polera_blanca",        "Polera Blanca",        "Polera Blanca",        10,  4141, 17990, "👕", 30),
+    ("polera_negra",         "Polera Negra",         "Polera Negra",         12,  4141, 17990, "👕", 31),
+    ("polera_verde",         "Polera Verde",         "Polera Verde",          6,  4141, 17990, "👕", 32),
+    ("poleron_negro",        "Polerón Negro",        "Polerón Negro",         6,  8841, 29990, "🧥", 33),
+    ("poleron_azul_marino",  "Polerón Azul Marino",  "Polerón Azul Marino",   6,  8841, 29990, "🧥", 34),
+    ("poleron_grueso_negro", "Polerón Grueso Negro", "Polerón Grueso Negro",  6, 12841, 34990, "🧥", 35),
+    ("gorro_verde",          "Gorro Verde",          "Gorro Verde",           8,  4304, 14990, "🧢", 36),
+    ("gorro_blanco",         "Gorro Blanco",         "Gorro Blanco",          8,  4304, 14990, "🧢", 37),
+    ("gorro_negro",          "Gorro Negro",          "Gorro Negro",           8,  4304, 14990, "🧢", 38),
 ]
+
+# Old (wrong) costs seeded earlier, kept so we can self-heal rows that still
+# carry them without clobbering any manual cost edit the admin may have made.
+_CLOTHING_OLD_COSTS = {
+    "polera_blanca": 15000, "polera_negra": 18000, "polera_verde": 9000,
+    "poleron_negro": 9000, "poleron_azul_marino": 9000, "poleron_grueso_negro": 9000,
+    "gorro_verde": 8000, "gorro_blanco": 8000, "gorro_negro": 8000,
+}
+
+
+def _fix_clothing_costs():
+    """Correct clothing costs only where the row still holds the old wrong value."""
+    try:
+        from app.db.connection import get_connection
+        seed_by_slug = {row[0]: row for row in _CLOTHING_PRODUCTS_SEED}
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for slug, old_cost in _CLOTHING_OLD_COSTS.items():
+                    new_cost = seed_by_slug[slug][4]
+                    cur.execute(
+                        "UPDATE extras_visibility SET costo=%s "
+                        "WHERE extra_name_lower=%s AND costo=%s",
+                        (new_cost, slug, old_cost),
+                    )
+                    cur.execute(
+                        "UPDATE stock_products SET cost_per_unit=%s, updated_at=NOW() "
+                        "WHERE id=(SELECT stock_product_id FROM extras_visibility "
+                        "         WHERE extra_name_lower=%s) AND cost_per_unit=%s",
+                        (new_cost, slug, old_cost),
+                    )
+                conn.commit()
+    except Exception as e:
+        logger.warning("Clothing cost fix skipped: %s", e)
 
 
 def _seed_clothing_products():
@@ -691,6 +724,7 @@ async def lifespan(app: FastAPI):
     _ensure_extras_visibility_table()
     _seed_extras_visibility()
     _seed_clothing_products()
+    _fix_clothing_costs()
     _seed_packs_catalog()
     try:
         from app.bot.cart import CartManager
