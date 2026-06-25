@@ -243,6 +243,10 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
             global_cfg = get_urgency_config()
             day_urgency_cfg_map = get_day_urgency_config_map(start.date(), end.date())
 
+            def _slot_to_min(t: str) -> int:
+                h, m = map(int, t.split(":"))
+                return h * 60 + m
+
             for dk, times in grouped.items():
                 if not _day_urgency_active(dk):
                     continue  # day has urgency off — no ghost slots
@@ -250,8 +254,20 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
                 # Use urgency-mode profile assigned to this day, else global config
                 day_override = day_urgency_cfg_map.get(dk)
                 cfg = {**global_cfg, **day_override} if day_override else global_cfg
-                fake_base = get_urgency_fake_slots(config=cfg)
                 gap_min = int(float(cfg.get("gap_hours", 3)) * 60)
+
+                # Build fake (grey) set:
+                # - seed±gap + explicit ghost_times (always)
+                # - PLUS: if a profile with explicit seeds is assigned, any available
+                #   slot that is NOT a seed also becomes grey. This guarantees only
+                #   seed times stay clickable (green).
+                computed_fakes = set(get_urgency_fake_slots(config=cfg))
+                if day_override and cfg.get("seed_times"):
+                    seed_set = set(cfg["seed_times"])
+                    non_seed_avail = {t for t in times if t not in seed_set}
+                    fake_base = sorted(computed_fakes | non_seed_avail, key=_slot_to_min)
+                else:
+                    fake_base = sorted(computed_fakes, key=_slot_to_min)
 
                 booked = booked_by_day.get(dk, [])
                 avail_set = set(times)
