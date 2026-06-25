@@ -7586,7 +7586,12 @@ function renderExtrasCat(list){
           : `<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 6px;font-size:.7rem;white-space:nowrap">✓ OK</span>`;
         return `
           <td style="text-align:center;font-weight:700;color:${isLow?'#f87171':'#4ade80'};font-size:.9rem">${sp.current_stock}</td>
-          <td style="text-align:center;color:var(--muted);font-size:.8rem">${sp.min_stock}</td>
+          <td style="text-align:center">
+            <input type="number" id="min-${sp.id}" value="${sp.min_stock}" min="0" step="0.5"
+              title="Mínimo para alerta de stock bajo"
+              onchange="saveMinStock(${sp.id}, this.value)"
+              style="width:48px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.15rem;font-size:.78rem">
+          </td>
           <td style="text-align:center">${badge}</td>
           <td style="text-align:center;padding:.3rem .4rem">
             <div style="display:inline-flex;gap:.2rem;align-items:center">
@@ -9799,6 +9804,16 @@ async function quickAdjust(pid, sign, unit){
   try{
     await api('/api/admin/stock/adjust', {method:'POST', body:JSON.stringify({product_id:pid, delta, reason, notes})});
     showToast(`Stock ajustado: ${sign>0?'+':''}${delta} ${unit}`);
+    await loadExtrasCat({silent:true});
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function saveMinStock(pid, value){
+  const newMin = Math.max(0, parseFloat(value)||0);
+  try{
+    await api(`/api/admin/stock/products/${pid}/min`, {method:'PATCH', body:JSON.stringify({min_stock:newMin})});
+    showToast(`Mínimo actualizado: ${newMin}`);
+    // Refresh so the ⚠️/✓ badge and the top low-stock banner reflect the new threshold
     await loadExtrasCat({silent:true});
   }catch(e){ showToast('Error: '+e.message); }
 }

@@ -245,6 +245,25 @@ def update_product(pid: int, body: ProductBody, x_admin_key: str = Header("")):
     return {"ok": True}
 
 
+class MinStockBody(BaseModel):
+    min_stock: float = 0
+
+
+@stock_router.patch("/api/admin/stock/products/{pid}/min")
+def update_product_min(pid: int, body: MinStockBody, x_admin_key: str = Header("")):
+    """Lightweight update of just the min_stock threshold (no movement logging)."""
+    _check_auth(x_admin_key)
+    new_min = max(0.0, float(body.min_stock or 0))
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE stock_products SET min_stock=%s, updated_at=NOW() WHERE id=%s",
+                (new_min, pid),
+            )
+            conn.commit()
+    return {"ok": True, "id": pid, "min_stock": new_min}
+
+
 @stock_router.delete("/api/admin/stock/products/{pid}")
 def delete_product(pid: int, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
