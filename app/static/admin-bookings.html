@@ -5799,10 +5799,9 @@ function saveTablaConfig(){
       elige_1:e1, elige_2:e2checked, elige_3:e3checked,
     };
   } else {
-    // Remove any existing tabla__ item first (one per reservation)
-    const idx = _extrasItems.findIndex(e=>e.key.startsWith('tabla__'));
-    if(idx>=0) _extrasItems.splice(idx,1);
-    _extrasItems.push({key, name, qty:1, unit_price:25000, unit_cost:0,
+    // Look up price from EXTRAS_CATALOG (any tabla entry); fallback to 0
+    const tablaPrice = (EXTRAS_CATALOG||[]).find(e=>(e.key||'').startsWith('tabla'))?.price ?? 0;
+    _extrasItems.push({key, name, qty:1, unit_price:tablaPrice, unit_cost:0,
       tabla_type:type, elige_1:e1, elige_2:e2checked, elige_3:e3checked});
   }
   closeTablaModal();
@@ -8198,7 +8197,8 @@ function initExtrasEditor(extrasJson){
       const tType = key.replace('tabla__','');
       const tCat = TABLA_CATALOG[tType] || {};
       const qty = isObj ? (+val.qty||1) : 1;
-      const saved_price = isObj&&val.unit_price ? +val.unit_price : 25000;
+      const saved_price = isObj&&val.unit_price ? +val.unit_price
+          : (catalogByKey[key]?.price ?? (EXTRAS_CATALOG||[]).find(e=>(e.key||'').startsWith('tabla'))?.price ?? 0);
       _extrasItems.push({
         key,
         name:       isObj&&val.name ? val.name : ((tCat.emoji||'🍽')+' '+(tCat.label||tType)),
@@ -8247,13 +8247,17 @@ function _renderTablaRow(item, i){
         ✏️ Editar ingredientes
       </button>
     </div>`;
+  const tabSub = (item.qty||1) * (item.unit_price||0);
   return `<div class="extras-row" style="flex-direction:column;align-items:stretch;gap:0">
     <div style="display:flex;align-items:center;gap:.4rem">
       <div class="ex-name" title="${item.name}" style="flex:1">${item.name}</div>
+      <input type="number" min="1" step="1" value="${item.qty||1}" title="Cantidad"
+        style="width:44px;text-align:center"
+        oninput="_extrasItems[${i}].qty=+this.value||1;updateExtrasTotals();updateExtraSubtotal(${i})">
       <input type="number" min="0" value="${item.unit_price}" title="Precio tabla"
         style="width:82px"
         oninput="_extrasItems[${i}].unit_price=+this.value||0;updateExtrasTotals();updateExtraSubtotal(${i})">
-      <div class="ex-sub" id="ex-sub-${i}">${fmtMoney(item.unit_price)}</div>
+      <div class="ex-sub" id="ex-sub-${i}">${fmtMoney(tabSub)}</div>
       <button class="ex-del" onclick="removeExtraItem(${i})" title="Quitar">✕</button>
     </div>
     ${ingHtml}
