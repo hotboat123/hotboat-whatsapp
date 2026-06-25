@@ -1013,6 +1013,10 @@ async function loadLeadInfo(phoneNumber) {
         if (!response.ok) throw new Error('Failed to load lead info');
 
         const data = await response.json();
+
+        // Discard if the user navigated to a different conversation while fetching
+        if (selectConversation._pendingPhone !== phoneNumber) return;
+
         renderLeadInfo(data.lead);
         // Load booking card AFTER renderLeadInfo so innerHTML reset never wipes it
         loadBookingContext(phoneNumber);
@@ -1086,6 +1090,7 @@ async function loadBookingContext(phoneNumber) {
         const r = await fetch(`${API_BASE}/api/conversations/${phoneNumber}/booking-context`);
         if (!r.ok) return;
         const ctx = await r.json();
+        if (selectConversation._pendingPhone !== phoneNumber) return;
         renderBookingContext(ctx);
     } catch (e) {
         console.error('Error loading booking context:', e);
@@ -1380,9 +1385,12 @@ async function sendMessage(event) {
         updateCharCount('messageInput', 'charCount');
         
         showToast('Message sent successfully! ✅', 'success');
-        
-        // Refresh conversation (ensure DB sync)
-        setTimeout(() => selectConversation(currentConversation.phone_number), 1500);
+
+        // Refresh conversation — capture phone NOW so a mid-flight navigation can't redirect back
+        const _sentPhone = currentConversation.phone_number;
+        setTimeout(() => {
+            if (selectConversation._pendingPhone === _sentPhone) selectConversation(_sentPhone);
+        }, 1500);
         
     } catch (error) {
         console.error('Error sending message:', error);
@@ -1469,9 +1477,11 @@ async function sendImageFromFile(file, caption = '') {
         updateCharCount('messageInput', 'charCount');
         
         showToast('¡Imagen enviada! ✅', 'success');
-        
-        // Refresh conversation after a short delay to sync with server
-        setTimeout(() => selectConversation(currentConversation.phone_number), 2000);
+
+        const _imgPhone = currentConversation.phone_number;
+        setTimeout(() => {
+            if (selectConversation._pendingPhone === _imgPhone) selectConversation(_imgPhone);
+        }, 2000);
         
     } catch (error) {
         console.error('❌ Error sending image:', error);
@@ -2095,9 +2105,11 @@ async function sendAudioFromRecording() {
         clearAudioRecording();
         
         showToast('¡Audio enviado! ✅', 'success');
-        
-        // Refresh conversation
-        setTimeout(() => selectConversation(currentConversation.phone_number), 2000);
+
+        const _audioPhone = currentConversation.phone_number;
+        setTimeout(() => {
+            if (selectConversation._pendingPhone === _audioPhone) selectConversation(_audioPhone);
+        }, 2000);
         
     } catch (error) {
         console.error('❌ Error sending audio:', error);
