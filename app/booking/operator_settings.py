@@ -804,6 +804,7 @@ def get_day_urgency_config_map(
         out[v["date"]] = {
             "seed_times": mode.get("seed_times") or [],
             "gap_hours": float(mode.get("gap_hours") or 3),
+            "ghost_times": mode.get("ghost_times") or [],
         }
     return out
 
