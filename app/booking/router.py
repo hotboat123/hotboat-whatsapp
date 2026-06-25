@@ -275,17 +275,40 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
                         pass
 
                 if day_override and cfg.get("seed_times"):
-                    # Profile with explicit seeds: ONLY seeds that are available and
-                    # not booked stay green. Everything else is grey:
-                    #   - every available slot that is not a seed
-                    #   - seed±gap + explicit ghost_times (computed_fakes)
-                    #   - booked slots (even if they are seeds) + booked±gap
                     seed_set = set(cfg["seed_times"])
-                    grey = {t for t in times if t not in seed_set}
-                    grey |= computed_fakes
-                    grey |= booked_set
-                    grey |= booked_expansion
-                    fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
+                    ghost_times_set = set(cfg.get("ghost_times") or [])
+
+                    if not booked:
+                        # No bookings → seeds are green, everything else grey.
+                        grey = {t for t in times if t not in seed_set}
+                        grey |= computed_fakes  # seed±gap + ghost_times
+                        fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
+                    else:
+                        # With a booking at X → green = (available non-booked seeds)
+                        # + (X±gap slots that are available). Everything else is grey.
+                        green_from_seeds = {
+                            t for t in times if t in seed_set and t not in booked_set
+                        }
+                        green_from_expansion = set()
+                        for bt in booked:
+                            try:
+                                bh, bm = map(int, bt.split(":"))
+                                b_min = bh * 60 + bm
+                                for delta in (-gap_min, gap_min):
+                                    t_min = b_min + delta
+                                    if 6 * 60 <= t_min < 24 * 60:
+                                        cand = f"{t_min//60:02d}:{t_min%60:02d}"
+                                        if cand in avail_set:
+                                            green_from_expansion.add(cand)
+                            except Exception:
+                                pass
+                        green_set = green_from_seeds | green_from_expansion
+                        # Grey = available slots not in green_set + booked + ghost_times
+                        grey = {t for t in times if t not in green_set}
+                        grey |= ghost_times_set
+                        grey |= booked_set
+                        fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
+
                 elif not booked:
                     # Global urgency, no bookings → seed±gap + ghost_times as grey
                     fake_booked_by_day[dk] = sorted(computed_fakes, key=_slot_to_min)
