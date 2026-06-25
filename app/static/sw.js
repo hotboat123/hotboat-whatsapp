@@ -26,7 +26,7 @@ self.addEventListener('push', (event) => {
         renotify: true,
         data: {
             phone: data.phone || null,
-            url: data.phone ? `/?phone=${data.phone}` : '/',
+            url: data.phone ? `/admin-bookings?phone=${data.phone}` : '/admin-bookings',
         },
         vibrate: [200, 100, 200],
     };

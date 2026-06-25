@@ -4525,7 +4525,13 @@ function _enterDashboard(pw, loginData){
   document.getElementById('menu-btn').style.display='';
   return _applyUserSession(pw, loginData).then(()=>{
     loadExtrasCatalog(); loadAlojExpCatalogs(); reloadAll();
-    showSection('whatsapp');
+    const _pendingNotifPhone = sessionStorage.getItem('notif_pending_phone');
+    if (_pendingNotifPhone) {
+      sessionStorage.removeItem('notif_pending_phone');
+      _openChatFromNotification(_pendingNotifPhone);
+    } else {
+      showSection('whatsapp');
+    }
   });
 }
 
@@ -4555,6 +4561,43 @@ function doLogin(){
     if(r.ok){ await _enterDashboard(saved, await r.json()); }
     else { localStorage.removeItem('hb_admin_key'); }
   }).catch(()=>{});
+})();
+
+// ── Push notification deep-link ────────────────────────────────────────────
+// Opens the WhatsApp chat section and navigates to a specific conversation
+// when the admin taps a push notification.
+function _openChatFromNotification(phone) {
+  if (!phone) return;
+  const ifr = document.getElementById('whatsapp-iframe');
+  if (!ifr) return;
+  showSection('whatsapp');
+  const ifrLoaded = (ifr.getAttribute('src') || '').startsWith('/chat');
+  if (ifrLoaded) {
+    setTimeout(() => {
+      try { ifr.contentWindow.postMessage({ type: 'OPEN_CHAT', phone }, '*'); } catch(e) {}
+    }, 200);
+  } else {
+    fetch('/api/admin/chat-login', { method: 'POST', headers: { 'x-admin-key': KEY } })
+      .finally(() => { ifr.src = `/chat?phone=${encodeURIComponent(phone)}`; });
+  }
+}
+
+// Listen for service worker messages (tap notification while app is already open)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type === 'OPEN_CHAT' && event.data.phone) {
+      _openChatFromNotification(event.data.phone);
+    }
+  });
+}
+
+// Capture ?phone= URL param from notification deep-link (app was closed when tapped)
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const phone = params.get('phone');
+  if (!phone) return;
+  sessionStorage.setItem('notif_pending_phone', phone);
+  history.replaceState({}, '', window.location.pathname);
 })();
 
 // ── Navigation ───────────────────────────────────────────────────────────────
