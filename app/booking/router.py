@@ -256,46 +256,48 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
                 cfg = {**global_cfg, **day_override} if day_override else global_cfg
                 gap_min = int(float(cfg.get("gap_hours", 3)) * 60)
 
-                # Build fake (grey) set:
-                # - seed±gap + explicit ghost_times (always)
-                # - PLUS: if a profile with explicit seeds is assigned, any available
-                #   slot that is NOT a seed also becomes grey. This guarantees only
-                #   seed times stay clickable (green).
                 computed_fakes = set(get_urgency_fake_slots(config=cfg))
-                if day_override and cfg.get("seed_times"):
-                    seed_set = set(cfg["seed_times"])
-                    non_seed_avail = {t for t in times if t not in seed_set}
-                    fake_base = sorted(computed_fakes | non_seed_avail, key=_slot_to_min)
-                else:
-                    fake_base = sorted(computed_fakes, key=_slot_to_min)
-
                 booked = booked_by_day.get(dk, [])
+                booked_set = set(booked)
                 avail_set = set(times)
-                if not booked:
-                    # No real bookings → show seed±gap slots as grey.
-                    # Do NOT filter by avail_set: fake slots must override availability
-                    # so that only the seed times remain clickable (green).
-                    fake_booked_by_day[dk] = list(fake_base)
+
+                # booked ± gap expansion (used by both modes)
+                booked_expansion = set()
+                for bt in booked:
+                    try:
+                        bh, bm = map(int, bt.split(":"))
+                        b_min = bh * 60 + bm
+                        for delta in (-gap_min, gap_min):
+                            t_min = b_min + delta
+                            if 6 * 60 <= t_min < 24 * 60:
+                                booked_expansion.add(f"{t_min//60:02d}:{t_min%60:02d}")
+                    except Exception:
+                        pass
+
+                if day_override and cfg.get("seed_times"):
+                    # Profile with explicit seeds: ONLY seeds that are available and
+                    # not booked stay green. Everything else is grey:
+                    #   - every available slot that is not a seed
+                    #   - seed±gap + explicit ghost_times (computed_fakes)
+                    #   - booked slots (even if they are seeds) + booked±gap
+                    seed_set = set(cfg["seed_times"])
+                    grey = {t for t in times if t not in seed_set}
+                    grey |= computed_fakes
+                    grey |= booked_set
+                    grey |= booked_expansion
+                    fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
+                elif not booked:
+                    # Global urgency, no bookings → seed±gap + ghost_times as grey
+                    fake_booked_by_day[dk] = sorted(computed_fakes, key=_slot_to_min)
                 else:
-                    # Real bookings → grey = the booked times themselves + expansion
-                    # targets that ended up NOT available (not green)
-                    booked_set = set(booked)
-                    all_expansion = []
-                    for bt in booked:
-                        try:
-                            bh, bm = map(int, bt.split(":"))
-                            b_min = bh * 60 + bm
-                            for delta in (-gap_min, gap_min):
-                                t_min = b_min + delta
-                                if 6 * 60 <= t_min < 24 * 60:
-                                    all_expansion.append(f"{t_min//60:02d}:{t_min%60:02d}")
-                        except Exception:
-                            pass
-                    grey = list(booked_set)  # the actually booked time(s) show as grey
-                    for t in all_expansion:
+                    # Global urgency with bookings → grey = booked + expansion targets
+                    # that ended up NOT available (not green), plus ghost_times
+                    grey = set(booked_set)
+                    grey |= computed_fakes
+                    for t in booked_expansion:
                         if t not in avail_set and t not in booked_set:
-                            grey.append(t)
-                    fake_booked_by_day[dk] = grey
+                            grey.add(t)
+                    fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
 
         result = {
             "availability": grouped,
