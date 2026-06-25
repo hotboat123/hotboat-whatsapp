@@ -1220,7 +1220,7 @@ async def mark_conversation_read(phone_number: str):
 
 
 class PriorityUpdate(BaseModel):
-    priority: int  # 0 = none, 1 = high, 2 = medium, 3 = low
+    priority: int  # 0 = none, 1 = high, 2 = medium, 3 = low, 4 = "Ya reservó"
 
 
 @app.put("/api/conversations/{phone_number}/priority")

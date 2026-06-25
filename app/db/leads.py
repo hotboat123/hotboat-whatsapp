@@ -577,14 +577,16 @@ async def update_lead_priority(phone_number: str, priority: int) -> bool:
     
     Args:
         phone_number: Contact phone number
-        priority: Priority level (0 = none, 1 = high, 2 = medium, 3 = low)
-    
+        priority: Priority level (0 = none, 1 = high, 2 = medium, 3 = low,
+                  4 = "Ya reservó")
+
     Returns:
         True if successful
     """
     try:
         # Validate priority value
-        if priority not in [0, 1, 2, 3]:
+        # 0 = none, 1 = high, 2 = medium, 3 = low, 4 = "Ya reservó" (displayed as "0")
+        if priority not in [0, 1, 2, 3, 4]:
             logger.error(f"Invalid priority value: {priority}")
             return False
         
