@@ -7062,6 +7062,7 @@ function addUrgencyMode(){
 async function saveUrgencyModes(){
   try{
     await api('/api/admin/urgency-modes',{method:'PUT',body:JSON.stringify({urgency_modes:urgencyModes})});
+    try{ await api('/api/admin/availability-cache-clear',{method:'POST'}); }catch(e){}
     renderUrgCal();
     renderUrgList();
     renderProfileLegend();

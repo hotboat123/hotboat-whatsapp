@@ -1069,6 +1069,11 @@ async def update_urgency_modes(body: UrgencyModesRequest, x_admin_key: str = Hea
             "ghost_times": _normalize_hhmm_list(m.get("ghost_times")),
         })
     set_setting("urgency_modes", json.dumps(cleaned))
+    try:
+        from app.booking import router as _booking_router
+        _booking_router._avail_cache.clear()
+    except Exception:
+        pass
     return {"ok": True, "urgency_modes": cleaned}
 
 
