@@ -5321,7 +5321,7 @@ async function openModal(id){
       <div class="form-group" style="margin-bottom:.8rem">
         <label>Quién los atendió <span style="color:var(--muted);font-size:.72rem;font-weight:400">(selecciona varios)</span></label>
         ${(()=>{
-          const ATEND=['Nestor','Axel','Tomás','Panchini','Otro'];
+          const ATEND=['Nestor','Axel','Tomás','Panchini','Esteban','Otro'];
           const saved = (r.quien_atendio||'').split(',').map(s=>s.trim()).filter(Boolean);
           const hasOtroVal = saved.find(s=>!ATEND.slice(0,-1).includes(s));
           const otroTxt = hasOtroVal || '';
