@@ -571,130 +571,117 @@ def _seed_extras_visibility():
         logger.warning("extras_visibility seed failed: %s", e)
 
 
-_CLOTHING_SIZES_SEED = [
-    # (slug, name, cost, price, icon, sort, sizes: [(label, stock), ...])
-    # Poleras — 4 tallas S/M/L/XL
-    ("polera_blanca",        "Polera Blanca",        4141,  17990, "👕", 30,
-     [("S", 2), ("M", 3), ("L", 3), ("XL", 2)]),
-    ("polera_negra",         "Polera Negra",         4141,  17990, "👕", 31,
-     [("S", 2), ("M", 4), ("L", 4), ("XL", 2)]),
-    ("polera_verde",         "Polera Verde",         4141,  17990, "👕", 32,
-     [("S", 1), ("M", 2), ("L", 2), ("XL", 1)]),
-    # Polerones — 4 tallas S/M/L/XL
-    ("poleron_negro",        "Polerón Negro",        8841,  29990, "🧥", 33,
-     [("S", 1), ("M", 2), ("L", 2), ("XL", 1)]),
-    ("poleron_azul_marino",  "Polerón Azul Marino",  8841,  29990, "🧥", 34,
-     [("S", 1), ("M", 2), ("L", 2), ("XL", 1)]),
-    ("poleron_grueso_negro", "Polerón Grueso Negro", 12841, 34990, "🧥", 35,
-     [("S", 0), ("M", 3), ("L", 3), ("XL", 0)]),
-    # Gorros — sin talla (stock total = 8 c/u)
-    ("gorro_verde",          "Gorro Verde",          4304,  14990, "🧢", 36, []),
-    ("gorro_blanco",         "Gorro Blanco",         4304,  14990, "🧢", 37, []),
-    ("gorro_negro",          "Gorro Negro",          4304,  14990, "🧢", 38, []),
+_CLOTHING_FLAT_SEED = [
+    # (slug, name, cost, price, icon, sort, stock)
+    # Polera Blanca — S/M/L/XL
+    ("polera_blanca_s",          "Polera Blanca S",          4141,  17990, "👕", 30, 2),
+    ("polera_blanca_m",          "Polera Blanca M",          4141,  17990, "👕", 31, 3),
+    ("polera_blanca_l",          "Polera Blanca L",          4141,  17990, "👕", 32, 3),
+    ("polera_blanca_xl",         "Polera Blanca XL",         4141,  17990, "👕", 33, 2),
+    # Polera Negra
+    ("polera_negra_s",           "Polera Negra S",           4141,  17990, "👕", 34, 2),
+    ("polera_negra_m",           "Polera Negra M",           4141,  17990, "👕", 35, 4),
+    ("polera_negra_l",           "Polera Negra L",           4141,  17990, "👕", 36, 4),
+    ("polera_negra_xl",          "Polera Negra XL",          4141,  17990, "👕", 37, 2),
+    # Polera Verde
+    ("polera_verde_s",           "Polera Verde S",           4141,  17990, "👕", 38, 1),
+    ("polera_verde_m",           "Polera Verde M",           4141,  17990, "👕", 39, 2),
+    ("polera_verde_l",           "Polera Verde L",           4141,  17990, "👕", 40, 2),
+    ("polera_verde_xl",          "Polera Verde XL",          4141,  17990, "👕", 41, 1),
+    # Polerón Negro
+    ("poleron_negro_s",          "Polerón Negro S",          8841,  29990, "🧥", 42, 1),
+    ("poleron_negro_m",          "Polerón Negro M",          8841,  29990, "🧥", 43, 2),
+    ("poleron_negro_l",          "Polerón Negro L",          8841,  29990, "🧥", 44, 2),
+    ("poleron_negro_xl",         "Polerón Negro XL",         8841,  29990, "🧥", 45, 1),
+    # Polerón Azul Marino
+    ("poleron_azul_marino_s",    "Polerón Azul Marino S",    8841,  29990, "🧥", 46, 1),
+    ("poleron_azul_marino_m",    "Polerón Azul Marino M",    8841,  29990, "🧥", 47, 2),
+    ("poleron_azul_marino_l",    "Polerón Azul Marino L",    8841,  29990, "🧥", 48, 2),
+    ("poleron_azul_marino_xl",   "Polerón Azul Marino XL",   8841,  29990, "🧥", 49, 1),
+    # Polerón Grueso Negro
+    ("poleron_grueso_negro_s",   "Polerón Grueso Negro S",   12841, 34990, "🧥", 50, 0),
+    ("poleron_grueso_negro_m",   "Polerón Grueso Negro M",   12841, 34990, "🧥", 51, 3),
+    ("poleron_grueso_negro_l",   "Polerón Grueso Negro L",   12841, 34990, "🧥", 52, 3),
+    ("poleron_grueso_negro_xl",  "Polerón Grueso Negro XL",  12841, 34990, "🧥", 53, 0),
+    # Gorros — sin talla
+    ("gorro_verde",              "Gorro Verde",              4304,  14990, "🧢", 54, 8),
+    ("gorro_blanco",             "Gorro Blanco",             4304,  14990, "🧢", 55, 8),
+    ("gorro_negro",              "Gorro Negro",              4304,  14990, "🧢", 56, 8),
 ]
 
-_CLOTHING_SLUGS = [row[0] for row in _CLOTHING_SIZES_SEED]
+# Slugs usados en intentos anteriores de seed (para limpiar si existen)
+_CLOTHING_LEGACY_SLUGS = [
+    "polera_blanca", "polera_negra", "polera_verde",
+    "poleron_negro", "poleron_azul_marino", "poleron_grueso_negro",
+    "gorro_verde", "gorro_blanco", "gorro_negro",
+]
 
 
 def _seed_clothing_products():
-    """Seed ropa con variantes de talla (S/M/L/XL) vía extras_bom.is_variant.
-
-    Si ya existe la estructura correcta (polera_blanca con is_variant=TRUE) no
-    hace nada. Si existe la versión vieja sin variantes, la elimina y recrea.
-    """
+    """Un extra independiente por cada talla/color + gorros sin talla."""
     try:
         from app.db.connection import get_connection
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # Already seeded correctly → nothing to do
                 cur.execute(
-                    "SELECT COUNT(*) FROM extras_bom "
-                    "WHERE extra_slug='polera_blanca' AND is_variant=TRUE"
+                    "SELECT COUNT(*) FROM extras_visibility "
+                    "WHERE extra_name_lower = 'polera_blanca_s'"
                 )
                 if cur.fetchone()[0] > 0:
                     return
 
-                # Remove any old single-product clothing rows (pre-variant seed)
+                # Limpiar intentos anteriores (slug sin talla o con variantes)
+                all_old = _CLOTHING_LEGACY_SLUGS + [r[0] for r in _CLOTHING_FLAT_SEED]
                 cur.execute(
                     "DELETE FROM extras_bom WHERE extra_slug = ANY(%s)",
-                    (list(_CLOTHING_SLUGS),),
+                    (all_old,),
                 )
                 cur.execute(
                     """
                     DELETE FROM stock_products WHERE id IN (
                         SELECT stock_product_id FROM extras_visibility
-                        WHERE extra_name_lower = ANY(%s) AND stock_product_id IS NOT NULL
+                        WHERE extra_name_lower = ANY(%s)
+                          AND stock_product_id IS NOT NULL
                     )
                     """,
-                    (list(_CLOTHING_SLUGS),),
+                    (all_old,),
                 )
                 cur.execute(
                     "DELETE FROM extras_visibility WHERE extra_name_lower = ANY(%s)",
-                    (list(_CLOTHING_SLUGS),),
+                    (all_old,),
                 )
 
-                # Insert new structure
-                for (slug, name, cost, price, icon, sort, sizes) in _CLOTHING_SIZES_SEED:
+                for (slug, name, cost, price, icon, sort, stock) in _CLOTHING_FLAT_SEED:
+                    cur.execute(
+                        """
+                        INSERT INTO stock_products
+                            (name, category, unit, current_stock,
+                             min_stock, cost_per_unit, is_active)
+                        VALUES (%s, 'Ropa', 'unidad', %s, 0, %s, TRUE)
+                        RETURNING id
+                        """,
+                        (name, stock, cost),
+                    )
+                    pid = cur.fetchone()[0]
                     cur.execute(
                         """
                         INSERT INTO extras_visibility
                             (extra_name_lower, name, precio_venta, costo, icon,
-                             sort_order, show_in_booking)
-                        VALUES (%s, %s, %s, %s, %s, %s, FALSE)
+                             sort_order, show_in_booking, stock_product_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, FALSE, %s)
                         ON CONFLICT DO NOTHING
                         """,
-                        (slug, name, price, cost, icon, sort),
+                        (slug, name, price, cost, icon, sort, pid),
+                    )
+                    cur.execute(
+                        "INSERT INTO extras_bom (extra_slug, product_id, quantity) "
+                        "VALUES (%s, %s, 1)",
+                        (slug, pid),
                     )
 
-                    if sizes:
-                        for (label, stock) in sizes:
-                            cur.execute(
-                                """
-                                INSERT INTO stock_products
-                                    (name, category, unit, current_stock,
-                                     min_stock, cost_per_unit, is_active)
-                                VALUES (%s, 'Ropa', 'unidad', %s, 0, %s, TRUE)
-                                RETURNING id
-                                """,
-                                (f"{name} {label}", stock, cost),
-                            )
-                            pid = cur.fetchone()[0]
-                            cur.execute(
-                                """
-                                INSERT INTO extras_bom
-                                    (extra_slug, product_id, quantity,
-                                     is_variant, variant_label)
-                                VALUES (%s, %s, 1, TRUE, %s)
-                                """,
-                                (slug, pid, label),
-                            )
-                    else:
-                        # Gorros: un solo producto de stock sin variante de talla
-                        cur.execute(
-                            """
-                            INSERT INTO stock_products
-                                (name, category, unit, current_stock,
-                                 min_stock, cost_per_unit, is_active)
-                            VALUES (%s, 'Ropa', 'unidad', 8, 1, %s, TRUE)
-                            RETURNING id
-                            """,
-                            (name, cost),
-                        )
-                        pid = cur.fetchone()[0]
-                        cur.execute(
-                            "UPDATE extras_visibility SET stock_product_id=%s "
-                            "WHERE extra_name_lower=%s",
-                            (pid, slug),
-                        )
-                        cur.execute(
-                            "INSERT INTO extras_bom "
-                            "  (extra_slug, product_id, quantity, is_variant, variant_label) "
-                            "VALUES (%s, %s, 1, FALSE, '')",
-                            (slug, pid),
-                        )
-
                 conn.commit()
-        logger.info("✅ Clothing products seeded with size variants")
+        logger.info("✅ Clothing products seeded (%d extras)", len(_CLOTHING_FLAT_SEED))
     except Exception as e:
         logger.warning("Clothing products seed failed: %s", e)
 
