@@ -256,8 +256,10 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
                 booked = booked_by_day.get(dk, [])
                 avail_set = set(times)
                 if not booked:
-                    # No real bookings → show constant seed±gap slots as grey
-                    fake_booked_by_day[dk] = [t for t in fake_base if t not in avail_set]
+                    # No real bookings → show seed±gap slots as grey.
+                    # Do NOT filter by avail_set: fake slots must override availability
+                    # so that only the seed times remain clickable (green).
+                    fake_booked_by_day[dk] = list(fake_base)
                 else:
                     # Real bookings → grey = the booked times themselves + expansion
                     # targets that ended up NOT available (not green)

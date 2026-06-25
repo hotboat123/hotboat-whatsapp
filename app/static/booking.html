@@ -2558,10 +2558,11 @@ function renderTimeSelect(){
   const avail = S.availability[S.selectedDate] || [];
   const fake  = S.fakeBooked[S.selectedDate] || [];
 
-  // Merge and sort all slots by time; never mark a slot grey if it's already available
+  // Fake slots override availability: urgency profiles grey out times even if
+  // technically available, so the only clickable slots are the profile seeds.
   const toMin = s => { const [h,m]=s.split(':').map(Number); return h*60+m; };
   const availSet = new Set(avail);
-  const fakeSet = new Set(fake.filter(s => !availSet.has(s)));
+  const fakeSet = new Set(fake);
   const allTimes = [...new Set([...avail, ...fakeSet])].sort((a,b)=>toMin(a)-toMin(b));
 
   const btns = allTimes.map(s => {
