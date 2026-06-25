@@ -509,13 +509,14 @@ def _ensure_extras_visibility_table():
                     )
                 """)
                 for col, definition in [
-                    ("sort_order",   "INTEGER NOT NULL DEFAULT 999"),
-                    ("description",  "TEXT"),
-                    ("precio_venta", "INTEGER"),
-                    ("costo",        "INTEGER"),
-                    ("icon",         "TEXT"),
-                    ("name",         "TEXT"),
-                    ("user_hidden",  "BOOLEAN NOT NULL DEFAULT FALSE"),
+                    ("sort_order",      "INTEGER NOT NULL DEFAULT 999"),
+                    ("description",     "TEXT"),
+                    ("precio_venta",    "INTEGER"),
+                    ("costo",           "INTEGER"),
+                    ("icon",            "TEXT"),
+                    ("name",            "TEXT"),
+                    ("user_hidden",     "BOOLEAN NOT NULL DEFAULT FALSE"),
+                    ("stock_product_id","INTEGER"),
                 ]:
                     cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col} {definition}")
 
@@ -568,6 +569,62 @@ def _seed_extras_visibility():
         logger.info("✅ extras_visibility seeded with %d items", len(_EXTRAS_SEED))
     except Exception as e:
         logger.warning("extras_visibility seed failed: %s", e)
+
+
+_CLOTHING_PRODUCTS_SEED = [
+    # (slug, display_name, stock_name, initial_stock, cost, price, icon, sort)
+    ("polera_blanca",        "Polera Blanca",        "Polera Blanca",        10, 15000, 17990, "👕", 30),
+    ("polera_negra",         "Polera Negra",         "Polera Negra",         12, 18000, 17990, "👕", 31),
+    ("polera_verde",         "Polera Verde",         "Polera Verde",          6,  9000, 17990, "👕", 32),
+    ("poleron_negro",        "Polerón Negro",        "Polerón Negro",         6,  9000, 29990, "🧥", 33),
+    ("poleron_azul_marino",  "Polerón Azul Marino",  "Polerón Azul Marino",   6,  9000, 29990, "🧥", 34),
+    ("poleron_grueso_negro", "Polerón Grueso Negro", "Polerón Grueso Negro",  6,  9000, 34990, "🧥", 35),
+    ("gorro_verde",          "Gorro Verde",          "Gorro Verde",           8,  8000, 14990, "🧢", 36),
+    ("gorro_blanco",         "Gorro Blanco",         "Gorro Blanco",          8,  8000, 14990, "🧢", 37),
+    ("gorro_negro",          "Gorro Negro",          "Gorro Negro",           8,  8000, 14990, "🧢", 38),
+]
+
+
+def _seed_clothing_products():
+    """Seed ropa clothing items into stock_products + extras_visibility + extras_bom."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) FROM extras_visibility WHERE extra_name_lower = 'polera_blanca'"
+                )
+                if cur.fetchone()[0] > 0:
+                    return
+                for (slug, name, sp_name, stock, cost, price, icon, sort) in _CLOTHING_PRODUCTS_SEED:
+                    cur.execute(
+                        """
+                        INSERT INTO stock_products
+                            (name, category, unit, current_stock, min_stock, cost_per_unit, is_active)
+                        VALUES (%s, 'Ropa', 'unidad', %s, 1, %s, TRUE)
+                        RETURNING id
+                        """,
+                        (sp_name, stock, cost),
+                    )
+                    product_id = cur.fetchone()[0]
+                    cur.execute(
+                        """
+                        INSERT INTO extras_visibility
+                            (extra_name_lower, name, precio_venta, costo, icon,
+                             sort_order, show_in_booking, stock_product_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, FALSE, %s)
+                        ON CONFLICT DO NOTHING
+                        """,
+                        (slug, name, price, cost, icon, sort, product_id),
+                    )
+                    cur.execute(
+                        "INSERT INTO extras_bom (extra_slug, product_id, quantity) VALUES (%s, %s, 1)",
+                        (slug, product_id),
+                    )
+                conn.commit()
+        logger.info("✅ Clothing products seeded (%d items)", len(_CLOTHING_PRODUCTS_SEED))
+    except Exception as e:
+        logger.warning("Clothing products seed failed: %s", e)
 
 
 _PACKS_CATALOG_SEED = [
@@ -633,6 +690,7 @@ async def lifespan(app: FastAPI):
     _ensure_web_push_table()
     _ensure_extras_visibility_table()
     _seed_extras_visibility()
+    _seed_clothing_products()
     _seed_packs_catalog()
     try:
         from app.bot.cart import CartManager
