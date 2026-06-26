@@ -318,6 +318,16 @@ label{color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0;fo
   .menu-btn:hover,.btn:hover,.time-btn:hover,.extra-item:hover,.counter-btn:hover,.btn-secondary:hover{transform:none!important}
 }
 </style>
+<style id="booking-icons">
+.ic{display:inline-block;width:1.05em;height:1.05em;vertical-align:-.16em;margin-right:.18em;background-color:currentColor;-webkit-mask:var(--ic) center/contain no-repeat;mask:var(--ic) center/contain no-repeat}
+.ic-calendar{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2718%27%20height%3D%2718%27%20x%3D%273%27%20y%3D%274%27%20rx%3D%272%27%2F%3E%3Cpath%20d%3D%27M3%2010h18M8%202v4M16%202v4%27%2F%3E%3C%2Fsvg%3E")}
+.ic-clock{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%2710%27%2F%3E%3Cpolyline%20points%3D%2712%206%2012%2012%2016%2014%27%2F%3E%3C%2Fsvg%3E")}
+.ic-users{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M16%2021v-2a4%204%200%200%200-4-4H6a4%204%200%200%200-4%204v2%27%2F%3E%3Ccircle%20cx%3D%279%27%20cy%3D%277%27%20r%3D%274%27%2F%3E%3Cpath%20d%3D%27M22%2021v-2a4%204%200%200%200-3-3.87%27%2F%3E%3Cpath%20d%3D%27M16%203.13a4%204%200%200%201%200%207.75%27%2F%3E%3C%2Fsvg%3E")}
+.ic-gift{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%273%27%20y%3D%278%27%20width%3D%2718%27%20height%3D%274%27%20rx%3D%271%27%2F%3E%3Cpath%20d%3D%27M12%208v13M19%2012v7a2%202%200%200%201-2%202H7a2%202%200%200%201-2-2v-7%27%2F%3E%3Cpath%20d%3D%27M7.5%208a2.5%202.5%200%200%201%200-5A4.8%208%200%200%201%2012%208a4.8%208%200%200%201%204.5-5%202.5%202.5%200%200%201%200%205%27%2F%3E%3C%2Fsvg%3E")}
+.ic-clipboard{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%278%27%20height%3D%274%27%20x%3D%278%27%20y%3D%272%27%20rx%3D%271%27%2F%3E%3Cpath%20d%3D%27M16%204h2a2%202%200%200%201%202%202v14a2%202%200%200%201-2%202H6a2%202%200%200%201-2-2V6a2%202%200%200%201%202-2h2%27%2F%3E%3Cpath%20d%3D%27M12%2011h4M12%2016h4M8%2011h.01M8%2016h.01%27%2F%3E%3C%2Fsvg%3E")}
+.ic-wallet{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M19%207V5a2%202%200%200%200-2-2H5a2%202%200%200%200%200%204h15a1%201%200%200%201%201%201v4a1%201%200%200%201-1%201H5a2%202%200%200%201-2-2V5%27%2F%3E%3Cpath%20d%3D%27M3%205v14a2%202%200%200%200%202%202h15a1%201%200%200%200%201-1v-4%27%2F%3E%3Cpath%20d%3D%27M18%2012h.01%27%2F%3E%3C%2Fsvg%3E")}
+.ic-lock{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2718%27%20height%3D%2711%27%20x%3D%273%27%20y%3D%2711%27%20rx%3D%272%27%2F%3E%3Cpath%20d%3D%27M7%2011V7a5%205%200%200%201%2010%200v4%27%2F%3E%3C%2Fsvg%3E")}
+</style>
 </head>
 <body>
 <div id="app">
@@ -403,28 +413,28 @@ const I18N = {
     menuPacks: 'Packs Completos', menuPacksDesc: 'Todo incluido',
     menuArma: 'Arma tu Pack', menuArmaDesc: 'Crea tu experiencia',
     // Calendar
-    calTitle: '📅 Elige tu fecha', calPrev: '‹ Anterior', calNext: 'Siguiente ›',
+    calTitle: '<span class="ic ic-calendar"></span> Elige tu fecha', calPrev: '‹ Anterior', calNext: 'Siguiente ›',
     noAvail: 'Sin disponibilidad',
     // Time
-    timeTitle: '🕐 Elige tu horario',
+    timeTitle: '<span class="ic ic-clock"></span> Elige tu horario',
     // People
-    peopleTitle: '👥 ¿Cuántas personas?',
+    peopleTitle: '<span class="ic ic-users"></span> ¿Cuántas personas?',
     personsLabel: 'personas',
     nextExtras: 'Siguiente: Extras →',
     // Extras
-    extrasTitle: '🎁 Extras opcionales',
+    extrasTitle: '<span class="ic ic-gift"></span> Extras opcionales',
     nextData: 'Siguiente: Datos →',
     back: 'Volver',
     // Form
-    formTitle: '📋 Resumen de reserva',
-    labelDate: '📅 Fecha', labelPeople: '👥 Personas',
-    labelBase: '💰 Tarifa base', labelFlex: '🔒 FLEX',
+    formTitle: '<span class="ic ic-clipboard"></span> Resumen de reserva',
+    labelDate: '<span class="ic ic-calendar"></span> Fecha', labelPeople: '<span class="ic ic-users"></span> Personas',
+    labelBase: '<span class="ic ic-wallet"></span> Tarifa base', labelFlex: '<span class="ic ic-lock"></span> FLEX',
     labelTotal: 'TOTAL',
     depositNote: 'Se cobra el 50% ahora para reservar. El resto se paga después de la experiencia HotBoat (efectivo, tarjeta o transferencia).',
     labelName: 'Nombre completo', labelPhone: 'Teléfono (WhatsApp)', labelEmail: 'Email',
     pay: 'Pagar',
     // Flex
-    flexName: '🔒 Reserva FLEX', flexDesc: 'Cancela hasta 48h antes · +10% del valor',
+    flexName: '<span class="ic ic-lock"></span> Reserva FLEX', flexDesc: 'Cancela hasta 48h antes · +10% del valor',
     // Success / failure
     successTitle: '¡Reserva confirmada!',
     failTitle: 'Pago no completado',
@@ -436,7 +446,7 @@ const I18N = {
     alojPerNight: '/noche',
     alojUpToPeople: (n) => `Hasta ${n} persona${n!==1?'s':''}`,
     alojPriceSub: (cap) => `/noche · hasta ${cap} pers.`,
-    alojSelectDates: '📅 Selecciona tus fechas',
+    alojSelectDates: '<span class="ic ic-calendar"></span> Selecciona tus fechas',
     alojLoadingAvail: 'Cargando disponibilidad...',
     alojAvailError: 'Error cargando disponibilidad.',
     alojLblCheckIn: 'Check-in',
@@ -445,7 +455,7 @@ const I18N = {
     alojPhDeparture: 'Salida',
     alojMoreOptions: '← Ver más opciones',
     alojNightsLabel: (n) => `${n} noche${n!==1?'s':''} seleccionada${n!==1?'s':''}`,
-    alojConsultTitle: '📋 Consultar disponibilidad',
+    alojConsultTitle: '<span class="ic ic-clipboard"></span> Consultar disponibilidad',
     alojConsultNote: (r1, r2, nights) =>
       `Las fechas seleccionadas (${r1} → ${r2}, ${nights} noche${nights!==1?'s':''}) requieren confirmación. Te contactamos a la brevedad 👨‍✈️`,
     alojPeopleShort: 'N° de personas',
@@ -471,7 +481,7 @@ const I18N = {
     alojPayErr: 'Error al procesar. Intenta de nuevo.',
     alojConnErr: 'Error de conexión.',
     alojPayLodgingShort: '💳 Pagar solo alojamiento',
-    extrasListTitle: '🎁 Extras disponibles',
+    extrasListTitle: '<span class="ic ic-gift"></span> Extras disponibles',
     extrasListNote: 'Los extras se agregan al momento de reservar',
     bookWithExtras: 'Reservar con extras 🚤',
     addonDaysLabel: (d) => `${d} día${d!==1?'s':''} seleccionado${d!==1?'s':''}`,
@@ -485,7 +495,7 @@ const I18N = {
     addonHighSeasonBody: 'Para confirmar, escribe a',
     addonNeedDates: 'Selecciona fechas de inicio y término',
     addonNeedDateExp: 'Selecciona la fecha de la actividad',
-    addonExpPickDateTitle: '📅 Fecha',
+    addonExpPickDateTitle: '<span class="ic ic-calendar"></span> Fecha',
     addonExpDateLbl: 'Fecha de la actividad',
     addonInvalidDates: 'La fecha de término debe ser igual o posterior al inicio',
     addonPriceHint: '/ persona · día',
@@ -531,23 +541,23 @@ const I18N = {
     menuAloj: 'Accommodation', menuAlojDesc: 'Cabins & lodging',
     menuPacks: 'Full Packages', menuPacksDesc: 'All inclusive',
     menuArma: 'Build your Pack', menuArmaDesc: 'Create your experience',
-    calTitle: '📅 Choose your date', calPrev: '‹ Previous', calNext: 'Next ›',
+    calTitle: '<span class="ic ic-calendar"></span> Choose your date', calPrev: '‹ Previous', calNext: 'Next ›',
     noAvail: 'No availability',
-    timeTitle: '🕐 Choose your time',
-    peopleTitle: '👥 How many people?',
+    timeTitle: '<span class="ic ic-clock"></span> Choose your time',
+    peopleTitle: '<span class="ic ic-users"></span> How many people?',
     personsLabel: 'people',
     nextExtras: 'Next: Extras →',
-    extrasTitle: '🎁 Optional extras',
+    extrasTitle: '<span class="ic ic-gift"></span> Optional extras',
     nextData: 'Next: Details →',
     back: 'Back',
-    formTitle: '📋 Booking summary',
-    labelDate: '📅 Date', labelPeople: '👥 People',
-    labelBase: '💰 Base rate', labelFlex: '🔒 FLEX',
+    formTitle: '<span class="ic ic-clipboard"></span> Booking summary',
+    labelDate: '<span class="ic ic-calendar"></span> Date', labelPeople: '<span class="ic ic-users"></span> People',
+    labelBase: '<span class="ic ic-wallet"></span> Base rate', labelFlex: '<span class="ic ic-lock"></span> FLEX',
     labelTotal: 'TOTAL',
     depositNote: '50% charged now to secure your booking. The rest is paid after your HotBoat experience (cash, card or transfer).',
     labelName: 'Full name', labelPhone: 'Phone (WhatsApp)', labelEmail: 'Email',
     pay: 'Pay',
-    flexName: '🔒 FLEX Booking', flexDesc: 'Cancel up to 48h before · +10% of total',
+    flexName: '<span class="ic ic-lock"></span> FLEX Booking', flexDesc: 'Cancel up to 48h before · +10% of total',
     successTitle: 'Booking confirmed!',
     failTitle: 'Payment not completed',
     failMsg: (ref) => `Your booking (${ref}) was saved. You can try again or contact us.`,
@@ -558,7 +568,7 @@ const I18N = {
     alojPerNight: '/night',
     alojUpToPeople: (n) => `Up to ${n} guest${n!==1?'s':''}`,
     alojPriceSub: (cap) => `/night · up to ${cap} guests`,
-    alojSelectDates: '📅 Choose your dates',
+    alojSelectDates: '<span class="ic ic-calendar"></span> Choose your dates',
     alojLoadingAvail: 'Loading availability...',
     alojAvailError: 'Could not load availability.',
     alojLblCheckIn: 'Check-in',
@@ -567,7 +577,7 @@ const I18N = {
     alojPhDeparture: 'Departure',
     alojMoreOptions: '← More options',
     alojNightsLabel: (n) => `${n} night${n!==1?'s':''} selected`,
-    alojConsultTitle: '📋 Request availability',
+    alojConsultTitle: '<span class="ic ic-clipboard"></span> Request availability',
     alojConsultNote: (r1, r2, nights) =>
       `Your dates (${r1} → ${r2}, ${nights} night${nights!==1?'s':''}) need confirmation. We’ll contact you shortly 👨‍✈️`,
     alojPeopleShort: 'Number of guests',
@@ -593,7 +603,7 @@ const I18N = {
     alojPayErr: 'Could not process. Try again.',
     alojConnErr: 'Connection error.',
     alojPayLodgingShort: '💳 Pay lodging only',
-    extrasListTitle: '🎁 Available add-ons',
+    extrasListTitle: '<span class="ic ic-gift"></span> Available add-ons',
     extrasListNote: 'Add-ons are selected when you book',
     bookWithExtras: 'Book with add-ons 🚤',
     addonDaysLabel: (d) => `${d} day${d!==1?'s':''} selected`,
@@ -607,7 +617,7 @@ const I18N = {
     addonHighSeasonBody: 'To confirm, write to',
     addonNeedDates: 'Select start and end dates',
     addonNeedDateExp: 'Pick the activity date',
-    addonExpPickDateTitle: '📅 Date',
+    addonExpPickDateTitle: '<span class="ic ic-calendar"></span> Date',
     addonExpDateLbl: 'Activity date',
     addonInvalidDates: 'End date must be on or after the start date',
     addonPriceHint: '/ person · day',
@@ -653,23 +663,23 @@ const I18N = {
     menuAloj: 'Hospedagem', menuAlojDesc: 'Cabanas e alojamento',
     menuPacks: 'Pacotes Completos', menuPacksDesc: 'Tudo incluído',
     menuArma: 'Monte seu Pacote', menuArmaDesc: 'Crie sua experiência',
-    calTitle: '📅 Escolha sua data', calPrev: '‹ Anterior', calNext: 'Próximo ›',
+    calTitle: '<span class="ic ic-calendar"></span> Escolha sua data', calPrev: '‹ Anterior', calNext: 'Próximo ›',
     noAvail: 'Sem disponibilidade',
-    timeTitle: '🕐 Escolha seu horário',
-    peopleTitle: '👥 Quantas pessoas?',
+    timeTitle: '<span class="ic ic-clock"></span> Escolha seu horário',
+    peopleTitle: '<span class="ic ic-users"></span> Quantas pessoas?',
     personsLabel: 'pessoas',
     nextExtras: 'Próximo: Extras →',
-    extrasTitle: '🎁 Extras opcionais',
+    extrasTitle: '<span class="ic ic-gift"></span> Extras opcionais',
     nextData: 'Próximo: Dados →',
     back: 'Voltar',
-    formTitle: '📋 Resumo da reserva',
-    labelDate: '📅 Data', labelPeople: '👥 Pessoas',
-    labelBase: '💰 Tarifa base', labelFlex: '🔒 FLEX',
+    formTitle: '<span class="ic ic-clipboard"></span> Resumo da reserva',
+    labelDate: '<span class="ic ic-calendar"></span> Data', labelPeople: '<span class="ic ic-users"></span> Pessoas',
+    labelBase: '<span class="ic ic-wallet"></span> Tarifa base', labelFlex: '<span class="ic ic-lock"></span> FLEX',
     labelTotal: 'TOTAL',
     depositNote: '50% cobrado agora para garantir sua reserva. O restante é pago após a experiência HotBoat (dinheiro, cartão ou transferência).',
     labelName: 'Nome completo', labelPhone: 'Telefone (WhatsApp)', labelEmail: 'E-mail',
     pay: 'Pagar',
-    flexName: '🔒 Reserva FLEX', flexDesc: 'Cancele até 48h antes · +10% do valor',
+    flexName: '<span class="ic ic-lock"></span> Reserva FLEX', flexDesc: 'Cancele até 48h antes · +10% do valor',
     successTitle: 'Reserva confirmada!',
     failTitle: 'Pagamento não concluído',
     failMsg: (ref) => `Sua reserva (${ref}) foi salva. Você pode tentar o pagamento novamente ou nos contatar.`,
@@ -680,7 +690,7 @@ const I18N = {
     alojPerNight: '/noite',
     alojUpToPeople: (n) => `Até ${n} pessoa${n!==1?'s':''}`,
     alojPriceSub: (cap) => `/noite · até ${cap} pessoas`,
-    alojSelectDates: '📅 Escolha as datas',
+    alojSelectDates: '<span class="ic ic-calendar"></span> Escolha as datas',
     alojLoadingAvail: 'Carregando disponibilidade...',
     alojAvailError: 'Erro ao carregar disponibilidade.',
     alojLblCheckIn: 'Check-in',
@@ -689,7 +699,7 @@ const I18N = {
     alojPhDeparture: 'Saída',
     alojMoreOptions: '← Ver mais opções',
     alojNightsLabel: (n) => `${n} noite${n!==1?'s':''} selecionada${n!==1?'s':''}`,
-    alojConsultTitle: '📋 Consultar disponibilidade',
+    alojConsultTitle: '<span class="ic ic-clipboard"></span> Consultar disponibilidade',
     alojConsultNote: (r1, r2, nights) =>
       `As datas escolhidas (${r1} → ${r2}, ${nights} noite${nights!==1?'s':''}) precisam de confirmação. Entraremos em contato em breve 👨‍✈️`,
     alojPeopleShort: 'N° de pessoas',
@@ -715,7 +725,7 @@ const I18N = {
     alojPayErr: 'Erro ao processar. Tente novamente.',
     alojConnErr: 'Erro de conexão.',
     alojPayLodgingShort: '💳 Pagar só hospedagem',
-    extrasListTitle: '🎁 Extras disponíveis',
+    extrasListTitle: '<span class="ic ic-gift"></span> Extras disponíveis',
     extrasListNote: 'Os extras são escolhidos no momento da reserva',
     bookWithExtras: 'Reservar com extras 🚤',
     addonDaysLabel: (d) => `${d} dia${d!==1?'s':''} selecionado${d!==1?'s':''}`,
@@ -729,7 +739,7 @@ const I18N = {
     addonHighSeasonBody: 'Para confirmar, escreva para',
     addonNeedDates: 'Selecione as datas de início e fim',
     addonNeedDateExp: 'Escolha a data da atividade',
-    addonExpPickDateTitle: '📅 Data',
+    addonExpPickDateTitle: '<span class="ic ic-calendar"></span> Data',
     addonExpDateLbl: 'Data da atividade',
     addonInvalidDates: 'A data de fim deve ser igual ou após o início',
     addonPriceHint: '/ pessoa · dia',
@@ -2769,7 +2779,7 @@ function renderPeopleSelect(){
     const pp = Math.round(basepp * mult / 1000) * 1000;
     const total = pp * S.numPeople;
     $('pp-val').textContent = S.numPeople;
-    $('pp-price').textContent = `$${pp.toLocaleString('es-CL')}/persona · Total $${total.toLocaleString('es-CL')}`;
+    $('pp-price').textContent = `$${pp.toLocaleString('es-CL')} por persona`;
     const badge = document.getElementById('dp-badge');
     if(badge){
       if(S.dpEnabled && mult !== 1.0){
@@ -2791,7 +2801,7 @@ function renderPeopleSelect(){
   ${stepsHtml('personas')}
   <div class="card">
     <div class="card-title">${t('peopleTitle')}</div>
-    <p style="color:var(--muted);margin-bottom:1rem">Min 2 · Max 7 ${t('personsLabel')}</p>
+    <p style="color:var(--muted);margin-bottom:1rem">Min 2 · Max 7 ${t('personsLabel')} · Niños menores de 6 años no pagan</p>
     <div class="counter">
       <button class="counter-btn" onclick="changePeople(-1)">−</button>
       <div class="counter-val" id="pp-val">${S.numPeople}</div>
@@ -2800,7 +2810,6 @@ function renderPeopleSelect(){
     <div class="price-tag">
       <div class="price-big" id="pp-price"></div>
       <div id="dp-badge" style="margin-top:.3rem"></div>
-      <div class="price-sub">${LANG==='es'?'Incluye 2 horas en el lago':LANG==='pt'?'Inclui 2 horas no lago':'Includes 2 hours on the lake'}</div>
     </div>
   </div>
   <button class="btn" onclick="goExtras()">${t('nextExtras')}</button>
