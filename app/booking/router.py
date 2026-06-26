@@ -217,29 +217,31 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
         # ``all_appointments`` booked rows. We do NOT re-apply it here to
         # avoid double-filtering that empties valid days.
         fake_booked_by_day: dict = {}
+
+        # Load actual bookings once for the whole range (reused for urgency
+        # fake-slots, schedule ghosts, and the universal booked-grey pass).
+        booked_by_day: dict = {}
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT fecha::text AS d,
+                               TO_CHAR(hora, 'HH24:MI') AS t
+                        FROM all_appointments
+                        WHERE fecha >= %s AND fecha <= %s
+                          AND hora IS NOT NULL
+                          AND (
+                              status IS NULL
+                              OR status NOT IN ('cancelled','rejected','cancelada','solicitud')
+                          )
+                    """, (start.date(), end.date()))
+                    for row in cur.fetchall():
+                        booked_by_day.setdefault(row[0], []).append(row[1])
+        except Exception as e:
+            logger.warning(f"fake-slots: could not fetch booked: {e}")
+
         any_urgency_active = global_urgency or any(v for v in urgency_day_overrides.values())
         if any_urgency_active:
-            # Load actual bookings for the fake-slot calculation
-            booked_by_day: dict = {}
-            try:
-                with get_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("""
-                            SELECT fecha::text AS d,
-                                   TO_CHAR(hora, 'HH24:MI') AS t
-                            FROM all_appointments
-                            WHERE fecha >= %s AND fecha <= %s
-                              AND hora IS NOT NULL
-                              AND (
-                                  status IS NULL
-                                  OR status NOT IN ('cancelled','rejected','cancelada','solicitud')
-                              )
-                        """, (start.date(), end.date()))
-                        for row in cur.fetchall():
-                            booked_by_day.setdefault(row[0], []).append(row[1])
-            except Exception as e:
-                logger.warning(f"Urgency fake-slots: could not fetch booked: {e}")
-
             # Global config as baseline; per-day profile overrides it when assigned
             global_cfg = get_urgency_config()
             day_urgency_cfg_map = get_day_urgency_config_map(start.date(), end.date())
@@ -323,46 +325,36 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
                             grey.add(t)
                     fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
 
+        def _sg(t: str) -> int:
+            h, m = map(int, t.split(":"))
+            return h * 60 + m
+
         # Schedule-type ghost slots: independent of urgency. For each day assigned
-        # a schedule profile with ghost_times, mark those as grey (non-bookable),
-        # and also show that day's existing bookings in grey (instead of hiding
-        # them) so the calendar looks consistent with urgency-mode days.
+        # a schedule profile with ghost_times, mark those as grey (non-bookable).
         try:
             schedule_ghost_map = get_day_schedule_ghost_map(start.date(), end.date())
-            if schedule_ghost_map:
-                sched_booked: dict = {}
-                try:
-                    with get_connection() as conn:
-                        with conn.cursor() as cur:
-                            cur.execute("""
-                                SELECT fecha::text AS d,
-                                       TO_CHAR(hora, 'HH24:MI') AS t
-                                FROM all_appointments
-                                WHERE fecha >= %s AND fecha <= %s
-                                  AND hora IS NOT NULL
-                                  AND (
-                                      status IS NULL
-                                      OR status NOT IN ('cancelled','rejected','cancelada','solicitud')
-                                  )
-                            """, (start.date(), end.date()))
-                            for row in cur.fetchall():
-                                sched_booked.setdefault(row[0], []).append(row[1])
-                except Exception as e:
-                    logger.warning(f"Schedule ghost-slots: could not fetch booked: {e}")
-
-                def _sg(t: str) -> int:
-                    h, m = map(int, t.split(":"))
-                    return h * 60 + m
-
-                for dk, ghosts in schedule_ghost_map.items():
-                    if dk not in grouped:
-                        continue
-                    existing = set(fake_booked_by_day.get(dk, []))
-                    existing |= set(ghosts)
-                    existing |= set(sched_booked.get(dk, []))
-                    fake_booked_by_day[dk] = sorted(existing, key=_sg)
+            for dk, ghosts in schedule_ghost_map.items():
+                if dk not in grouped:
+                    continue
+                existing = set(fake_booked_by_day.get(dk, []))
+                existing |= set(ghosts)
+                fake_booked_by_day[dk] = sorted(existing, key=_sg)
         except Exception as e:
             logger.warning(f"Schedule ghost-slots failed: {e}")
+
+        # Universal booked-grey pass: on every day, show existing bookings in grey
+        # (instead of hiding them) so reserved slots stay visible — including plain
+        # standard days with no urgency/schedule profile assigned.
+        try:
+            for dk in grouped:
+                booked = booked_by_day.get(dk, [])
+                if not booked:
+                    continue
+                existing = set(fake_booked_by_day.get(dk, []))
+                existing |= set(booked)
+                fake_booked_by_day[dk] = sorted(existing, key=_sg)
+        except Exception as e:
+            logger.warning(f"Booked-grey pass failed: {e}")
 
         result = {
             "availability": grouped,
