@@ -324,20 +324,43 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
                     fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
 
         # Schedule-type ghost slots: independent of urgency. For each day assigned
-        # a schedule profile with ghost_times, mark those as grey (non-bookable).
+        # a schedule profile with ghost_times, mark those as grey (non-bookable),
+        # and also show that day's existing bookings in grey (instead of hiding
+        # them) so the calendar looks consistent with urgency-mode days.
         try:
             schedule_ghost_map = get_day_schedule_ghost_map(start.date(), end.date())
-            for dk, ghosts in schedule_ghost_map.items():
-                if dk not in grouped:
-                    continue
-                existing = set(fake_booked_by_day.get(dk, []))
-                existing |= set(ghosts)
+            if schedule_ghost_map:
+                sched_booked: dict = {}
+                try:
+                    with get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                SELECT fecha::text AS d,
+                                       TO_CHAR(hora, 'HH24:MI') AS t
+                                FROM all_appointments
+                                WHERE fecha >= %s AND fecha <= %s
+                                  AND hora IS NOT NULL
+                                  AND (
+                                      status IS NULL
+                                      OR status NOT IN ('cancelled','rejected','cancelada','solicitud')
+                                  )
+                            """, (start.date(), end.date()))
+                            for row in cur.fetchall():
+                                sched_booked.setdefault(row[0], []).append(row[1])
+                except Exception as e:
+                    logger.warning(f"Schedule ghost-slots: could not fetch booked: {e}")
 
                 def _sg(t: str) -> int:
                     h, m = map(int, t.split(":"))
                     return h * 60 + m
 
-                fake_booked_by_day[dk] = sorted(existing, key=_sg)
+                for dk, ghosts in schedule_ghost_map.items():
+                    if dk not in grouped:
+                        continue
+                    existing = set(fake_booked_by_day.get(dk, []))
+                    existing |= set(ghosts)
+                    existing |= set(sched_booked.get(dk, []))
+                    fake_booked_by_day[dk] = sorted(existing, key=_sg)
         except Exception as e:
             logger.warning(f"Schedule ghost-slots failed: {e}")
 
