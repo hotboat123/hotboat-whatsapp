@@ -1208,7 +1208,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div id="urg-list" style="margin-top:1rem"></div>
 
         <!-- Day picker popup -->
-        <div id="day-profile-popup" style="display:none;position:fixed;z-index:9999;background:#1e2030;border:1px solid var(--border);border-radius:12px;padding:1rem;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:220px">
+        <div id="day-profile-popup" style="display:none;position:fixed;z-index:9999;background:#1e2030;border:1px solid var(--border);border-radius:12px;padding:1rem;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:220px;max-height:90vh;overflow-y:auto">
           <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:.6rem" id="popup-date-label"></div>
           <div id="popup-options" style="display:flex;flex-direction:column;gap:.35rem"></div>
           <div style="margin-top:.6rem;border-top:1px solid var(--border);padding-top:.6rem">
@@ -6975,12 +6975,17 @@ function openProfilePopup(dateStr, evt){
   const ghostInput = document.getElementById('popup-ghost-input');
   if(ghostInput) ghostInput.value = (urgencyDays[dateStr]?.ghost_times||[]).join(', ');
 
-  // Position near click
+  // Position near click, keeping popup fully inside viewport
   popup.style.display = 'block';
-  const x = Math.min(evt.clientX, window.innerWidth - 240);
-  const y = Math.min(evt.clientY + 10, window.innerHeight - 300);
-  popup.style.left = x + 'px';
-  popup.style.top  = y + 'px';
+  const pw = popup.offsetWidth  || 240;
+  const ph = popup.offsetHeight || 320;
+  const x = Math.min(evt.clientX, window.innerWidth  - pw - 10);
+  const belowY = evt.clientY + 10;
+  const y = belowY + ph > window.innerHeight
+    ? Math.max(10, evt.clientY - ph - 10)
+    : belowY;
+  popup.style.left = Math.max(5, x) + 'px';
+  popup.style.top  = Math.max(5, y) + 'px';
 }
 
 function closeProfilePopup(){
