@@ -787,6 +787,28 @@ def get_day_schedule_hours_map(
     return out
 
 
+def get_day_schedule_ghost_map(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+) -> dict:
+    """
+    Map of {date_str: [ghost HH:MM]} for days whose assigned profile is a
+    schedule-type that defines extra ghost (grey, non-bookable) slots.
+    """
+    types_by_id = {t.get("id"): t for t in get_schedule_types() if isinstance(t, dict)}
+    if not types_by_id:
+        return {}
+    out: dict = {}
+    for v in get_urgency_days(from_date, to_date):
+        pk = v.get("profile_key")
+        if not pk or pk not in types_by_id:
+            continue
+        ghosts = types_by_id[pk].get("ghost_times") or []
+        if ghosts:
+            out[v["date"]] = list(ghosts)
+    return out
+
+
 def get_day_urgency_config_map(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,

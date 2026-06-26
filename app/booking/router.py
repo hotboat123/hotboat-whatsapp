@@ -175,6 +175,7 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
             get_vacation_days, is_urgency_mode, apply_urgency_filter,
             get_operating_hours, get_urgency_fake_slots, get_urgency_days,
             get_urgency_config, get_day_urgency_config_map,
+            get_day_schedule_ghost_map,
         )
         from app.db.connection import get_connection
 
@@ -321,6 +322,24 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
                         if t not in avail_set and t not in booked_set:
                             grey.add(t)
                     fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
+
+        # Schedule-type ghost slots: independent of urgency. For each day assigned
+        # a schedule profile with ghost_times, mark those as grey (non-bookable).
+        try:
+            schedule_ghost_map = get_day_schedule_ghost_map(start.date(), end.date())
+            for dk, ghosts in schedule_ghost_map.items():
+                if dk not in grouped:
+                    continue
+                existing = set(fake_booked_by_day.get(dk, []))
+                existing |= set(ghosts)
+
+                def _sg(t: str) -> int:
+                    h, m = map(int, t.split(":"))
+                    return h * 60 + m
+
+                fake_booked_by_day[dk] = sorted(existing, key=_sg)
+        except Exception as e:
+            logger.warning(f"Schedule ghost-slots failed: {e}")
 
         result = {
             "availability": grouped,

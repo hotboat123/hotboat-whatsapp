@@ -1027,6 +1027,7 @@ async def update_schedule_types(body: ScheduleTypesRequest, x_admin_key: str = H
             "id": str(t.get("id") or "").strip() or f"s{len(cleaned)+1}",
             "name": str(t.get("name") or "").strip() or f"Horario {len(cleaned)+1}",
             "hours": _normalize_hhmm_list(t.get("hours")),
+            "ghost_times": _normalize_hhmm_list(t.get("ghost_times")),
         })
     set_setting("schedule_types", json.dumps(cleaned))
     try:
