@@ -1211,6 +1211,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div id="day-profile-popup" style="display:none;position:fixed;z-index:9999;background:#1e2030;border:1px solid var(--border);border-radius:12px;padding:1rem;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:220px">
           <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:.6rem" id="popup-date-label"></div>
           <div id="popup-options" style="display:flex;flex-direction:column;gap:.35rem"></div>
+          <div style="margin-top:.6rem;border-top:1px solid var(--border);padding-top:.6rem">
+            <div style="font-size:.72rem;color:var(--muted);margin-bottom:.25rem">Fantasmas del día (HH:MM):</div>
+            <input id="popup-ghost-input" type="text" placeholder="22:00, 23:00" style="width:100%;box-sizing:border-box;background:rgba(0,0,0,.2);border:1px solid rgba(128,128,128,.2);border-radius:5px;color:var(--text);font-size:.75rem;padding:.25rem .4rem;outline:none" onkeydown="if(event.key==='Enter'){saveGhostTimes(_popupDate,this.value);this.blur()}" onblur="saveGhostTimes(_popupDate,this.value)">
+          </div>
           <button onclick="closeProfilePopup()" style="margin-top:.7rem;width:100%;background:var(--border);border:none;color:var(--muted);border-radius:7px;padding:.3rem;font-size:.75rem;cursor:pointer">Cancelar</button>
         </div>
       </div>
@@ -6886,7 +6890,7 @@ async function loadUrgencyDays(){
     urgencyModes  = dModes.urgency_modes  || [];
     urgencyDays   = {};
     (dDays.urgency_days||[]).forEach(v=>{
-      urgencyDays[v.date] = {enabled: v.enabled, profile_key: v.profile_key||null};
+      urgencyDays[v.date] = {enabled: v.enabled, profile_key: v.profile_key||null, ghost_times: v.ghost_times||[]};
     });
     renderScheduleTypes();
     renderUrgencyModes();
@@ -6921,10 +6925,12 @@ function renderUrgCal(){
     const icon = lbl ? lbl.icon : (entry ? (entry.enabled ? '⚡' : '✗') : '');
     const shortName = lbl ? lbl.name.substring(0,6) : '';
     const bg = color ? `background:${color}22;outline:1.5px solid ${color}55;` : '';
+    const hasGhosts = (entry?.ghost_times||[]).length > 0;
     html+=`<div class="cal-day${isToday?' today':''}" style="${bg}cursor:pointer" onclick="openProfilePopup('${dateStr}',event)" title="${lbl?lbl.name:(entry?'Urgencia '+(entry.enabled?'ON':'OFF'):'Sin perfil')}">
       <div class="cal-day-num">${d}</div>
       ${icon?`<div style="font-size:.55rem;line-height:1.1">${icon}</div>`:''}
       ${shortName?`<div style="font-size:.45rem;line-height:1;color:${color};overflow:hidden;max-width:100%">${shortName}</div>`:''}
+      ${hasGhosts?`<div style="font-size:.42rem;line-height:1;color:#888">👻×${entry.ghost_times.length}</div>`:''}
     </div>`;
   }
   grid.innerHTML = html;
@@ -6966,6 +6972,8 @@ function openProfilePopup(dateStr, evt){
   });
   html+=`<button onclick="clearDayProfile('${dateStr}')" style="background:rgba(160,80,80,.15);border:1px solid rgba(160,80,80,.3);color:#e08080;border-radius:7px;padding:.35rem .7rem;font-size:.8rem;cursor:pointer;text-align:left">✕ Sin perfil (global)</button>`;
   opts.innerHTML = html;
+  const ghostInput = document.getElementById('popup-ghost-input');
+  if(ghostInput) ghostInput.value = (urgencyDays[dateStr]?.ghost_times||[]).join(', ');
 
   // Position near click
   popup.style.display = 'block';
@@ -6991,9 +6999,10 @@ async function setDayProfile(dateStr, profileKey, isUrgencyType){
     await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({
       date: dateStr,
       enabled: isUrgency,
-      profile_key: profileKey
+      profile_key: profileKey,
+      ghost_times: (urgencyDays[dateStr]?.ghost_times || [])
     })});
-    urgencyDays[dateStr] = {enabled: isUrgency, profile_key: profileKey};
+    urgencyDays[dateStr] = {enabled: isUrgency, profile_key: profileKey, ghost_times: urgencyDays[dateStr]?.ghost_times || []};
     const lbl = _profileLabel(profileKey);
     showToast(`${lbl?.icon||'✓'} ${dateStr}: ${lbl?.name||profileKey}`);
     renderUrgCal();
@@ -7013,6 +7022,25 @@ async function clearDayProfile(dateStr){
   }catch(e){ showToast('Error: '+e.message); }
 }
 
+async function saveGhostTimes(dateStr, rawValue){
+  if(!dateStr) return;
+  const times = rawValue.split(',').map(h=>h.trim()).filter(Boolean);
+  const entry = urgencyDays[dateStr] || {enabled:false, profile_key:null, ghost_times:[]};
+  if(JSON.stringify(times) === JSON.stringify(entry.ghost_times||[])) return;
+  try{
+    await api('/api/admin/urgency-days',{method:'POST',body:JSON.stringify({
+      date: dateStr,
+      enabled: entry.enabled,
+      profile_key: entry.profile_key||null,
+      ghost_times: times
+    })});
+    urgencyDays[dateStr] = {...entry, ghost_times: times};
+    renderUrgCal();
+    renderUrgList();
+    try{ await api('/api/admin/availability-cache-clear',{method:'POST'}); }catch(e){}
+  }catch(e){ showToast('Error guardando fantasmas: '+e.message); }
+}
+
 function renderUrgList(){
   const el = document.getElementById('urg-list');
   if(!el) return;
@@ -7024,8 +7052,10 @@ function renderUrgList(){
       const c = v.profile_key ? _profileColor(v.profile_key) : (v.enabled?'rgba(245,200,66,.35)':'rgba(112,112,160,.3)');
       const icon = lbl?.icon || (v.enabled?'⚡':'✗');
       const name = lbl?.name || (v.enabled?'Urgencia ON':'OFF');
+      const ghosts = v.ghost_times||[];
       return `<div style="background:${c}22;border:1px solid ${c};border-radius:8px;padding:.3rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.5rem">
         ${icon} <strong>${date}</strong> <span style="color:var(--muted)">${name}</span>
+        ${ghosts.length?`<span style="color:#888;font-size:.7rem">👻 ${ghosts.join(', ')}</span>`:''}
         <button onclick="clearDayProfile('${date}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem" title="Quitar perfil">✕</button>
       </div>`;
     }).join('')}

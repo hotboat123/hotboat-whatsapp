@@ -209,7 +209,7 @@ def get_urgency_days(
                     params.append(to_date)
                 where = "WHERE " + " AND ".join(wheres)
                 cur.execute(
-                    f"SELECT fecha, enabled, reason, entity_type, entity_slug, profile_key FROM urgency_days {where} ORDER BY fecha",
+                    f"SELECT fecha, enabled, reason, entity_type, entity_slug, profile_key, COALESCE(ghost_times, '[]'::jsonb) FROM urgency_days {where} ORDER BY fecha",
                     params,
                 )
                 return [
@@ -220,6 +220,7 @@ def get_urgency_days(
                         "entity_type": r[3],
                         "entity_slug": r[4] or "",
                         "profile_key": r[5] or None,
+                        "ghost_times": r[6] if isinstance(r[6], list) else (json.loads(r[6]) if isinstance(r[6], str) else []),
                     }
                     for r in cur.fetchall()
                 ]
@@ -267,19 +268,22 @@ def set_urgency_day(
     entity_type: str = "hotboat",
     entity_slug: str = "",
     profile_key: Optional[str] = None,
+    ghost_times: Optional[list] = None,
 ) -> bool:
     et, slug = normalize_urgency_entity(entity_type, entity_slug)
     pk = (profile_key or "").strip() or None
+    gt = json.dumps(ghost_times or [])
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO urgency_days (entity_type, entity_slug, fecha, enabled, reason, profile_key)
-                       VALUES (%s, %s, %s, %s, %s, %s)
+                    """INSERT INTO urgency_days (entity_type, entity_slug, fecha, enabled, reason, profile_key, ghost_times)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
                        ON CONFLICT (entity_type, entity_slug, fecha)
                        DO UPDATE SET enabled=EXCLUDED.enabled, reason=EXCLUDED.reason,
-                                     profile_key=EXCLUDED.profile_key""",
-                    (et, slug, d, enabled, reason, pk),
+                                     profile_key=EXCLUDED.profile_key,
+                                     ghost_times=EXCLUDED.ghost_times""",
+                    (et, slug, d, enabled, reason, pk, gt),
                 )
                 conn.commit()
         return True
@@ -801,10 +805,13 @@ def get_day_urgency_config_map(
         if not pk or pk not in modes_by_id:
             continue
         mode = modes_by_id[pk]
+        mode_ghosts = mode.get("ghost_times") or []
+        day_ghosts  = v.get("ghost_times") or []
+        combined    = list(dict.fromkeys(mode_ghosts + day_ghosts))
         out[v["date"]] = {
             "seed_times": mode.get("seed_times") or [],
             "gap_hours": float(mode.get("gap_hours") or 3),
-            "ghost_times": mode.get("ghost_times") or [],
+            "ghost_times": combined,
         }
     return out
 

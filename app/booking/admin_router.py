@@ -876,6 +876,7 @@ class UrgencyDayRequest(BaseModel):
     entity_type: str = "hotboat"
     entity_slug: str = ""
     profile_key: Optional[str] = None
+    ghost_times: Optional[List[str]] = None
 
 
 @admin_router.post("/api/admin/urgency-days")
@@ -885,7 +886,8 @@ async def add_urgency_day_route(body: UrgencyDayRequest, x_admin_key: str = Head
     d = _date.fromisoformat(body.date)
     et, slug = normalize_urgency_entity(body.entity_type, body.entity_slug)
     ok = set_urgency_day(d, body.enabled, body.reason or "", entity_type=et,
-                         entity_slug=slug, profile_key=body.profile_key)
+                         entity_slug=slug, profile_key=body.profile_key,
+                         ghost_times=body.ghost_times or [])
     if not ok:
         raise HTTPException(status_code=500, detail="Error setting urgency day")
     # Invalidate cached availability so day override applies immediately.

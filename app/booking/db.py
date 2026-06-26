@@ -1157,6 +1157,9 @@ def ensure_db_columns() -> None:
 
                 -- 036: per-day profile key (schedule type / urgency mode assigned to a day)
                 ALTER TABLE urgency_days ADD COLUMN IF NOT EXISTS profile_key TEXT DEFAULT NULL;
+
+                -- 037: per-day extra ghost times (additional grey slots visible in the calendar)
+                ALTER TABLE urgency_days ADD COLUMN IF NOT EXISTS ghost_times JSONB DEFAULT '[]';
             """)
             conn.commit()
 
