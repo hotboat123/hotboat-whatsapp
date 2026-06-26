@@ -45,7 +45,12 @@ def _legacy_booking_from_aa(d: Dict[str, Any]) -> Dict[str, Any]:
             ej = json.loads(ej)
         except Exception:
             ej = {}
-    extras_list = ej.get("extras") if isinstance(ej, dict) else []
+    if isinstance(ej, dict):
+        extras_list = ej.get("extras") or []
+    elif isinstance(ej, list):
+        extras_list = ej  # web bookings store extras as a plain list
+    else:
+        extras_list = []
     if not isinstance(extras_list, list):
         extras_list = []
     price_pp = 0
