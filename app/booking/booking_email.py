@@ -18,6 +18,40 @@ logger = logging.getLogger(__name__)
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 
+
+def _extras_rows_html(extras_raw, border_color: str = "#e2e8f0") -> str:
+    """Parse the extras field (list or JSON string) → HTML <tr> rows for email tables."""
+    import json as _json
+    if not extras_raw:
+        return ""
+    try:
+        items = _json.loads(extras_raw) if isinstance(extras_raw, str) else extras_raw
+    except Exception:
+        return ""
+    if isinstance(items, dict) and isinstance(items.get("extras"), list):
+        items = items["extras"]
+    if not isinstance(items, list) or not items:
+        return ""
+    rows = ""
+    for e in items:
+        if not isinstance(e, dict):
+            continue
+        name = str(e.get("name") or "Extra")
+        qty  = int(e.get("quantity") or e.get("qty") or 1)
+        price = float(e.get("price") or e.get("unit_price") or 0)
+        label = name
+        if qty > 1:
+            label += f" ×{qty}"
+        price_str = f"  {_fmt_clp(price * qty)}" if price else ""
+        rows += (
+            f"<tr>"
+            f"<td style='padding:10px 16px;border-top:1px solid {border_color}'>"
+            f"<strong>Extra</strong></td>"
+            f"<td style='padding:10px 16px;border-top:1px solid {border_color};text-align:right'>"
+            f"{label}{price_str}</td></tr>"
+        )
+    return rows
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _fmt_clp(n: Any) -> str:
@@ -81,6 +115,9 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
         "parametro_url": str(booking.get("parametro_url") or ""),
     }
     ctx["ad_source_label"] = ctx["utm_campaign"] or ctx["parametro_url"] or ctx["utm_source"]
+    _extras_raw = booking.get("extras") or []
+    ctx["extras_html"]         = _extras_rows_html(_extras_raw, "#e2e8f0")   # light border (new_lead)
+    ctx["extras_html_pending"] = _extras_rows_html(_extras_raw, "#fde68a")  # yellow border (pending)
     if extra:
         ctx.update(extra)
     return ctx
@@ -764,6 +801,7 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
         <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right;font-family:monospace">{ctx.get('booking_ref','')}</td></tr>
     <tr><td style="padding:12px 16px;border-top:1px solid #e2e8f0"><strong>Estado</strong></td>
         <td style="padding:12px 16px;border-top:1px solid #e2e8f0;text-align:right;color:#b45309">pendiente de pago</td></tr>
+    {ctx.get('extras_html','')}
   </table>
 </td></tr>"""
         + _ad_row
@@ -818,6 +856,7 @@ def _default_html_admin_pending_payment(ctx: Dict[str, str]) -> str:
         <td style="padding:12px 16px;border-top:1px solid #fde68a;text-align:right">{ctx.get('total_price_fmt','')}</td></tr>
     <tr><td style="padding:12px 16px;border-top:1px solid #fde68a"><strong>Ref</strong></td>
         <td style="padding:12px 16px;border-top:1px solid #fde68a;text-align:right;font-family:monospace">{ctx.get('booking_ref','')}</td></tr>
+    {ctx.get('extras_html_pending','')}
   </table>
 </td></tr>"""
         + wa_btn

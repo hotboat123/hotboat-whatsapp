@@ -449,7 +449,7 @@ def get_bookings_pending_payment_email(delay_minutes: int = 5) -> list:
             cur.execute(
                 "SELECT id, booking_ref, customer_name, customer_phone, customer_email, "
                 "       booking_date, booking_time, num_people, subtotal, extras_total, "
-                "       total_price "
+                "       total_price, extras "
                 "FROM hotboat_appointments "
                 "WHERE status = 'pending_payment' "
                 "  AND customer_email IS NOT NULL AND customer_email <> '' "
@@ -473,6 +473,7 @@ def get_bookings_pending_payment_email(delay_minutes: int = 5) -> list:
                 "subtotal",
                 "extras_total",
                 "total_price",
+                "extras",
             ]
             for row in cur.fetchall():
                 d = dict(zip(cols2, row))
