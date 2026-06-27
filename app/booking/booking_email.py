@@ -20,36 +20,42 @@ _PLACEHOLDER = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 
 
 def _extras_rows_html(extras_raw, border_color: str = "#e2e8f0") -> str:
-    """Parse the extras field (list or JSON string) → HTML <tr> rows for email tables."""
+    """Parse the extras field (list / dict / JSON string) → HTML <tr> rows for
+    admin email tables. ALWAYS returns at least one row ("Sin extras" when empty)
+    so the operator can always see the extras status in lead/pending emails."""
     import json as _json
-    if not extras_raw:
-        return ""
-    try:
-        items = _json.loads(extras_raw) if isinstance(extras_raw, str) else extras_raw
-    except Exception:
-        return ""
+    items = extras_raw
+    if isinstance(items, str):
+        try:
+            items = _json.loads(items)
+        except Exception:
+            items = []
     if isinstance(items, dict) and isinstance(items.get("extras"), list):
         items = items["extras"]
-    if not isinstance(items, list) or not items:
-        return ""
-    rows = ""
-    for e in items:
-        if not isinstance(e, dict):
-            continue
-        name = str(e.get("name") or "Extra")
-        qty  = int(e.get("quantity") or e.get("qty") or 1)
-        price = float(e.get("price") or e.get("unit_price") or 0)
-        label = name
-        if qty > 1:
-            label += f" ×{qty}"
-        price_str = f"  {_fmt_clp(price * qty)}" if price else ""
-        rows += (
+    if not isinstance(items, list):
+        items = []
+
+    def _cell(left: str, right: str) -> str:
+        return (
             f"<tr>"
             f"<td style='padding:10px 16px;border-top:1px solid {border_color}'>"
-            f"<strong>Extra</strong></td>"
+            f"<strong>{left}</strong></td>"
             f"<td style='padding:10px 16px;border-top:1px solid {border_color};text-align:right'>"
-            f"{label}{price_str}</td></tr>"
+            f"{right}</td></tr>"
         )
+
+    valid = [e for e in items if isinstance(e, dict)]
+    if not valid:
+        return _cell("Extras", "Sin extras")
+
+    rows = ""
+    for i, e in enumerate(valid):
+        name  = str(e.get("name") or "Extra")
+        qty   = int(e.get("quantity") or e.get("qty") or 1)
+        price = float(e.get("price") or e.get("unit_price") or 0)
+        label = name + (f" ×{qty}" if qty > 1 else "")
+        price_str = f"  {_fmt_clp(price * qty)}" if price else ""
+        rows += _cell("Extras" if i == 0 else "", f"{label}{price_str}")
     return rows
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
