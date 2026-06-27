@@ -997,6 +997,86 @@ def trigger_auto_consume(x_admin_key: str = Header("")):
     return auto_consume_past_bookings()
 
 
+@stock_router.post("/api/admin/stock/reconsume/{booking_ref:path}")
+def reconsume_booking(booking_ref: str, x_admin_key: str = Header("")):
+    """Fuerza el re-descuento de stock de UNA reserva (tabla + extras).
+
+    Revierte cualquier movimiento previo de esa reserva (devuelve el stock) y
+    vuelve a descontar con la lógica completa (incluye matching tolerante de
+    ingredientes). Útil cuando una reserva quedó marcada como consumida pero
+    en realidad no descontó (p. ej. nombres que no calzaban antes del fix).
+    """
+    _check_auth(x_admin_key)
+    import json as _json
+    ref = (booking_ref or "").strip()
+    if not ref:
+        raise HTTPException(400, "booking_ref requerido")
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Resolver la reserva en ambas tablas
+            found_table = found_id = customer_name = extras_json = None
+            cur.execute(
+                "SELECT id, customer_name, extras FROM hotboat_appointments WHERE booking_ref=%s ORDER BY id LIMIT 1",
+                (ref,),
+            )
+            r = cur.fetchone()
+            if r:
+                found_table, found_id, customer_name, extras_json = "hotboat_appointments", r[0], r[1], r[2]
+            else:
+                cur.execute(
+                    "SELECT id, nombre_cliente, extras_json FROM all_appointments "
+                    "WHERE source_id=%s OR id::text=%s ORDER BY id LIMIT 1",
+                    (ref, ref.replace("AA-", "").lstrip("0") or "0"),
+                )
+                r = cur.fetchone()
+                if r:
+                    found_table, found_id, customer_name, extras_json = "all_appointments", r[0], r[1], r[2]
+            if not found_table:
+                raise HTTPException(404, f"Reserva {ref!r} no encontrada")
+
+            # 1) Revertir movimientos previos (devolver stock) e idempotencia
+            cur.execute("SELECT product_id, delta FROM stock_movements WHERE booking_ref=%s", (ref,))
+            prev = cur.fetchall()
+            for product_id, old_delta in prev:
+                cur.execute(
+                    "UPDATE stock_products SET current_stock=current_stock-%s, updated_at=NOW() WHERE id=%s",
+                    (old_delta, product_id),
+                )
+            reverted = len(prev)
+            cur.execute("DELETE FROM stock_movements WHERE booking_ref=%s", (ref,))
+
+            # 2) Ingredientes de la tabla
+            cur.execute("SELECT elige_1, elige_2, elige_3 FROM tabla_selections WHERE booking_ref=%s", (ref,))
+            tr = cur.fetchone()
+            tabla_ingredients = []
+            if tr:
+                e1, e2, e3 = tr
+                if e1:
+                    tabla_ingredients.append(e1)
+                for fld in (e2, e3):
+                    if fld:
+                        try:
+                            tabla_ingredients.extend(_json.loads(fld) if isinstance(fld, str) else fld)
+                        except Exception:
+                            pass
+
+            # 3) Re-descontar con la lógica completa (tabla + extras BOM)
+            mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None, customer_name)
+
+            # 4) Marcar como consumida
+            cur.execute(f"UPDATE {found_table} SET stock_consumed_at=NOW() WHERE id=%s", (found_id,))
+            conn.commit()
+
+    return {
+        "booking_ref": ref,
+        "customer_name": customer_name,
+        "reverted_movements": reverted,
+        "applied_movements": mvts,
+        "unmatched_ingredients": unmatched,
+    }
+
+
 @stock_router.post("/api/admin/stock/check-tabla-ingredients")
 def trigger_tabla_check(x_admin_key: str = Header("")):
     """Manual trigger for the morning tabla ingredient check."""
