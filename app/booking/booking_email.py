@@ -350,7 +350,7 @@ def _footer(ctx: Dict[str, str]) -> str:
     return f"""<tr><td style="padding:18px 26px 26px;font-size:13px;color:#64748b;line-height:1.6;">
   <p style="margin:0;">{contact}</p>
   <p style="margin:10px 0 0;"><a href="{ctx.get('business_website','#')}"
-     style="color:#1e40af;">{ctx.get('business_website','')}</a></p>
+     style="color:#235e58;">{ctx.get('business_website','')}</a></p>
 </td></tr></table></td></tr></table></body></html>"""
 
 
@@ -391,14 +391,14 @@ def _hotboat_email_card(
 <html lang="es">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{hero_title} — {biz}</title></head>
-<body style="margin:0;padding:0;background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#07120f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
 
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#0b1120">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#07120f">
 <tr><td align="center" style="padding:36px 16px 48px;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;width:100%;">
 
   <!-- Main card -->
-  <tr><td style="background:#131c2e;border-radius:20px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.55);">
+  <tr><td style="background:#102220;border-radius:20px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.55);">
 
     <!-- Accent bar -->
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
@@ -419,30 +419,30 @@ def _hotboat_email_card(
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr><td style="padding:0 28px 24px;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-             style="background:#0b1120;border-radius:14px;border:1px solid #1e2d45;overflow:hidden;">
+             style="background:#07120f;border-radius:14px;border:1px solid #20352e;overflow:hidden;">
 
-        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2e28;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
             <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_ref")}</td>
             <td align="right" style="color:#e8b86d;font-size:13px;font-weight:700;font-family:'Courier New',monospace;">{ref}</td>
           </tr></table>
         </td></tr>
 
-        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2e28;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
             <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_date")}</td>
             <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{date}</td>
           </tr></table>
         </td></tr>
 
-        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2e28;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
             <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_time")}</td>
             <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{time_} {_t(lang,"hrs")}</td>
           </tr></table>
         </td></tr>
 
-        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2e28;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
             <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_people")}</td>
             <td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{people}</td>
@@ -451,17 +451,17 @@ def _hotboat_email_card(
 
         {extra_detail_rows_html}
 
-        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2740;">
+        <tr><td style="padding:14px 20px;border-bottom:1px solid #1a2e28;">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
             <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang, deposit_row_i18n_key)}</td>
             <td align="right" style="color:#e8b86d;font-size:14px;font-weight:700;">{deposit}</td>
           </tr></table>
         </td></tr>
 
-        <tr><td style="padding:16px 20px;background:rgba(16,185,129,.06);">
+        <tr><td style="padding:16px 20px;background:rgba(44,122,114,.06);">
           <table width="100%" cellspacing="0" cellpadding="0"><tr>
             <td style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">{_t(lang,"label_total")}</td>
-            <td align="right" style="color:#10b981;font-size:18px;font-weight:800;">{total}</td>
+            <td align="right" style="color:#34a394;font-size:18px;font-weight:800;">{total}</td>
           </tr></table>
         </td></tr>
 
@@ -480,7 +480,7 @@ def _hotboat_email_card(
 
     <!-- Divider -->
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-    <tr><td style="padding:0 28px;"><hr style="border:none;border-top:1px solid #1e2d45;margin:0;"></td></tr>
+    <tr><td style="padding:0 28px;"><hr style="border:none;border-top:1px solid #20352e;margin:0;"></td></tr>
     </table>
 
     <!-- Footer contact -->
@@ -529,8 +529,8 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
 
     accent = (
         '<td width="33%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
-        '<td width="34%" height="4" bgcolor="#3b82f6" style="line-height:4px;font-size:0;">&nbsp;</td>'
-        '<td width="33%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="34%" height="4" bgcolor="#2c7a72" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="33%" height="4" bgcolor="#34a394" style="line-height:4px;font-size:0;">&nbsp;</td>'
     )
 
     payment_note = f"""
@@ -598,7 +598,7 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
     firma_url = ctx.get("firma_url", "") or website
 
     accent = (
-        '<td width="50%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="50%" height="4" bgcolor="#34a394" style="line-height:4px;font-size:0;">&nbsp;</td>'
         '<td width="50%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
     )
 
@@ -606,9 +606,9 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr><td style="padding:0 28px 16px;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-             style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:12px;">
+             style="background:rgba(44,122,114,.08);border:1px solid rgba(44,122,114,.3);border-radius:12px;">
       <tr><td style="padding:15px 20px;">
-        <p style="margin:0;color:#6ee7b7;font-size:13px;line-height:1.65;">
+        <p style="margin:0;color:#8fd3c9;font-size:13px;line-height:1.65;">
           <strong>{_t(lang,"confirmed_payment_title")}</strong><br>
           {_t(lang,"confirmed_payment_body")}
         </p>
@@ -687,7 +687,7 @@ def _default_html_booking_status_changed(ctx: Dict[str, str]) -> str:
     ref    = ctx.get("booking_ref", "")
     status = ctx.get("status", "")
     return (
-        _header(ctx, _t(lang, "status_title"), "#1e40af")
+        _header(ctx, _t(lang, "status_title"), "#235e58")
         + f"""<tr><td style="padding:26px 26px 8px;color:#0f172a;font-size:15px;line-height:1.65;">
   <p style="margin:0 0 12px;">{_t(lang,"status_hello",name=name)}</p>
   <p style="margin:0 0 12px;">{_t(lang,"status_body",ref=ref,status=status)}</p>
@@ -705,9 +705,9 @@ def _default_html_booking_followup(ctx: Dict[str, str]) -> str:
     name = ctx.get("customer_name", "")
 
     accent = (
-        '<td width="33%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="33%" height="4" bgcolor="#34a394" style="line-height:4px;font-size:0;">&nbsp;</td>'
         '<td width="34%" height="4" bgcolor="#34d399" style="line-height:4px;font-size:0;">&nbsp;</td>'
-        '<td width="33%" height="4" bgcolor="#3b82f6" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="33%" height="4" bgcolor="#2c7a72" style="line-height:4px;font-size:0;">&nbsp;</td>'
     )
 
     extra_body = f"""
@@ -771,7 +771,7 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
     _ad_row = (
         "<tr><td colspan='2' style='padding:0 26px 8px;'>"
         "<table role='presentation' width='100%' style='background:#eff6ff;border-radius:8px;"
-        "border:1px solid #bfdbfe;font-size:14px;color:#1e40af;'>"
+        "border:1px solid #bfe3dd;font-size:14px;color:#235e58;'>"
         "<tr><td style='padding:10px 16px'><strong>Anuncio (origen)</strong></td>"
         "<td style='padding:10px 16px;text-align:right;font-weight:600'>\U0001f4e2 " + _ad + "</td>"
         "</tr></table></td></tr>"
@@ -1504,7 +1504,7 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
 
     # ── Build extras detail rows ─────────────────────────────────────────────
     ROW = (
-        '<tr><td style="padding:10px 20px;border-bottom:1px solid #1a2740;">'
+        '<tr><td style="padding:10px 20px;border-bottom:1px solid #1a2e28;">'
         '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
         '<td style="color:#94a3b8;font-size:12px;">{label}</td>'
         '<td align="right" style="color:{color};font-size:13px;font-weight:600;">{value}</td>'
@@ -1559,7 +1559,7 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
     if has_flex and flex_amount > 0:
         extra_rows.append(ROW.format(
             label="🔒 Reserva Flex",
-            color="#60a5fa",
+            color="#5fb8ae",
             value=_fmt_clp(flex_amount),
         ))
     # Coupon discount
@@ -1590,7 +1590,7 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
     # ── Payment rows (after total) ────────────────────────────────────────────
     after_rows = []
     PAID_ROW = (
-        '<tr><td style="padding:10px 20px;border-bottom:1px solid #1a2740;">'
+        '<tr><td style="padding:10px 20px;border-bottom:1px solid #1a2e28;">'
         '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
         '<td style="color:#94a3b8;font-size:12px;">{label}</td>'
         '<td align="right" style="color:#4ade80;font-size:13px;font-weight:600;">{value}</td>'
@@ -1647,16 +1647,16 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
     website  = ctx.get("business_website", "#")
     firma_url = ctx.get("firma_url", "") or website
     accent = (
-        '<td width="50%" height="4" bgcolor="#10b981" style="line-height:4px;font-size:0;">&nbsp;</td>'
+        '<td width="50%" height="4" bgcolor="#34a394" style="line-height:4px;font-size:0;">&nbsp;</td>'
         '<td width="50%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
     )
     confirmed_note = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr><td style="padding:0 28px 16px;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-             style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:12px;">
+             style="background:rgba(44,122,114,.08);border:1px solid rgba(44,122,114,.3);border-radius:12px;">
       <tr><td style="padding:15px 20px;">
-        <p style="margin:0;color:#6ee7b7;font-size:13px;line-height:1.65;">
+        <p style="margin:0;color:#8fd3c9;font-size:13px;line-height:1.65;">
           <strong>{_t(lang,"confirmed_payment_title")}</strong><br>
           {_t(lang,"confirmed_payment_body")}
         </p>
@@ -1840,7 +1840,7 @@ def _build_daily_summary_html(today_str: str, bookings: List[dict], settings) ->
          box-shadow:0 8px 40px rgba(0,0,0,.5);">
 
 <!-- HEADER -->
-<tr><td style="background:linear-gradient(135deg,#0369a1,#0ea5e9);
+<tr><td style="background:linear-gradient(135deg,#235e58,#34897f);
                padding:28px 28px 20px;text-align:center;">
   <p style="margin:0 0 6px;font-size:13px;color:#bae6fd;letter-spacing:2px;
              text-transform:uppercase">Resumen del día</p>
@@ -1939,7 +1939,7 @@ def _build_daily_summary_html(today_str: str, bookings: List[dict], settings) ->
   <!-- action buttons -->
   <tr><td colspan="2" style="padding:12px 16px 14px">
     {"<a href='"+wa_url+"' style='display:inline-block;background:#25d366;color:#fff;text-decoration:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;margin-right:8px'>💬 WhatsApp recordatorio</a>" if wa_url != "#" else ""}
-    <a href="{_MAPS_URL}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;
+    <a href="{_MAPS_URL}" style="display:inline-block;background:#2c7a72;color:#fff;text-decoration:none;
        padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700">📍 Cómo llegar</a>
   </td></tr>
 
@@ -1955,7 +1955,7 @@ def _build_daily_summary_html(today_str: str, bookings: List[dict], settings) ->
     <tr><td style="padding:16px">
       <p style="margin:0 0 10px;font-size:14px;font-weight:700;color:#f1f5f9">📍 Ubicación HotBoat</p>
       <p style="margin:0 0 10px;font-size:13px;color:#94a3b8">Entre Pucón y Curarrehue, corazón de La Araucanía</p>
-      <a href="{_MAPS_URL}" style="display:inline-block;background:#1d4ed8;color:#fff;
+      <a href="{_MAPS_URL}" style="display:inline-block;background:#2c7a72;color:#fff;
          text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700">
         🗺️ Abrir en Google Maps
       </a>
