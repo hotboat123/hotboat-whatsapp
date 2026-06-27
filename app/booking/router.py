@@ -29,7 +29,8 @@ CHILE_TZ = ZoneInfo("America/Santiago")
 
 
 def _booking_html() -> str:
-    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "booking.html")
+    # Diseño nuevo (verde / "soft"). El antiguo queda en booking.html como respaldo.
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "booking-soft.html")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return apply_meta_pixel_placeholder(f.read(), get_settings().meta_pixel_id)
