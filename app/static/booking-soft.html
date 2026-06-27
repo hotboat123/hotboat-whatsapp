@@ -3488,9 +3488,12 @@ async function submitBooking(){
       window.location.href = `/tabla/${encodeURIComponent(S.bookingRef)}?next=${encodeURIComponent(nextUrl)}`;
       return;
     }
-    // Ir directo al checkout de pago (sin pantalla intermedia).
+    // Ir directo al checkout de WooCommerce, saltando la página intermedia /pagar.
     if(S.paymentUrl){
-      window.location.href = S.paymentUrl;
+      let _dest = S.paymentUrl;
+      try{ const _u = new URL(S.paymentUrl, location.origin); const _w = _u.searchParams.get('woo_url'); if(_w) _dest = _w; }catch(e){}
+      try{ if(typeof fbq==='function') fbq('track','InitiateCheckout',{currency:'CLP', value: Math.round((total||0)*0.5)}); }catch(e){}
+      window.location.href = _dest;
       return;
     }
     renderPayment(); // fallback: sin URL de pago (coordinación por email)
