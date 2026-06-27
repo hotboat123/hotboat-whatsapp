@@ -95,6 +95,33 @@ def _extras_card_rows_html(extras_raw) -> str:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _gift_banner_html(notes) -> str:
+    """Si la reserva está marcada como regalo (en las observaciones), devuelve un
+    banner destacado para el admin recordando crear la gift card manualmente.
+    Cadena vacía si no es regalo."""
+    txt = str(notes or "")
+    if "REGALO" not in txt.upper():
+        return ""
+    detail = ""
+    for line in txt.splitlines():
+        line = line.strip()
+        if not line or line.startswith("\U0001F381") or line.upper().startswith("REGALO"):
+            continue
+        detail += f'<div style="margin:2px 0;color:#92400e;">{line}</div>'
+    return (
+        '<tr><td style="padding:4px 26px 16px;">'
+        '<table role="presentation" width="100%" style="background:#fef3c7;'
+        'border:2px solid #f59e0b;border-radius:12px;">'
+        '<tr><td style="padding:14px 18px;font-size:14px;line-height:1.6;color:#92400e;">'
+        '<div style="font-size:15px;font-weight:800;margin-bottom:6px;">'
+        '\U0001F381 ESTA RESERVA ES UN REGALO</div>'
+        '<div style="font-weight:700;margin-bottom:8px;">'
+        '⚠️ Recuerda crear la gift card manualmente.</div>'
+        f'{detail}'
+        '</td></tr></table></td></tr>'
+    )
+
+
 def _fmt_clp(n: Any) -> str:
     try:
         v = int(float(n or 0))
@@ -162,6 +189,7 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
     ctx["extras_html"]         = _extras_rows_html(_extras_raw, "#e2e8f0")   # light border (new_lead)
     ctx["extras_html_pending"] = _extras_rows_html(_extras_raw, "#fde68a")  # yellow border (pending)
     ctx["extras_card_rows"]    = _extras_card_rows_html(_extras_raw)         # dark card (customer confirmed/created)
+    ctx["gift_banner_html"]    = _gift_banner_html(booking.get("notes"))     # aviso admin si es regalo
     if extra:
         ctx.update(extra)
     return ctx
@@ -831,6 +859,7 @@ def _default_html_admin_new_lead(ctx: Dict[str, str]) -> str:
         + f"""<tr><td style="padding:22px 26px 6px;color:#0f172a;font-size:15px;line-height:1.65;">
   <p style="margin:0 0 10px;">Un cliente acaba de completar sus datos y avanzó al pago.</p>
 </td></tr>
+{ctx.get('gift_banner_html','')}
 <tr><td style="padding:0 26px 20px;">
   <table role="presentation" width="100%" style="background:#f8fafc;border-radius:10px;
          border:1px solid #e2e8f0;font-size:14px;color:#334155;">
@@ -888,6 +917,7 @@ def _default_html_admin_pending_payment(ctx: Dict[str, str]) -> str:
   <p style="margin:0 0 10px;">Han pasado 5 minutos y el cliente <strong>no completó el pago</strong>.
   Puedes contactarle directamente por WhatsApp.</p>
 </td></tr>
+{ctx.get('gift_banner_html','')}
 <tr><td style="padding:0 26px 20px;">
   <table role="presentation" width="100%" style="background:#fffbeb;border-radius:10px;
          border:1px solid #fde68a;font-size:14px;color:#334155;">
@@ -919,6 +949,7 @@ def _default_html_admin_booking_confirmed(ctx: Dict[str, str]) -> str:
         + f"""<tr><td style="padding:22px 26px 6px;color:#0f172a;font-size:15px;line-height:1.65;">
   <p style="margin:0 0 10px;">El cliente completó el pago. Aquí están los detalles:</p>
 </td></tr>
+{ctx.get('gift_banner_html','')}
 <tr><td style="padding:0 26px 20px;">
   <table role="presentation" width="100%" style="background:#f0fdf4;border-radius:10px;
          border:1px solid #bbf7d0;font-size:14px;color:#166534;">
