@@ -364,6 +364,8 @@ label{color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0;fo
 .ic-citrus{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M21.66%2017.67a1.08%201.08%200%200%201-.04%201.6A12%2012%200%200%201%204.73%202.38a1.1%201.1%200%200%201%201.61-.04z%27%2F%3E%3Cpath%20d%3D%27M19.65%2015.66A8%208%200%200%201%208.35%204.34%27%2F%3E%3Cpath%20d%3D%27m14%2010-5.5%205.5M14%2017.85V10H6.15%27%2F%3E%3C%2Fsvg%3E")}
 .ic-chocolate{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%275%27%20y%3D%273%27%20width%3D%2714%27%20height%3D%2718%27%20rx%3D%271%27%2F%3E%3Cpath%20d%3D%27M5%209h14M5%2015h14M12%203v18%27%2F%3E%3C%2Fsvg%3E")}
 .ic-coffee{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M17%208h1a4%204%200%200%201%200%208h-1%27%2F%3E%3Cpath%20d%3D%27M3%208h14v9a4%204%200%200%201-4%204H7a4%204%200%200%201-4-4Z%27%2F%3E%3Cpath%20d%3D%27M6%202v2M10%202v2M14%202v2%27%2F%3E%3C%2Fsvg%3E")}
+.ic-heart{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M19%2014c1.49-1.46%203-3.21%203-5.5A5.5%205.5%200%200%200%2016.5%203c-1.76%200-3%20.5-4.5%202-1.5-1.5-2.74-2-4.5-2A5.5%205.5%200%200%200%202%208.5c0%202.3%201.5%204.05%203%205.5l7%207Z%27%2F%3E%3C%2Fsvg%3E")}
+.ic-towel{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%275%27%20y%3D%273%27%20width%3D%2714%27%20height%3D%2718%27%20rx%3D%272%27%2F%3E%3Cpath%20d%3D%27M9%203v18M5%207h4M5%2011h4%27%2F%3E%3C%2Fsvg%3E")}
 </style>
 </head>
 <body>
@@ -812,7 +814,7 @@ const I18N = {
   },
 };
 let LANG = localStorage.getItem('hb_lang') || 'es';
-function emoIcon(s){if(!s)return '';var k=String(s).replace(/\uFE0F/g,'');var m={"👕": "shirt", "🧥": "jacket", "🧢": "cap", "🍇": "grape", "🥤": "cupsoda", "🎥": "film", "🧻": "towel", "💧": "droplet", "🍦": "icecream", "🌹": "flower", "🕯": "candle", "✨": "sparkles", "🌙": "moon", "🚐": "bus", "🩴": "sandal", "🔄": "refresh", "♨": "waves", "⭐": "star", "🍽": "utensils", "🎫": "ticket"};Object.assign(m,{"🚗": "car", "🚙": "car", "🚕": "car", "🏖": "umbrella", "⛱": "umbrella", "☂": "umbrella", "🌂": "umbrella", "🍓": "strawberry", "🎁": "gift", "🎀": "gift", "🪣": "bucket", "🍫": "chocolate", "🍷": "wine", "🥂": "wine", "🍾": "wine", "🍸": "wine", "🍹": "cupsoda", "🎂": "cake", "🍰": "cake", "🧁": "cake", "🎈": "balloon", "🎉": "party", "🎊": "party", "🧺": "basket", "🛒": "cart", "🍊": "citrus", "🍋": "citrus", "🍵": "coffee", "☕": "coffee", "🍴": "utensils", "🥗": "utensils", "🧀": "utensils", "🍿": "utensils", "🥪": "utensils", "🍕": "utensils"});return m[k]?'<span class="ic ic-'+m[k]+'" aria-hidden="true"></span>':s;}
+function emoIcon(s,nm){var H='<span class="ic ic-',T='" aria-hidden="true"></span>';var n=(nm||'').toLowerCase();if(n){if(/coca|fanta|bebida|gaseosa|refresco|sprite|pepsi|7up/.test(n))return H+'cupsoda'+T;if(/toalla|poncho/.test(n))return H+'towel'+T;if(/rom[a\u00e1]nt/.test(n))return H+'heart'+T;}if(!s)return '';var k=String(s).replace(/\uFE0F/g,'');var m={"👕": "shirt", "🧥": "jacket", "🧢": "cap", "🍇": "grape", "🥤": "cupsoda", "🎥": "film", "🧻": "towel", "💧": "droplet", "🍦": "icecream", "🌹": "flower", "🕯": "candle", "✨": "sparkles", "🌙": "moon", "🚐": "bus", "🩴": "sandal", "🔄": "refresh", "♨": "waves", "⭐": "star", "🍽": "utensils", "🎫": "ticket"};Object.assign(m,{"🚗": "car", "🚙": "car", "🚕": "car", "🏖": "umbrella", "⛱": "umbrella", "☂": "umbrella", "🌂": "umbrella", "🍓": "strawberry", "🎁": "gift", "🎀": "gift", "🪣": "bucket", "🍫": "chocolate", "🍷": "wine", "🥂": "wine", "🍾": "wine", "🍸": "wine", "🍹": "cupsoda", "🎂": "cake", "🍰": "cake", "🧁": "cake", "🎈": "balloon", "🎉": "party", "🎊": "party", "🧺": "basket", "🛒": "cart", "🍊": "citrus", "🍋": "citrus", "🍵": "coffee", "☕": "coffee", "🍴": "utensils", "🥗": "utensils", "🧀": "utensils", "🍿": "utensils", "🥪": "utensils", "🍕": "utensils","💕":"heart","❤":"heart","💖":"heart","💗":"heart","💘":"heart","💝":"heart","💞":"heart","💑":"heart"});return m[k]?'<span class="ic ic-'+m[k]+'" aria-hidden="true"></span>':s;}
 function t(key, ...args){ const v = I18N[LANG][key]; return typeof v === 'function' ? v(...args) : (v || I18N.es[key] || key); }
 function _customerBasicsOk(){
   return !!(String(S.customerName||'').trim() && String(S.customerPhone||'').trim());
@@ -1795,7 +1797,7 @@ function showExtras(){
     <div class="card-title">${t('extrasListTitle')}</div>
     ${EXTRAS_CATALOG.map(e=>`
     <div class="extra-item" style="margin-bottom:.4rem">
-      <span>${emoIcon(e.icon)} ${e.name}</span>
+      <span>${emoIcon(e.icon, e.name)} ${e.name}</span>
       <span class="extra-price">+$${e.price.toLocaleString(loc)}</span>
     </div>`).join('')}
     <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem">${t('extrasListNote')}</p>
@@ -2371,7 +2373,7 @@ function showPacks(){
   }
   const cards = list.map(p=>`
     <div class="card" style="margin-bottom:0">
-      <div style="font-size:2rem;margin-bottom:.3rem">${p.icon}</div>
+      <div style="font-size:2rem;margin-bottom:.3rem">${emoIcon(p.icon, p.name)}</div>
       <div style="font-size:1.1rem;font-weight:700;margin-bottom:.2rem">${p.name}</div>
       <div style="color:var(--muted);font-size:.8rem;margin-bottom:.6rem">${p.personas} · ${p.desc||p.description||''}</div>
       <div style="font-size:.85rem;line-height:1.8;margin-bottom:.6rem">
@@ -2423,7 +2425,7 @@ function showPackDetail(id){
   const desde = p.desde || (`Desde ${_alojMoney(priceFrom)}`);
   mc.innerHTML = `
   <div class="card">
-    <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${p.icon}</div>
+    <div style="text-align:center;font-size:3rem;margin-bottom:.5rem">${emoIcon(p.icon, p.name)}</div>
     <div class="card-title">${p.name}</div>
     <div style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">${p.personas} · ${p.desc||p.description||''}</div>
     <div class="info-box" style="line-height:2">
@@ -2873,7 +2875,7 @@ function renderExtras(){
     return `
     <div class="extra-item ${sel?'selected':''}" style="cursor:default;gap:.5rem">
       <div style="flex:1;min-width:0;cursor:pointer" onclick="addExtra('${e.id}')">
-        <div class="extra-name">${emoIcon(e.icon)} ${e.name}</div>
+        <div class="extra-name">${emoIcon(e.icon, e.name)} ${e.name}</div>
         ${variantLabel?`<div style="font-size:.75rem;color:var(--gold);margin-top:.15rem">🍽 ${variantLabel}</div>`
           :(e.description?`<div style="font-size:.75rem;color:var(--muted);margin-top:.15rem">${e.description}</div>`:'')}
       </div>
@@ -2978,7 +2980,7 @@ function renderForm(){
     const linePrice = e.price * qty;
     extTotal += linePrice;
     const vLabel = S.extraVariants[e.id]?.label;
-    return `<div class="summary-row"><span>${emoIcon(e.icon)} ${e.name}${qty>1?` <span style="opacity:.7">×${qty}</span>`:''}</span><span>$${linePrice.toLocaleString('es-CL')}</span></div>${vLabel?`<div class="summary-row" style="font-size:.78rem;color:var(--gold);padding-top:0;margin-top:-.2rem"><span style="padding-left:1.2rem">${emoIcon('🍽')} ${vLabel}</span><span></span></div>`:''}`;
+    return `<div class="summary-row"><span>${emoIcon(e.icon, e.name)} ${e.name}${qty>1?` <span style="opacity:.7">×${qty}</span>`:''}</span><span>$${linePrice.toLocaleString('es-CL')}</span></div>${vLabel?`<div class="summary-row" style="font-size:.78rem;color:var(--gold);padding-top:0;margin-top:-.2rem"><span style="padding-left:1.2rem">${emoIcon('🍽')} ${vLabel}</span><span></span></div>`:''}`;
 
   }).join('');
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
