@@ -558,6 +558,15 @@ def get_movements(product_id: Optional[int] = None, limit: int = 100,
 
 # ─────────────────────────── Auto-consume past reservations ─────────────────
 
+def _norm_name(s) -> str:
+    """Normaliza un nombre para comparar ignorando tildes, mayúsculas y espacios
+    de más. Ej: 'Castañas de Cajú ' y 'castanas de caju' → mismo valor."""
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(s or ""))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return " ".join(s.lower().split())
+
+
 def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=None):
     """Consume stock for one booking. Returns number of movements applied."""
     import json as _json
@@ -614,21 +623,19 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
 
     # Pre-load all product names once for close-match suggestions on misses
     all_product_names = []
+    norm_to_pid = {}   # nombre normalizado (sin tildes/mayúsculas/espacios) → product_id
     if all_tabla_ingredients:
-        cur.execute("SELECT name FROM stock_products")
-        all_product_names = [r[0] for r in cur.fetchall()]
+        cur.execute("SELECT id, name FROM stock_products")
+        for _pid, _pname in cur.fetchall():
+            all_product_names.append(_pname)
+            norm_to_pid.setdefault(_norm_name(_pname), _pid)
 
-    # Tabla ingredients (chosen by client)
+    # Tabla ingredients (chosen by client) — match tolerante a tildes/mayúsculas/espacios
     for ingredient_name in all_tabla_ingredients:
-        name_lower = ingredient_name.lower()
-        cur.execute(
-            "SELECT id FROM stock_products WHERE LOWER(name)=%s LIMIT 1",
-            (name_lower,)
-        )
-        row = cur.fetchone()
-        if row:
-            _apply_movement(cur, row[0], -1, "booking", booking_ref,
-                            name_lower, f"Tabla — {ingredient_name}")
+        pid = norm_to_pid.get(_norm_name(ingredient_name))
+        if pid:
+            _apply_movement(cur, pid, -1, "booking", booking_ref,
+                            _norm_name(ingredient_name), f"Tabla — {ingredient_name}")
             movements += 1
         else:
             # Name mismatch — log loudly with the closest product name so it's
