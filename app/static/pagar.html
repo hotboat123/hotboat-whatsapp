@@ -6,34 +6,37 @@
 <title>HotBoat Chile · Pagar Reserva</title>
 <!--META_PIXEL_HEAD-->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Raleway:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --navy:#0a1628;--deep:#0d2040;--blue:#1a3a6e;
-  --coral:#ff5c35;--gold:#f0a500;
-  --text:#f0f4ff;--muted:#8899bb;
-  --card:#132240;--border:#1e3a6e;
-  --green:#2ecc71;
+  --bg:#f4f1ea;--deep:#fbfaf6;--blue:#e7efea;
+  --coral:#2c7a72;--gold:#235e58;
+  --text:#2a322e;--muted:#6f7d79;
+  --card:#ffffff;--border:#e3e9e6;
+  --green:#23766b;
 }
-body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min-height:100vh;
+body{font-family:'Raleway',sans-serif;
+  background:radial-gradient(900px 460px at 50% -8%, rgba(44,122,114,.08), transparent 60%), var(--bg);
+  color:var(--text);min-height:100vh;
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem}
 
-.site-logo{display:block;margin:0 auto 2rem;height:140px;width:auto;filter:brightness(0) invert(1)}
+.site-logo{display:block;margin:0 auto 2rem;height:120px;width:auto;filter:brightness(0)}
 .boat-emoji{display:none}
 
-.card{background:var(--card);border:1px solid var(--border);border-radius:20px;
-  width:100%;max-width:420px;padding:2rem;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:22px;
+  width:100%;max-width:420px;padding:2rem;
+  box-shadow:0 22px 48px -24px rgba(31,42,40,.30), 0 6px 16px -10px rgba(31,42,40,.14)}
 
-.rsv-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(240,165,0,.12);
-  color:var(--gold);border:1px solid rgba(240,165,0,.3);border-radius:30px;
+.rsv-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(44,122,114,.10);
+  color:#235e58;border:1px solid rgba(44,122,114,.30);border-radius:30px;
   padding:.3rem .9rem;font-size:.75rem;font-weight:700;letter-spacing:.05em;margin-bottom:1.2rem}
 
-.rsv-title{font-size:1.3rem;font-weight:800;margin-bottom:.2rem;line-height:1.3}
+.rsv-title{font-family:'Lora',serif;font-size:1.4rem;font-weight:700;margin-bottom:.2rem;line-height:1.3;color:#235e58}
 .rsv-sub{color:var(--muted);font-size:.88rem;margin-bottom:1.5rem}
 
 .detail-row{display:flex;align-items:center;gap:.7rem;padding:.65rem 0;
-  border-bottom:1px solid rgba(255,255,255,.06);font-size:.88rem}
+  border-bottom:1px solid #eef0ec;font-size:.88rem}
 .detail-row:last-of-type{border-bottom:none}
 .detail-icon{font-size:1.1rem;width:1.6rem;text-align:center;flex-shrink:0}
 .detail-label{color:var(--muted);flex:1}
@@ -43,14 +46,14 @@ body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min
 
 .total-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem}
 .total-label{font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.total-amount{font-size:1.8rem;font-weight:800;color:var(--gold)}
+.total-amount{font-family:'Lora',serif;font-size:1.8rem;font-weight:700;color:#235e58}
 
 .btn-pay{display:block;width:100%;padding:1rem;
-  background:linear-gradient(135deg,var(--coral),#ff3a1a);
-  color:#fff;border:none;border-radius:14px;font-size:1.05rem;font-weight:800;
+  background:linear-gradient(180deg,#34897f,#2c7a72);
+  color:#fff;border:none;border-radius:50px;font-size:1.05rem;font-weight:700;
   cursor:pointer;text-align:center;text-decoration:none;letter-spacing:.03em;
-  transition:transform .15s,box-shadow .15s;box-shadow:0 4px 20px rgba(255,92,53,.4)}
-.btn-pay:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(255,92,53,.55)}
+  transition:transform .15s,box-shadow .15s;box-shadow:0 10px 22px -10px rgba(44,122,114,.6)}
+.btn-pay:hover{transform:translateY(-2px);box-shadow:0 16px 30px -12px rgba(44,122,114,.65)}
 .btn-pay:active{transform:translateY(0)}
 
 .security-note{display:flex;align-items:center;justify-content:center;gap:.4rem;
@@ -58,8 +61,8 @@ body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min
 .security-note span{font-size:.9rem}
 
 .loading{text-align:center;color:var(--muted);padding:2rem}
-.error-msg{background:rgba(255,92,53,.1);border:1px solid rgba(255,92,53,.3);
-  border-radius:12px;padding:1rem;color:#ff7c5c;font-size:.85rem;text-align:center;margin-top:1rem}
+.error-msg{background:rgba(44,122,114,.08);border:1px solid rgba(44,122,114,.3);
+  border-radius:12px;padding:1rem;color:#235e58;font-size:.85rem;text-align:center;margin-top:1rem}
 </style>
 </head>
 <body>
@@ -129,8 +132,8 @@ async function init(){
 
     <div class="divider"></div>
 
-    <div style="background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.2);border-radius:10px;
-      padding:.6rem .9rem;margin-bottom:1.2rem;font-size:.8rem;color:#c8a84b;line-height:1.5">
+    <div style="background:rgba(44,122,114,.08);border:1px solid rgba(44,122,114,.25);border-radius:10px;
+      padding:.6rem .9rem;margin-bottom:1.2rem;font-size:.8rem;color:#235e58;line-height:1.5">
       🔑 Se cobra el <strong>50% ahora</strong> para reservar. El saldo restante
       se paga al terminar la experiencia HotBoat, en efectivo o transferencia.
     </div>
