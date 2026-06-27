@@ -58,6 +58,41 @@ def _extras_rows_html(extras_raw, border_color: str = "#e2e8f0") -> str:
         rows += _cell("Extras" if i == 0 else "", f"{label}{price_str}")
     return rows
 
+
+def _extras_card_rows_html(extras_raw) -> str:
+    """Extras as dark-card rows (matching _hotboat_email_card details) for the
+    customer confirmation/created emails. Returns '' when there are no extras."""
+    import json as _json
+    items = extras_raw
+    if isinstance(items, str):
+        try:
+            items = _json.loads(items)
+        except Exception:
+            items = []
+    if isinstance(items, dict) and isinstance(items.get("extras"), list):
+        items = items["extras"]
+    if not isinstance(items, list):
+        items = []
+    valid = [e for e in items if isinstance(e, dict)]
+    if not valid:
+        return ""
+    rows = ""
+    for e in valid:
+        name  = str(e.get("name") or "Extra")
+        qty   = int(e.get("quantity") or e.get("qty") or 1)
+        price = float(e.get("price") or e.get("unit_price") or 0)
+        label = name + (f" ×{qty}" if qty > 1 else "")
+        amount = _fmt_clp(price * qty) if price else ""
+        rows += (
+            '<tr><td style="padding:14px 20px;border-bottom:1px solid #1a2e28;">'
+            '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+            f'<td style="color:#64748b;font-size:11px;text-transform:uppercase;'
+            f'letter-spacing:1.2px;font-weight:600;">{label}</td>'
+            f'<td align="right" style="color:#e2e8f0;font-size:14px;font-weight:600;">{amount}</td>'
+            '</tr></table></td></tr>'
+        )
+    return rows
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _fmt_clp(n: Any) -> str:
@@ -126,6 +161,7 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
     _extras_raw = booking.get("extras") or []
     ctx["extras_html"]         = _extras_rows_html(_extras_raw, "#e2e8f0")   # light border (new_lead)
     ctx["extras_html_pending"] = _extras_rows_html(_extras_raw, "#fde68a")  # yellow border (pending)
+    ctx["extras_card_rows"]    = _extras_card_rows_html(_extras_raw)         # dark card (customer confirmed/created)
     if extra:
         ctx.update(extra)
     return ctx
@@ -598,6 +634,7 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
         extra_body=payment_note,
         cta_rows=cta_rows,
         deposit_row_i18n_key="label_deposit_due",
+        extra_detail_rows_html=ctx.get("extras_card_rows", ""),
     )
 
 
@@ -667,6 +704,7 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
         accent_bar=accent,
         extra_body=confirmed_note,
         cta_rows=cta_rows,
+        extra_detail_rows_html=ctx.get("extras_card_rows", ""),
     )
 
 
