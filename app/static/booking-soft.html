@@ -2752,6 +2752,13 @@ function renderCal(){
       <button onclick="nextMonth()">&#8250;</button>
     </div>
     <div class="cal-grid">${cells}</div>
+    <div class="info-box" style="margin-top:1rem;font-size:.85rem">
+      🎁 ${LANG==='en'
+        ? '<strong>A gift or not sure about the date?</strong> Pick any date for now — the gift card is valid for 1 year and the final date is arranged later. You can still add extras and complete your booking.'
+        : LANG==='pt'
+        ? '<strong>É um presente ou não sabe a data?</strong> Escolha qualquer data por enquanto — o gift card é válido por 1 ano e a data final é combinada depois. Você ainda pode adicionar extras e concluir a reserva.'
+        : '<strong>¿Es un regalo o no sabes la fecha?</strong> Elige cualquier fecha por ahora — la gift card tiene validez de 1 año y la fecha definitiva se coordina más tarde. Igual puedes agregar extras y completar tu reserva.'}
+    </div>
   </div>
   <button class="btn btn-secondary" onclick="renderMenu()">${t('back')}</button>`;
 }
