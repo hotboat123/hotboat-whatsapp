@@ -320,6 +320,9 @@ label{color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0;fo
 </style>
 <style id="booking-icons">
 .ic{display:inline-block;width:1.05em;height:1.05em;vertical-align:-.16em;margin-right:.18em;background-color:currentColor;-webkit-mask:var(--ic) center/contain no-repeat;mask:var(--ic) center/contain no-repeat}
+.hb-check{display:flex;align-items:flex-start;gap:.55rem;cursor:pointer;font-weight:500;color:var(--text);font-size:.9rem;line-height:1.4}
+.hb-check input[type=checkbox]{width:19px;height:19px;margin-top:.05rem;accent-color:var(--coral);cursor:pointer;flex:0 0 auto}
+#gift-fields{border-left:2px solid var(--border);padding-left:.8rem;margin:.2rem 0 .4rem}
 .ic-calendar{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2718%27%20height%3D%2718%27%20x%3D%273%27%20y%3D%274%27%20rx%3D%272%27%2F%3E%3Cpath%20d%3D%27M3%2010h18M8%202v4M16%202v4%27%2F%3E%3C%2Fsvg%3E")}
 .ic-clock{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%2710%27%2F%3E%3Cpolyline%20points%3D%2712%206%2012%2012%2016%2014%27%2F%3E%3C%2Fsvg%3E")}
 .ic-users{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M16%2021v-2a4%204%200%200%200-4-4H6a4%204%200%200%200-4%204v2%27%2F%3E%3Ccircle%20cx%3D%279%27%20cy%3D%277%27%20r%3D%274%27%2F%3E%3Cpath%20d%3D%27M22%2021v-2a4%204%200%200%200-3-3.87%27%2F%3E%3Cpath%20d%3D%27M16%203.13a4%204%200%200%201%200%207.75%27%2F%3E%3C%2Fsvg%3E")}
@@ -405,8 +408,11 @@ new MutationObserver(()=>{
   _homeBtn(!mc.querySelector('.menu-grid'));
 }).observe(mc, {childList:true, subtree:false});
 
+// TODO: reemplazar con el link real de Términos y Condiciones
+const TERMS_URL = 'https://hotboat.cl/terminos-y-condiciones';
 const S = {
   step: 'menu',
+  isGift:false, giftTo:'', giftMsg:'', giftFrom:'', termsAccepted:false,
   prices: {},
   availability: {},
   calYear: new Date().getFullYear(),
@@ -3165,6 +3171,20 @@ function renderForm(){
     <div class="form-group"><label>${LANG==='es'?'Fecha de nacimiento':'Date of birth'} <span style="font-weight:400;opacity:.65">(${LANG==='es'?'opcional — para regalonearte en tu día 🎂':LANG==='pt'?'opcional 🎂':'optional 🎂'})</span></label>
       <input type="date" id="f-birthday" max="${new Date().toISOString().split('T')[0]}" value="${S.customerBirthday||''}">
     </div>
+    <div class="form-group" style="margin-top:.4rem">
+      <label class="hb-check"><input type="checkbox" id="f-gift" ${S.isGift?'checked':''} onchange="toggleGift(this.checked)"><span>${LANG==='es'?'Es un regalo':LANG==='pt'?'É um presente':'It is a gift'} <span class="ic ic-gift"></span></span></label>
+    </div>
+    <div id="gift-fields" style="display:${S.isGift?'block':'none'}">
+      <div class="form-group"><label>${LANG==='es'?'¿Para quién es el regalo?':LANG==='pt'?'Para quem é o presente?':'Who receives the gift?'}</label>
+        <input type="text" id="f-gift-to" placeholder="${LANG==='es'?'Nombre de quien lo recibe':LANG==='pt'?'Nome de quem recebe':'Recipient name'}" value="${(S.giftTo||'').replace(/"/g,'&quot;')}" oninput="S.giftTo=this.value"></div>
+      <div class="form-group"><label>${LANG==='es'?'Dedicatoria':LANG==='pt'?'Dedicatória':'Message'}</label>
+        <textarea id="f-gift-msg" rows="2" placeholder="${LANG==='es'?'Escribe tu mensaje...':LANG==='pt'?'Escreva sua mensagem...':'Write your message...'}" oninput="S.giftMsg=this.value">${(S.giftMsg||'').replace(/</g,'&lt;')}</textarea></div>
+      <div class="form-group"><label>${LANG==='es'?'¿De parte de quién?':LANG==='pt'?'De quem?':'From whom?'}</label>
+        <input type="text" id="f-gift-from" placeholder="${LANG==='es'?'Tu nombre':LANG==='pt'?'Seu nome':'Your name'}" value="${(S.giftFrom||'').replace(/"/g,'&quot;')}" oninput="S.giftFrom=this.value"></div>
+    </div>
+    <div class="form-group" style="margin-top:.2rem">
+      <label class="hb-check"><input type="checkbox" id="f-terms" ${S.termsAccepted?'checked':''} onchange="S.termsAccepted=this.checked"><span>${LANG==='es'?'He leído y acepto los':LANG==='pt'?'Li e aceito os':'I have read and accept the'} <a href="${TERMS_URL}" target="_blank" rel="noopener" style="color:var(--coral);text-decoration:underline;font-weight:600">${LANG==='es'?'Términos y Condiciones':LANG==='pt'?'Termos e Condições':'Terms and Conditions'}</a></span></label>
+    </div>
   </div>
   <button class="btn" onclick="submitBooking()">
     ${_pendingAlojBooking
@@ -3232,6 +3252,8 @@ async function applyCoupon(){
   finally{ if(btn){ btn.disabled=false; btn.textContent=LANG==='en'?'Apply':LANG==='pt'?'Aplicar':'Aplicar'; } }
 }
 
+function toggleGift(on){S.isGift=!!on;var g=document.getElementById('gift-fields');if(g)g.style.display=on?'block':'none';}
+
 async function submitBooking(){
   if(_isSubmittingBooking) return;
   S.customerName = $('f-name').value.trim();
@@ -3240,6 +3262,17 @@ async function submitBooking(){
   S.customerBirthday = ($('f-birthday')?.value||'').trim()||null;
   if(!S.customerName || !S.customerPhone){
     showToast('Por favor ingresa nombre y telefono');
+    return;
+  }
+  S.isGift = !!(document.getElementById('f-gift') && document.getElementById('f-gift').checked);
+  S.termsAccepted = !!(document.getElementById('f-terms') && document.getElementById('f-terms').checked);
+  if(S.isGift){
+    S.giftTo = (document.getElementById('f-gift-to')?.value||'').trim();
+    S.giftMsg = (document.getElementById('f-gift-msg')?.value||'').trim();
+    S.giftFrom = (document.getElementById('f-gift-from')?.value||'').trim();
+  }
+  if(!S.termsAccepted){
+    showToast(LANG==='es'?'Debes aceptar los Términos y Condiciones':LANG==='pt'?'Você deve aceitar os Termos e Condições':'You must accept the Terms and Conditions');
     return;
   }
   _isSubmittingBooking = true;
@@ -3283,6 +3316,13 @@ async function submitBooking(){
       utm_content: S.utm_content || '',
       parametro_url: S.parametro_url || '',
     };
+    if(S.isGift){
+      const _gl = ['\u{1F381} REGALO'];
+      if(S.giftTo) _gl.push('Para: '+S.giftTo);
+      if(S.giftMsg) _gl.push('Dedicatoria: '+S.giftMsg);
+      if(S.giftFrom) _gl.push('De parte de: '+S.giftFrom);
+      payload.notes = _gl.join('\n');
+    }
     if(testPrice) payload.test_price = parseInt(testPrice);
     // If coming from accommodation flow, create HotBoat booking without payment order
     if(_pendingAlojBooking || _experienceCart.length || _pendingPackBooking) payload.skip_payment = true;
