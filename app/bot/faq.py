@@ -496,23 +496,25 @@ Quer adicionar algo especial ao seu HotBoat?
             if actual_keyword in faq_to_translation:
                 translation_key = faq_to_translation[actual_keyword]
                 logger.info(f"FAQ match: '{keyword}' → {translation_key}")
-                if actual_keyword == "extras":
-                    # Prioridad 1: lo que esté configurado en el panel del chatbot
-                    # (tabla bot_responses, key "extras"). NADA hardcodeado si hay config.
+                # Prioridad 1: lo que esté configurado en el panel del chatbot
+                # (tabla bot_responses) para CUALQUIER respuesta del menú.
+                # NADA hardcodeado si hay algo configurado.
+                configured = None
+                try:
+                    from app.booking.bot_config_router import get_bot_response as _get_cfg
+                    configured = _get_cfg(actual_keyword, lang)
+                except Exception:
                     configured = None
-                    try:
-                        from app.booking.bot_config_router import get_bot_response as _get_cfg
-                        configured = _get_cfg("extras", lang)
-                    except Exception:
-                        configured = None
-                    if configured and configured.strip():
-                        collected.append(configured)
-                        continue
-                    # Prioridad 2 (fallback): armar desde el catálogo (precios de BD)
+                if configured and configured.strip():
+                    collected.append(configured)
+                    continue
+                # Prioridad 2: extras → armar desde el catálogo (precios de BD)
+                if actual_keyword == "extras":
                     dynamic = self._build_extras_from_db(lang)
                     if dynamic:
                         collected.append(dynamic)
                         continue
+                # Prioridad 3 (fallback): texto por defecto (translations.py)
                 collected.append(get_text(translation_key, lang))
             else:
                 actual_response = self.faqs[actual_keyword] if isinstance(response, str) and response in self.faqs else response
