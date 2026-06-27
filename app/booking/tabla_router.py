@@ -51,6 +51,27 @@ TABLA_CATALOG = {
 
 DEFAULT_PRICE = 25000
 
+
+def _get_tabla_price() -> int:
+    """Precio de la tabla = precio del extra 'tabla de picoteo' configurado en la
+    app (extras_visibility.precio_venta). Cae a DEFAULT_PRICE si no está."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT precio_venta FROM extras_visibility
+                       WHERE REPLACE(LOWER(extra_name_lower),' ','_') = 'tabla_de_picoteo'
+                         AND precio_venta IS NOT NULL AND precio_venta > 0
+                       ORDER BY precio_venta LIMIT 1"""
+                )
+                row = cur.fetchone()
+                if row and row[0]:
+                    return int(row[0])
+    except Exception:
+        pass
+    return DEFAULT_PRICE
+
 # All unique ingredients across all tabla types with their purchase cost (CLP)
 # Prices from supplier catalog. show_in_booking=False so they don't appear
 # in the regular booking extras dropdown — only used in tabla flow + stock.
@@ -397,7 +418,7 @@ async def serve_tabla_form(booking_ref: str):
 
 @tabla_router.get("/api/tabla/catalog")
 async def get_tabla_catalog():
-    return {"catalog": _get_catalog_from_db(), "default_price": DEFAULT_PRICE}
+    return {"catalog": _get_catalog_from_db(), "default_price": _get_tabla_price()}
 
 
 @tabla_router.get("/api/tabla/{booking_ref}/info")
@@ -411,7 +432,7 @@ async def get_tabla_info(booking_ref: str):
             "booking_date": None,
             "booking_time": None,
             "catalog": _get_catalog_from_db(),
-            "default_price": DEFAULT_PRICE,
+            "default_price": _get_tabla_price(),
             "existing": None,
             "is_demo": True,
         }
@@ -443,7 +464,7 @@ async def get_tabla_info(booking_ref: str):
         "booking_date": booking["booking_date"],
         "booking_time": booking["booking_time"],
         "catalog": _get_catalog_from_db(),
-        "default_price": DEFAULT_PRICE,
+        "default_price": _get_tabla_price(),
         "existing": existing,
     }
 
@@ -473,7 +494,7 @@ async def submit_tabla(booking_ref: str, payload: TablaPayload):
     if len(payload.elige_3) != 3 or not all(i in cat["tier3"] for i in payload.elige_3):
         raise HTTPException(status_code=400, detail="Selección tier 3 inválida (necesita exactamente 3)")
 
-    price = payload.price if payload.price and payload.price > 0 else DEFAULT_PRICE
+    price = payload.price if payload.price and payload.price > 0 else _get_tabla_price()
     now = datetime.now(timezone.utc)
 
     with get_connection() as conn:
