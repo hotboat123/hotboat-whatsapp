@@ -3488,7 +3488,12 @@ async function submitBooking(){
       window.location.href = `/tabla/${encodeURIComponent(S.bookingRef)}?next=${encodeURIComponent(nextUrl)}`;
       return;
     }
-    renderPayment();
+    // Ir directo al checkout de pago (sin pantalla intermedia).
+    if(S.paymentUrl){
+      window.location.href = S.paymentUrl;
+      return;
+    }
+    renderPayment(); // fallback: sin URL de pago (coordinación por email)
   }catch(e){
     _pendingAlojBooking = null;
     _pendingPackBooking = null;
