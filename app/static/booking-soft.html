@@ -2743,9 +2743,6 @@ function renderCal(){
       <button onclick="nextMonth()">&#8250;</button>
     </div>
     <div class="cal-grid">${cells}</div>
-    <p style="margin-top:.8rem;font-size:.8rem;color:var(--muted)">
-      🟡 ${LANG==='es'?'Días disponibles':'Available days'} &nbsp; ${LANG==='es'?'Toca para seleccionar':LANG==='pt'?'Toque para selecionar':'Tap to select'}
-    </p>
   </div>
   <button class="btn btn-secondary" onclick="renderMenu()">${t('back')}</button>`;
 }
