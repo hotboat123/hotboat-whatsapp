@@ -509,15 +509,15 @@ def _hotboat_email_card(
 
 def _cta_btn(label: str, url: str, solid: bool = True) -> str:
     if solid:
-        style = ("display:block;text-align:center;background:#2563eb;color:#ffffff;"
+        style = ("display:block;text-align:center;background:#2c7a72;color:#ffffff;"
                  "text-decoration:none;padding:13px 10px;border-radius:11px;"
                  "font-size:13px;font-weight:700;letter-spacing:0.3px;"
-                 "box-shadow:0 4px 14px rgba(37,99,235,.35);")
+                 "box-shadow:0 4px 14px rgba(44,122,114,.35);")
     else:
-        style = ("display:block;text-align:center;background:rgba(37,99,235,.1);color:#60a5fa;"
+        style = ("display:block;text-align:center;background:rgba(44,122,114,.12);color:#5fb8ae;"
                  "text-decoration:none;padding:13px 10px;border-radius:11px;"
                  "font-size:13px;font-weight:700;letter-spacing:0.3px;"
-                 "border:1px solid rgba(96,165,250,.3);")
+                 "border:1px solid rgba(95,184,174,.35);")
     return f'<a href="{url}" style="{style}">{label}</a>'
 
 
