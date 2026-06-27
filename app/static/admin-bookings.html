@@ -9867,7 +9867,7 @@ function renderStockMovements(movements){
       <td style="padding:.45rem .8rem;font-size:.82rem">${m.product_name}</td>
       <td style="padding:.45rem .8rem;text-align:center;font-weight:700;color:${isOut?'#f87171':'#4ade80'}">${isOut?'':'+'}${m.delta}</td>
       <td style="padding:.45rem .8rem;font-size:.78rem">${reasonIcon} ${m.reason}</td>
-      <td style="padding:.45rem .8rem;font-size:.78rem;color:var(--muted)">${m.booking_ref||'—'}</td>
+      <td style="padding:.45rem .8rem;font-size:.78rem;color:var(--text)" title="${m.booking_ref||''}">${m.reservation||m.booking_ref||'—'}</td>
       <td style="padding:.45rem .8rem;font-size:.78rem;color:var(--muted)">${m.notes||''}</td>
     </tr>`;
   }).join('');

@@ -553,6 +553,44 @@ def get_movements(product_id: Optional[int] = None, limit: int = 100,
             for r in rows:
                 if r.get("created_at"):
                     r["created_at"] = str(r["created_at"])
+
+            # Enriquecer con "Nombre · Fecha" por reserva (también para movimientos viejos)
+            refs = sorted({r["booking_ref"] for r in rows if r.get("booking_ref")})
+            label_map = {}  # booking_ref -> (nombre, fecha)
+            if refs:
+                cur.execute(
+                    "SELECT booking_ref, customer_name, booking_date FROM hotboat_appointments WHERE booking_ref = ANY(%s)",
+                    (refs,),
+                )
+                for br, nm, dt in cur.fetchall():
+                    label_map[br] = (nm, dt)
+                cur.execute(
+                    "SELECT source_id, nombre_cliente, fecha FROM all_appointments WHERE source_id = ANY(%s)",
+                    (refs,),
+                )
+                for sid, nm, dt in cur.fetchall():
+                    if sid:
+                        label_map.setdefault(sid, (nm, dt))
+                aa_ref_by_id = {}
+                for ref in refs:
+                    if ref.startswith("AA-"):
+                        try:
+                            aa_ref_by_id[int(ref[3:])] = ref
+                        except ValueError:
+                            pass
+                if aa_ref_by_id:
+                    cur.execute(
+                        "SELECT id, nombre_cliente, fecha FROM all_appointments WHERE id = ANY(%s)",
+                        (list(aa_ref_by_id.keys()),),
+                    )
+                    for _id, nm, dt in cur.fetchall():
+                        label_map.setdefault(aa_ref_by_id[_id], (nm, dt))
+            for r in rows:
+                nm_dt = label_map.get(r.get("booking_ref"))
+                if nm_dt and nm_dt[0]:
+                    r["reservation"] = f"{nm_dt[0]} · {str(nm_dt[1])[:10]}" if nm_dt[1] else str(nm_dt[0])
+                else:
+                    r["reservation"] = r.get("booking_ref") or ""
             return {"movements": rows}
 
 
@@ -567,12 +605,15 @@ def _norm_name(s) -> str:
     return " ".join(s.lower().split())
 
 
-def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=None, customer_name=None):
+def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=None,
+                            customer_name=None, booking_date=None):
     """Consume stock for one booking. Returns number of movements applied."""
     import json as _json
-    # Etiqueta legible de la reserva para las notas del movimiento
-    _who = (str(customer_name).strip() if customer_name else "")
-    _res_label = f"{booking_ref}" + (f" · {_who}" if _who else "")
+    # Etiqueta legible de la reserva para las notas del movimiento: "Nombre · Fecha".
+    # Si falta el nombre, cae al código de reserva como respaldo.
+    _who  = (str(customer_name).strip() if customer_name else "")
+    _when = (str(booking_date)[:10] if booking_date else "")
+    _res_label = " · ".join([p for p in (_who, _when) if p]) or booking_ref
 
     # Parse extras
     if isinstance(extras_json, str):
@@ -806,7 +847,7 @@ def auto_consume_past_bookings() -> dict:
                                 except Exception:
                                     pass
 
-                        mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None, customer_name)
+                        mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None, customer_name, fecha)
                         if unmatched:
                             for u in unmatched:
                                 unmatched_ingredients.append({"booking_ref": ref, **u})
@@ -1015,23 +1056,23 @@ def reconsume_booking(booking_ref: str, x_admin_key: str = Header("")):
     with get_connection() as conn:
         with conn.cursor() as cur:
             # Resolver la reserva en ambas tablas
-            found_table = found_id = customer_name = extras_json = None
+            found_table = found_id = customer_name = extras_json = booking_date = None
             cur.execute(
-                "SELECT id, customer_name, extras FROM hotboat_appointments WHERE booking_ref=%s ORDER BY id LIMIT 1",
+                "SELECT id, customer_name, extras, booking_date FROM hotboat_appointments WHERE booking_ref=%s ORDER BY id LIMIT 1",
                 (ref,),
             )
             r = cur.fetchone()
             if r:
-                found_table, found_id, customer_name, extras_json = "hotboat_appointments", r[0], r[1], r[2]
+                found_table, found_id, customer_name, extras_json, booking_date = "hotboat_appointments", r[0], r[1], r[2], r[3]
             else:
                 cur.execute(
-                    "SELECT id, nombre_cliente, extras_json FROM all_appointments "
+                    "SELECT id, nombre_cliente, extras_json, fecha FROM all_appointments "
                     "WHERE source_id=%s OR id::text=%s ORDER BY id LIMIT 1",
                     (ref, ref.replace("AA-", "").lstrip("0") or "0"),
                 )
                 r = cur.fetchone()
                 if r:
-                    found_table, found_id, customer_name, extras_json = "all_appointments", r[0], r[1], r[2]
+                    found_table, found_id, customer_name, extras_json, booking_date = "all_appointments", r[0], r[1], r[2], r[3]
             if not found_table:
                 raise HTTPException(404, f"Reserva {ref!r} no encontrada")
 
@@ -1062,7 +1103,7 @@ def reconsume_booking(booking_ref: str, x_admin_key: str = Header("")):
                             pass
 
             # 3) Re-descontar con la lógica completa (tabla + extras BOM)
-            mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None, customer_name)
+            mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None, customer_name, booking_date)
 
             # 4) Marcar como consumida
             cur.execute(f"UPDATE {found_table} SET stock_consumed_at=NOW() WHERE id=%s", (found_id,))
