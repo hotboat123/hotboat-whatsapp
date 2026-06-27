@@ -323,6 +323,8 @@ label{color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0;fo
 .hb-check{display:flex;align-items:flex-start;gap:.55rem;cursor:pointer;font-weight:500;color:var(--text);font-size:.9rem;line-height:1.4}
 .hb-check input[type=checkbox]{width:19px;height:19px;margin-top:.05rem;accent-color:var(--coral);cursor:pointer;flex:0 0 auto}
 #gift-fields{border-left:2px solid var(--border);padding-left:.8rem;margin:.2rem 0 .4rem}
+select.bday-sel{background:#fff;border:1.5px solid #dbe3df;color:var(--text);border-radius:14px;box-shadow:var(--shadow-sm);padding:.7rem .5rem;font-size:.92rem;font-family:inherit;outline:none;width:100%;cursor:pointer}
+select.bday-sel:focus{border-color:var(--coral);box-shadow:0 0 0 3px var(--ring)}
 .ic-calendar{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20width%3D%2718%27%20height%3D%2718%27%20x%3D%273%27%20y%3D%274%27%20rx%3D%272%27%2F%3E%3Cpath%20d%3D%27M3%2010h18M8%202v4M16%202v4%27%2F%3E%3C%2Fsvg%3E")}
 .ic-clock{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%2710%27%2F%3E%3Cpolyline%20points%3D%2712%206%2012%2012%2016%2014%27%2F%3E%3C%2Fsvg%3E")}
 .ic-users{--ic:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M16%2021v-2a4%204%200%200%200-4-4H6a4%204%200%200%200-4%204v2%27%2F%3E%3Ccircle%20cx%3D%279%27%20cy%3D%277%27%20r%3D%274%27%2F%3E%3Cpath%20d%3D%27M22%2021v-2a4%204%200%200%200-3-3.87%27%2F%3E%3Cpath%20d%3D%27M16%203.13a4%204%200%200%201%200%207.75%27%2F%3E%3C%2Fsvg%3E")}
@@ -2973,6 +2975,35 @@ function toggleFlex(){
   renderExtras();
 }
 
+function _bdayMonths(){
+  if(LANG==='en') return ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  if(LANG==='pt') return ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  return ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+}
+function birthdayPickerHtml(){
+  const bd = (S.customerBirthday||'').split('-');
+  const yy = bd[0]||'', mm = bd[1]?String(parseInt(bd[1])):'', dd = bd[2]?String(parseInt(bd[2])):'';
+  const dayLbl = LANG==='en'?'Day':LANG==='pt'?'Dia':'Día';
+  const monLbl = LANG==='en'?'Month':LANG==='pt'?'Mês':'Mes';
+  const yrLbl  = LANG==='en'?'Year':LANG==='pt'?'Ano':'Año';
+  let days = `<option value="">${dayLbl}</option>`;
+  for(let d=1;d<=31;d++) days += `<option value="${d}"${String(d)===dd?' selected':''}>${d}</option>`;
+  const mn=_bdayMonths(); let months = `<option value="">${monLbl}</option>`;
+  for(let m=0;m<12;m++) months += `<option value="${m+1}"${String(m+1)===mm?' selected':''}>${mn[m]}</option>`;
+  const nowY=new Date().getFullYear(); let years = `<option value="">${yrLbl}</option>`;
+  for(let y=nowY;y>=1940;y--) years += `<option value="${y}"${String(y)===yy?' selected':''}>${y}</option>`;
+  return `<div style="display:flex;gap:.5rem">
+    <select id="f-bday-day" class="bday-sel" style="flex:1">${days}</select>
+    <select id="f-bday-month" class="bday-sel" style="flex:1.6">${months}</select>
+    <select id="f-bday-year" class="bday-sel" style="flex:1.2">${years}</select>
+  </div>`;
+}
+function _composeBirthday(){
+  const d=document.getElementById('f-bday-day'), m=document.getElementById('f-bday-month'), y=document.getElementById('f-bday-year');
+  if(!d||!m||!y||!d.value||!m.value||!y.value) return null;
+  return `${y.value}-${String(m.value).padStart(2,'0')}-${String(d.value).padStart(2,'0')}`;
+}
+
 function renderForm(){
   window._lastSummaryFn = renderForm;   // so applyCoupon can re-render
   const basepp = S.prices[S.numPeople] || 76990;
@@ -3168,7 +3199,7 @@ function renderForm(){
       <input type="email" id="f-email" placeholder="tu@email.com" value="${S.customerEmail}">
     </div>
     <div class="form-group"><label>${LANG==='es'?'Fecha de nacimiento':'Date of birth'} <span style="font-weight:400;opacity:.65">(${LANG==='es'?'opcional — para regalonearte en tu día 🎂':LANG==='pt'?'opcional 🎂':'optional 🎂'})</span></label>
-      <input type="date" id="f-birthday" max="${new Date().toISOString().split('T')[0]}" value="${S.customerBirthday||''}">
+      ${birthdayPickerHtml()}
     </div>
     <div class="form-group" style="margin-top:.4rem">
       <label class="hb-check"><input type="checkbox" id="f-gift" ${S.isGift?'checked':''} onchange="toggleGift(this.checked)"><span>${LANG==='es'?'Es un regalo':LANG==='pt'?'É um presente':'It is a gift'} <span class="ic ic-gift"></span></span></label>
@@ -3258,7 +3289,7 @@ async function submitBooking(){
   S.customerName = $('f-name').value.trim();
   S.customerPhone = $('f-phone').value.trim();
   S.customerEmail = $('f-email').value.trim();
-  S.customerBirthday = ($('f-birthday')?.value||'').trim()||null;
+  S.customerBirthday = _composeBirthday();
   if(!S.customerName || !S.customerPhone){
     showToast('Por favor ingresa nombre y telefono');
     return;
