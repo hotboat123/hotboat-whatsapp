@@ -91,6 +91,7 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
     booking_ref = str(booking.get("booking_ref") or "")
     base_url = _get_base_url()
     firma_url = f"{base_url}/firma/{booking_ref}" if booking_ref and base_url else ""
+    tabla_url = f"{base_url}/tabla/{booking_ref}" if booking_ref and base_url else ""
     lang = str(booking.get("customer_language") or "es").strip().lower()
     if lang not in ("es", "en", "pt"):
         lang = "es"
@@ -113,6 +114,7 @@ def _booking_ctx(booking: dict, extra: Optional[Dict[str, str]] = None) -> Dict[
         "business_email":     getattr(s, "business_email", ""),
         "business_website":   getattr(s, "business_website", ""),
         "firma_url":          firma_url,
+        "tabla_url":          tabla_url,
         "customer_language":  lang,
         "utm_source":   str(booking.get("utm_source") or ""),
         "utm_medium":   str(booking.get("utm_medium") or ""),
@@ -152,6 +154,7 @@ def _sample_ctx(to_addr: str) -> Dict[str, str]:
         "business_email":   getattr(s, "business_email", ""),
         "business_website": getattr(s, "business_website", ""),
         "firma_url":         f"{base_url}/firma/{demo_ref}" if base_url else "",
+        "tabla_url":         f"{base_url}/tabla/{demo_ref}" if base_url else "",
         "customer_language": "es",
     }
 
@@ -532,6 +535,7 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
     name      = ctx.get("customer_name", "")
     website   = ctx.get("business_website", "#")
     firma_url = ctx.get("firma_url", "") or website
+    tabla_url = ctx.get("tabla_url", "") or "https://hotboatchile.com/tablas/"
 
     accent = (
         '<td width="33%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
@@ -582,7 +586,7 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
       <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_video"), "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_menu"), "https://hotboatchile.com/tablas/", solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_menu"), tabla_url, solid=False)}</td>
     </tr>
     </table>"""
 
@@ -602,6 +606,7 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
     name      = ctx.get("customer_name", "")
     website   = ctx.get("business_website", "#")
     firma_url = ctx.get("firma_url", "") or website
+    tabla_url = ctx.get("tabla_url", "") or "https://hotboatchile.com/tablas/"
 
     accent = (
         '<td width="50%" height="4" bgcolor="#34a394" style="line-height:4px;font-size:0;">&nbsp;</td>'
@@ -651,7 +656,7 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
       <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_video"), "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_menu"), "https://hotboatchile.com/tablas/", solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_menu"), tabla_url, solid=False)}</td>
     </tr>
     </table>"""
 
@@ -1652,6 +1657,7 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
     name = ctx.get("customer_name", "")
     website  = ctx.get("business_website", "#")
     firma_url = ctx.get("firma_url", "") or website
+    tabla_url = ctx.get("tabla_url", "") or "https://hotboatchile.com/tablas/"
     accent = (
         '<td width="50%" height="4" bgcolor="#34a394" style="line-height:4px;font-size:0;">&nbsp;</td>'
         '<td width="50%" height="4" bgcolor="#e8b86d" style="line-height:4px;font-size:0;">&nbsp;</td>'
@@ -1698,7 +1704,7 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
       <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_video"), "https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb", solid=False)}</td>
-      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_menu"), "https://hotboatchile.com/tablas/", solid=False)}</td>
+      <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_menu"), tabla_url, solid=False)}</td>
     </tr>
     </table>"""
 
