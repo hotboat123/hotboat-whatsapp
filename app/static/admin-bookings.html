@@ -605,6 +605,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <button class="btn-primary" onclick="openNewExtraModal()" style="white-space:nowrap">+ Nuevo extra</button>
         <button class="btn-secondary" onclick="openStockProductModal()" style="white-space:nowrap;font-size:.78rem">+ Nuevo producto stock</button>
         <button onclick="triggerAutoConsumeStock()" style="background:rgba(74,222,128,.12);border:1px solid #4ade80;color:#4ade80;border-radius:8px;padding:.38rem .85rem;font-size:.78rem;cursor:pointer;font-weight:600;white-space:nowrap">📦 Consumir reservas pasadas</button>
+        <button onclick="reconsumeBookingPrompt()" style="background:rgba(96,165,250,.12);border:1px solid #60a5fa;color:#60a5fa;border-radius:8px;padding:.38rem .85rem;font-size:.78rem;cursor:pointer;font-weight:600;white-space:nowrap">🔁 Re-descontar una reserva</button>
         <button onclick="dedupStockProducts()" style="background:rgba(251,191,36,.12);border:1px solid #fbbf24;color:#fbbf24;border-radius:8px;padding:.38rem .85rem;font-size:.78rem;cursor:pointer;font-weight:600;white-space:nowrap">🧹 Limpiar duplicados</button>
         <span id="ec-count" style="color:var(--muted);font-size:.78rem"></span>
       </div>
@@ -10083,6 +10084,28 @@ async function triggerAutoConsumeStock(){
     const res = await api('/api/admin/stock/auto-consume-past', {method:'POST'});
     await loadExtrasCat();
     _showConsumeResultModal(res);
+  }catch(e){ showToast('❌ Error: '+e.message); }
+  finally{ btn.textContent = orig; btn.disabled = false; }
+}
+
+async function reconsumeBookingPrompt(){
+  const ref = (prompt('Re-descontar stock de una reserva.\n\nEscribe el código de la reserva (ej: HB-2026-R9WJK):')||'').trim();
+  if(!ref) return;
+  const btn = event.currentTarget;
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Procesando...'; btn.disabled = true;
+  try{
+    const res = await api('/api/admin/stock/reconsume/'+encodeURIComponent(ref), {method:'POST'});
+    await loadExtrasCat();
+    const um = (res.unmatched_ingredients||[]);
+    let msg = `🔁 ${res.booking_ref}${res.customer_name?' · '+res.customer_name:''}\n`+
+              `Revertidos: ${res.reverted_movements||0} · Descontados ahora: ${res.applied_movements||0}`;
+    if(um.length){
+      msg += `\n\n⚠️ ${um.length} ingrediente(s) sin coincidencia:\n` +
+             um.map(u=>`• ${u.ingredient}${u.suggestion?` → ¿"${u.suggestion}"?`:''}`).join('\n');
+    }
+    alert(msg);
+    showToast(`✅ ${res.applied_movements||0} descuento(s) aplicados a ${res.booking_ref}`);
   }catch(e){ showToast('❌ Error: '+e.message); }
   finally{ btn.textContent = orig; btn.disabled = false; }
 }
