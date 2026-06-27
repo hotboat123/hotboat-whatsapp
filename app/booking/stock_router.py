@@ -567,9 +567,12 @@ def _norm_name(s) -> str:
     return " ".join(s.lower().split())
 
 
-def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=None):
+def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=None, customer_name=None):
     """Consume stock for one booking. Returns number of movements applied."""
     import json as _json
+    # Etiqueta legible de la reserva para las notas del movimiento
+    _who = (str(customer_name).strip() if customer_name else "")
+    _res_label = f"{booking_ref}" + (f" · {_who}" if _who else "")
 
     # Parse extras
     if isinstance(extras_json, str):
@@ -635,7 +638,7 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
         pid = norm_to_pid.get(_norm_name(ingredient_name))
         if pid:
             _apply_movement(cur, pid, -1, "booking", booking_ref,
-                            _norm_name(ingredient_name), f"Tabla — {ingredient_name}")
+                            _norm_name(ingredient_name), f"Tabla de {_res_label} — {ingredient_name}")
             movements += 1
         else:
             # Name mismatch — log loudly with the closest product name so it's
@@ -667,13 +670,13 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
                 if target:
                     _apply_movement(cur, target[0], -(target[1] * item["quantity"]),
                                     "booking", booking_ref, item["extra_slug"],
-                                    f"Reserva {booking_ref} — variante {target[3]}")
+                                    f"Reserva {_res_label} — {item['extra_slug']} (variante {target[3]})")
                     movements += 1
         else:
             for product_id, qty, _, _ in bom_rows:
                 _apply_movement(cur, product_id, -(qty * item["quantity"]),
                                 "booking", booking_ref, item["extra_slug"],
-                                f"Reserva {booking_ref}")
+                                f"Reserva {_res_label} — {item['extra_slug']}")
                 movements += 1
     return movements, unmatched
 
@@ -732,7 +735,7 @@ def auto_consume_past_bookings() -> dict:
             with conn.cursor() as cur:
                 # hotboat_appointments uses different column names
                 cur.execute("""
-                    SELECT id, booking_ref, booking_date, booking_time, extras, stock_consumed_at
+                    SELECT id, booking_ref, booking_date, booking_time, extras, stock_consumed_at, customer_name
                     FROM hotboat_appointments
                     WHERE booking_date <= %s
                       AND status IN ('confirmed', 'CONFIRMED', 'pending', 'PENDING')
@@ -742,7 +745,7 @@ def auto_consume_past_bookings() -> dict:
 
                 # all_appointments: synced/historical reservations
                 cur.execute("""
-                    SELECT id, source_id, fecha, hora, extras_json, stock_consumed_at
+                    SELECT id, source_id, fecha, hora, extras_json, stock_consumed_at, nombre_cliente
                     FROM all_appointments
                     WHERE fecha <= %s
                       AND status IN ('confirmed', 'CONFIRMED', 'pending', 'PENDING')
@@ -753,7 +756,7 @@ def auto_consume_past_bookings() -> dict:
             processed_refs = set()
 
             for table_name, rows in [("hotboat_appointments", web_rows), ("all_appointments", all_rows)]:
-                for (row_id, source_id, fecha, hora, extras_json, _) in rows:
+                for (row_id, source_id, fecha, hora, extras_json, _, customer_name) in rows:
                     ref = source_id or (f"HA-{row_id}" if table_name == "hotboat_appointments" else f"AA-{row_id}")
                     if ref in processed_refs:
                         continue
@@ -803,7 +806,7 @@ def auto_consume_past_bookings() -> dict:
                                 except Exception:
                                     pass
 
-                        mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None)
+                        mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None, customer_name)
                         if unmatched:
                             for u in unmatched:
                                 unmatched_ingredients.append({"booking_ref": ref, **u})
