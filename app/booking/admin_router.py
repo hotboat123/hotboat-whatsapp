@@ -1001,6 +1001,15 @@ def _normalize_hhmm_list(values) -> list:
     return out
 
 
+def _parse_duration(v):
+    """Duración de paseo en horas (float >0) o None si no está configurada (usa el global)."""
+    try:
+        d = float(v)
+        return d if d > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 @admin_router.get("/api/admin/schedule-types")
 async def get_schedule_types(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
@@ -1028,6 +1037,7 @@ async def update_schedule_types(body: ScheduleTypesRequest, x_admin_key: str = H
             "name": str(t.get("name") or "").strip() or f"Horario {len(cleaned)+1}",
             "hours": _normalize_hhmm_list(t.get("hours")),
             "ghost_times": _normalize_hhmm_list(t.get("ghost_times")),
+            "duration_hours": _parse_duration(t.get("duration_hours")),
         })
     set_setting("schedule_types", json.dumps(cleaned))
     try:
@@ -1070,6 +1080,7 @@ async def update_urgency_modes(body: UrgencyModesRequest, x_admin_key: str = Hea
             "seed_times": _normalize_hhmm_list(m.get("seed_times")),
             "gap_hours": gap,
             "ghost_times": _normalize_hhmm_list(m.get("ghost_times")),
+            "duration_hours": _parse_duration(m.get("duration_hours")),
         })
     set_setting("urgency_modes", json.dumps(cleaned))
     try:

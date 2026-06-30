@@ -204,7 +204,19 @@ class AvailabilityChecker:
                 end_date,
                 exclude_statuses=self.config.exclude_statuses
             )
-            
+
+            # Duración de paseo por día según el perfil asignado (Horario/Urgencia).
+            # Días sin perfil con duración propia → usan la duración global.
+            day_duration_map: dict = {}
+            try:
+                from app.booking.operator_settings import get_day_duration_map
+                day_duration_map = get_day_duration_map(start_date.date(), end_date.date())
+            except Exception as e:
+                logger.warning("get_day_duration_map failed (continuing): %s", e, exc_info=True)
+
+            def _dur_for(d) -> float:
+                return float(day_duration_map.get(str(d), self.config.duration_hours))
+
             # Create a set of booked time ranges for overlap checking
             # Store (date, start_hour, end_hour) for each appointment
             booked_ranges = []
@@ -214,9 +226,9 @@ class AvailabilityChecker:
                     if isinstance(dt, str):
                         dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
                     
-                    # Calculate appointment range with buffer
+                    # Calculate appointment range with buffer (duración del día de la reserva)
                     appointment_start = dt
-                    appointment_duration = self.config.duration_hours
+                    appointment_duration = _dur_for(dt.date())
                     appointment_end = appointment_start + timedelta(hours=appointment_duration)
                     
                     # Apply buffer
@@ -293,9 +305,9 @@ class AvailabilityChecker:
                     if slot_datetime < datetime.now(CHILE_TZ):
                         continue
                     
-                    # Calculate slot range with buffer
+                    # Calculate slot range with buffer (duración del día del slot)
                     slot_start_with_buffer = slot_datetime - timedelta(hours=self.config.buffer_hours)
-                    slot_end = slot_datetime + timedelta(hours=self.config.duration_hours)
+                    slot_end = slot_datetime + timedelta(hours=_dur_for(slot_datetime.date()))
                     slot_end_with_buffer = slot_end + timedelta(hours=self.config.buffer_hours)
                     
                     # Check if slot overlaps with any booked appointment (in-memory, fast)

@@ -783,6 +783,40 @@ def get_day_schedule_hours_map(
     return out
 
 
+def get_day_duration_map(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+) -> dict:
+    """
+    Map of {date_str: duration_hours} for days whose assigned profile (schedule
+    type O urgency mode) define una duración de paseo propia. Días sin perfil o
+    sin duración configurada quedan ausentes → usan la duración global.
+    """
+    profiles = {}
+    for p in get_schedule_types():
+        if isinstance(p, dict) and p.get("id"):
+            profiles[p["id"]] = p
+    for p in get_urgency_modes():
+        if isinstance(p, dict) and p.get("id"):
+            profiles[p["id"]] = p
+    if not profiles:
+        return {}
+    out: dict = {}
+    for v in get_urgency_days(from_date, to_date):
+        pk = v.get("profile_key")
+        prof = profiles.get(pk) if pk else None
+        if not prof:
+            continue
+        dur = prof.get("duration_hours")
+        try:
+            dur = float(dur)
+        except (TypeError, ValueError):
+            dur = None
+        if dur and dur > 0:
+            out[v["date"]] = dur
+    return out
+
+
 def get_day_schedule_ghost_map(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
