@@ -159,12 +159,24 @@ class AvailabilityChecker:
         return await self.get_available_slots(start_date, end_date)
     
     def _generate_time_slots_for_date(self, date: datetime, override_hours: list = None) -> List[datetime]:
-        """Generate all possible time slots for a given date"""
+        """Generate all possible time slots for a given date.
+        Accepts each hour as int (hora entera), 'HH' o 'HH:MM' — soporta media hora."""
         slots = []
         date_obj = date.date() if isinstance(date, datetime) else date
         hours = override_hours if override_hours is not None else self.config.operating_hours
-        for hour in hours:
-            dt_naive = datetime.combine(date_obj, time(hour, 0))
+        for h in hours:
+            if isinstance(h, int):
+                hh, mm = h, 0
+            else:
+                parts = str(h).strip().split(":")
+                try:
+                    hh = int(parts[0])
+                    mm = int(parts[1]) if len(parts) > 1 and parts[1] != "" else 0
+                except (ValueError, IndexError):
+                    continue
+            if not (0 <= hh <= 23 and 0 <= mm <= 59):
+                continue
+            dt_naive = datetime.combine(date_obj, time(hh, mm))
             slots.append(dt_naive.replace(tzinfo=CHILE_TZ))
         return slots
     
@@ -226,7 +238,7 @@ class AvailabilityChecker:
             try:
                 from app.booking.operator_settings import (
                     get_vacation_days,
-                    get_operating_hours_as_ints,
+                    get_operating_hours,
                     get_day_schedule_hours_map,
                 )
             except Exception as ie:
@@ -239,9 +251,9 @@ class AvailabilityChecker:
                 except Exception as e:
                     logger.warning("get_vacation_days failed (continuing): %s", e, exc_info=True)
                 try:
-                    db_operating_hours = get_operating_hours_as_ints()
+                    db_operating_hours = get_operating_hours()   # 'HH:MM' (soporta media hora)
                 except Exception as e:
-                    logger.warning("get_operating_hours_as_ints failed (continuing): %s", e, exc_info=True)
+                    logger.warning("get_operating_hours failed (continuing): %s", e, exc_info=True)
                 try:
                     # Per-day custom hours from an assigned schedule-type profile
                     day_schedule_hours = get_day_schedule_hours_map(

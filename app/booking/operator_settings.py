@@ -776,14 +776,10 @@ def get_day_schedule_hours_map(
         if not pk or pk not in types_by_id:
             continue
         hours = types_by_id[pk].get("hours") or []
-        hour_ints = []
-        for h in hours:
-            try:
-                hour_ints.append(int(str(h).split(":")[0]))
-            except Exception:
-                pass
-        if hour_ints:
-            out[v["date"]] = sorted(set(hour_ints))
+        # Preservar 'HH:MM' (soporta media hora), no truncar a la hora entera.
+        hhmm = sorted({str(h).strip() for h in hours if str(h).strip()})
+        if hhmm:
+            out[v["date"]] = hhmm
     return out
 
 
