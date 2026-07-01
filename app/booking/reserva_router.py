@@ -23,30 +23,73 @@ RESERVA_HTML_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "st
 MAPS_URL = "https://maps.app.goo.gl/jVYVHRzekkmFRjEH7"
 
 
-def _resolve_appointment_row(booking_ref: str):
-    """Return the raw all_appointments row needed to append extras, or None."""
+_ROW_COLS = (
+    "id, source_id, nombre_cliente, fecha, hora, num_personas, "
+    "COALESCE(ingreso_reserva,0), COALESCE(ingreso_extras,0), COALESCE(ingreso_total,0), "
+    "extras_json, has_flex, COALESCE(flex_amount,0), status, COALESCE(coupon_discount,0)"
+)
+
+
+def _resolve_full_booking(booking_ref: str):
+    """Resuelve cualquier formato de booking_ref a los datos completos de la
+    reserva en all_appointments. Soporta:
+      - 'AA-{id}'  → reservas sin source_id (manuales, sincronizadas, etc.) por id directo
+      - cualquier otro (p. ej. 'HB-YYYY-XXXXX') → por source_id (web bookings)
+    Mismo esquema de resolución que ya usan /firma/{ref} y /tabla/{ref}."""
     from app.db.connection import get_connection
     ref = (booking_ref or "").strip()
     if not ref:
         return None
+
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """SELECT id, extras_json, COALESCE(ingreso_reserva,0), COALESCE(ingreso_extras,0),
-                          COALESCE(flex_amount,0), COALESCE(coupon_discount,0)
-                   FROM all_appointments WHERE source='hotboat_web' AND source_id=%s LIMIT 1""",
-                (ref,),
-            )
+            if ref.upper().startswith("AA-"):
+                try:
+                    apt_id = int(ref[3:])
+                except ValueError:
+                    return None
+                cur.execute(f"SELECT {_ROW_COLS} FROM all_appointments WHERE id=%s", (apt_id,))
+            else:
+                cur.execute(
+                    f"SELECT {_ROW_COLS} FROM all_appointments WHERE source='hotboat_web' AND source_id=%s LIMIT 1",
+                    (ref,),
+                )
             row = cur.fetchone()
             if not row:
                 return None
+            (aid, source_id, nombre, fecha, hora, num_personas, ingreso_reserva,
+             ingreso_extras, ingreso_total, extras_json, has_flex, flex_amount,
+             status, coupon_discount) = row
+
+            ej = extras_json
+            if isinstance(ej, str):
+                try:
+                    ej = _json.loads(ej)
+                except Exception:
+                    ej = None
+            if isinstance(ej, dict):
+                extras_list = ej.get("extras") or []
+            elif isinstance(ej, list):
+                extras_list = ej
+            else:
+                extras_list = []
+
             return {
-                "id": row[0],
-                "extras_json": row[1],
-                "ingreso_reserva": float(row[2]),
-                "ingreso_extras": float(row[3]),
-                "flex_amount": float(row[4]),
-                "coupon_discount": float(row[5]),
+                "id": aid,
+                "booking_ref": source_id or f"AA-{aid}",
+                "customer_name": nombre or "",
+                "booking_date": str(fecha) if fecha else "",
+                "booking_time": str(hora)[:5] if hora else "",
+                "num_people": num_personas,
+                "status": status or "",
+                "extras_json": ej,
+                "extras": extras_list,
+                "ingreso_reserva": float(ingreso_reserva),
+                "ingreso_extras": float(ingreso_extras),
+                "ingreso_total": float(ingreso_total),
+                "has_flex": bool(has_flex),
+                "flex_amount": float(flex_amount),
+                "coupon_discount": float(coupon_discount),
             }
 
 
@@ -78,23 +121,22 @@ async def get_mireserva_info(booking_ref: str):
             "flex_amount": 15398,
             "maps_url": MAPS_URL,
         }
-    from app.booking.db import get_booking_by_ref
-    b = get_booking_by_ref(booking_ref)
+    b = _resolve_full_booking(booking_ref)
     if not b:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
     return {
-        "booking_ref": b.get("booking_ref") or booking_ref,
-        "customer_name": b.get("customer_name") or "",
-        "booking_date": b.get("booking_date") or "",
-        "booking_time": (b.get("booking_time") or "")[:5],
-        "num_people": b.get("num_people"),
-        "status": b.get("status") or "",
-        "total_price": b.get("total_price") or 0,
-        "subtotal": b.get("subtotal") or 0,
-        "extras_total": b.get("extras_total") or 0,
-        "extras": b.get("extras") or [],
-        "has_flex": bool(b.get("has_flex")),
-        "flex_amount": b.get("flex_amount") or 0,
+        "booking_ref": b["booking_ref"],
+        "customer_name": b["customer_name"],
+        "booking_date": b["booking_date"],
+        "booking_time": b["booking_time"],
+        "num_people": b["num_people"],
+        "status": b["status"],
+        "total_price": b["ingreso_total"],
+        "subtotal": b["ingreso_reserva"],
+        "extras_total": b["ingreso_extras"],
+        "extras": b["extras"],
+        "has_flex": b["has_flex"],
+        "flex_amount": b["flex_amount"],
         "maps_url": MAPS_URL,
     }
 
@@ -118,7 +160,7 @@ async def add_extras_to_booking(booking_ref: str, body: AddExtrasRequest):
         added = sum(i.price * i.quantity for i in body.extras)
         return {"ok": True, "extras_total": added, "total_price": 169378 + added, "added_total": added, "demo": True}
 
-    row = _resolve_appointment_row(booking_ref)
+    row = _resolve_full_booking(booking_ref)
     if not row:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
