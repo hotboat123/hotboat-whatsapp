@@ -60,6 +60,24 @@ async def serve_mireserva(booking_ref: str):
 
 @reserva_router.get("/api/mireserva/{booking_ref}")
 async def get_mireserva_info(booking_ref: str):
+    if booking_ref.strip().lower() == "demo":
+        # Datos de muestra: para que la revisión de Meta y las pruebas propias
+        # abran una página con contenido real en vez de un 404.
+        return {
+            "booking_ref": "HB-2026-DEMO",
+            "customer_name": "Cliente",
+            "booking_date": "2026-12-24",
+            "booking_time": "19:00",
+            "num_people": 2,
+            "status": "confirmed",
+            "total_price": 169378,
+            "subtotal": 153980,
+            "extras_total": 0,
+            "extras": [],
+            "has_flex": False,
+            "flex_amount": 15398,
+            "maps_url": MAPS_URL,
+        }
     from app.booking.db import get_booking_by_ref
     b = get_booking_by_ref(booking_ref)
     if not b:
@@ -95,6 +113,10 @@ class AddExtrasRequest(BaseModel):
 async def add_extras_to_booking(booking_ref: str, body: AddExtrasRequest):
     if not body.extras:
         raise HTTPException(status_code=400, detail="Selecciona al menos un extra")
+
+    if booking_ref.strip().lower() == "demo":
+        added = sum(i.price * i.quantity for i in body.extras)
+        return {"ok": True, "extras_total": added, "total_price": 169378 + added, "added_total": added, "demo": True}
 
     row = _resolve_appointment_row(booking_ref)
     if not row:
