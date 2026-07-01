@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Mi Reserva · HotBoat Chile</title>
+<style>
+:root{
+  --bg:#07120f; --card:#102220; --border:#20352e; --row-border:#1a2e28;
+  --text:#f8fafc; --muted:#64748b; --value:#e2e8f0;
+  --gold:#e8b86d; --green:#34a394; --green-btn:#2c7a72; --green-btn2:#34897f;
+  --green-soft:#5fb8ae;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+     background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:3rem}
+.wrap{max-width:480px;margin:0 auto;padding:1.5rem 1rem}
+.card{background:var(--card);border-radius:20px;border:1px solid var(--border);
+      box-shadow:0 24px 64px rgba(0,0,0,.45);padding:2rem 1.6rem;margin-bottom:1rem}
+.logo{display:block;height:70px;width:auto;margin:0 auto 1rem;filter:brightness(0) invert(1)}
+h1{text-align:center;font-size:1.3rem;font-weight:800;margin-bottom:.3rem}
+.sub{text-align:center;color:var(--muted);font-size:.85rem;margin-bottom:1.2rem}
+.badge{display:block;width:fit-content;margin:0 auto 1.2rem;background:rgba(232,184,110,.12);
+       color:var(--gold);border:1px solid rgba(232,184,110,.3);border-radius:20px;
+       padding:.35rem 1rem;font-size:.75rem;font-weight:700;letter-spacing:.05em}
+.details{background:var(--bg);border-radius:14px;border:1px solid var(--border);overflow:hidden}
+.row{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;
+     border-bottom:1px solid var(--row-border);font-size:.85rem;gap:.6rem}
+.row:last-child{border-bottom:none}
+.row .lbl{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;font-weight:600;white-space:nowrap}
+.row .val{color:var(--value);font-weight:600;text-align:right}
+.row.extra-row .lbl{text-transform:none;font-size:.83rem;color:var(--value);font-weight:500;letter-spacing:0}
+.row.total .val{color:var(--green);font-size:1.15rem;font-weight:800}
+.btn{display:block;width:100%;text-align:center;padding:.9rem;border-radius:11px;
+     font-weight:700;font-size:.95rem;text-decoration:none;border:none;cursor:pointer;
+     transition:transform .15s}
+.btn:active{transform:scale(.98)}
+.btn-solid{background:linear-gradient(135deg,var(--green-btn2),var(--green-btn));color:#fff;
+           box-shadow:0 6px 18px rgba(44,122,114,.35)}
+.btn-outline{background:rgba(44,122,114,.12);color:var(--green-soft);
+             border:1px solid rgba(95,184,174,.35)}
+.section-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+               color:var(--muted);margin:0 0 .8rem}
+.extra-item{display:flex;align-items:center;justify-content:space-between;gap:.7rem;
+            background:var(--bg);border:1px solid var(--border);border-radius:12px;
+            padding:.7rem .9rem;margin-bottom:.55rem}
+.extra-info{flex:1;min-width:0}
+.extra-name{font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:.4rem}
+.extra-price{font-size:.75rem;color:var(--gold);margin-top:.15rem}
+.qty{display:flex;align-items:center;gap:.5rem;flex-shrink:0}
+.qty button{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);
+            background:var(--card);color:var(--text);font-size:1rem;cursor:pointer;
+            display:flex;align-items:center;justify-content:center}
+.qty span{min-width:1.2rem;text-align:center;font-weight:700;font-size:.85rem}
+.loading,.error{text-align:center;color:var(--muted);padding:3rem 1rem;font-size:.9rem}
+.toast{position:fixed;bottom:1.4rem;left:50%;transform:translateX(-50%);
+       background:var(--green-btn);color:#fff;padding:.7rem 1.3rem;border-radius:30px;
+       font-size:.85rem;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.35);
+       opacity:0;pointer-events:none;transition:opacity .25s;z-index:999;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="card"><div class="loading">Cargando tu reserva...</div></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const parts = location.pathname.split('/').filter(Boolean);
+const bookingRef = decodeURIComponent(parts[parts.length-1] || '');
+let DATA = null, CATALOG = [];
+const qty = {}; // extra id -> quantity to add
+
+function fmtCLP(n){ return '$' + Math.round(n||0).toLocaleString('es-CL'); }
+function fmtDate(d){
+  if(!d) return '';
+  const [y,m,day] = String(d).slice(0,10).split('-');
+  if(!y||!m||!day) return d;
+  return `${day}/${m}/${y}`;
+}
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function statusLabel(s){
+  const map = {confirmed:'✅ Confirmada', pending_payment:'🔶 Pendiente de pago', cancelled:'✕ Cancelada'};
+  return map[s] || s || '—';
+}
+
+async function init(){
+  if(!bookingRef){ renderError(); return; }
+  try{
+    const [infoRes, catRes] = await Promise.all([
+      fetch(`/api/mireserva/${encodeURIComponent(bookingRef)}`),
+      fetch('/api/content/extras?lang=es').catch(()=>null),
+    ]);
+    if(!infoRes.ok){ renderError(); return; }
+    DATA = await infoRes.json();
+    if(catRes && catRes.ok){
+      const catData = await catRes.json().catch(()=>({extras:[]}));
+      CATALOG = catData.extras || [];
+    }
+    render();
+  }catch(e){
+    console.error(e);
+    renderError();
+  }
+}
+
+function renderError(){
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <div class="error">
+        <div style="font-size:2.2rem;margin-bottom:.6rem">😕</div>
+        No pudimos encontrar esta reserva.<br>
+        Si crees que es un error, escríbenos por WhatsApp.
+      </div>
+    </div>`;
+}
+
+function render(){
+  const d = DATA;
+  const existingExtras = (d.extras||[]).filter(e=>e && e.name).map(e=>{
+    const q = e.quantity>1 ? ` ×${e.quantity}` : '';
+    return `<div class="row extra-row"><span class="lbl">${e.name}${q}</span><span class="val">${fmtCLP((e.price||0)*(e.quantity||1))}</span></div>`;
+  }).join('');
+
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <img src="/static/logo.png" class="logo" alt="HotBoat" onerror="this.style.display='none'">
+      <h1>¡Hola${d.customer_name?' '+d.customer_name:''}! 👋</h1>
+      <p class="sub">Aquí tienes el resumen de tu reserva HotBoat</p>
+      <div class="badge">${statusLabel(d.status)}</div>
+      <div class="details">
+        <div class="row"><span class="lbl">Referencia</span><span class="val" style="font-family:monospace">${d.booking_ref}</span></div>
+        <div class="row"><span class="lbl">Fecha</span><span class="val">${fmtDate(d.booking_date)}</span></div>
+        <div class="row"><span class="lbl">Hora</span><span class="val">${d.booking_time||''} hrs</span></div>
+        <div class="row"><span class="lbl">Personas</span><span class="val">${d.num_people||''}</span></div>
+        ${existingExtras}
+        <div class="row total"><span class="lbl">Total</span><span class="val">${fmtCLP(d.total_price)}</span></div>
+      </div>
+      <a href="${d.maps_url}" target="_blank" rel="noopener" class="btn btn-outline" style="margin-top:1rem">📍 Ver ubicación en el mapa</a>
+    </div>
+
+    <div class="card">
+      <div class="section-title">🎁 Agregar extras a tu reserva</div>
+      <div id="extras-list"></div>
+      <button class="btn btn-solid" style="margin-top:.4rem" onclick="submitExtras()">Agregar extras seleccionados</button>
+    </div>
+  `;
+  renderExtrasList();
+}
+
+function renderExtrasList(){
+  const el = document.getElementById('extras-list');
+  if(!CATALOG.length){ el.innerHTML = '<p style="color:var(--muted);font-size:.82rem">No hay extras disponibles por ahora.</p>'; return; }
+  el.innerHTML = CATALOG.map(e=>{
+    const q = qty[e.id] || 0;
+    return `<div class="extra-item">
+      <div class="extra-info">
+        <div class="extra-name">${e.icon||''} ${e.name}</div>
+        <div class="extra-price">${fmtCLP(e.price)}</div>
+      </div>
+      <div class="qty">
+        <button onclick="changeQty('${e.id}',-1)">−</button>
+        <span id="qv-${e.id}">${q}</span>
+        <button onclick="changeQty('${e.id}',1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function changeQty(id, delta){
+  qty[id] = Math.max(0, (qty[id]||0) + delta);
+  const el = document.getElementById('qv-'+id);
+  if(el) el.textContent = qty[id];
+}
+
+async function submitExtras(){
+  const items = CATALOG.filter(e => qty[e.id] > 0).map(e => ({name: e.name, price: e.price, quantity: qty[e.id]}));
+  if(!items.length){ toast('Selecciona al menos un extra'); return; }
+  try{
+    const r = await fetch(`/api/mireserva/${encodeURIComponent(bookingRef)}/extras`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({extras: items})
+    });
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data.detail || 'Error al agregar extras');
+    toast('✅ Extras agregados a tu reserva');
+    for(const k in qty) qty[k] = 0;
+    const infoRes = await fetch(`/api/mireserva/${encodeURIComponent(bookingRef)}`);
+    DATA = await infoRes.json();
+    render();
+  }catch(e){
+    toast('❌ ' + (e.message||'Error al agregar extras'));
+  }
+}
+
+init();
+</script>
+</body>
+</html>
