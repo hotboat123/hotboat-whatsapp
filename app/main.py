@@ -2240,7 +2240,48 @@ async def send_custom_message(request: SendMessageRequest):
             message_id = result.get('messages', [{}])[0].get('id', '')
             message_type = "image"
         else:
-            result = await whatsapp_client.send_text_message(request.to, request.message)
+            try:
+                result = await whatsapp_client.send_text_message(request.to, request.message)
+            except httpx.HTTPStatusError as _wae:
+                # ¿Es el error de "fuera de la ventana de 24h"? (Meta code 131047 / re-engagement)
+                _body = ""
+                try:
+                    _body = _wae.response.text or ""
+                except Exception:
+                    _body = ""
+                _bl = _body.lower()
+                _is_24h = ("131047" in _body or "24 hours" in _bl
+                           or "re-engagement" in _bl or "reengagement" in _bl
+                           or "outside the allowed window" in _bl)
+                if not _is_24h:
+                    raise
+                import os as _os
+                _tmpl = (_os.getenv("WA_REENGAGE_TEMPLATE", "") or "").strip()
+                if _tmpl:
+                    _lang = (_os.getenv("WA_REENGAGE_LANG", "") or "es").strip() or "es"
+                    _tr = await whatsapp_client.send_template_message(request.to, _tmpl, language_code=_lang)
+                    _tid = _tr.get('messages', [{}])[0].get('id', '')
+                    try:
+                        await save_conversation(
+                            phone_number=request.to,
+                            customer_name=lead.get('customer_name', request.to) if lead else request.to,
+                            message_text='',
+                            response_text=f"[Plantilla de re-enganche enviada: {_tmpl}]",
+                            message_type='text', message_id=_tid or None, direction='outgoing')
+                    except Exception:
+                        pass
+                    return {
+                        "status": "sent_template",
+                        "to": request.to,
+                        "message_id": _tid,
+                        "note": ("El cliente no te había escrito en 24h, así que WhatsApp no permite "
+                                 "texto libre. Le enviamos la plantilla de re-enganche; cuando responda "
+                                 "podrás escribirle libremente."),
+                    }
+                raise HTTPException(status_code=409, detail=(
+                    "El cliente no te ha escrito en las últimas 24 horas. WhatsApp solo permite "
+                    "enviar una plantilla aprobada fuera de esa ventana (no texto libre). "
+                    "Configura la variable WA_REENGAGE_TEMPLATE con el nombre de tu plantilla aprobada."))
             message_id = result.get('messages', [{}])[0].get('id', '')
             message_type = "text"
         

@@ -1353,10 +1353,21 @@ async function sendMessage(event) {
             body: JSON.stringify(payload)
         });
         
-        if (!response.ok) throw new Error('Failed to send message');
-        
-        const result = await response.json();
-        
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || 'Failed to send message');
+
+        // Fuera de la ventana de 24h: se envió una plantilla de re-enganche, NO tu texto libre.
+        if (result.status === 'sent_template') {
+            input.value = '';
+            updateCharCount('messageInput', 'charCount');
+            const _msg = result.note || 'El cliente no había escrito en 24h. Se le envió la plantilla de re-enganche; tu mensaje no se envió como texto libre. Cuando responda podrás escribirle.';
+            showToast('Plantilla de re-enganche enviada 📩', 'success');
+            alert(_msg);
+            const _sp = currentConversation.phone_number;
+            setTimeout(() => { if (selectConversation._pendingPhone === _sp) selectConversation(_sp); }, 1500);
+            return;
+        }
+
         // Optimistically append outgoing message to the UI
         const timestamp = new Date().toISOString();
         const newMessage = {
@@ -1394,7 +1405,7 @@ async function sendMessage(event) {
         
     } catch (error) {
         console.error('Error sending message:', error);
-        showToast('Failed to send message', 'error');
+        showToast(error.message || 'Failed to send message', 'error');
     }
 }
 
