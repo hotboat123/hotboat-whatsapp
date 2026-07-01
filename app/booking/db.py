@@ -815,6 +815,59 @@ def count_previous_bookings(customer_email: str = "", customer_phone: str = "",
             return n_aa + n_hb
 
 
+def get_relevant_booking_by_phone(phone: str) -> Optional[dict]:
+    """Find the most relevant all_appointments booking for a WhatsApp phone
+    number (digits only, e.g. '56977577307'): prefers the soonest upcoming
+    reservation; falls back to the most recent past one. Used to auto-fill
+    WhatsApp re-engagement/reminder templates from the chat.
+    Returns {booking_ref, customer_name, booking_date, booking_time} or None.
+    """
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    if not digits:
+        return None
+    core = digits[-9:]  # últimos 9 dígitos: robusto a con/sin código de país
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COALESCE(NULLIF(TRIM(source_id), ''), 'AA-' || id::text) AS ref,
+                       nombre_cliente, fecha, hora
+                FROM all_appointments
+                WHERE RIGHT(REGEXP_REPLACE(COALESCE(telefono, ''), '[^0-9]', '', 'g'), 9) = %s
+                  AND status NOT IN ('cancelled', 'rejected', 'cancelada', 'solicitud')
+                  AND fecha >= CURRENT_DATE
+                ORDER BY fecha ASC, hora ASC NULLS LAST
+                LIMIT 1
+                """,
+                (core,),
+            )
+            row = cur.fetchone()
+            if not row:
+                cur.execute(
+                    """
+                    SELECT COALESCE(NULLIF(TRIM(source_id), ''), 'AA-' || id::text) AS ref,
+                           nombre_cliente, fecha, hora
+                    FROM all_appointments
+                    WHERE RIGHT(REGEXP_REPLACE(COALESCE(telefono, ''), '[^0-9]', '', 'g'), 9) = %s
+                      AND status NOT IN ('cancelled', 'rejected', 'cancelada', 'solicitud')
+                    ORDER BY fecha DESC, hora DESC NULLS LAST
+                    LIMIT 1
+                    """,
+                    (core,),
+                )
+                row = cur.fetchone()
+            if not row:
+                return None
+            ref, nombre, fecha, hora = row
+            return {
+                "booking_ref": ref,
+                "customer_name": nombre or "",
+                "booking_date": str(fecha) if fecha else "",
+                "booking_time": str(hora)[:5] if hora else "",
+            }
+
+
 # ── Birthday sweep ────────────────────────────────────────────────────────────
 
 def get_customers_for_birthday_email() -> list:
