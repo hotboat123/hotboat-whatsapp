@@ -643,7 +643,7 @@ def _default_html_booking_created(ctx: Dict[str, str]) -> str:
     cta_rows = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://hotboatchile.com/images/Otras/resumen_reserva_espanol.webp", solid=True)}</td>
       <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_sign_tc"), firma_url, solid=False)}</td>
     </tr>
     </table>
@@ -714,7 +714,7 @@ def _default_html_booking_confirmed(ctx: Dict[str, str]) -> str:
     cta_rows = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://hotboatchile.com/images/Otras/resumen_reserva_espanol.webp", solid=True)}</td>
       <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_sign_tc"), firma_url, solid=False)}</td>
     </tr>
     </table>
@@ -1766,7 +1766,7 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
     cta_rows = f"""
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:10px;">
     <tr>
-      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://srv1080-files.hstgr.io/2f0792bfa7cfcf2b/files/public_html/images/Resumen_reserva_espa%C3%B1ol.png", solid=True)}</td>
+      <td width="50%" style="padding-right:6px;">{_cta_btn(_t(lang,"cta_summary"), "https://hotboatchile.com/images/Otras/resumen_reserva_espanol.webp", solid=True)}</td>
       <td width="50%" style="padding-left:6px;">{_cta_btn(_t(lang,"cta_sign_tc"), firma_url, solid=False)}</td>
     </tr>
     </table>

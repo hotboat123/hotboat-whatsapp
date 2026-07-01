@@ -39,6 +39,8 @@ h1{text-align:center;font-size:1.3rem;font-weight:800;margin-bottom:.3rem}
            box-shadow:0 6px 18px rgba(44,122,114,.35)}
 .btn-outline{background:rgba(44,122,114,.12);color:var(--green-soft);
              border:1px solid rgba(95,184,174,.35)}
+.cta-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.6rem}
+.cta-btn{padding:.7rem .4rem;font-size:.78rem;line-height:1.3}
 .section-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
                color:var(--muted);margin:0 0 .8rem}
 .extra-item{display:flex;align-items:center;justify-content:space-between;gap:.7rem;
@@ -141,6 +143,12 @@ function render(){
         <div class="row total"><span class="lbl">Total</span><span class="val">${fmtCLP(d.total_price)}</span></div>
       </div>
       <a href="${d.maps_url}" target="_blank" rel="noopener" class="btn btn-outline" style="margin-top:1rem">📍 Ver ubicación en el mapa</a>
+      <div class="cta-grid">
+        <a href="https://hotboatchile.com/images/Otras/resumen_reserva_espanol.webp" target="_blank" rel="noopener" class="btn btn-solid cta-btn">📋 Resumen de reserva</a>
+        <a href="/firma/${encodeURIComponent(d.booking_ref)}" class="btn btn-outline cta-btn">✍️ Firmar T&amp;C</a>
+        <a href="https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb" target="_blank" rel="noopener" class="btn btn-outline cta-btn">🎬 Video instructivo</a>
+        <a href="/tabla/${encodeURIComponent(d.booking_ref)}" class="btn btn-outline cta-btn">🍹 Tablas y bebestibles</a>
+      </div>
     </div>
 
     <div class="card">
