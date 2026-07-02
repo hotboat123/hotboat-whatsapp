@@ -36,6 +36,8 @@ class AvailabilityChecker:
     def __init__(self):
         self.config = AVAILABILITY_CONFIG
         self.phone_number = None
+        self._last_booked_range = None
+        self._last_booked_slots = None
     
     def set_phone_number(self, phone_number: str):
         """Set phone number for auto-priority assignment"""
@@ -204,6 +206,10 @@ class AvailabilityChecker:
                 end_date,
                 exclude_statuses=self.config.exclude_statuses
             )
+            # Cache para que check_availability() pueda reusarlos en el filtro de
+            # urgencia sin volver a golpear la DB con el mismo rango de fechas.
+            self._last_booked_range = (start_date, end_date)
+            self._last_booked_slots = booked_slots
 
             # Duración de paseo por día según el perfil asignado (Horario/Urgencia).
             # Días sin perfil con duración propia → usan la duración global.
@@ -443,10 +449,14 @@ class AvailabilityChecker:
                 if global_urgency or any(day_overrides.values()):
                     global_cfg = get_urgency_config()
                     day_cfg_map = get_day_urgency_config_map(start_date.date(), end_date.date())
-                    # Reservas por día (HH:MM) para el cálculo reserva±gap
-                    booked_for_urgency = await get_booked_slots(
-                        start_date, end_date, exclude_statuses=self.config.exclude_statuses
-                    )
+                    # Reservas por día (HH:MM) para el cálculo reserva±gap — reusa las
+                    # que ya trajo get_available_slots() en vez de volver a golpear la DB.
+                    if self._last_booked_range == (start_date, end_date) and self._last_booked_slots is not None:
+                        booked_for_urgency = self._last_booked_slots
+                    else:
+                        booked_for_urgency = await get_booked_slots(
+                            start_date, end_date, exclude_statuses=self.config.exclude_statuses
+                        )
                     booked_by_day: dict = {}
                     for bs in booked_for_urgency:
                         sa = bs.get("starts_at")

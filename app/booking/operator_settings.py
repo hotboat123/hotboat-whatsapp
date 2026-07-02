@@ -188,6 +188,16 @@ def normalize_urgency_entity(entity_type: str, entity_slug: str) -> Tuple[str, s
     return et, slug
 
 
+_URGENCY_DAYS_CACHE: dict = {}
+_URGENCY_DAYS_CACHE_TTL = 20  # seconds — corta, solo para deduplicar ráfagas de llamadas
+                              # (get_available_slots/check_availability llaman a esto
+                              # varias veces por cada mensaje de WhatsApp).
+
+
+def _clear_urgency_days_cache():
+    _URGENCY_DAYS_CACHE.clear()
+
+
 def get_urgency_days(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
@@ -197,6 +207,13 @@ def get_urgency_days(
 ) -> list:
     """Return list of {date, enabled, reason, entity_type, entity_slug} for the given scope."""
     et, slug = normalize_urgency_entity(entity_type, entity_slug)
+
+    import time as _time
+    cache_key = (from_date, to_date, et, slug)
+    cached = _URGENCY_DAYS_CACHE.get(cache_key)
+    if cached and (_time.time() - cached[0]) < _URGENCY_DAYS_CACHE_TTL:
+        return cached[1]
+
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -212,7 +229,7 @@ def get_urgency_days(
                     f"SELECT fecha, enabled, reason, entity_type, entity_slug, profile_key, COALESCE(ghost_times, '[]'::jsonb) FROM urgency_days {where} ORDER BY fecha",
                     params,
                 )
-                return [
+                result = [
                     {
                         "date": str(r[0]),
                         "enabled": r[1],
@@ -224,6 +241,8 @@ def get_urgency_days(
                     }
                     for r in cur.fetchall()
                 ]
+                _URGENCY_DAYS_CACHE[cache_key] = (_time.time(), result)
+                return result
     except Exception as e:
         logger.error(f"get_urgency_days failed: {e}")
         return []
@@ -286,6 +305,7 @@ def set_urgency_day(
                     (et, slug, d, enabled, reason, pk, gt),
                 )
                 conn.commit()
+        _clear_urgency_days_cache()
         return True
     except Exception as e:
         logger.error(f"set_urgency_day failed: {e}")
@@ -307,6 +327,7 @@ def remove_urgency_day(
                     (et, slug, d),
                 )
                 conn.commit()
+        _clear_urgency_days_cache()
         return True
     except Exception as e:
         logger.error(f"remove_urgency_day failed: {e}")
