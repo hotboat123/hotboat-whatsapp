@@ -28,7 +28,13 @@ def _row_to_dict(cur, row):
     return dict(zip([d.name for d in cur.description], row))
 
 
+_tables_ensured = False  # DDL solo debe correr una vez por proceso, no en cada request
+
+
 def _ensure_tables():
+    global _tables_ensured
+    if _tables_ensured:
+        return
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -68,6 +74,7 @@ def _ensure_tables():
                     ADD COLUMN IF NOT EXISTS consumption_qty NUMERIC DEFAULT 1;
             """)
             conn.commit()
+    _tables_ensured = True
 
 
 def _apply_movement(cur, product_id: int, delta: float, reason: str,
