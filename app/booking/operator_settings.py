@@ -453,6 +453,14 @@ DP_CONFIG_DEFAULT = {
         "0": 1.00, "1": 1.00, "2": 1.00,
         "3": 1.00, "4": 1.05, "5": 1.18, "6": 1.22,
     },
+    # Each entry: {min_hour, multiplier, label}  (sorted descending → first match wins)
+    # Ej: 16:00-17:59 (tarde) más caro, 00:00-11:59 (mañana) más barato.
+    "hour_of_day": [
+        {"min_hour": 18, "multiplier": 1.00, "label": "Noche (18-23h)"},
+        {"min_hour": 16, "multiplier": 1.15, "label": "Tarde (16-17h)"},
+        {"min_hour": 12, "multiplier": 1.00, "label": "Mediodía (12-15h)"},
+        {"min_hour":  0, "multiplier": 0.92, "label": "Mañana (0-11h)"},
+    ],
     "min_mult": 0.80,
     "max_mult": 1.60,
 }
@@ -471,14 +479,17 @@ def calculate_dynamic_multiplier(
     bookings_on_day: int,
     days_advance: int,
     config: Optional[dict] = None,
+    booking_hour: Optional[int] = None,
 ) -> float:
     """
-    Returns the price multiplier for a given date based on demand signals.
+    Returns the price multiplier for a given date (and optionally hour) based
+    on demand signals.
 
     Factors (multiplicative):
-      1. Fill rate  – how booked is the day already
-      2. Advance    – how far ahead the customer is booking
-      3. Weekday    – base demand by day of week
+      1. Fill rate   – how booked is the day already
+      2. Advance     – how far ahead the customer is booking
+      3. Weekday     – base demand by day of week
+      4. Hour of day – time slot of the trip (only if booking_hour is given)
 
     Returns 1.0 if dynamic pricing is disabled.
     """
@@ -515,10 +526,64 @@ def calculate_dynamic_multiplier(
     wk = cfg.get("weekday", {})
     mult *= float(wk.get(str(weekday), 1.0))
 
+    # ── 4. Hour of day (solo si se conoce la hora del paseo) ──────────────────
+    if booking_hour is not None:
+        hour_rules = sorted(
+            cfg.get("hour_of_day", []),
+            key=lambda r: r["min_hour"],
+            reverse=True,
+        )
+        for rule in hour_rules:
+            if booking_hour >= rule["min_hour"]:
+                mult *= float(rule["multiplier"])
+                break
+
     # ── Clamp ─────────────────────────────────────────────────────────────────
     lo = float(cfg.get("min_mult", 0.8))
     hi = float(cfg.get("max_mult", 1.6))
     return round(max(lo, min(hi, mult)), 4)
+
+
+def get_dynamic_multiplier_for_booking(booking_date: date, booking_time: Optional[str] = None) -> float:
+    """
+    Single source of truth for the dynamic-price multiplier of a HotBoat
+    booking: counts same-day web bookings, days of advance, and (if given)
+    the hour of the slot. Used by BOTH the price-preview endpoint (shown to
+    the customer before they pay) and the booking-creation endpoint (what
+    they're actually charged) — so the two can never drift apart.
+    """
+    cfg = get_dp_config()
+    if not cfg.get("enabled"):
+        return 1.0
+
+    today = date.today()
+    days_advance = max(0, (booking_date - today).days)
+
+    bookings_on_day = 0
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT COUNT(*) FROM all_appointments
+                       WHERE source = 'hotboat_web'
+                         AND fecha = %s
+                         AND status NOT IN ('cancelled','rejected','solicitud')""",
+                    (booking_date,),
+                )
+                bookings_on_day = cur.fetchone()[0]
+    except Exception as e:
+        logger.warning(f"get_dynamic_multiplier_for_booking: could not count bookings: {e}")
+
+    booking_hour = None
+    if booking_time:
+        try:
+            booking_hour = int(str(booking_time).split(":")[0])
+        except (ValueError, IndexError):
+            booking_hour = None
+
+    return calculate_dynamic_multiplier(
+        booking_date, bookings_on_day, days_advance, cfg, booking_hour=booking_hour
+    )
 
 
 # ── Booking email workflows (Booknetic-style multi-trigger) ─────────────────

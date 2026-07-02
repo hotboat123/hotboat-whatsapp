@@ -88,6 +88,7 @@ async def booking_pending(booking_ref: str = Query(None)):
 async def get_dynamic_price(
     date: str = Query(..., description="YYYY-MM-DD"),
     persons: int = Query(2, ge=1, le=8),
+    time: Optional[str] = Query(None, description="HH:MM, opcional — habilita el factor por horario"),
 ):
     """Return dynamic price multiplier and adjusted prices for a given booking date."""
     try:
@@ -98,6 +99,12 @@ async def get_dynamic_price(
         booking_date = _date.fromisoformat(date)
         today = datetime.now(CHILE_TZ).date()
         days_advance = max(0, (booking_date - today).days)
+        booking_hour = None
+        if time:
+            try:
+                booking_hour = int(str(time).split(":")[0])
+            except (ValueError, IndexError):
+                booking_hour = None
 
         # Count confirmed web bookings on that day (all_appointments is canonical)
         bookings_on_day = 0
@@ -118,7 +125,7 @@ async def get_dynamic_price(
 
         cfg = get_dp_config()
         multiplier = calculate_dynamic_multiplier(
-            booking_date, bookings_on_day, days_advance, cfg
+            booking_date, bookings_on_day, days_advance, cfg, booking_hour=booking_hour
         )
 
         # Round adjusted prices to nearest 1000 CLP
@@ -149,6 +156,13 @@ async def get_dynamic_price(
                 sign = "+" if pct >= 0 else ""
                 DAY_NAMES = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
                 active_factors.append(f"{DAY_NAMES[weekday]}: {sign}{pct}%")
+            if booking_hour is not None:
+                for rule in sorted(cfg.get("hour_of_day", []), key=lambda r: r["min_hour"], reverse=True):
+                    if booking_hour >= rule["min_hour"]:
+                        pct = round((rule["multiplier"] - 1) * 100)
+                        sign = "+" if pct >= 0 else ""
+                        active_factors.append(f"Horario ({rule.get('label','')}): {sign}{pct}%")
+                        break
 
         return {
             "date": date,
@@ -382,7 +396,23 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         n = request.num_people
         if not (2 <= n <= 7):
             raise HTTPException(status_code=400, detail="Capacidad: 2-7 personas")
-        price_pp = PRICES.get(n, 76990)
+
+        # Precio dinámico: SIEMPRE recalculado en el servidor (nunca se confía en lo
+        # que haya mostrado el frontend) — mismo cálculo que /api/booking/dynamic-price,
+        # así lo que ve el cliente y lo que se le cobra son consistentes.
+        base_pp = PRICES.get(n, 76990)
+        try:
+            from datetime import date as _date
+            from app.booking.operator_settings import get_dynamic_multiplier_for_booking
+            _dp_mult = get_dynamic_multiplier_for_booking(
+                _date.fromisoformat(request.booking_date), request.booking_time
+            )
+        except Exception as _dpe:
+            logger.warning(f"dynamic pricing at create-booking failed, using base price: {_dpe}")
+            _dp_mult = 1.0
+        # Redondeo al millar más cercano — misma fórmula que ya usa el frontend
+        # (Math.round(basepp*mult/1000)*1000) para que lo cobrado sea EXACTO a lo mostrado.
+        price_pp = round(base_pp * _dp_mult / 1000) * 1000
         subtotal = price_pp * n
         extras_list = [e.dict() for e in request.extras]
         extras_total = sum(e["price"] * e["quantity"] for e in extras_list)

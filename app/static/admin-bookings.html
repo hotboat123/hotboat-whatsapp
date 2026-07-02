@@ -1281,9 +1281,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">💰 Precios Dinamicos</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
-          El precio base se multiplica automaticamente segun 3 factores:<br>
-          <strong>Ocupacion del dia</strong> · <strong>Dias de anticipacion</strong> · <strong>Dia de semana</strong>.<br>
-          El cliente ve el precio ajustado al elegir su fecha.
+          El precio base se multiplica automaticamente segun 4 factores:<br>
+          <strong>Ocupacion del dia</strong> · <strong>Dias de anticipacion</strong> · <strong>Dia de semana</strong> · <strong>Horario del paseo</strong>.<br>
+          El cliente ve el precio ajustado al elegir su fecha y horario. El precio cobrado siempre coincide con el mostrado (se recalcula en el servidor).
         </p>
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem">
           <label class="toggle-wrap">
@@ -1332,6 +1332,22 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <div>
             <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.6rem">📅 Por dia de semana</label>
             <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem" id="dp-weekday-grid"></div>
+          </div>
+
+          <!-- Hour of day -->
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.6rem">🕐 Por horario del paseo</label>
+            <div style="font-size:.75rem;color:var(--muted);margin-bottom:.4rem">Segun la hora del horario elegido (ej: tarde mas caro, manana mas barato). Se aplica la primera regla que coincida (de mayor a menor hora).</div>
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem" id="dp-hour-table">
+              <thead><tr style="color:var(--muted);font-size:.75rem">
+                <th style="text-align:left;padding:.3rem .4rem">Hora minima</th>
+                <th style="text-align:left;padding:.3rem .4rem">Multiplicador</th>
+                <th style="text-align:left;padding:.3rem .4rem">Etiqueta</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="dp-hour-body"></tbody>
+            </table>
+            <button onclick="addHourRule()" style="margin-top:.4rem;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">+ Agregar regla</button>
           </div>
 
           <!-- Min/max clamp -->
@@ -6783,6 +6799,18 @@ function renderDpConfig(){
     </tr>`).join('');
   }
 
+  // Hour of day rows
+  const hourBody = document.getElementById('dp-hour-body');
+  if(hourBody){
+    const rules = _dpCfg.hour_of_day || [];
+    hourBody.innerHTML = rules.map((r,i)=>`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.35rem .4rem"><input type="number" min="0" max="23" value="${r.min_hour}" style="width:60px;${tblInputStyle()}" oninput="_dpCfg.hour_of_day[${i}].min_hour=+this.value"></td>
+      <td style="padding:.35rem .4rem"><input type="number" min="0.5" max="3" step="0.01" value="${r.multiplier}" style="width:70px;${tblInputStyle()}" oninput="_dpCfg.hour_of_day[${i}].multiplier=+this.value"></td>
+      <td style="padding:.35rem .4rem"><input value="${r.label||''}" placeholder="ej: Tarde (16-17h)" style="width:140px;${tblInputStyle()}" oninput="_dpCfg.hour_of_day[${i}].label=this.value"></td>
+      <td style="padding:.35rem .4rem"><button onclick="_dpCfg.hour_of_day.splice(${i},1);renderDpConfig()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem">✕</button></td>
+    </tr>`).join('');
+  }
+
   // Day of week grid
   const wkGrid = document.getElementById('dp-weekday-grid');
   if(wkGrid){
@@ -6813,6 +6841,7 @@ function pctLabelText(mult){ const p=Math.round((parseFloat(mult)-1)*100); retur
 
 function addFillRule(){ _dpCfg.fill_rate.push({min_bookings:1,multiplier:1.10,label:''}); renderDpConfig(); }
 function addAdvRule(){ _dpCfg.advance_booking.push({min_days:0,multiplier:1.00,label:'nuevo'}); renderDpConfig(); }
+function addHourRule(){ if(!_dpCfg.hour_of_day) _dpCfg.hour_of_day=[]; _dpCfg.hour_of_day.push({min_hour:0,multiplier:1.00,label:'nuevo'}); renderDpConfig(); }
 
 async function setDpEnabled(val){
   if(!_dpCfg) return;
