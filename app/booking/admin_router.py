@@ -2339,14 +2339,23 @@ async def send_reservation_template_route(rid: int, x_admin_key: str = Header(""
     if not phone_clean:
         raise HTTPException(status_code=400, detail="Esta reserva no tiene teléfono registrado")
 
-    from app.whatsapp.reservation_template import send_reservation_contact_template
+    first_name = (nombre or "").strip().split()[0] if (nombre or "").strip() else ""
+    hora_str = str(hora)[:5] if hora else ""
+    greeting = (
+        f"Hola {first_name}! Cómo estas? Tomás de HotBoat por Aquí😊. "
+        f"Hoy tienes reserva a las {hora_str}. Cualquier duda aquí estamos para ayudar, nos vemos!"
+    )
+
+    from app.whatsapp.reservation_template import send_free_text_or_template
     try:
-        result = await send_reservation_contact_template(
-            phone=phone_clean,
+        # Intenta primero texto libre (gratis si el cliente escribió en 24h);
+        # solo si Meta lo rechaza por la ventana, cae a la plantilla (con costo).
+        result = await send_free_text_or_template(
+            phone_clean, greeting,
             booking_ref=booking_ref,
             customer_name=(nombre or "").strip(),
             booking_date=str(fecha) if fecha else "",
-            booking_time=str(hora)[:5] if hora else "",
+            booking_time=hora_str,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2354,6 +2363,7 @@ async def send_reservation_template_route(rid: int, x_admin_key: str = Header(""
         logger.error(f"send_reservation_template_route failed for rid={rid}: {e}")
         raise HTTPException(status_code=502, detail=f"WhatsApp/Meta rechazó el envío: {e}")
 
+    via = result.get("via", "text")
     message_id = result.get('messages', [{}])[0].get('id', '')
     try:
         from app.db.queries import save_conversation
@@ -2361,12 +2371,13 @@ async def send_reservation_template_route(rid: int, x_admin_key: str = Header(""
             phone_number=phone_clean,
             customer_name=nombre or phone_clean,
             message_text='',
-            response_text="[Plantilla 'contactar_cliente_por_reserva' enviada desde Popeye]",
+            response_text=(greeting if via == "text" else
+                           "[Plantilla 'contactar_cliente_por_reserva' enviada desde Popeye]"),
             message_type='text', message_id=message_id or None, direction='outgoing')
     except Exception as e:
-        logger.warning(f"Could not log popeye template send in DB: {e}")
+        logger.warning(f"Could not log popeye send in DB: {e}")
 
-    return {"ok": True, "sent_to": phone_clean, "booking_ref": booking_ref, "message_id": message_id}
+    return {"ok": True, "sent_to": phone_clean, "booking_ref": booking_ref, "message_id": message_id, "via": via}
 
 
 @admin_router.post("/api/admin/reservas/{rid}/send-followup-email")

@@ -2245,17 +2245,8 @@ async def send_custom_message(request: SendMessageRequest):
             try:
                 result = await whatsapp_client.send_text_message(request.to, request.message)
             except httpx.HTTPStatusError as _wae:
-                # ¿Es el error de "fuera de la ventana de 24h"? (Meta code 131047 / re-engagement)
-                _body = ""
-                try:
-                    _body = _wae.response.text or ""
-                except Exception:
-                    _body = ""
-                _bl = _body.lower()
-                _is_24h = ("131047" in _body or "24 hours" in _bl
-                           or "re-engagement" in _bl or "reengagement" in _bl
-                           or "outside the allowed window" in _bl)
-                if not _is_24h:
+                from app.whatsapp.reservation_template import is_24h_window_error
+                if not is_24h_window_error(_wae):
                     raise
                 import os as _os
                 _tmpl = (_os.getenv("WA_REENGAGE_TEMPLATE", "") or "").strip()

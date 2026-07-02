@@ -5922,8 +5922,8 @@ async function openPopeye(){
   const origLabel = ppBtn.innerHTML;
   ppBtn.innerHTML = '⏳ Enviando...';
   try{
-    await api(`/api/admin/reservas/${r.id}/send-reservation-template`, {method:'POST'});
-    showToast('🦜 Plantilla enviada por WhatsApp ✅');
+    const _pr = await api(`/api/admin/reservas/${r.id}/send-reservation-template`, {method:'POST'});
+    showToast(_pr.via === 'template' ? '🦜 Plantilla enviada (fuera de 24h) ✅' : '🦜 Mensaje enviado (gratis, dentro de 24h) ✅');
   }catch(e){
     showToast('❌ No se pudo enviar: '+e.message);
   } finally {

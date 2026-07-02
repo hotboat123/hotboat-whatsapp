@@ -13,7 +13,7 @@ Used by:
 """
 import os
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,52 @@ def _fmt_fecha(d: str) -> str:
         return f"{day}/{m}/{y}"
     except Exception:
         return d or ""
+
+
+def is_24h_window_error(exc: Exception) -> bool:
+    """True si el error de WhatsApp/Meta es por estar fuera de la ventana de
+    24h (code 131047 / re-engagement) — es decir, que el texto libre no se
+    puede enviar y hace falta una plantilla."""
+    body = ""
+    try:
+        body = exc.response.text or ""
+    except Exception:
+        body = ""
+    bl = body.lower()
+    return ("131047" in body or "24 hours" in bl or "re-engagement" in bl
+            or "reengagement" in bl or "outside the allowed window" in bl)
+
+
+async def send_free_text_or_template(
+    phone: str,
+    message: str,
+    *,
+    booking_ref: str,
+    customer_name: str,
+    booking_date: str,
+    booking_time: str,
+) -> Dict[str, Any]:
+    """Intenta primero un mensaje de texto libre (gratis si el cliente escribió
+    en las últimas 24h). Solo si Meta lo rechaza por estar fuera de esa
+    ventana, envía la plantilla de contacto (con costo). Así nunca se paga de
+    más: el fallback a plantilla solo ocurre cuando es estrictamente
+    necesario, sin depender de qué política de precios tenga Meta vigente.
+
+    Devuelve {"via": "text"|"template", **datos de la respuesta de Meta}.
+    """
+    import httpx
+    from app.whatsapp.client import whatsapp_client
+
+    try:
+        result = await whatsapp_client.send_text_message(phone, message)
+        return {"via": "text", **result}
+    except httpx.HTTPStatusError as e:
+        if not is_24h_window_error(e):
+            raise
+        result = await send_reservation_contact_template(
+            phone=phone, booking_ref=booking_ref, customer_name=customer_name,
+            booking_date=booking_date, booking_time=booking_time)
+        return {"via": "template", **result}
 
 
 async def send_reservation_contact_template(
