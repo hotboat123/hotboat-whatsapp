@@ -7738,7 +7738,12 @@ function renderExtrasCat(list){
           ? `<span style="background:rgba(239,68,68,.15);color:#f87171;border-radius:12px;padding:2px 6px;font-size:.7rem;font-weight:700;white-space:nowrap">⚠️ Bajo</span>`
           : `<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 6px;font-size:.7rem;white-space:nowrap">✓ OK</span>`;
         return `
-          <td style="text-align:center;font-weight:700;color:${isLow?'#f87171':'#4ade80'};font-size:.9rem">${sp.current_stock}</td>
+          <td style="text-align:center">
+            <input type="number" id="cs-${sp.id}" value="${sp.current_stock}" step="0.5"
+              title="Editar stock directamente (sin registrar movimiento)"
+              onchange="saveCurrentStock(${sp.id}, this.value)"
+              style="width:56px;text-align:center;font-weight:700;color:${isLow?'#f87171':'#4ade80'};font-size:.9rem;background:var(--input);border:1px solid var(--border);border-radius:6px;padding:.15rem">
+          </td>
           <td style="text-align:center">
             <input type="number" id="min-${sp.id}" value="${sp.min_stock}" min="0" step="0.5"
               title="Mínimo para alerta de stock bajo"
@@ -9895,7 +9900,12 @@ function renderStockProducts(list){
       <td style="padding:.6rem .8rem;font-weight:600;color:var(--text)">${p.name}</td>
       <td style="padding:.6rem .8rem;color:var(--muted);font-size:.8rem">${p.category||'—'}</td>
       <td style="padding:.6rem .8rem;text-align:center;color:var(--muted);font-size:.8rem">${p.unit}</td>
-      <td style="padding:.6rem .8rem;text-align:center;font-weight:700;color:${isLow?'#f87171':'#4ade80'};font-size:.95rem">${p.current_stock}</td>
+      <td style="padding:.6rem .8rem;text-align:center">
+        <input type="number" id="cs-${p.id}" value="${p.current_stock}" step="0.5"
+          title="Editar stock directamente (sin registrar movimiento)"
+          onchange="saveCurrentStock(${p.id}, this.value)"
+          style="width:60px;text-align:center;font-weight:700;color:${isLow?'#f87171':'#4ade80'};font-size:.9rem;background:var(--input);border:1px solid var(--border);border-radius:6px;padding:.2rem">
+      </td>
       <td style="padding:.6rem .8rem;text-align:center;color:var(--muted)">${p.min_stock}</td>
       <td style="padding:.6rem .8rem;text-align:center">${badge}</td>
       <td style="padding:.4rem .8rem;text-align:center">
@@ -9993,6 +10003,20 @@ async function saveMinStock(pid, value){
   }catch(e){ showToast('Error: '+e.message); }
 }
 
+async function saveCurrentStock(pid, value){
+  const newStock = parseFloat(value);
+  if(isNaN(newStock)){ showToast('Valor inválido'); return; }
+  try{
+    // Sin registrar movimiento — corrección manual directa del número de stock.
+    await api(`/api/admin/stock/products/${pid}/stock`, {method:'PATCH', body:JSON.stringify({current_stock:newStock})});
+    showToast(`Stock actualizado: ${newStock} (sin registrar movimiento)`);
+    const p = _stockProducts.find(x=>x.id===pid);
+    if(p) p.current_stock = newStock;
+    await loadExtrasCat({silent:true});
+    if(document.getElementById('stock-products-tbody')) renderStockProducts(_stockProducts);
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
 async function dedupStockProducts(){
   try{
     // 1) Preview (dry run)
@@ -10030,6 +10054,7 @@ function openStockProductModal(id){
   document.getElementById('spm-stock').value = p?.current_stock??0;
   document.getElementById('spm-min').value = p?.min_stock??0;
   document.getElementById('spm-cost').value = p?.cost_per_unit??0;
+  document.getElementById('spm-cqty').value = p?.consumption_qty??1;
   document.getElementById('spm-notes').value = p?.notes||'';
   document.getElementById('stock-product-modal').style.display='';
 }
@@ -10047,6 +10072,7 @@ async function saveStockProduct(){
     current_stock: +document.getElementById('spm-stock').value||0,
     min_stock: +document.getElementById('spm-min').value||0,
     cost_per_unit: +document.getElementById('spm-cost').value||0,
+    consumption_qty: +document.getElementById('spm-cqty').value||1,
     notes: document.getElementById('spm-notes').value.trim(),
     is_active: true,
   };
@@ -10420,6 +10446,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="form-group-adm"><label>Costo/unidad</label>
         <input id="spm-cost" type="number" min="0" value="0"></div>
     </div>
+    <div class="form-group-adm"><label title="Cuántas unidades de stock se descuentan cada vez que este ingrediente se incluye en una tabla de picoteo. Ej: si 'Super 8' viene en packs de 3 galletas por porción, poner 3.">Cantidad consumida por tabla (solo ingredientes de tabla)</label>
+      <input id="spm-cqty" type="number" min="0.25" step="0.25" value="1"></div>
     <div class="form-group-adm"><label>Notas</label>
       <input id="spm-notes" type="text" placeholder="opcional"></div>
     <div style="display:flex;gap:.6rem;margin-top:1rem">

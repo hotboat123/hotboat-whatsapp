@@ -60,6 +60,12 @@ def _ensure_tables():
                     ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
+                -- Unidades de este producto que se descuentan por cada tabla que lo
+                -- incluye (p. ej. "Super 8" puede venir en packs de 3 por porción).
+                -- Solo aplica al consumo de ingredientes de tabla; los extras normales
+                -- ya usan extras_bom.quantity para esto.
+                ALTER TABLE stock_products
+                    ADD COLUMN IF NOT EXISTS consumption_qty NUMERIC DEFAULT 1;
             """)
             conn.commit()
 
@@ -154,6 +160,7 @@ class ProductBody(BaseModel):
     cost_per_unit: float = 0
     notes: str = ""
     is_active: bool = True
+    consumption_qty: float = 1
 
 
 @stock_router.get("/api/admin/stock/products")
@@ -164,7 +171,8 @@ def list_products(x_admin_key: str = Header("")):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, name, category, unit, current_stock, min_stock,
-                       cost_per_unit, notes, is_active, updated_at
+                       cost_per_unit, notes, is_active, updated_at,
+                       COALESCE(consumption_qty, 1) AS consumption_qty
                 FROM stock_products ORDER BY category, name
             """)
             cols = [d.name for d in cur.description]
@@ -183,10 +191,11 @@ def create_product(body: ProductBody, x_admin_key: str = Header("")):
             # Insert with current_stock already set; log it without adding again
             cur.execute(
                 """INSERT INTO stock_products
-                   (name, category, unit, current_stock, min_stock, cost_per_unit, notes, is_active)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                   (name, category, unit, current_stock, min_stock, cost_per_unit, notes, is_active, consumption_qty)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                 (body.name, body.category, body.unit, body.current_stock,
-                 body.min_stock, body.cost_per_unit, body.notes, body.is_active)
+                 body.min_stock, body.cost_per_unit, body.notes, body.is_active,
+                 body.consumption_qty or 1)
             )
             new_id = cur.fetchone()[0]
             # Only log the movement — do NOT apply delta (stock already set by INSERT)
@@ -216,10 +225,11 @@ def update_product(pid: int, body: ProductBody, x_admin_key: str = Header("")):
             cur.execute(
                 """UPDATE stock_products
                    SET name=%s, category=%s, unit=%s, current_stock=%s, min_stock=%s,
-                       cost_per_unit=%s, notes=%s, is_active=%s, updated_at=NOW()
+                       cost_per_unit=%s, notes=%s, is_active=%s, consumption_qty=%s, updated_at=NOW()
                    WHERE id=%s""",
                 (body.name, body.category, body.unit, body.current_stock,
-                 body.min_stock, body.cost_per_unit, body.notes, body.is_active, pid)
+                 body.min_stock, body.cost_per_unit, body.notes, body.is_active,
+                 body.consumption_qty or 1, pid)
             )
             # Cascade name rename to movement history snapshots and tabla catalog
             if old_name and old_name != body.name:
@@ -262,6 +272,29 @@ def update_product_min(pid: int, body: MinStockBody, x_admin_key: str = Header("
             )
             conn.commit()
     return {"ok": True, "id": pid, "min_stock": new_min}
+
+
+class StockSetBody(BaseModel):
+    current_stock: float = 0
+
+
+@stock_router.patch("/api/admin/stock/products/{pid}/stock")
+def set_product_stock(pid: int, body: StockSetBody, x_admin_key: str = Header("")):
+    """Fija current_stock directamente — SIN registrar movimiento. Para
+    correcciones manuales rápidas (recuento físico, error de tipeo, etc.)
+    que no deben ensuciar el historial de consumo."""
+    _check_auth(x_admin_key)
+    new_stock = float(body.current_stock or 0)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE stock_products SET current_stock=%s, updated_at=NOW() WHERE id=%s",
+                (new_stock, pid),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Producto no encontrado")
+            conn.commit()
+    return {"ok": True, "id": pid, "current_stock": new_stock}
 
 
 @stock_router.delete("/api/admin/stock/products/{pid}")
@@ -629,6 +662,40 @@ def _norm_name(s) -> str:
     return " ".join(s.lower().split())
 
 
+def _booking_paid_tabla(extras_json) -> bool:
+    """True si la reserva realmente tiene una tabla de picoteo pagada/incluida
+    en sus extras. El cliente puede completar el formulario de selección de
+    tabla (queda en tabla_selections) sin que ese extra haya sido pagado ni
+    incluido en la reserva final — en ese caso NO se debe descontar stock."""
+    import json as _json2
+    ej = extras_json
+    if isinstance(ej, str):
+        try:
+            ej = _json2.loads(ej)
+        except Exception:
+            return False
+    if isinstance(ej, dict):
+        if any(str(k).startswith("tabla__") for k in ej.keys()):
+            return True
+        items = ej.get("extras") or []
+    elif isinstance(ej, list):
+        items = ej
+    else:
+        return False
+    for e in items:
+        if not isinstance(e, dict):
+            continue
+        name = _norm_name(e.get("name", ""))
+        qty = e.get("quantity") or e.get("qty") or 1
+        try:
+            qty = float(qty)
+        except (TypeError, ValueError):
+            qty = 1
+        if qty > 0 and ("tabla" in name or "picoteo" in name):
+            return True
+    return False
+
+
 def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=None,
                             customer_name=None, booking_date=None):
     """Consume stock for one booking. Returns number of movements applied."""
@@ -691,18 +758,19 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
 
     # Pre-load all product names once for close-match suggestions on misses
     all_product_names = []
-    norm_to_pid = {}   # nombre normalizado (sin tildes/mayúsculas/espacios) → product_id
+    norm_to_pid = {}   # nombre normalizado (sin tildes/mayúsculas/espacios) → (product_id, consumption_qty)
     if all_tabla_ingredients:
-        cur.execute("SELECT id, name FROM stock_products")
-        for _pid, _pname in cur.fetchall():
+        cur.execute("SELECT id, name, COALESCE(consumption_qty, 1) FROM stock_products")
+        for _pid, _pname, _cqty in cur.fetchall():
             all_product_names.append(_pname)
-            norm_to_pid.setdefault(_norm_name(_pname), _pid)
+            norm_to_pid.setdefault(_norm_name(_pname), (_pid, float(_cqty or 1)))
 
     # Tabla ingredients (chosen by client) — match tolerante a tildes/mayúsculas/espacios
     for ingredient_name in all_tabla_ingredients:
-        pid = norm_to_pid.get(_norm_name(ingredient_name))
-        if pid:
-            _apply_movement(cur, pid, -1, "booking", booking_ref,
+        match = norm_to_pid.get(_norm_name(ingredient_name))
+        if match:
+            pid, cqty = match
+            _apply_movement(cur, pid, -cqty, "booking", booking_ref,
                             _norm_name(ingredient_name), f"Tabla de {_res_label} — {ingredient_name}")
             movements += 1
         else:
@@ -849,27 +917,30 @@ def auto_consume_past_bookings() -> dict:
                             skipped.append(ref)
                             continue
 
-                        # Check for tabla selection
-                        cur.execute(
-                            "SELECT elige_1, elige_2, elige_3 FROM tabla_selections WHERE booking_ref=%s",
-                            (ref,)
-                        )
-                        tabla_row = cur.fetchone()
+                        # Check for tabla selection — pero solo si la tabla fue
+                        # realmente pagada/incluida en la reserva (el cliente puede
+                        # haber llenado el formulario sin que se haya cobrado).
                         tabla_ingredients = []
-                        if tabla_row:
-                            elige_1, elige_2, elige_3 = tabla_row
-                            if elige_1:
-                                tabla_ingredients.append(elige_1)
-                            if elige_2:
-                                try:
-                                    tabla_ingredients.extend(_json.loads(elige_2) if isinstance(elige_2, str) else elige_2)
-                                except Exception:
-                                    pass
-                            if elige_3:
-                                try:
-                                    tabla_ingredients.extend(_json.loads(elige_3) if isinstance(elige_3, str) else elige_3)
-                                except Exception:
-                                    pass
+                        if _booking_paid_tabla(extras_json):
+                            cur.execute(
+                                "SELECT elige_1, elige_2, elige_3 FROM tabla_selections WHERE booking_ref=%s",
+                                (ref,)
+                            )
+                            tabla_row = cur.fetchone()
+                            if tabla_row:
+                                elige_1, elige_2, elige_3 = tabla_row
+                                if elige_1:
+                                    tabla_ingredients.append(elige_1)
+                                if elige_2:
+                                    try:
+                                        tabla_ingredients.extend(_json.loads(elige_2) if isinstance(elige_2, str) else elige_2)
+                                    except Exception:
+                                        pass
+                                if elige_3:
+                                    try:
+                                        tabla_ingredients.extend(_json.loads(elige_3) if isinstance(elige_3, str) else elige_3)
+                                    except Exception:
+                                        pass
 
                         mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None, customer_name, fecha)
                         if unmatched:
@@ -1111,20 +1182,21 @@ def reconsume_booking(booking_ref: str, x_admin_key: str = Header("")):
             reverted = len(prev)
             cur.execute("DELETE FROM stock_movements WHERE booking_ref=%s", (ref,))
 
-            # 2) Ingredientes de la tabla
-            cur.execute("SELECT elige_1, elige_2, elige_3 FROM tabla_selections WHERE booking_ref=%s", (ref,))
-            tr = cur.fetchone()
+            # 2) Ingredientes de la tabla — solo si realmente fue pagada/incluida
             tabla_ingredients = []
-            if tr:
-                e1, e2, e3 = tr
-                if e1:
-                    tabla_ingredients.append(e1)
-                for fld in (e2, e3):
-                    if fld:
-                        try:
-                            tabla_ingredients.extend(_json.loads(fld) if isinstance(fld, str) else fld)
-                        except Exception:
-                            pass
+            if _booking_paid_tabla(extras_json):
+                cur.execute("SELECT elige_1, elige_2, elige_3 FROM tabla_selections WHERE booking_ref=%s", (ref,))
+                tr = cur.fetchone()
+                if tr:
+                    e1, e2, e3 = tr
+                    if e1:
+                        tabla_ingredients.append(e1)
+                    for fld in (e2, e3):
+                        if fld:
+                            try:
+                                tabla_ingredients.extend(_json.loads(fld) if isinstance(fld, str) else fld)
+                            except Exception:
+                                pass
 
             # 3) Re-descontar con la lógica completa (tabla + extras BOM)
             mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None, customer_name, booking_date)
