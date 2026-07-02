@@ -5912,34 +5912,39 @@ function closeModal(e){
   const ppBtn = document.getElementById('popeye-contact-btn');
   if(ppBtn) ppBtn.style.display='none';
 }
-function openPopeye(){
+async function openPopeye(){
   const ppBtn = document.getElementById('popeye-contact-btn');
   const phone = ppBtn?.dataset?.phone;
-  if(!phone) return;
-
-  // Build the same greeting message as the WhatsApp button
   const r = _currentReservaData || {};
-  const firstName = (r.nombre_cliente||'').trim().split(/\s+/)[0] || '';
-  const hora = (r.hora||'').substring(0,5);
-  const prefillMsg = `Hola ${firstName}! Cómo estas? Tomás de HotBoat por Aquí😊. Hoy tienes reserva a las ${hora}. Cualquier duda aquí estamos para ayudar, nos vemos!`;
+  if(!phone || !r.id){ showToast('Falta teléfono o reserva'); return; }
 
+  ppBtn.disabled = true;
+  const origLabel = ppBtn.innerHTML;
+  ppBtn.innerHTML = '⏳ Enviando...';
+  try{
+    await api(`/api/admin/reservas/${r.id}/send-reservation-template`, {method:'POST'});
+    showToast('🦜 Plantilla enviada por WhatsApp ✅');
+  }catch(e){
+    showToast('❌ No se pudo enviar: '+e.message);
+  } finally {
+    ppBtn.disabled = false;
+    ppBtn.innerHTML = origLabel;
+  }
+
+  // Abrir el chat de todas formas, para ver la conversación con el cliente
   closeModal();
   const ifr = document.getElementById('whatsapp-iframe');
   const ifrLoaded = ifr && (ifr.getAttribute('src')||'').startsWith('/chat');
   showSection('whatsapp');
 
   if(ifrLoaded){
-    // Chat already loaded → postMessage (app.js _initParentMessages handles this)
     setTimeout(()=>{
-      try{
-        ifr.contentWindow.postMessage({type:'OPEN_CHAT', phone, prefillMessage: prefillMsg, setPriority: 4}, '*');
-      }catch(e){}
+      try{ ifr.contentWindow.postMessage({type:'OPEN_CHAT', phone, setPriority: 4}, '*'); }catch(e){}
     }, 200);
   } else {
-    // First load → pass phone + prefill via URL params
     fetch('/api/admin/chat-login', {method:'POST', headers:{'x-admin-key': KEY}})
       .finally(()=>{
-        if(ifr) ifr.src = `/chat?phone=${encodeURIComponent(phone)}&prefill=${encodeURIComponent(prefillMsg)}&priority=4`;
+        if(ifr) ifr.src = `/chat?phone=${encodeURIComponent(phone)}&priority=4`;
       });
   }
 }

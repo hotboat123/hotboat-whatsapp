@@ -2316,6 +2316,59 @@ async def send_payment_link(rid: int, x_admin_key: str = Header("")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@admin_router.post("/api/admin/reservas/{rid}/send-reservation-template")
+async def send_reservation_template_route(rid: int, x_admin_key: str = Header("")):
+    """Envía la plantilla de WhatsApp 'contactar_cliente_por_reserva' para esta
+    reserva puntual (botón 🦜 Popeye del resumen). A diferencia del fallback
+    de /api/send-message (que busca la reserva por teléfono), aquí usamos
+    directamente los datos de la reserva que el admin tiene abierta."""
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT source_id, nombre_cliente, telefono, fecha, hora "
+                f"FROM {TABLE} WHERE id=%s",
+                (rid,),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+    source_id, nombre, telefono, fecha, hora = row
+    booking_ref = (source_id or "").strip() or f"AA-{rid}"
+    phone_clean = (telefono or "").replace("+", "").replace(" ", "").replace("-", "")
+    if not phone_clean:
+        raise HTTPException(status_code=400, detail="Esta reserva no tiene teléfono registrado")
+
+    from app.whatsapp.reservation_template import send_reservation_contact_template
+    try:
+        result = await send_reservation_contact_template(
+            phone=phone_clean,
+            booking_ref=booking_ref,
+            customer_name=(nombre or "").strip(),
+            booking_date=str(fecha) if fecha else "",
+            booking_time=str(hora)[:5] if hora else "",
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"send_reservation_template_route failed for rid={rid}: {e}")
+        raise HTTPException(status_code=502, detail=f"WhatsApp/Meta rechazó el envío: {e}")
+
+    message_id = result.get('messages', [{}])[0].get('id', '')
+    try:
+        from app.db.queries import save_conversation
+        await save_conversation(
+            phone_number=phone_clean,
+            customer_name=nombre or phone_clean,
+            message_text='',
+            response_text="[Plantilla 'contactar_cliente_por_reserva' enviada desde Popeye]",
+            message_type='text', message_id=message_id or None, direction='outgoing')
+    except Exception as e:
+        logger.warning(f"Could not log popeye template send in DB: {e}")
+
+    return {"ok": True, "sent_to": phone_clean, "booking_ref": booking_ref, "message_id": message_id}
+
+
 @admin_router.post("/api/admin/reservas/{rid}/send-followup-email")
 async def send_followup_email_manual(rid: int, x_admin_key: str = Header("")):
     """Send TripAdvisor / satisfaction follow-up email to the customer (manual trigger)."""

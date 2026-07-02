@@ -2260,35 +2260,20 @@ async def send_custom_message(request: SendMessageRequest):
                 import os as _os
                 _tmpl = (_os.getenv("WA_REENGAGE_TEMPLATE", "") or "").strip()
                 if _tmpl:
-                    _lang = (_os.getenv("WA_REENGAGE_LANG", "") or "es").strip() or "es"
                     # La plantilla "contactar_cliente_por_reserva" necesita datos de LA
                     # reserva del cliente (nombre, fecha, hora) + el booking_ref para el
                     # botón dinámico (/mireserva/{ref}). Los buscamos por su teléfono.
                     from app.booking.db import get_relevant_booking_by_phone
+                    from app.whatsapp.reservation_template import send_reservation_contact_template
                     _bk = get_relevant_booking_by_phone(request.to)
                     if not _bk:
                         raise HTTPException(status_code=409, detail=(
                             "No encontramos una reserva asociada a este número para "
                             "completar la plantilla de contacto — no se pudo enviar."))
                     _name = _bk["customer_name"] or (lead.get('customer_name') if lead else '') or "cliente"
-                    _fecha_fmt = _bk["booking_date"]
-                    try:
-                        _y, _m, _d = _bk["booking_date"].split("-")
-                        _fecha_fmt = f"{_d}/{_m}/{_y}"
-                    except Exception:
-                        pass
-                    _components = [
-                        {"type": "body", "parameters": [
-                            {"type": "text", "text": _name},
-                            {"type": "text", "text": "HotBoat"},
-                            {"type": "text", "text": _fecha_fmt},
-                            {"type": "text", "text": _bk["booking_time"] or ""},
-                        ]},
-                        {"type": "button", "sub_type": "url", "index": "0",
-                         "parameters": [{"type": "text", "text": _bk["booking_ref"]}]},
-                    ]
-                    _tr = await whatsapp_client.send_template_message(
-                        request.to, _tmpl, language_code=_lang, components=_components)
+                    _tr = await send_reservation_contact_template(
+                        phone=request.to, booking_ref=_bk["booking_ref"], customer_name=_name,
+                        booking_date=_bk["booking_date"], booking_time=_bk["booking_time"])
                     _tid = _tr.get('messages', [{}])[0].get('id', '')
                     try:
                         await save_conversation(
