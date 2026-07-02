@@ -528,6 +528,30 @@ def get_alerts(x_admin_key: str = Header("")):
 
 # ─────────────────────────── Movement history ───────────────────────────────
 
+@stock_router.delete("/api/admin/stock/movements/{movement_id}")
+def delete_movement(movement_id: int, x_admin_key: str = Header("")):
+    """Elimina un movimiento de stock puntual y revierte su efecto (recupera
+    el producto consumido, o vuelve a descontar si era una devolución)."""
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT product_id, delta, product_name FROM stock_movements WHERE id=%s",
+                (movement_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+            product_id, delta, product_name = row
+            cur.execute(
+                "UPDATE stock_products SET current_stock=current_stock-%s, updated_at=NOW() WHERE id=%s",
+                (delta, product_id),
+            )
+            cur.execute("DELETE FROM stock_movements WHERE id=%s", (movement_id,))
+            conn.commit()
+    return {"ok": True, "reverted_delta": -float(delta), "product_id": product_id, "product_name": product_name}
+
+
 @stock_router.get("/api/admin/stock/movements")
 def get_movements(product_id: Optional[int] = None, limit: int = 100,
                   x_admin_key: str = Header("")):

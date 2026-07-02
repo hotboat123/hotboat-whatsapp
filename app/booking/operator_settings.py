@@ -463,11 +463,29 @@ DP_CONFIG_DEFAULT = {
     ],
     "min_mult": 0.80,
     "max_mult": 1.60,
+    # Permite activar/desactivar cada factor por separado (independiente del
+    # interruptor maestro "enabled"). Todos ON por defecto.
+    "factors_enabled": {
+        "fill_rate": True,
+        "advance_booking": True,
+        "weekday": True,
+        "hour_of_day": True,
+    },
 }
 
 
 def get_dp_config() -> dict:
-    return _json_setting("dynamic_pricing", DP_CONFIG_DEFAULT)
+    """Config de precios dinámicos, con merge sobre los defaults para que
+    configuraciones guardadas antes de agregar un factor nuevo (p. ej.
+    hour_of_day o factors_enabled) lo reciban con su valor por defecto en
+    vez de quedar vacío/ausente."""
+    stored = _json_setting("dynamic_pricing", DP_CONFIG_DEFAULT)
+    merged = {**DP_CONFIG_DEFAULT, **stored}
+    merged["factors_enabled"] = {
+        **DP_CONFIG_DEFAULT["factors_enabled"],
+        **(stored.get("factors_enabled") or {}),
+    }
+    return merged
 
 
 def set_dp_config(cfg: dict) -> bool:
@@ -497,37 +515,44 @@ def calculate_dynamic_multiplier(
     if not cfg.get("enabled"):
         return 1.0
 
+    factors_on = cfg.get("factors_enabled") or {}
+    def _factor_on(key: str) -> bool:
+        return factors_on.get(key, True)
+
     mult = 1.0
 
     # ── 1. Fill rate ──────────────────────────────────────────────────────────
-    fill_rules = sorted(
-        cfg.get("fill_rate", []),
-        key=lambda r: r["min_bookings"],
-        reverse=True,
-    )
-    for rule in fill_rules:
-        if bookings_on_day >= rule["min_bookings"]:
-            mult *= float(rule["multiplier"])
-            break
+    if _factor_on("fill_rate"):
+        fill_rules = sorted(
+            cfg.get("fill_rate", []),
+            key=lambda r: r["min_bookings"],
+            reverse=True,
+        )
+        for rule in fill_rules:
+            if bookings_on_day >= rule["min_bookings"]:
+                mult *= float(rule["multiplier"])
+                break
 
     # ── 2. Advance booking ────────────────────────────────────────────────────
-    adv_rules = sorted(
-        cfg.get("advance_booking", []),
-        key=lambda r: r["min_days"],
-        reverse=True,
-    )
-    for rule in adv_rules:
-        if days_advance >= rule["min_days"]:
-            mult *= float(rule["multiplier"])
-            break
+    if _factor_on("advance_booking"):
+        adv_rules = sorted(
+            cfg.get("advance_booking", []),
+            key=lambda r: r["min_days"],
+            reverse=True,
+        )
+        for rule in adv_rules:
+            if days_advance >= rule["min_days"]:
+                mult *= float(rule["multiplier"])
+                break
 
     # ── 3. Day of week (0=Mon, 6=Sun in Python) ───────────────────────────────
-    weekday = booking_date.weekday()
-    wk = cfg.get("weekday", {})
-    mult *= float(wk.get(str(weekday), 1.0))
+    if _factor_on("weekday"):
+        weekday = booking_date.weekday()
+        wk = cfg.get("weekday", {})
+        mult *= float(wk.get(str(weekday), 1.0))
 
     # ── 4. Hour of day (solo si se conoce la hora del paseo) ──────────────────
-    if booking_hour is not None:
+    if booking_hour is not None and _factor_on("hour_of_day"):
         hour_rules = sorted(
             cfg.get("hour_of_day", []),
             key=lambda r: r["min_hour"],

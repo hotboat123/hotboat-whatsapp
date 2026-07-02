@@ -137,26 +137,30 @@ async def get_dynamic_price(
         # Determine which factor labels are active (for UI tooltip)
         active_factors = []
         if cfg.get("enabled"):
-            for rule in sorted(cfg.get("fill_rate", []), key=lambda r: r["min_bookings"], reverse=True):
-                if bookings_on_day >= rule["min_bookings"]:
-                    pct = round((rule["multiplier"] - 1) * 100)
+            factors_on = cfg.get("factors_enabled") or {}
+            if factors_on.get("fill_rate", True):
+                for rule in sorted(cfg.get("fill_rate", []), key=lambda r: r["min_bookings"], reverse=True):
+                    if bookings_on_day >= rule["min_bookings"]:
+                        pct = round((rule["multiplier"] - 1) * 100)
+                        sign = "+" if pct >= 0 else ""
+                        active_factors.append(f"Demanda del día: {sign}{pct}%")
+                        break
+            if factors_on.get("advance_booking", True):
+                for rule in sorted(cfg.get("advance_booking", []), key=lambda r: r["min_days"], reverse=True):
+                    if days_advance >= rule["min_days"]:
+                        pct = round((rule["multiplier"] - 1) * 100)
+                        sign = "+" if pct >= 0 else ""
+                        active_factors.append(f"Anticipación ({rule.get('label','')}): {sign}{pct}%")
+                        break
+            if factors_on.get("weekday", True):
+                weekday = booking_date.weekday()
+                wk_mult = float(cfg.get("weekday", {}).get(str(weekday), 1.0))
+                if wk_mult != 1.0:
+                    pct = round((wk_mult - 1) * 100)
                     sign = "+" if pct >= 0 else ""
-                    active_factors.append(f"Demanda del día: {sign}{pct}%")
-                    break
-            for rule in sorted(cfg.get("advance_booking", []), key=lambda r: r["min_days"], reverse=True):
-                if days_advance >= rule["min_days"]:
-                    pct = round((rule["multiplier"] - 1) * 100)
-                    sign = "+" if pct >= 0 else ""
-                    active_factors.append(f"Anticipación ({rule.get('label','')}): {sign}{pct}%")
-                    break
-            weekday = booking_date.weekday()
-            wk_mult = float(cfg.get("weekday", {}).get(str(weekday), 1.0))
-            if wk_mult != 1.0:
-                pct = round((wk_mult - 1) * 100)
-                sign = "+" if pct >= 0 else ""
-                DAY_NAMES = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
-                active_factors.append(f"{DAY_NAMES[weekday]}: {sign}{pct}%")
-            if booking_hour is not None:
+                    DAY_NAMES = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+                    active_factors.append(f"{DAY_NAMES[weekday]}: {sign}{pct}%")
+            if booking_hour is not None and factors_on.get("hour_of_day", True):
                 for rule in sorted(cfg.get("hour_of_day", []), key=lambda r: r["min_hour"], reverse=True):
                     if booking_hour >= rule["min_hour"]:
                         pct = round((rule["multiplier"] - 1) * 100)
