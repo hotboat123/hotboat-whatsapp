@@ -223,28 +223,28 @@ class AvailabilityChecker:
             def _dur_for(d) -> float:
                 return float(day_duration_map.get(str(d), self.config.duration_hours))
 
-            # Create a set of booked time ranges for overlap checking
-            # Store (date, start_hour, end_hour) for each appointment
-            booked_ranges = []
+            # Create booked time ranges for overlap checking, grouped by date
+            # so the per-slot overlap check below is O(bookings that day)
+            # instead of a full scan of every booking in the whole range.
+            booked_ranges_by_date: dict = {}
             for slot in booked_slots:
                 if slot['starts_at']:
                     dt = slot['starts_at']
                     if isinstance(dt, str):
                         dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
-                    
+
                     # Calculate appointment range with buffer (duración del día de la reserva)
                     appointment_start = dt
                     appointment_duration = _dur_for(dt.date())
                     appointment_end = appointment_start + timedelta(hours=appointment_duration)
-                    
+
                     # Apply buffer
                     appointment_start_with_buffer = appointment_start - timedelta(hours=self.config.buffer_hours)
                     appointment_end_with_buffer = appointment_end + timedelta(hours=self.config.buffer_hours)
-                    
-                    booked_ranges.append({
+
+                    booked_ranges_by_date.setdefault(dt.date(), []).append({
                         'start': appointment_start_with_buffer,
                         'end': appointment_end_with_buffer,
-                        'date': dt.date()
                     })
             
             # Load vacation days + operating hours (urgency is handled separately in the
@@ -320,10 +320,8 @@ class AvailabilityChecker:
                     # get_booked_slots already loaded booked rows from all_appointments,
                     # so no need for a second per-slot DB query (check_slot_availability).
                     overlaps = False
-                    for booked_range in booked_ranges:
-                        if booked_range['date'] != slot_datetime.date():
-                            continue
-                        if (slot_start_with_buffer < booked_range['end'] and 
+                    for booked_range in booked_ranges_by_date.get(slot_datetime.date(), []):
+                        if (slot_start_with_buffer < booked_range['end'] and
                             slot_end_with_buffer > booked_range['start']):
                             overlaps = True
                             break
