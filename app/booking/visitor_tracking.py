@@ -22,22 +22,26 @@ def persist_booking_visitor_event(
     referrer: str,
     is_returning: bool,
     recorded_at: datetime,
+    link_token: Optional[str] = None,
 ) -> None:
-    """Append one tracking event (one row per /api/booking/track call)."""
+    """Append one tracking event (one row per /api/booking/track call).
+    link_token (if present) ties this visit's whole funnel back to a specific
+    per-client tracked link (see app/booking/link_tracking_router.py)."""
     sid = (session_id or "").strip()[:64]
     et = (event_type or "").strip()[:96]
     if not sid or not et:
         return
     extra = (extra_date or "").strip()[:120] if extra_date else None
+    lt = (link_token or "").strip()[:16] or None
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO booking_visitor_events (
                     session_id, event_type, extra_date, time_label,
-                    lang, referrer, is_returning, recorded_at
+                    lang, referrer, is_returning, recorded_at, link_token
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     sid,
@@ -48,6 +52,7 @@ def persist_booking_visitor_event(
                     (referrer or "")[:500],
                     bool(is_returning),
                     recorded_at,
+                    lt,
                 ),
             )
         conn.commit()

@@ -1387,6 +1387,44 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
+      <!-- ── Links de seguimiento por cliente ────────────────────────────── -->
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">🔗 Links de Seguimiento</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
+          Cada link se genera desde el chat (botón 🔗 junto al mensaje) para un cliente puntual.
+          Acá ves si hizo clic, cuándo, y qué hizo después en la página de reservas.
+        </p>
+        <div style="display:flex;gap:.6rem;margin-bottom:.8rem">
+          <button onclick="loadTrackedLinks()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .9rem;font-size:.82rem;cursor:pointer">🔄 Actualizar</button>
+        </div>
+        <div class="tbl-wrap" style="max-height:340px;overflow-y:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+            <thead>
+              <tr style="background:var(--input)">
+                <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Cliente</th>
+                <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Teléfono</th>
+                <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Generado</th>
+                <th style="padding:.5rem .8rem;text-align:center;color:var(--muted)">¿Clic?</th>
+                <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Último clic</th>
+                <th style="padding:.5rem .8rem;text-align:center;color:var(--muted)"></th>
+              </tr>
+            </thead>
+            <tbody id="tracked-links-tbody"><tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--muted)">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Modal: embudo de un link puntual -->
+      <div id="link-funnel-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeLinkFunnelModal()">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.4rem;max-width:480px;width:92%;max-height:80vh;overflow-y:auto">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <h3 style="margin:0;font-size:1rem;color:var(--text)" id="link-funnel-title">Embudo del cliente</h3>
+            <button onclick="closeLinkFunnelModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem">✕</button>
+          </div>
+          <div id="link-funnel-body" style="font-size:.85rem;color:var(--text)"></div>
+        </div>
+      </div>
+
       <!-- ── Vacation days ────────────────────────────────────────────── -->
       <div class="chart-wrap">
         <div class="chart-title">🏖️ Dias de Vacaciones / Cierre</div>
@@ -6276,6 +6314,7 @@ async function loadSettings(){
     if(cb){ cb.checked = d.urgency_mode; updateUrgencyLabel(d.urgency_mode); }
     if(d.urgency_config){ _urgencyCfg = d.urgency_config; renderUrgencyConfig(); }
     if(d.dynamic_pricing){ _dpCfg = d.dynamic_pricing; renderDpConfig(); }
+    loadTrackedLinks();
     // Operating hours
     if(oh && oh.hours){ _opHours = oh.hours; renderOpHours(); }
     // Menu visibility toggles
@@ -6891,6 +6930,100 @@ async function saveDpConfig(){
     showToast('Precios dinamicos guardados ✅');
     renderDpConfig();
   }catch(e){ showToast('Error: '+e.message); }
+}
+
+// ── Links de seguimiento por cliente ─────────────────────────────────────────
+async function loadTrackedLinks(){
+  const tbody = document.getElementById('tracked-links-tbody');
+  if(!tbody) return;
+  try{
+    const r = await api('/api/admin/tracked-links');
+    renderTrackedLinks(r.links||[]);
+  }catch(e){
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--red)">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderTrackedLinks(links){
+  const tbody = document.getElementById('tracked-links-tbody');
+  if(!tbody) return;
+  if(!links.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--muted)">Aún no se ha generado ningún link (usa el botón 🔗 en el chat).</td></tr>';
+    return;
+  }
+  tbody.innerHTML = links.map(l=>{
+    const clicked = !!l.first_clicked_at;
+    const badge = clicked
+      ? `<span style="background:rgba(34,197,94,.12);color:#4ade80;border-radius:12px;padding:2px 8px;font-size:.72rem;font-weight:700">✓ ${l.click_count}x</span>`
+      : `<span style="background:rgba(148,163,184,.12);color:var(--muted);border-radius:12px;padding:2px 8px;font-size:.72rem">Sin clic</span>`;
+    const created = l.created_at ? l.created_at.substring(0,16).replace('T',' ') : '';
+    const lastClick = l.last_clicked_at ? l.last_clicked_at.substring(0,16).replace('T',' ') : '—';
+    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openLinkFunnel('${l.token}')">
+      <td style="padding:.5rem .8rem">${l.customer_name || '—'}</td>
+      <td style="padding:.5rem .8rem;color:var(--muted)">${l.phone}</td>
+      <td style="padding:.5rem .8rem;color:var(--muted);font-size:.75rem;white-space:nowrap">${created}</td>
+      <td style="padding:.5rem .8rem;text-align:center">${badge}</td>
+      <td style="padding:.5rem .8rem;color:var(--muted);font-size:.75rem;white-space:nowrap">${lastClick}</td>
+      <td style="padding:.5rem .8rem;text-align:center;color:var(--muted)">👁</td>
+    </tr>`;
+  }).join('');
+}
+
+const _TRACKED_EVENT_LABELS = {
+  page_visit: '🚪 Entró a la página',
+  view_prices: '💰 Vio precios',
+  view_features: '⚡ Vio características',
+  view_ubicacion: '📍 Vio ubicación',
+  view_experiencias: '🏔️ Vio experiencias',
+  view_alojamientos: '🏠 Vio alojamientos',
+  view_packs: '🎁 Vio packs',
+  view_reservar: '📅 Entró a reservar',
+  date_selected: '📅 Eligió fecha',
+  view_arma_pack: '🛒 Vio "Arma tu pack"',
+  solicitud_form: '📝 Llenó formulario de solicitud',
+  booking_completed: '✅ Completó la reserva',
+};
+
+async function openLinkFunnel(token){
+  const modal = document.getElementById('link-funnel-modal');
+  const body = document.getElementById('link-funnel-body');
+  const title = document.getElementById('link-funnel-title');
+  modal.style.display = 'flex';
+  body.innerHTML = '<p style="color:var(--muted)">Cargando...</p>';
+  try{
+    const r = await api(`/api/admin/tracked-links/${token}/funnel`);
+    const l = r.link;
+    title.textContent = `📍 ${l.customer_name || l.phone}`;
+    const events = r.events || [];
+    if(!l.first_clicked_at){
+      body.innerHTML = `
+        <p style="color:var(--muted);margin-bottom:.6rem">Generado: ${(l.created_at||'').substring(0,16).replace('T',' ')}</p>
+        <p style="color:#f87171">✕ Este cliente todavía no ha hecho clic en el link.</p>`;
+      return;
+    }
+    const timeline = events.length
+      ? events.map(e=>{
+          const label = _TRACKED_EVENT_LABELS[e.event_type] || `• ${e.event_type}`;
+          const when = (e.recorded_at||'').substring(11,16);
+          const extra = e.extra_date ? ` <span style="color:var(--muted)">(${e.extra_date})</span>` : '';
+          return `<div style="display:flex;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--muted);font-size:.78rem;white-space:nowrap">${when}</span>
+            <span>${label}${extra}</span>
+          </div>`;
+        }).join('')
+      : '<p style="color:var(--muted)">Hizo clic pero aún no interactuó más con la página.</p>';
+    body.innerHTML = `
+      <p style="color:var(--muted);margin-bottom:.3rem">Generado: ${(l.created_at||'').substring(0,16).replace('T',' ')}</p>
+      <p style="color:#4ade80;margin-bottom:.9rem">✓ Hizo clic ${l.click_count} vez/veces — última: ${(l.last_clicked_at||'').substring(0,16).replace('T',' ')}</p>
+      <div style="font-weight:700;font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem">Qué hizo después</div>
+      ${timeline}`;
+  }catch(e){
+    body.innerHTML = `<p style="color:var(--red)">Error: ${e.message}</p>`;
+  }
+}
+
+function closeLinkFunnelModal(){
+  document.getElementById('link-funnel-modal').style.display = 'none';
 }
 
 function renderVacList(vacDays){

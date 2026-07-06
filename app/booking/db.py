@@ -1213,6 +1213,26 @@ def ensure_db_columns() -> None:
 
                 -- 037: per-day extra ghost times (additional grey slots visible in the calendar)
                 ALTER TABLE urgency_days ADD COLUMN IF NOT EXISTS ghost_times JSONB DEFAULT '[]';
+
+                -- 038: per-client trackable quote links (one unique short link per lead,
+                -- so we know exactly if/when they clicked and what they did afterwards).
+                CREATE TABLE IF NOT EXISTS tracked_quote_links (
+                    id SERIAL PRIMARY KEY,
+                    token VARCHAR(16) UNIQUE NOT NULL,
+                    phone VARCHAR(50) NOT NULL,
+                    customer_name TEXT DEFAULT '',
+                    dest TEXT DEFAULT '/booking',
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    first_clicked_at TIMESTAMPTZ,
+                    last_clicked_at TIMESTAMPTZ,
+                    click_count INT DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_tracked_links_phone ON tracked_quote_links(phone);
+
+                -- Link each booking-site visitor event back to the tracked link (if any)
+                -- that brought that visitor in, so the funnel can be viewed per client.
+                ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS link_token VARCHAR(16);
+                CREATE INDEX IF NOT EXISTS idx_booking_visitor_events_link_token ON booking_visitor_events(link_token);
             """)
             conn.commit()
 

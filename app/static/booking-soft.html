@@ -1021,6 +1021,14 @@ const _landingAttribution = Object.freeze({
   parametro_url: _queryParam(['parametro_url','PARAMETRO_URL','parametro'],240),
   fbclid:       _queryParam(['fbclid'],120),
 });
+// Link de seguimiento por cliente (generado desde el chat del admin, /ir/{token}).
+// Si viene, se guarda para toda la sesión (no solo el primer evento) y se manda
+// en cada _trackEvent, así se puede ver el embudo completo de ESE cliente puntual.
+const _linkToken = (()=>{
+  const fromUrl = _queryParam(['lt'],16);
+  if(fromUrl){ try{ sessionStorage.setItem('_hb_lt', fromUrl); }catch(e){} return fromUrl; }
+  try{ return sessionStorage.getItem('_hb_lt') || ''; }catch(e){ return ''; }
+})();
 
 function _trackEvent(event, date){
   try{
@@ -1031,6 +1039,7 @@ function _trackEvent(event, date){
       session_id: _sessionId,
       is_returning: _isReturning,
       ..._landingAttribution,
+      link_token: _linkToken || '',
     });
     fetch('/api/booking/track',{method:'POST',headers:{'Content-Type':'application/json'},body:payload}).catch(()=>{});
   }catch(e){}

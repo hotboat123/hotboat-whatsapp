@@ -1305,6 +1305,45 @@ async function translateIncomingMessage(msgId, text) {
     }
 }
 
+// Generate a per-client tracked quote link (e.g. for dynamic pricing) and
+// drop it into the message box, ready to send. Lets the admin later see
+// exactly if/when this client clicked it and what they did afterwards.
+async function generateTrackedLink() {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'error');
+        return;
+    }
+    const btn = document.getElementById('generateLinkButton');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳';
+    try {
+        const response = await fetch(`${API_BASE}/api/admin/tracked-links`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone: currentConversation.phone_number,
+                customer_name: currentConversation.customer_name || '',
+                dest: '/booking',
+            }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        const input = document.getElementById('messageInput');
+        const sep = input.value && !input.value.endsWith(' ') && !input.value.endsWith('\n') ? ' ' : '';
+        input.value = `${input.value}${sep}${data.url}`;
+        updateCharCount('messageInput', 'charCount');
+        input.focus();
+        showToast('🔗 Link generado — se puede ver si hace clic y qué hace después', 'success');
+    } catch (error) {
+        console.error('Error generating tracked link:', error);
+        showToast('Error al generar el link', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = orig;
+    }
+}
+
 // Send Message (Reply in Conversation)
 async function sendMessage(event) {
     event.preventDefault();

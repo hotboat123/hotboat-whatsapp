@@ -2483,6 +2483,7 @@ class TrackEventRequest(BaseModel):
     fbclid: Optional[str] = ""  # present = clicked a Meta ad
     # Custom ad URL parameter (landing pages / Meta website URL fields)
     parametro_url: Optional[str] = ""
+    link_token: Optional[str] = ""  # present when the visit came from a per-client tracked link (/ir/{token})
 
 
 def _merge_visitor_session_attribution(dst: dict, body: TrackEventRequest) -> None:
@@ -2543,6 +2544,7 @@ async def track_booking_event(body: TrackEventRequest):
             referrer=str(body.referrer or ""),
             is_returning=bool(body.is_returning),
             recorded_at=now_cl,
+            link_token=(body.link_token or "").strip() or None,
         )
     except Exception as _persist_e:
         logger.warning("visitor event persist failed: %s", _persist_e)
