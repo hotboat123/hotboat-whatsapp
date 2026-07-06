@@ -1283,7 +1283,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div class="chart-title">💰 Precios Dinamicos</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
           El precio base se multiplica automaticamente segun 4 factores:<br>
-          <strong>Ocupacion del dia</strong> · <strong>Dias de anticipacion</strong> · <strong>Dia de semana</strong> · <strong>Horario del paseo</strong>.<br>
+          <strong>Ocupacion del dia</strong> · <strong>Dias de anticipacion</strong> · <strong>Temporada alta/baja</strong> · <strong>Horario del paseo</strong>.<br>
           El cliente ve el precio ajustado al elegir su fecha y horario. El precio cobrado siempre coincide con el mostrado (se recalcula en el servidor).
         </p>
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem">
@@ -1335,13 +1335,24 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <button onclick="addAdvRule()" style="margin-top:.4rem;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">+ Agregar regla</button>
           </div>
 
-          <!-- Day of week -->
+          <!-- Season (temporada alta / baja) -->
           <div>
             <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem">
-              <input type="checkbox" id="dp-en-weekday" onchange="_dpCfg.factors_enabled.weekday=this.checked" style="accent-color:var(--gold);cursor:pointer" title="Activar/desactivar este factor">
-              📅 Por dia de semana
+              <input type="checkbox" id="dp-en-season" onchange="_dpCfg.factors_enabled.season=this.checked" style="accent-color:var(--gold);cursor:pointer" title="Activar/desactivar este factor">
+              🌤️ Por temporada (alta / baja)
             </label>
-            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem" id="dp-weekday-grid"></div>
+            <div style="font-size:.75rem;color:var(--muted);margin-bottom:.4rem">Marca los meses de temporada alta; el resto se considera temporada baja.</div>
+            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:.4rem;margin-bottom:.8rem" id="dp-season-grid"></div>
+            <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
+              <div>
+                <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.3rem">Multiplicador temporada alta</label>
+                <input type="number" id="dp-season-high" min="0.5" max="3" step="0.01" style="width:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .5rem;font-size:.9rem;text-align:center" oninput="_dpCfg.season.high_multiplier=+this.value">
+              </div>
+              <div>
+                <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.3rem">Multiplicador temporada baja</label>
+                <input type="number" id="dp-season-low" min="0.5" max="3" step="0.01" style="width:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .5rem;font-size:.9rem;text-align:center" oninput="_dpCfg.season.low_multiplier=+this.value">
+              </div>
+            </div>
           </div>
 
           <!-- Hour of day -->
@@ -6231,7 +6242,15 @@ let vacationDates = new Set();
 // Working copies for settings editors
 let _urgencyCfg = {seed_times:['10:00','18:00'], gap_hours:3};
 let _dpCfg = null;
-const DAY_NAMES_SHORT = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+const MONTH_NAMES_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function toggleSeasonMonth(m){
+  if(!_dpCfg.season) _dpCfg.season = {high_months:[], high_multiplier:1.15, low_multiplier:0.92};
+  const months = new Set((_dpCfg.season.high_months||[]).map(Number));
+  if(months.has(m)) months.delete(m); else months.add(m);
+  _dpCfg.season.high_months = [...months].sort((a,b)=>a-b);
+  renderDpConfig();
+}
 
 // ── Operating Hours ───────────────────────────────────────────────────────────
 let _opHours = ['10:00','18:00','21:00'];
@@ -6837,8 +6856,8 @@ function renderDpConfig(){
   if(dpToggle){ dpToggle.checked = !!_dpCfg.enabled; updateDpLabel(!!_dpCfg.enabled); }
 
   // Toggles independientes por factor (activo/inactivo)
-  if(!_dpCfg.factors_enabled) _dpCfg.factors_enabled = {fill_rate:true, advance_booking:true, weekday:true, hour_of_day:true};
-  ['fill_rate','advance_booking','weekday','hour_of_day'].forEach(key=>{
+  if(!_dpCfg.factors_enabled) _dpCfg.factors_enabled = {fill_rate:true, advance_booking:true, season:true, hour_of_day:true};
+  ['fill_rate','advance_booking','season','hour_of_day'].forEach(key=>{
     const el = document.getElementById('dp-en-'+key);
     if(el) el.checked = _dpCfg.factors_enabled[key] !== false;
   });
@@ -6879,22 +6898,21 @@ function renderDpConfig(){
     </tr>`).join('');
   }
 
-  // Day of week grid
-  const wkGrid = document.getElementById('dp-weekday-grid');
-  if(wkGrid){
-    const wk = _dpCfg.weekday || {};
-    wkGrid.innerHTML = DAY_NAMES_SHORT.map((name,i)=>{
-      const val = parseFloat(wk[String(i)]||1);
-      const pct = Math.round((val-1)*100);
-      const col = pct>0?'var(--red)':pct<0?'var(--green)':'var(--muted)';
-      return `<div style="text-align:center">
-        <div style="font-size:.72rem;color:var(--muted);margin-bottom:.25rem">${name}</div>
-        <input type="number" min="0.5" max="3" step="0.01" value="${val}"
-          style="width:100%;${tblInputStyle()};text-align:center"
-          oninput="_dpCfg.weekday['${i}']=+this.value;this.nextElementSibling.textContent=(Math.round((+this.value-1)*100)||0)+'%';this.nextElementSibling.style.color=(+this.value>1)?'var(--red)':(+this.value<1?'var(--green)':'var(--muted)')">
-        <div style="font-size:.7rem;color:${col};margin-top:.15rem">${pct===0?'—':(pct>0?'+':'')+pct+'%'}</div>
-      </div>`;
+  // Season grid (temporada alta / baja por mes)
+  const seasonGrid = document.getElementById('dp-season-grid');
+  if(seasonGrid){
+    if(!_dpCfg.season) _dpCfg.season = {high_months:[12,1,2,3], high_multiplier:1.15, low_multiplier:0.92};
+    const highMonths = new Set((_dpCfg.season.high_months||[]).map(Number));
+    seasonGrid.innerHTML = MONTH_NAMES_SHORT.map((name,idx)=>{
+      const m = idx+1;
+      const on = highMonths.has(m);
+      return `<button type="button" onclick="toggleSeasonMonth(${m})"
+        style="padding:.4rem .2rem;border-radius:8px;font-size:.78rem;cursor:pointer;border:1px solid ${on?'var(--gold)':'var(--border)'};background:${on?'var(--gold)':'var(--bg)'};color:${on?'#000':'var(--muted)'};font-weight:${on?700:400}">${name}</button>`;
     }).join('');
+    const highEl = document.getElementById('dp-season-high');
+    const lowEl = document.getElementById('dp-season-low');
+    if(highEl) highEl.value = _dpCfg.season.high_multiplier ?? 1.15;
+    if(lowEl) lowEl.value = _dpCfg.season.low_multiplier ?? 0.92;
   }
 
   // Min/max
@@ -6912,15 +6930,13 @@ function previewDpMessage(){
   _dpPreviewTimer = setTimeout(async ()=>{
     const box = document.getElementById('dp-msg-preview');
     if(!box || !_dpCfg) return;
-    // Reflect the min/max clamp + weekday grid inputs even if not saved yet.
+    // Reflect the min/max clamp even if not saved yet (season/rule inputs
+    // already mutate _dpCfg directly via oninput/onclick).
     const draft = JSON.parse(JSON.stringify(_dpCfg));
     const minEl = document.getElementById('dp-min-mult');
     const maxEl = document.getElementById('dp-max-mult');
     if(minEl) draft.min_mult = parseFloat(minEl.value)||0.80;
     if(maxEl) draft.max_mult = parseFloat(maxEl.value)||1.60;
-    document.querySelectorAll('#dp-weekday-grid input[type=number]').forEach((inp,i)=>{
-      draft.weekday[String(i)] = parseFloat(inp.value)||1.0;
-    });
     try{
       const res = await api('/api/admin/dynamic-pricing/preview-message',{method:'POST',body:JSON.stringify(draft)});
       box.textContent = res.message;
@@ -6964,11 +6980,6 @@ async function saveDpConfig(){
   const maxEl = document.getElementById('dp-max-mult');
   if(minEl) _dpCfg.min_mult = parseFloat(minEl.value)||0.80;
   if(maxEl) _dpCfg.max_mult = parseFloat(maxEl.value)||1.60;
-
-  // Sync weekday from grid inputs
-  document.querySelectorAll('#dp-weekday-grid input[type=number]').forEach((inp,i)=>{
-    _dpCfg.weekday[String(i)] = parseFloat(inp.value)||1.0;
-  });
 
   try{
     await api('/api/admin/dynamic-pricing',{method:'PUT',body:JSON.stringify(_dpCfg)});

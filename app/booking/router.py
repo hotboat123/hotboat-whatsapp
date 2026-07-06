@@ -134,17 +134,13 @@ async def get_dynamic_price(
             adj = round(base * multiplier / 1000) * 1000
             adjusted[str(n)] = {"base": base, "adjusted": adj, "total": adj * n}
 
-        # Determine which factor labels are active (for UI tooltip)
+        # Determine which factor labels are active (for UI tooltip).
+        # Occupancy ("fill_rate") is intentionally excluded here: it affects
+        # the multiplier above, but customers are never told the price
+        # depends on how full the boat is that day.
         active_factors = []
         if cfg.get("enabled"):
             factors_on = cfg.get("factors_enabled") or {}
-            if factors_on.get("fill_rate", True):
-                for rule in sorted(cfg.get("fill_rate", []), key=lambda r: r["min_bookings"], reverse=True):
-                    if bookings_on_day >= rule["min_bookings"]:
-                        pct = round((rule["multiplier"] - 1) * 100)
-                        sign = "+" if pct >= 0 else ""
-                        active_factors.append(f"Demanda del día: {sign}{pct}%")
-                        break
             if factors_on.get("advance_booking", True):
                 for rule in sorted(cfg.get("advance_booking", []), key=lambda r: r["min_days"], reverse=True):
                     if days_advance >= rule["min_days"]:
@@ -152,14 +148,15 @@ async def get_dynamic_price(
                         sign = "+" if pct >= 0 else ""
                         active_factors.append(f"Anticipación ({rule.get('label','')}): {sign}{pct}%")
                         break
-            if factors_on.get("weekday", True):
-                weekday = booking_date.weekday()
-                wk_mult = float(cfg.get("weekday", {}).get(str(weekday), 1.0))
-                if wk_mult != 1.0:
-                    pct = round((wk_mult - 1) * 100)
+            if factors_on.get("season", True):
+                season_cfg = cfg.get("season") or {}
+                high_months = {int(m) for m in season_cfg.get("high_months", [])}
+                is_high = booking_date.month in high_months
+                season_mult = float(season_cfg.get("high_multiplier" if is_high else "low_multiplier", 1.0))
+                if season_mult != 1.0:
+                    pct = round((season_mult - 1) * 100)
                     sign = "+" if pct >= 0 else ""
-                    DAY_NAMES = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
-                    active_factors.append(f"{DAY_NAMES[weekday]}: {sign}{pct}%")
+                    active_factors.append(f"Temporada {'alta' if is_high else 'baja'}: {sign}{pct}%")
             if booking_hour is not None and factors_on.get("hour_of_day", True):
                 for rule in sorted(cfg.get("hour_of_day", []), key=lambda r: r["min_hour"], reverse=True):
                     if booking_hour >= rule["min_hour"]:

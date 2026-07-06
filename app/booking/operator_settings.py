@@ -469,10 +469,12 @@ DP_CONFIG_DEFAULT = {
         {"min_days":  3, "multiplier": 1.00, "label": "3-6 días (normal)"},
         {"min_days":  0, "multiplier": 1.12, "label": "0-2 días (última hora)"},
     ],
-    # Python weekday: 0=Mon … 6=Sun
-    "weekday": {
-        "0": 1.00, "1": 1.00, "2": 1.00,
-        "3": 1.00, "4": 1.05, "5": 1.18, "6": 1.22,
+    # Meses (1=Ene … 12=Dic) que caen en temporada alta; el resto es temporada
+    # baja. Cada temporada tiene su propio multiplicador.
+    "season": {
+        "high_months": [12, 1, 2, 3],
+        "high_multiplier": 1.15,
+        "low_multiplier": 0.92,
     },
     # Each entry: {min_hour, multiplier, label}  (sorted descending → first match wins)
     # Ej: 16:00-17:59 (tarde) más caro, 00:00-11:59 (mañana) más barato.
@@ -489,7 +491,7 @@ DP_CONFIG_DEFAULT = {
     "factors_enabled": {
         "fill_rate": True,
         "advance_booking": True,
-        "weekday": True,
+        "season": True,
         "hour_of_day": True,
     },
 }
@@ -527,7 +529,7 @@ def calculate_dynamic_multiplier(
     Factors (multiplicative):
       1. Fill rate   – how booked is the day already
       2. Advance     – how far ahead the customer is booking
-      3. Weekday     – base demand by day of week
+      3. Season      – high season vs low season (by month)
       4. Hour of day – time slot of the trip (only if booking_hour is given)
 
     Returns 1.0 if dynamic pricing is disabled.
@@ -566,11 +568,14 @@ def calculate_dynamic_multiplier(
                 mult *= float(rule["multiplier"])
                 break
 
-    # ── 3. Day of week (0=Mon, 6=Sun in Python) ───────────────────────────────
-    if _factor_on("weekday"):
-        weekday = booking_date.weekday()
-        wk = cfg.get("weekday", {})
-        mult *= float(wk.get(str(weekday), 1.0))
+    # ── 3. Season (high vs low, by calendar month) ────────────────────────────
+    if _factor_on("season"):
+        season_cfg = cfg.get("season") or {}
+        high_months = {int(m) for m in season_cfg.get("high_months", [])}
+        if booking_date.month in high_months:
+            mult *= float(season_cfg.get("high_multiplier", 1.0))
+        else:
+            mult *= float(season_cfg.get("low_multiplier", 1.0))
 
     # ── 4. Hour of day (solo si se conoce la hora del paseo) ──────────────────
     if booking_hour is not None and _factor_on("hour_of_day"):
@@ -669,8 +674,12 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
                 adv_min_label = lo_rule.get("label") or f"{lo_rule['min_days']}+ días de anticipación"
                 adv_max_label = hi_rule.get("label") or f"{hi_rule['min_days']}+ días de anticipación"
 
-        if _on("weekday"):
-            vals = [float(v) for v in (cfg.get("weekday") or {}).values()] or [1.0]
+        if _on("season"):
+            season_cfg = cfg.get("season") or {}
+            vals = [
+                float(season_cfg.get("high_multiplier", 1.0)),
+                float(season_cfg.get("low_multiplier", 1.0)),
+            ]
             min_mult *= min(vals)
             max_mult *= max(vals)
 
