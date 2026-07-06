@@ -1246,6 +1246,28 @@ async def update_dp(request: Request, x_admin_key: str = Header("")):
     return {"ok": True}
 
 
+@admin_router.post("/api/admin/dynamic-pricing/preview-message")
+async def preview_dp_message(request: Request, x_admin_key: str = Header("")):
+    """Live preview of the customer price-range message for a (possibly
+    unsaved) dynamic-pricing config, so the admin can see the numbers update
+    as they edit multipliers, before hitting save."""
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import build_dynamic_price_message
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    return build_dynamic_price_message(body or None)
+
+
+@admin_router.get("/api/admin/dynamic-pricing/message")
+async def get_dp_message(x_admin_key: str = Header("")):
+    """Customer price-range message built from the currently saved config."""
+    _check_auth(x_admin_key)
+    from app.booking.operator_settings import build_dynamic_price_message
+    return build_dynamic_price_message()
+
+
 # ── T&C Signatures ────────────────────────────────────────────────────────────
 
 @admin_router.get("/api/admin/reservas/{booking_ref}/firmas")

@@ -632,6 +632,129 @@ def get_dynamic_multiplier_for_booking(booking_date: date, booking_time: Optiona
     )
 
 
+def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
+    """
+    Computes the true min/max price (per person and per full boat) reachable
+    under the given dynamic-pricing config — considering ONLY the factors
+    whose factors_enabled flag is on — and renders a ready-to-send customer
+    message. Pass a draft (unsaved) config to preview edits live; omit to use
+    the config currently stored in settings.
+    """
+    from app.booking.db import PRICES
+
+    cfg = cfg if cfg is not None else get_dp_config()
+    factors_on = cfg.get("factors_enabled") or {}
+
+    def _on(key: str) -> bool:
+        return factors_on.get(key, True)
+
+    min_mult = 1.0
+    max_mult = 1.0
+    adv_min_label = adv_max_label = None
+    hour_min_label = hour_max_label = None
+
+    if cfg.get("enabled"):
+        if _on("fill_rate"):
+            mults = [1.0] + [float(r["multiplier"]) for r in (cfg.get("fill_rate") or [])]
+            min_mult *= min(mults)
+            max_mult *= max(mults)
+
+        if _on("advance_booking"):
+            rules = cfg.get("advance_booking") or []
+            if rules:
+                lo_rule = min(rules, key=lambda r: float(r["multiplier"]))
+                hi_rule = max(rules, key=lambda r: float(r["multiplier"]))
+                min_mult *= float(lo_rule["multiplier"])
+                max_mult *= float(hi_rule["multiplier"])
+                adv_min_label = lo_rule.get("label") or f"{lo_rule['min_days']}+ días de anticipación"
+                adv_max_label = hi_rule.get("label") or f"{hi_rule['min_days']}+ días de anticipación"
+
+        if _on("weekday"):
+            vals = [float(v) for v in (cfg.get("weekday") or {}).values()] or [1.0]
+            min_mult *= min(vals)
+            max_mult *= max(vals)
+
+        if _on("hour_of_day"):
+            rules = cfg.get("hour_of_day") or []
+            if rules:
+                lo_rule = min(rules, key=lambda r: float(r["multiplier"]))
+                hi_rule = max(rules, key=lambda r: float(r["multiplier"]))
+                min_mult *= float(lo_rule["multiplier"])
+                max_mult *= float(hi_rule["multiplier"])
+                hour_min_label = lo_rule.get("label") or f"horario desde las {lo_rule['min_hour']}h"
+                hour_max_label = hi_rule.get("label") or f"horario desde las {hi_rule['min_hour']}h"
+
+        lo_clamp = float(cfg.get("min_mult", 0.80))
+        hi_clamp = float(cfg.get("max_mult", 1.60))
+        min_mult = max(lo_clamp, min(min_mult, hi_clamp))
+        max_mult = max(lo_clamp, min(max_mult, hi_clamp))
+
+    def _round_pp(base: float, mult: float) -> int:
+        return int(round(base * mult / 1000) * 1000)
+
+    pp_min_vals = [_round_pp(p, min_mult) for p in PRICES.values()]
+    pp_max_vals = [_round_pp(p, max_mult) for p in PRICES.values()]
+    total_min_vals = [_round_pp(p, min_mult) * n for n, p in PRICES.items()]
+    total_max_vals = [_round_pp(p, max_mult) * n for n, p in PRICES.items()]
+
+    pp_min = min(pp_min_vals + pp_max_vals)
+    pp_max = max(pp_min_vals + pp_max_vals)
+    total_min = min(total_min_vals + total_max_vals)
+    total_max = max(total_min_vals + total_max_vals)
+
+    n_cheapest = min(PRICES, key=lambda n: PRICES[n])
+    n_priciest = max(PRICES, key=lambda n: PRICES[n])
+
+    def _clp(n: int) -> str:
+        return f"${n:,.0f}".replace(",", ".")
+
+    def _extreme_sentence(direction: str) -> Optional[str]:
+        if direction == "min":
+            parts = [p for p in (
+                f"con {adv_min_label}" if adv_min_label else None,
+                f"en {hour_min_label}" if hour_min_label else None,
+            ) if p]
+            n, verb = n_cheapest, "más bajo"
+        else:
+            parts = [p for p in (
+                f"con {adv_max_label}" if adv_max_label else None,
+                f"en {hour_max_label}" if hour_max_label else None,
+            ) if p]
+            n, verb = n_priciest, "más alto"
+        if not parts:
+            return None
+        return f"• El precio {verb} se da reservando {' y '.join(parts)}, para grupos de {n} personas."
+
+    lines = [
+        "Los precios de HotBoat dependen de 3 factores: número de personas, "
+        "anticipación de tu reserva y horario del paseo.",
+        "",
+        f"💰 Por persona: desde {_clp(pp_min)} hasta {_clp(pp_max)}",
+        f"🚤 Por bote completo: desde {_clp(total_min)} hasta {_clp(total_max)}",
+    ]
+    sentence_min = _extreme_sentence("min")
+    sentence_max = _extreme_sentence("max")
+    if sentence_min or sentence_max:
+        lines.append("")
+        if sentence_min:
+            lines.append(sentence_min)
+        if sentence_max:
+            lines.append(sentence_max)
+    lines.append("")
+    lines.append("👉 Para saber el valor exacto de tu fecha, cotiza aquí: {LINK}")
+
+    return {
+        "enabled": bool(cfg.get("enabled")),
+        "min_mult": round(min_mult, 4),
+        "max_mult": round(max_mult, 4),
+        "price_per_person_min": pp_min,
+        "price_per_person_max": pp_max,
+        "price_total_min": total_min,
+        "price_total_max": total_max,
+        "message": "\n".join(lines),
+    }
+
+
 # ── Booking email workflows (Booknetic-style multi-trigger) ─────────────────
 
 TRIGGER_META: dict = {
