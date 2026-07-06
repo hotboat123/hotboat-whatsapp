@@ -186,16 +186,20 @@ class AvailabilityChecker:
         self,
         start_date: datetime,
         end_date: datetime,
-        party_size: Optional[int] = None
+        party_size: Optional[int] = None,
+        vacation_dates: Optional[set] = None,
     ) -> List[Dict]:
         """
         Get available time slots from database
-        
+
         Args:
             start_date: Start date for search
             end_date: End date for search
             party_size: Number of people (optional)
-        
+            vacation_dates: pre-fetched vacation-day set (as str(date)) for
+                this range, so a caller that already loaded it doesn't pay
+                for a second identical query. Fetched internally if omitted.
+
         Returns:
             List of available slots with datetime info
         """
@@ -247,10 +251,13 @@ class AvailabilityChecker:
                         'end': appointment_end_with_buffer,
                     })
             
-            # Load vacation days + operating hours (urgency is handled separately in the
+            # Load vacation days (unless the caller already fetched them for this
+            # exact range) + operating hours (urgency is handled separately in the
             # web booking endpoint as a "ghost calendar" overlay; it must NOT affect
             # real availability generation here).
-            vacation_dates: set = set()
+            need_vacation_fetch = vacation_dates is None
+            if vacation_dates is None:
+                vacation_dates = set()
             db_operating_hours = None
             day_schedule_hours: dict = {}
             try:
@@ -262,12 +269,13 @@ class AvailabilityChecker:
             except Exception as ie:
                 logger.error("operator_settings import failed: %s", ie, exc_info=True)
             else:
-                try:
-                    vacation_dates = {
-                        v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
-                    }
-                except Exception as e:
-                    logger.warning("get_vacation_days failed (continuing): %s", e, exc_info=True)
+                if need_vacation_fetch:
+                    try:
+                        vacation_dates = {
+                            v["date"] for v in get_vacation_days(start_date.date(), end_date.date())
+                        }
+                    except Exception as e:
+                        logger.warning("get_vacation_days failed (continuing): %s", e, exc_info=True)
                 try:
                     db_operating_hours = get_operating_hours()   # 'HH:MM' (soporta media hora)
                 except Exception as e:

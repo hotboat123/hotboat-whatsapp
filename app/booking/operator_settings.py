@@ -4,6 +4,7 @@ All settings stored in hotboat_settings (key/value) table.
 """
 import json
 import logging
+import time as _time
 from datetime import date, timedelta
 from typing import Optional, Tuple
 
@@ -14,13 +15,29 @@ logger = logging.getLogger(__name__)
 
 # ── Generic settings store ─────────────────────────────────────────────────────
 
+# Short-lived cache so a single request that reads the same setting multiple
+# times (schedule types, urgency modes, operating hours, dp config, etc. are
+# each read several times while building the availability calendar) doesn't
+# hit the DB once per read. TTL kept short so admin edits apply almost
+# immediately; invalidated outright on write.
+_SETTINGS_CACHE: dict = {}
+_SETTINGS_CACHE_TTL = 15  # seconds
+
+
 def get_setting(key: str, default: str = "") -> str:
+    now = _time.time()
+    cached = _SETTINGS_CACHE.get(key)
+    if cached and (now - cached[1]) < _SETTINGS_CACHE_TTL:
+        return cached[0]
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT value FROM hotboat_settings WHERE key=%s", (key,))
                 row = cur.fetchone()
-                return row[0] if row else default
+                if row:
+                    _SETTINGS_CACHE[key] = (row[0], now)
+                    return row[0]
+                return default
     except Exception as e:
         logger.warning(f"get_setting({key}) failed: {e}")
         return default
@@ -36,6 +53,7 @@ def set_setting(key: str, value: str) -> bool:
                     ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
                 """, (key, value))
                 conn.commit()
+        _SETTINGS_CACHE.pop(key, None)
         return True
     except Exception as e:
         logger.error(f"set_setting({key}) failed: {e}")

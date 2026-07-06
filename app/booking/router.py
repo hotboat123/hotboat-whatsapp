@@ -199,12 +199,14 @@ async def get_availability(days: int = Query(270, ge=1, le=270)):
         now = datetime.now(CHILE_TZ)
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=days)
-        slots = await checker.get_available_slots(start, end)
 
-        # Load vacation days and per-day urgency overrides for the range
+        # Load vacation days once and hand them to get_available_slots so it
+        # doesn't re-query the same (start, end) range internally.
         vacation_dates = {
             v["date"] for v in get_vacation_days(start.date(), end.date())
         }
+        slots = await checker.get_available_slots(start, end, vacation_dates=vacation_dates)
+
         global_urgency = is_urgency_mode()
         urgency_day_overrides = {
             v["date"]: v["enabled"]
