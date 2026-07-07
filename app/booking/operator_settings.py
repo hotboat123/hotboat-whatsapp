@@ -675,8 +675,9 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
     Computes the true min/max price (per person and per full boat) reachable
     under the given dynamic-pricing config — considering ONLY the factors
     whose factors_enabled flag is on — and renders a ready-to-send customer
-    message. Pass a draft (unsaved) config to preview edits live; omit to use
-    the config currently stored in settings.
+    message quoting the lowest per-person price. Pass a draft (unsaved)
+    config to preview edits live; omit to use the config currently stored
+    in settings.
     """
     from app.booking.db import PRICES
 
@@ -688,8 +689,6 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
 
     min_mult = 1.0
     max_mult = 1.0
-    adv_min_label = adv_max_label = None
-    hour_min_label = hour_max_label = None
 
     if cfg.get("enabled"):
         if _on("fill_rate"):
@@ -700,12 +699,8 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
         if _on("advance_booking"):
             rules = cfg.get("advance_booking") or []
             if rules:
-                lo_rule = min(rules, key=lambda r: float(r["multiplier"]))
-                hi_rule = max(rules, key=lambda r: float(r["multiplier"]))
-                min_mult *= float(lo_rule["multiplier"])
-                max_mult *= float(hi_rule["multiplier"])
-                adv_min_label = lo_rule.get("label") or f"{lo_rule['min_days']}+ días de anticipación"
-                adv_max_label = hi_rule.get("label") or f"{hi_rule['min_days']}+ días de anticipación"
+                min_mult *= min(float(r["multiplier"]) for r in rules)
+                max_mult *= max(float(r["multiplier"]) for r in rules)
 
         if _on("season"):
             season_cfg = cfg.get("season") or {}
@@ -719,12 +714,8 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
         if _on("hour_of_day"):
             rules = cfg.get("hour_of_day") or []
             if rules:
-                lo_rule = min(rules, key=lambda r: float(r["multiplier"]))
-                hi_rule = max(rules, key=lambda r: float(r["multiplier"]))
-                min_mult *= float(lo_rule["multiplier"])
-                max_mult *= float(hi_rule["multiplier"])
-                hour_min_label = lo_rule.get("label") or f"horario desde las {lo_rule['min_hour']}h"
-                hour_max_label = hi_rule.get("label") or f"horario desde las {hi_rule['min_hour']}h"
+                min_mult *= min(float(r["multiplier"]) for r in rules)
+                max_mult *= max(float(r["multiplier"]) for r in rules)
 
         lo_clamp = float(cfg.get("min_mult", 0.80))
         hi_clamp = float(cfg.get("max_mult", 1.60))
@@ -744,46 +735,21 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
     total_min = min(total_min_vals + total_max_vals)
     total_max = max(total_min_vals + total_max_vals)
 
-    n_cheapest = min(PRICES, key=lambda n: PRICES[n])
-    n_priciest = max(PRICES, key=lambda n: PRICES[n])
-
     def _clp(n: int) -> str:
         return f"${n:,.0f}".replace(",", ".")
 
-    def _extreme_sentence(direction: str) -> Optional[str]:
-        if direction == "min":
-            parts = [p for p in (
-                f"con {adv_min_label}" if adv_min_label else None,
-                f"en {hour_min_label}" if hour_min_label else None,
-            ) if p]
-            n, verb = n_cheapest, "más bajo"
-        else:
-            parts = [p for p in (
-                f"con {adv_max_label}" if adv_max_label else None,
-                f"en {hour_max_label}" if hour_max_label else None,
-            ) if p]
-            n, verb = n_priciest, "más alto"
-        if not parts:
-            return None
-        return f"• El precio {verb} se da reservando {' y '.join(parts)}, para grupos de {n} personas."
-
     lines = [
-        "Los precios de HotBoat dependen de 3 factores: número de personas, "
-        "anticipación de tu reserva y horario del paseo.",
+        "El valor cambia según la fecha, el horario, la cantidad de personas y "
+        "la anticipación de la reserva.",
         "",
-        f"💰 Por persona: desde {_clp(pp_min)} hasta {_clp(pp_max)}",
-        f"🚤 Por bote completo: desde {_clp(total_min)} hasta {_clp(total_max)}",
+        "🎁 Mientras antes reserves, mejor precio puedes obtener.",
+        "",
+        f"💰 Valores desde {_clp(pp_min)} por persona.",
+        "",
+        "En menos de 20 segundos puedes ver el precio exacto para tu grupo y fecha:",
+        "",
+        "👉 {LINK}",
     ]
-    sentence_min = _extreme_sentence("min")
-    sentence_max = _extreme_sentence("max")
-    if sentence_min or sentence_max:
-        lines.append("")
-        if sentence_min:
-            lines.append(sentence_min)
-        if sentence_max:
-            lines.append(sentence_max)
-    lines.append("")
-    lines.append("👉 Para saber el valor exacto de tu fecha, cotiza aquí: {LINK}")
 
     return {
         "enabled": bool(cfg.get("enabled")),
