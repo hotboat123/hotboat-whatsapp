@@ -1123,6 +1123,29 @@ def ensure_analytics_views() -> None:
                 LEFT JOIN booking_visitor_events bve ON bve.link_token = tql.token
                 GROUP BY tql.token, tql.phone, tql.customer_name, tql.created_at,
                          tql.first_clicked_at, tql.last_clicked_at, tql.click_count;
+
+                -- Every single action a visitor took, one row per event, with
+                -- phone/customer_name attached when it came from a tracked
+                -- link. This is the actual behavior detail — the two views
+                -- above only summarize whether a stage was reached, not what
+                -- was clicked, in what order, or which date/pack/experience.
+                CREATE OR REPLACE VIEW booking_visitor_activity AS
+                SELECT
+                    bve.id,
+                    bve.session_id,
+                    bve.event_type,
+                    bve.extra_date,
+                    bve.time_label,
+                    bve.recorded_at,
+                    bve.lang,
+                    bve.referrer,
+                    bve.is_returning,
+                    bve.link_token,
+                    tql.phone,
+                    tql.customer_name
+                FROM booking_visitor_events bve
+                LEFT JOIN tracked_quote_links tql ON tql.token = bve.link_token
+                ORDER BY bve.recorded_at DESC;
             """)
             conn.commit()
 

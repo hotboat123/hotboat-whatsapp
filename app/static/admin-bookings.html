@@ -553,6 +553,32 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div id="funnel-body">Cargando...</div>
       </div>
 
+      <!-- Actividad detallada de clientes en el sitio de reservas -->
+      <div class="chart-wrap" style="margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.6rem">
+          <div class="chart-title" style="margin:0">📋 Actividad de Clientes</div>
+          <div style="display:flex;gap:.4rem;align-items:center">
+            <input id="activity-phone-filter" placeholder="Filtrar por teléfono..." onkeydown="if(event.key==='Enter')loadActivity()" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.8rem;width:170px">
+            <button onclick="loadActivity()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .8rem;font-size:.8rem;cursor:pointer">🔄</button>
+          </div>
+        </div>
+        <p style="color:var(--muted);font-size:.8rem;margin-bottom:.8rem">
+          Cada acción, en orden, de los últimos 7 días — qué vio, qué fecha eligió, en qué orden. Con teléfono/nombre cuando vino por un link de seguimiento.
+        </p>
+        <div class="tbl-wrap" style="max-height:360px;overflow-y:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+            <thead>
+              <tr style="background:var(--input)">
+                <th style="padding:.4rem .7rem;text-align:left;color:var(--muted)">Cuándo</th>
+                <th style="padding:.4rem .7rem;text-align:left;color:var(--muted)">Cliente</th>
+                <th style="padding:.4rem .7rem;text-align:left;color:var(--muted)">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="activity-tbody"><tr><td colspan="3" style="text-align:center;padding:1rem;color:var(--muted)">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Reporte de caja por método de pago -->
       <div style="margin-top:1.4rem;background:#0d0d14;border:1px solid #1e1e2e;border-radius:16px;overflow:hidden">
 
@@ -4775,7 +4801,7 @@ function showSection(name){
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
   if(name==='clientes') loadClients();
-  if(name==='stats'){ loadStats(); loadCashReport(); loadFunnel(7); }
+  if(name==='stats'){ loadStats(); loadCashReport(); loadFunnel(7); loadActivity(); }
   if(name==='extras-cat') loadExtrasCat();
   if(name==='emails') loadEmailBookingConfig();
   if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); adminCheckPushState(); if(_userIsSuper) loadAdminUsers(); onHighSeasonTypeChange(); }
@@ -5132,6 +5158,35 @@ async function loadFunnel(days){
       : `<p style="color:var(--muted);font-size:.85rem">Sin visitas registradas en los últimos ${days} días.</p>`;
   }catch(e){
     body.innerHTML = `<p style="color:var(--red);font-size:.85rem">Error: ${e.message}</p>`;
+  }
+}
+
+async function loadActivity(){
+  const tbody = document.getElementById('activity-tbody');
+  if(!tbody) return;
+  const phone = (document.getElementById('activity-phone-filter')?.value || '').trim();
+  tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:1rem;color:var(--muted)">Cargando...</td></tr>';
+  try{
+    const qs = phone ? `?phone=${encodeURIComponent(phone)}&days=365&limit=200` : '?days=7&limit=200';
+    const r = await api(`/api/admin/analytics/activity${qs}`);
+    const rows = r.activity || [];
+    if(!rows.length){
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:1rem;color:var(--muted)">Sin actividad registrada.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(a=>{
+      const when = (a.recorded_at||'').substring(0,16).replace('T',' ');
+      const who = a.customer_name || a.phone || `<span style="color:var(--muted)">visita anónima</span>`;
+      const label = _TRACKED_EVENT_LABELS[a.event_type] || `• ${escHtml(a.event_type||'')}`;
+      const extra = a.extra_date ? ` <span style="color:var(--muted)">(${escHtml(a.extra_date)})</span>` : '';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:.4rem .7rem;color:var(--muted);font-size:.75rem;white-space:nowrap">${when}</td>
+        <td style="padding:.4rem .7rem">${who}</td>
+        <td style="padding:.4rem .7rem">${label}${extra}</td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:1rem;color:var(--red)">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -7200,11 +7255,16 @@ const _TRACKED_EVENT_LABELS = {
   view_features: '⚡ Vio características',
   view_ubicacion: '📍 Vio ubicación',
   view_experiencias: '🏔️ Vio experiencias',
+  view_experiencia_detail: '🏔️ Vio detalle de una experiencia',
   view_alojamientos: '🏠 Vio alojamientos',
+  view_alojamiento_detail: '🏠 Vio detalle de un alojamiento',
   view_packs: '🎁 Vio packs',
+  view_pack_detail: '🎁 Vio detalle de un pack',
   view_reservar: '📅 Entró a reservar',
   date_selected: '📅 Eligió fecha',
   view_arma_pack: '🛒 Vio "Arma tu pack"',
+  view_exp_cart: '🛒 Vio el carrito',
+  cart_only_payment_ready: '💳 Carrito listo para pagar',
   solicitud_form: '📝 Llenó formulario de solicitud',
   booking_completed: '✅ Completó la reserva',
 };

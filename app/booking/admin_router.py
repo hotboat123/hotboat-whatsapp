@@ -692,6 +692,60 @@ async def get_conversion_funnel(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@admin_router.get("/api/admin/analytics/activity")
+async def get_visitor_activity(
+    phone: Optional[str] = Query(None, description="Filtra por teléfono (link de seguimiento)"),
+    session_id: Optional[str] = Query(None),
+    days: int = Query(7, ge=1, le=365),
+    limit: int = Query(200, ge=1, le=1000),
+    x_admin_key: str = Header(""),
+):
+    """Detalle evento por evento de lo que hicieron los visitantes del sitio
+    de reservas — a diferencia de los otros dos endpoints (que solo dicen si
+    llegaron a una etapa), acá se ve cada acción, en orden, con fecha/hora."""
+    _check_auth(x_admin_key)
+    try:
+        wheres = ["recorded_at >= NOW() - (%s || ' days')::interval"]
+        params: list = [days]
+        if phone:
+            wheres.append("phone = %s")
+            params.append("".join(ch for ch in phone if ch.isdigit()))
+        if session_id:
+            wheres.append("session_id = %s")
+            params.append(session_id)
+        params.append(limit)
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT id, session_id, event_type, extra_date, time_label,
+                           recorded_at, lang, referrer, is_returning, link_token,
+                           phone, customer_name
+                    FROM booking_visitor_activity
+                    WHERE {' AND '.join(wheres)}
+                    ORDER BY recorded_at DESC
+                    LIMIT %s
+                    """,
+                    tuple(params),
+                )
+                cols = [
+                    "id", "session_id", "event_type", "extra_date", "time_label",
+                    "recorded_at", "lang", "referrer", "is_returning", "link_token",
+                    "phone", "customer_name",
+                ]
+                rows = []
+                for r in cur.fetchall():
+                    d = dict(zip(cols, r))
+                    if d.get("recorded_at"):
+                        d["recorded_at"] = str(d["recorded_at"])
+                    rows.append(d)
+        return {"activity": rows}
+    except Exception as e:
+        logger.error(f"get_visitor_activity error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @admin_router.get("/api/admin/stats")
 async def get_stats(
     year: int = Query(2026),
