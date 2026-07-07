@@ -1323,7 +1323,7 @@ function showPrices(){
     <p style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">Paseo 2 horas · Lago Villarrica · Motor electrico</p>
     ${rows}
     <p style="color:var(--muted);font-size:.75rem;margin-top:.5rem">*Ninos pagan desde los 6 anos</p>
-    ${S.pricingNote ? `<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.7rem .9rem;margin-top:.8rem;font-size:.78rem;color:var(--muted);text-align:left">💡 ${S.pricingNote}</div>` : ''}
+    ${S.pricingNote ? `<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.8rem 1rem;margin-top:.8rem;font-size:.78rem;color:var(--muted);text-align:left;white-space:pre-wrap;line-height:1.5">${String(S.pricingNote).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
   </div>
   <button class="btn" onclick="goReservar()">Reservar ahora 🚤</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;

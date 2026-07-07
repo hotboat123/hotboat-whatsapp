@@ -391,13 +391,11 @@ async def get_availability(days: int = Query(150, ge=1, le=150)):
 async def get_prices():
     pricing_note = None
     try:
-        from app.booking.operator_settings import build_dynamic_price_message
+        from app.booking.operator_settings import build_dynamic_price_message, resolve_price_message
         dp = build_dynamic_price_message()
-        pp_min_clp = f"${dp['price_per_person_min']:,.0f}".replace(",", ".")
-        pricing_note = (
-            "El precio varía según la fecha, el horario, la cantidad de personas y "
-            f"la anticipación de tu reserva. Valores desde {pp_min_clp} por persona."
-        )
+        # Same message as the WhatsApp bot's price answer, minus the {LINK}
+        # CTA line — the visitor is already inside the booking flow.
+        pricing_note = resolve_price_message(dp["message"], link_url=None)
     except Exception as e:
         logger.warning(f"pricing_note build failed: {e}")
     return {"prices": PRICES, "duration_hours": 2, "pricing_note": pricing_note}

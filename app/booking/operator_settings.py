@@ -777,6 +777,29 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
     }
 
 
+def resolve_price_message(message: str, link_url: Optional[str] = None) -> str:
+    """Resolve the {LINK} placeholder left in build_dynamic_price_message()'s
+    output. If link_url is given, substitutes it in place (WhatsApp bot —
+    always wants a CTA link). If not, drops the whole line(s) containing the
+    placeholder instead of leaving a dangling literal "{LINK}" in the text —
+    used on the booking web page itself, where there's no per-client link to
+    offer since the visitor is already inside the booking flow."""
+    if "{LINK}" not in message:
+        return message
+    if link_url:
+        return message.replace("{LINK}", link_url)
+    lines = [ln for ln in message.split("\n") if "{LINK}" not in ln]
+    cleaned = []
+    prev_blank = False
+    for ln in lines:
+        blank = not ln.strip()
+        if blank and prev_blank:
+            continue
+        cleaned.append(ln)
+        prev_blank = blank
+    return "\n".join(cleaned).strip()
+
+
 # ── Booking email workflows (Booknetic-style multi-trigger) ─────────────────
 
 TRIGGER_META: dict = {
