@@ -35,11 +35,13 @@ def _gen_token(n: int = 8) -> str:
 
 
 def _base_url() -> str:
+    """Domain used for the /ir/{token} redirect link sent to customers.
+    Prefers PUBLIC_BASE_URL if set (e.g. for local/dev testing on a
+    different host); otherwise always uses the real customer-facing
+    domain — never the Railway-generated one (staging or otherwise),
+    since that's an internal URL customers shouldn't see."""
     base = (os.environ.get("PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
-    if base:
-        return base
-    domain = (os.environ.get("RAILWAY_PUBLIC_DOMAIN", "") or "").strip()
-    return f"https://{domain}" if domain else ""
+    return base or "https://whatsapp.hotboat.cl"
 
 
 class CreateLinkBody(BaseModel):
