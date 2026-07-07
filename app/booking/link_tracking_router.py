@@ -10,7 +10,6 @@ do afterwards (viewed prices, picked a date, completed the booking, or
 dropped off)?
 """
 import logging
-import os
 import secrets
 import string
 
@@ -36,12 +35,16 @@ def _gen_token(n: int = 8) -> str:
 
 def _base_url() -> str:
     """Domain used for the /ir/{token} redirect link sent to customers.
-    Prefers PUBLIC_BASE_URL if set (e.g. for local/dev testing on a
-    different host); otherwise always uses the real customer-facing
-    domain — never the Railway-generated one (staging or otherwise),
-    since that's an internal URL customers shouldn't see."""
-    base = (os.environ.get("PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
-    return base or "https://whatsapp.hotboat.cl"
+
+    Deliberately hardcoded — NOT read from PUBLIC_BASE_URL. That env var is
+    also used elsewhere (e.g. app/payment/woocommerce.py) for internal/
+    webhook URLs and is set to the Railway-generated staging host on this
+    deployment, which is not what customers should ever see in a WhatsApp
+    message. This link is purely customer-facing branding, so it always
+    points at the real domain regardless of which backend/environment
+    actually generated the token.
+    """
+    return "https://whatsapp.hotboat.cl"
 
 
 class CreateLinkBody(BaseModel):
