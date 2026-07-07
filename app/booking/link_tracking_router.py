@@ -125,13 +125,15 @@ def list_tracked_links(x_admin_key: str = Header("")):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT token, phone, customer_name, created_at,
-                          first_clicked_at, last_clicked_at, click_count
-                   FROM tracked_quote_links
-                   ORDER BY created_at DESC LIMIT 300"""
+                """SELECT token, phone, customer_name, link_created_at,
+                          first_clicked_at, last_clicked_at, click_count,
+                          viewed_prices, selected_date, completed_booking
+                   FROM tracked_link_conversion
+                   ORDER BY link_created_at DESC LIMIT 300"""
             )
             cols = ["token", "phone", "customer_name", "created_at",
-                    "first_clicked_at", "last_clicked_at", "click_count"]
+                    "first_clicked_at", "last_clicked_at", "click_count",
+                    "viewed_prices", "selected_date", "completed_booking"]
             rows = []
             for r in cur.fetchall():
                 d = dict(zip(cols, r))

@@ -537,6 +537,22 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div class="chart-wrap" id="source-chart"></div>
       </div>
 
+      <!-- Embudo de conversión del sitio de reservas -->
+      <div class="chart-wrap" style="margin-top:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.8rem">
+          <div class="chart-title" style="margin:0">📊 Embudo de Conversión</div>
+          <div style="display:flex;gap:.3rem;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:.25rem">
+            <button class="cpill funnel-pill active" data-days="7"  onclick="setFunnelPeriod(this)">7d</button>
+            <button class="cpill funnel-pill"        data-days="30" onclick="setFunnelPeriod(this)">30d</button>
+            <button class="cpill funnel-pill"        data-days="90" onclick="setFunnelPeriod(this)">90d</button>
+          </div>
+        </div>
+        <p style="color:var(--muted);font-size:.8rem;margin-bottom:.9rem">
+          Sesiones en la página de reservas que llegaron a cada etapa (incluye visitas orgánicas y las que llegaron por un link de seguimiento).
+        </p>
+        <div id="funnel-body">Cargando...</div>
+      </div>
+
       <!-- Reporte de caja por método de pago -->
       <div style="margin-top:1.4rem;background:#0d0d14;border:1px solid #1e1e2e;border-radius:16px;overflow:hidden">
 
@@ -1459,11 +1475,12 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Teléfono</th>
                 <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Generado</th>
                 <th style="padding:.5rem .8rem;text-align:center;color:var(--muted)">¿Clic?</th>
+                <th style="padding:.5rem .8rem;text-align:center;color:var(--muted)">¿Convirtió?</th>
                 <th style="padding:.5rem .8rem;text-align:left;color:var(--muted)">Último clic</th>
                 <th style="padding:.5rem .8rem;text-align:center;color:var(--muted)"></th>
               </tr>
             </thead>
-            <tbody id="tracked-links-tbody"><tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--muted)">Cargando...</td></tr></tbody>
+            <tbody id="tracked-links-tbody"><tr><td colspan="7" style="text-align:center;padding:1rem;color:var(--muted)">Cargando...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -4758,7 +4775,7 @@ function showSection(name){
   if(name==='calendar') renderCal();
   if(name==='lista') loadLista();
   if(name==='clientes') loadClients();
-  if(name==='stats'){ loadStats(); loadCashReport(); }
+  if(name==='stats'){ loadStats(); loadCashReport(); loadFunnel(7); }
   if(name==='extras-cat') loadExtrasCat();
   if(name==='emails') loadEmailBookingConfig();
   if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); adminCheckPushState(); if(_userIsSuper) loadAdminUsers(); onHighSeasonTypeChange(); }
@@ -5073,10 +5090,49 @@ async function openClientModal(tel){
 // ── Stats ─────────────────────────────────────────────────────────────────────
 let _cashDays = 7;
 function setCashPeriod(el){
-  document.querySelectorAll('.cpill').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#cash-period-pills .cpill').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   _cashDays = +el.dataset.days;
   loadCashReport();
+}
+
+function setFunnelPeriod(el){
+  document.querySelectorAll('.funnel-pill').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  loadFunnel(+el.dataset.days);
+}
+
+async function loadFunnel(days){
+  const body = document.getElementById('funnel-body');
+  if(!body) return;
+  try{
+    const d = await api(`/api/admin/analytics/funnel?days=${days}`);
+    const stages = [
+      {key:'total_sessions',        label:'Visitó la página'},
+      {key:'viewed_prices',         label:'Vio precios'},
+      {key:'entered_booking_flow',  label:'Entró a reservar'},
+      {key:'selected_date',         label:'Eligió fecha'},
+      {key:'completed_booking',     label:'Completó la reserva'},
+    ];
+    const total = d.total_sessions || 0;
+    body.innerHTML = total
+      ? stages.map(s=>{
+          const n = d[s.key] || 0;
+          const pct = total ? Math.round(n/total*100) : 0;
+          return `<div style="margin-bottom:.6rem">
+            <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:.25rem">
+              <span>${s.label}</span>
+              <span style="color:var(--muted)">${n} · ${pct}%</span>
+            </div>
+            <div style="background:var(--bg);border-radius:6px;height:10px;overflow:hidden">
+              <div style="background:var(--gold);height:100%;width:${pct}%"></div>
+            </div>
+          </div>`;
+        }).join('') + `<p style="color:var(--muted);font-size:.75rem;margin-top:.6rem">${d.from_tracked_link||0} de estas sesiones llegaron desde un link de seguimiento (🔗 Links de Seguimiento, más abajo en Configuración).</p>`
+      : `<p style="color:var(--muted);font-size:.85rem">Sin visitas registradas en los últimos ${days} días.</p>`;
+  }catch(e){
+    body.innerHTML = `<p style="color:var(--red);font-size:.85rem">Error: ${e.message}</p>`;
+  }
 }
 
 const METHOD_COLORS = {
@@ -7110,7 +7166,7 @@ function renderTrackedLinks(links){
   const tbody = document.getElementById('tracked-links-tbody');
   if(!tbody) return;
   if(!links.length){
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1rem;color:var(--muted)">Aún no se ha generado ningún link (usa el botón 🔗 en el chat).</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:1rem;color:var(--muted)">Aún no se ha generado ningún link (usa el botón 🔗 en el chat).</td></tr>';
     return;
   }
   tbody.innerHTML = links.map(l=>{
@@ -7118,6 +7174,12 @@ function renderTrackedLinks(links){
     const badge = clicked
       ? `<span style="background:rgba(34,197,94,.12);color:#4ade80;border-radius:12px;padding:2px 8px;font-size:.72rem;font-weight:700">✓ ${l.click_count}x</span>`
       : `<span style="background:rgba(148,163,184,.12);color:var(--muted);border-radius:12px;padding:2px 8px;font-size:.72rem">Sin clic</span>`;
+    const converted = !!l.completed_booking;
+    const convBadge = converted
+      ? `<span style="background:rgba(34,197,94,.12);color:#4ade80;border-radius:12px;padding:2px 8px;font-size:.72rem;font-weight:700">✓ Reservó</span>`
+      : l.selected_date
+        ? `<span style="background:rgba(251,191,36,.12);color:#fbbf24;border-radius:12px;padding:2px 8px;font-size:.72rem">Eligió fecha</span>`
+        : `<span style="background:rgba(148,163,184,.12);color:var(--muted);border-radius:12px;padding:2px 8px;font-size:.72rem">—</span>`;
     const created = l.created_at ? l.created_at.substring(0,16).replace('T',' ') : '';
     const lastClick = l.last_clicked_at ? l.last_clicked_at.substring(0,16).replace('T',' ') : '—';
     return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openLinkFunnel('${l.token}')">
@@ -7125,6 +7187,7 @@ function renderTrackedLinks(links){
       <td style="padding:.5rem .8rem;color:var(--muted)">${l.phone}</td>
       <td style="padding:.5rem .8rem;color:var(--muted);font-size:.75rem;white-space:nowrap">${created}</td>
       <td style="padding:.5rem .8rem;text-align:center">${badge}</td>
+      <td style="padding:.5rem .8rem;text-align:center">${convBadge}</td>
       <td style="padding:.5rem .8rem;color:var(--muted);font-size:.75rem;white-space:nowrap">${lastClick}</td>
       <td style="padding:.5rem .8rem;text-align:center;color:var(--muted)">👁</td>
     </tr>`;

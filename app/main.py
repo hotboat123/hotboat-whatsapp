@@ -781,6 +781,12 @@ async def lifespan(app: FastAPI):
         ensure_signatures_table()
     except Exception as _e:
         logger.warning(f"ensure_signatures_table skipped: {_e}")
+    # Ensure conversion-funnel analytics views exist
+    try:
+        from app.booking.db import ensure_analytics_views
+        ensure_analytics_views()
+    except Exception as _e:
+        logger.warning(f"ensure_analytics_views skipped: {_e}")
     try:
         _ensure_bot_tables()
         seed_bot_defaults()

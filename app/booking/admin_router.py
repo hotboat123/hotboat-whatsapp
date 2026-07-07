@@ -655,6 +655,43 @@ async def get_cash_report(
         raise HTTPException(500, str(e))
 
 
+@admin_router.get("/api/admin/analytics/funnel")
+async def get_conversion_funnel(
+    days: int = Query(30, ge=1, le=365),
+    x_admin_key: str = Header(""),
+):
+    """Embudo de conversión del sitio de reservas: cuántas sesiones llegaron
+    a cada etapa (booking_funnel_sessions es una vista sobre
+    booking_visitor_events — ver ensure_analytics_views en db.py)."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COUNT(*)                                            AS total_sessions,
+                        COUNT(*) FILTER (WHERE viewed_prices)               AS viewed_prices,
+                        COUNT(*) FILTER (WHERE entered_booking_flow)        AS entered_booking_flow,
+                        COUNT(*) FILTER (WHERE selected_date)               AS selected_date,
+                        COUNT(*) FILTER (WHERE completed_booking)           AS completed_booking,
+                        COUNT(*) FILTER (WHERE link_token IS NOT NULL)      AS from_tracked_link
+                    FROM booking_funnel_sessions
+                    WHERE first_seen_at >= NOW() - (%s || ' days')::interval
+                    """,
+                    (days,),
+                )
+                row = cur.fetchone()
+                cols = [
+                    "total_sessions", "viewed_prices", "entered_booking_flow",
+                    "selected_date", "completed_booking", "from_tracked_link",
+                ]
+                return {"days": days, **dict(zip(cols, row))}
+    except Exception as e:
+        logger.error(f"get_conversion_funnel error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @admin_router.get("/api/admin/stats")
 async def get_stats(
     year: int = Query(2026),

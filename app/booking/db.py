@@ -1067,6 +1067,66 @@ def ensure_signatures_table() -> None:
             conn.commit()
 
 
+def ensure_analytics_views() -> None:
+    """Create/refresh the read-only SQL views used for conversion-funnel
+    analysis. Kept in its own isolated function (own connection, own
+    try/except at the call site) rather than folded into the big
+    ensure_db_columns() script — a single bad statement there once blocked
+    every migration after it, and CREATE OR REPLACE VIEW is exactly the
+    kind of thing worth re-running on every deploy without that risk.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                -- One row per browsing session on the booking site: what did
+                -- that visitor reach, regardless of whether a tracked link
+                -- brought them in.
+                CREATE OR REPLACE VIEW booking_funnel_sessions AS
+                SELECT
+                    session_id,
+                    (ARRAY_AGG(link_token) FILTER (WHERE link_token IS NOT NULL))[1] AS link_token,
+                    MIN(recorded_at) AS first_seen_at,
+                    MAX(recorded_at) AS last_seen_at,
+                    COUNT(*) AS event_count,
+                    BOOL_OR(is_returning) AS is_returning,
+                    BOOL_OR(event_type = 'view_prices')                                              AS viewed_prices,
+                    BOOL_OR(event_type = 'view_reservar')                                             AS entered_booking_flow,
+                    BOOL_OR(event_type = 'date_selected')                                             AS selected_date,
+                    BOOL_OR(event_type = 'solicitud_form')                                            AS filled_request_form,
+                    BOOL_OR(event_type = 'booking_completed')                                         AS completed_booking,
+                    BOOL_OR(event_type IN ('view_experiencias', 'view_experiencia_detail'))           AS viewed_experiencias,
+                    BOOL_OR(event_type IN ('view_alojamientos', 'view_alojamiento_detail'))           AS viewed_alojamientos,
+                    BOOL_OR(event_type IN ('view_packs', 'view_pack_detail', 'view_arma_pack'))       AS viewed_packs
+                FROM booking_visitor_events
+                GROUP BY session_id;
+
+                -- One row per tracked link (per WhatsApp client) with its
+                -- conversion status, aggregated across all sessions tagged
+                -- with that token.
+                CREATE OR REPLACE VIEW tracked_link_conversion AS
+                SELECT
+                    tql.token,
+                    tql.phone,
+                    tql.customer_name,
+                    tql.created_at        AS link_created_at,
+                    tql.first_clicked_at,
+                    tql.last_clicked_at,
+                    tql.click_count,
+                    MIN(bve.recorded_at) AS first_seen_at,
+                    MAX(bve.recorded_at) AS last_seen_at,
+                    COUNT(bve.id)        AS event_count,
+                    BOOL_OR(bve.event_type = 'view_prices')      AS viewed_prices,
+                    BOOL_OR(bve.event_type = 'view_reservar')    AS entered_booking_flow,
+                    BOOL_OR(bve.event_type = 'date_selected')    AS selected_date,
+                    BOOL_OR(bve.event_type = 'booking_completed') AS completed_booking
+                FROM tracked_quote_links tql
+                LEFT JOIN booking_visitor_events bve ON bve.link_token = tql.token
+                GROUP BY tql.token, tql.phone, tql.customer_name, tql.created_at,
+                         tql.first_clicked_at, tql.last_clicked_at, tql.click_count;
+            """)
+            conn.commit()
+
+
 def create_signature(booking_ref: str, data: dict, ip: str = "") -> dict:
     """Save a passenger T&C signature. Returns the created row as dict."""
     from datetime import date as _date
