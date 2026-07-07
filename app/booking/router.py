@@ -298,6 +298,21 @@ async def get_availability(days: int = Query(150, ge=1, le=150)):
                     seed_set = set(cfg["seed_times"])
                     ghost_times_set = set(cfg.get("ghost_times") or [])
 
+                    # This profile defines the day's displayed schedule
+                    # directly: only its seeds (bookable) and explicit ghost
+                    # times (shown locked) should appear as options — not the
+                    # full hourly grid the day's operating-hours config would
+                    # otherwise generate. Real bookings always stay visible
+                    # even if they land outside that set. Only restrict when
+                    # at least one seed genuinely exists in today's schedule —
+                    # otherwise (misconfigured profile) leave the full real
+                    # schedule showing, caught by the safety-net below.
+                    if seed_set & avail_set:
+                        restricted = sorted((seed_set | ghost_times_set | booked_set) & avail_set, key=_slot_to_min)
+                        grouped[dk] = restricted
+                        times = restricted
+                        avail_set = set(times)
+
                     if not booked:
                         # No bookings → only the exact seed times are bookable;
                         # every other real slot that day is fantasma. The
@@ -307,7 +322,7 @@ async def get_availability(days: int = Query(150, ge=1, le=150)):
                         # this branch itself intentionally greys "everything
                         # that isn't a seed", that's the point of seed_times.
                         grey = {t for t in times if t not in seed_set}
-                        grey |= computed_fakes  # seed±gap + ghost_times
+                        grey |= (computed_fakes & avail_set)  # seed±gap + ghost_times
                         fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
                     else:
                         # With a booking at X → green = (available non-booked seeds)
@@ -318,7 +333,7 @@ async def get_availability(days: int = Query(150, ge=1, le=150)):
                         green_from_expansion = booked_expansion & avail_set
                         green_set = green_from_seeds | green_from_expansion
                         grey = {t for t in times if t not in green_set}
-                        grey |= ghost_times_set
+                        grey |= (ghost_times_set & avail_set)
                         grey |= booked_set
                         fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
 
