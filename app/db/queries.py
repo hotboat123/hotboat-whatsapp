@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 ADMIN_PHONE = "56974950762"
 _last_error_notification = {}  # Track last notification time to avoid spam
 
+# Rolling retention cap for whatsapp_conversations — keeps the table from
+# growing unbounded per customer while still giving enough recent context.
+MAX_CONVERSATION_ROWS_PER_PHONE = 30
+
 
 async def _notify_admin_db_error(error: Exception, function_name: str) -> None:
     """
@@ -267,10 +271,22 @@ async def save_conversation(
                         return
                 
                 cur.execute("""
-                    INSERT INTO whatsapp_conversations 
+                    INSERT INTO whatsapp_conversations
                     (phone_number, customer_name, message_text, response_text, message_type, message_id, direction, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                 """, (phone_number, customer_name, message_text, response_text, message_type, message_id, direction))
+
+                # Trim old rows so history doesn't grow unbounded per customer
+                cur.execute("""
+                    DELETE FROM whatsapp_conversations
+                    WHERE phone_number = %s
+                      AND id NOT IN (
+                          SELECT id FROM whatsapp_conversations
+                          WHERE phone_number = %s
+                          ORDER BY created_at DESC
+                          LIMIT %s
+                      )
+                """, (phone_number, phone_number, MAX_CONVERSATION_ROWS_PER_PHONE))
             conn.commit()
             logger.info(f"Conversation saved for {phone_number}")
     

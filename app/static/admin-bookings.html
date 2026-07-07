@@ -1445,7 +1445,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div class="chart-title">🔗 Links de Seguimiento</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
           Cada link se genera desde el chat (botón 🔗 junto al mensaje) para un cliente puntual.
-          Acá ves si hizo clic, cuándo, y qué hizo después en la página de reservas.
+          Acá ves si hizo clic, cuándo, y el historial completo después: qué hizo en la página de
+          reservas + los últimos mensajes de WhatsApp con ese cliente.
         </p>
         <div style="display:flex;gap:.6rem;margin-bottom:.8rem">
           <button onclick="loadTrackedLinks()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .9rem;font-size:.82rem;cursor:pointer">🔄 Actualizar</button>
@@ -7155,29 +7156,35 @@ async function openLinkFunnel(token){
     const r = await api(`/api/admin/tracked-links/${token}/funnel`);
     const l = r.link;
     title.textContent = `📍 ${l.customer_name || l.phone}`;
-    const events = r.events || [];
-    if(!l.first_clicked_at){
-      body.innerHTML = `
-        <p style="color:var(--muted);margin-bottom:.6rem">Generado: ${(l.created_at||'').substring(0,16).replace('T',' ')}</p>
-        <p style="color:#f87171">✕ Este cliente todavía no ha hecho clic en el link.</p>`;
-      return;
-    }
-    const timeline = events.length
-      ? events.map(e=>{
-          const label = _TRACKED_EVENT_LABELS[e.event_type] || `• ${e.event_type}`;
-          const when = (e.recorded_at||'').substring(11,16);
-          const extra = e.extra_date ? ` <span style="color:var(--muted)">(${e.extra_date})</span>` : '';
-          return `<div style="display:flex;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--border)">
-            <span style="color:var(--muted);font-size:.78rem;white-space:nowrap">${when}</span>
-            <span>${label}${extra}</span>
-          </div>`;
-        }).join('')
-      : '<p style="color:var(--muted)">Hizo clic pero aún no interactuó más con la página.</p>';
+    const timeline = r.timeline || [];
+
+    const clickNote = l.first_clicked_at
+      ? `<p style="color:#4ade80;margin-bottom:.9rem">✓ Hizo clic ${l.click_count} vez/veces — última: ${(l.last_clicked_at||'').substring(0,16).replace('T',' ')}</p>`
+      : `<p style="color:#f87171;margin-bottom:.9rem">✕ Todavía no ha hecho clic en el link.</p>`;
+
+    const rows = timeline.map(item=>{
+      const when = (item.at||'').substring(11,16);
+      if(item.source === 'whatsapp'){
+        const icon = item.direction === 'outgoing' ? '🤖' : '💬';
+        const text = escHtml((item.message_text||'').slice(0,200));
+        return `<div style="display:flex;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--muted);font-size:.78rem;white-space:nowrap">${when}</span>
+          <span>${icon} ${text}</span>
+        </div>`;
+      }
+      const label = _TRACKED_EVENT_LABELS[item.event_type] || `• ${escHtml(item.event_type||'')}`;
+      const extra = item.extra_date ? ` <span style="color:var(--muted)">(${escHtml(item.extra_date)})</span>` : '';
+      return `<div style="display:flex;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--muted);font-size:.78rem;white-space:nowrap">${when}</span>
+        <span>${label}${extra}</span>
+      </div>`;
+    }).join('');
+
     body.innerHTML = `
       <p style="color:var(--muted);margin-bottom:.3rem">Generado: ${(l.created_at||'').substring(0,16).replace('T',' ')}</p>
-      <p style="color:#4ade80;margin-bottom:.9rem">✓ Hizo clic ${l.click_count} vez/veces — última: ${(l.last_clicked_at||'').substring(0,16).replace('T',' ')}</p>
-      <div style="font-weight:700;font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem">Qué hizo después</div>
-      ${timeline}`;
+      ${clickNote}
+      <div style="font-weight:700;font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem">Historial completo (web + WhatsApp)</div>
+      ${rows || '<p style="color:var(--muted)">Sin actividad todavía.</p>'}`;
   }catch(e){
     body.innerHTML = `<p style="color:var(--red)">Error: ${e.message}</p>`;
   }

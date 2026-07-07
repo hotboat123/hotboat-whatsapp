@@ -1344,6 +1344,31 @@ async function generateTrackedLink() {
     }
 }
 
+// Delete all stored WhatsApp history for the open conversation (irreversible)
+async function deleteConversationHistory() {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'error');
+        return;
+    }
+    const name = currentConversation.customer_name || currentConversation.phone_number;
+    if (!confirm(`¿Borrar TODO el historial de mensajes con ${name}? Esta acción no se puede deshacer.`)) {
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}`, {
+            method: 'DELETE',
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        currentConversation.messages = [];
+        renderCurrentChat({ scrollToBottom: true });
+        showToast(`🗑️ Historial borrado (${data.deleted} mensajes)`, 'success');
+    } catch (error) {
+        console.error('Error deleting conversation history:', error);
+        showToast('Error al borrar el historial', 'error');
+    }
+}
+
 // Send Message (Reply in Conversation)
 async function sendMessage(event) {
     event.preventDefault();

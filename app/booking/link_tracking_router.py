@@ -143,8 +143,10 @@ def list_tracked_links(x_admin_key: str = Header("")):
 
 
 @link_tracking_router.get("/api/admin/tracked-links/{token}/funnel")
-def get_tracked_link_funnel(token: str, x_admin_key: str = Header("")):
-    """Datos del link + línea de tiempo de eventos de esa visita puntual."""
+async def get_tracked_link_funnel(token: str, x_admin_key: str = Header("")):
+    """Datos del link + línea de tiempo completa de esa visita puntual:
+    eventos del sitio de reservas Y los últimos mensajes de WhatsApp con
+    ese mismo cliente, mezclados en orden cronológico."""
     _check_auth(x_admin_key)
     token = (token or "").strip()[:16]
     with get_connection() as conn:
@@ -174,8 +176,47 @@ def get_tracked_link_funnel(token: str, x_admin_key: str = Header("")):
                    ORDER BY recorded_at ASC""",
                 (token,),
             )
+            raw_events = cur.fetchall()
             events = [
                 {"event_type": e[0], "extra_date": e[1], "time_label": e[2], "recorded_at": str(e[3])}
-                for e in cur.fetchall()
+                for e in raw_events
             ]
-    return {"link": link, "events": events}
+
+    whatsapp_messages = []
+    try:
+        from app.db.leads import get_conversation_history
+        whatsapp_messages = await get_conversation_history(link["phone"], limit=30)
+    except Exception as e:
+        logger.warning("Could not load WhatsApp history for %s: %s", link["phone"], e)
+
+    # Web timestamps come back as tz-aware datetimes straight from psycopg;
+    # WhatsApp timestamps are already-formatted ISO strings (Chile-local, from
+    # get_conversation_history). Parse both into real datetimes before sorting —
+    # comparing the raw strings directly mixes separators/timezones and can
+    # silently interleave events in the wrong order.
+    from datetime import datetime as _dt, timezone as _tz
+
+    def _parse_dt(value):
+        if value is None:
+            return None
+        dt = value if isinstance(value, _dt) else None
+        if dt is None:
+            try:
+                dt = _dt.fromisoformat(str(value))
+            except ValueError:
+                return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_tz.utc)
+        return dt
+
+    timeline = []
+    for ev, raw in zip(events, raw_events):
+        timeline.append({"source": "web", "at": _parse_dt(raw[3]), **ev})
+    for m in whatsapp_messages:
+        timeline.append({"source": "whatsapp", "at": _parse_dt(m.get("timestamp")), **m})
+
+    timeline.sort(key=lambda x: x["at"] or _dt.min.replace(tzinfo=_tz.utc))
+    for item in timeline:
+        item["at"] = item["at"].isoformat() if item["at"] else None
+
+    return {"link": link, "events": events, "whatsapp_messages": whatsapp_messages, "timeline": timeline}

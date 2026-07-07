@@ -2178,6 +2178,23 @@ async def get_conversation_detail(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/conversations/{phone_number}")
+async def delete_conversation_history(phone_number: str):
+    """Permanently delete all stored WhatsApp messages for a phone number.
+    Used from the admin chat UI to clear test/personal conversations."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number = %s", (phone_number,))
+                deleted = cur.rowcount
+            conn.commit()
+        return {"ok": True, "deleted": deleted}
+    except Exception as e:
+        logger.error(f"Error deleting conversation history for {phone_number}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class TranslateRequest(BaseModel):
     text: str
     target_lang: str  # "en", "pt", "fr"
