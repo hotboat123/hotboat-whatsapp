@@ -48,12 +48,13 @@ class CreateLinkBody(BaseModel):
     dest: str = "/booking"
 
 
-@link_tracking_router.post("/api/admin/tracked-links")
-def create_tracked_link(body: CreateLinkBody, x_admin_key: str = Header("")):
-    _check_auth(x_admin_key)
-    phone = "".join(ch for ch in (body.phone or "") if ch.isdigit())
-    if not phone:
-        raise HTTPException(status_code=400, detail="Teléfono requerido")
+def create_tracked_link_for_phone(phone: str, customer_name: str = "", dest: str = "/booking") -> dict:
+    """Core logic behind POST /api/admin/tracked-links, reusable from plain
+    Python (e.g. the WhatsApp bot) without going through the HTTP layer.
+    Returns {"token": None, "url": None} if phone has no digits."""
+    phone_digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    if not phone_digits:
+        return {"token": None, "url": None}
 
     token = _gen_token()
     with get_connection() as conn:
@@ -68,13 +69,22 @@ def create_tracked_link(body: CreateLinkBody, x_admin_key: str = Header("")):
             cur.execute(
                 """INSERT INTO tracked_quote_links (token, phone, customer_name, dest)
                    VALUES (%s, %s, %s, %s)""",
-                (token, phone, (body.customer_name or "").strip(), body.dest or "/booking"),
+                (token, phone_digits, (customer_name or "").strip(), dest or "/booking"),
             )
             conn.commit()
 
     base = _base_url()
     url = f"{base}/ir/{token}" if base else f"/ir/{token}"
-    return {"ok": True, "token": token, "url": url}
+    return {"token": token, "url": url}
+
+
+@link_tracking_router.post("/api/admin/tracked-links")
+def create_tracked_link(body: CreateLinkBody, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    result = create_tracked_link_for_phone(body.phone, body.customer_name, body.dest)
+    if not result["token"]:
+        raise HTTPException(status_code=400, detail="Teléfono requerido")
+    return {"ok": True, **result}
 
 
 @link_tracking_router.get("/ir/{token}")

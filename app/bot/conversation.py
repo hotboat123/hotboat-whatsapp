@@ -565,7 +565,10 @@ class ConversationManager:
             # PRIORITY 0.9: FAQ keywords always win, even inside active booking flows.
             # Placed before all awaiting_* states so that e.g. "Precios" sent during
             # time-slot selection gets the pricing answer instead of "No reconocí el horario".
-            elif faq_hit := self.faq_handler.get_response(message_text, metadata.get("language", "es")):
+            elif faq_hit := self.faq_handler.get_response(
+                message_text, metadata.get("language", "es"),
+                phone=from_number, customer_name=contact_name,
+            ):
                 logger.info("FAQ keyword matched — answering regardless of active flow")
                 response = faq_hit
             # PRIORITY 1: Check if user is responding with number of people (after selecting date/time)
@@ -652,7 +655,9 @@ class ConversationManager:
                     response = self._ask_for_reservation_date(conversation, language)
                 elif menu_number == 2:
                     # Option 2: Precios por persona HotBoat
-                    response = self.faq_handler.get_response("precio", language)
+                    response = self.faq_handler.get_response(
+                        "precio", language, phone=from_number, customer_name=contact_name
+                    )
                 elif menu_number == 3:
                     # Option 3: Características Experiencia HotBoat
                     response = self.faq_handler.get_response("caracteristicas", language)
@@ -2255,7 +2260,9 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
                 responses.append(self._ask_for_reservation_date(conversation, language))
             elif menu_number == 2:
                 # Option 2: Precios por persona HotBoat
-                responses.append(self.faq_handler.get_response("precio", language))
+                responses.append(self.faq_handler.get_response(
+                    "precio", language, phone=from_number, customer_name=contact_name
+                ))
             elif menu_number == 3:
                 # Option 3: Características Experiencia HotBoat
                 responses.append(self.faq_handler.get_response("caracteristicas", language))
@@ -2352,7 +2359,9 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             if menu_num == 1:
                 return self._ask_for_reservation_date(conversation, language)
             elif menu_num == 2:
-                return self.faq_handler.get_response("precio", language)
+                return self.faq_handler.get_response(
+                    "precio", language, phone=phone_number, customer_name=contact_name
+                )
             elif menu_num == 3:
                 return self.faq_handler.get_response("caracteristicas", language)
             elif menu_num == 4:

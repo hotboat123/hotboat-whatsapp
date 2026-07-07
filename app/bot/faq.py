@@ -288,6 +288,33 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
         """Set the language for responses"""
         self.language = language
 
+    def _build_dynamic_price_response(
+        self, phone: Optional[str], customer_name: Optional[str]
+    ) -> Optional[str]:
+        """Render the live pricing message (Precios Dinamicos config) with a
+        per-client tracked link substituted for {LINK}, so the admin can see
+        exactly what this specific customer did after clicking."""
+        try:
+            from app.booking.operator_settings import build_dynamic_price_message
+            message = (build_dynamic_price_message() or {}).get("message") or ""
+        except Exception as e:
+            logger.warning(f"build_dynamic_price_message failed: {e}")
+            return None
+        if not message:
+            return None
+
+        if "{LINK}" in message:
+            link_url = None
+            if phone:
+                try:
+                    from app.booking.link_tracking_router import create_tracked_link_for_phone
+                    link_url = create_tracked_link_for_phone(phone, customer_name or "").get("url")
+                except Exception as e:
+                    logger.warning(f"Tracked link creation failed for {phone}: {e}")
+            message = message.replace("{LINK}", link_url or "https://whatsapp.hotboat.cl/booking")
+
+        return message
+
     def _build_extras_from_db(self, language: str = "es") -> Optional[str]:
         """Build extras menu keeping exact structure/numbering, pulling prices from DB."""
         # Load price lookup from extras_visibility
@@ -432,14 +459,24 @@ Quer adicionar algo especial ao seu HotBoat?
 
 📝 *Escribe el número del extra que deseas agregar* 🚤"""
 
-    def get_response(self, message: str, language: str = None) -> Optional[str]:
+    def get_response(
+        self,
+        message: str,
+        language: str = None,
+        *,
+        phone: Optional[str] = None,
+        customer_name: Optional[str] = None,
+    ) -> Optional[str]:
         """
         Get FAQ response if message matches a question
-        
+
         Args:
             message: User's message
             language: Language code (es, en, pt). If None, uses default
-        
+            phone: Sender's WhatsApp number — used to mint a per-client
+                tracked link when the pricing answer is triggered.
+            customer_name: Sender's contact name, tied to the tracked link.
+
         Returns:
             FAQ response or None
         """
@@ -454,7 +491,10 @@ Quer adicionar algo especial ao seu HotBoat?
         db_hits = _lookup_all_db_keywords(message_lower, lang)
         for resp_key, content in db_hits:
             seen_keys.add(resp_key)
-            collected.append(content)
+            if resp_key == "precio":
+                collected.append(self._build_dynamic_price_response(phone, customer_name) or content)
+            else:
+                collected.append(content)
         # NOTE: we do NOT bail out here — hardcoded FAQ may cover additional topics
         # not present in the DB (e.g. "precio" when "horarios" DB keyword also fired).
 
@@ -496,6 +536,14 @@ Quer adicionar algo especial ao seu HotBoat?
             if actual_keyword in faq_to_translation:
                 translation_key = faq_to_translation[actual_keyword]
                 logger.info(f"FAQ match: '{keyword}' → {translation_key}")
+                # Precio siempre usa el mensaje dinámico (Precios Dinamicos en el
+                # admin) con un link de seguimiento propio — tiene prioridad sobre
+                # lo configurado en el panel del chatbot y sobre el texto fijo.
+                if actual_keyword == "precio":
+                    dynamic = self._build_dynamic_price_response(phone, customer_name)
+                    if dynamic:
+                        collected.append(dynamic)
+                        continue
                 # Prioridad 1: lo que esté configurado en el panel del chatbot
                 # (tabla bot_responses) para CUALQUIER respuesta del menú.
                 # NADA hardcodeado si hay algo configurado.

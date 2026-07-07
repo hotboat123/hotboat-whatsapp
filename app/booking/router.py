@@ -389,7 +389,18 @@ async def get_availability(days: int = Query(150, ge=1, le=150)):
 
 @router.get("/api/booking/prices")
 async def get_prices():
-    return {"prices": PRICES, "duration_hours": 2}
+    pricing_note = None
+    try:
+        from app.booking.operator_settings import build_dynamic_price_message
+        dp = build_dynamic_price_message()
+        pp_min_clp = f"${dp['price_per_person_min']:,.0f}".replace(",", ".")
+        pricing_note = (
+            "El precio varía según la fecha, el horario, la cantidad de personas y "
+            f"la anticipación de tu reserva. Valores desde {pp_min_clp} por persona."
+        )
+    except Exception as e:
+        logger.warning(f"pricing_note build failed: {e}")
+    return {"prices": PRICES, "duration_hours": 2, "pricing_note": pricing_note}
 
 
 @router.post("/api/booking/create")
