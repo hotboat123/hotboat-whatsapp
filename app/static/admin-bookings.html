@@ -1225,7 +1225,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       <div class="chart-wrap" style="margin-bottom:1rem">
         <div class="chart-title">🔥 Temporada alta por producto</div>
         <p style="color:var(--muted);font-size:.83rem;margin-bottom:1rem;line-height:1.6">
-          Marca días de temporada alta para <strong>experiencias, packs y alojamientos</strong>.<br>
+          Marca días de temporada alta para <strong>HotBoat, experiencias, packs y alojamientos</strong>.<br>
           Estos días desactivan pago web para ese producto específico y pasan a flujo por email/confirmación manual.
         </p>
         <div style="display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem;align-items:flex-end">
@@ -1233,6 +1233,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:.35rem">Tipo de producto</label>
             <select id="hs-scope-type" onchange="onHighSeasonTypeChange()"
               style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;font-size:.85rem;min-width:220px">
+              <option value="hotboat">🚤 HotBoat</option>
               <option value="experience">Experiencia</option>
               <option value="pack">Pack</option>
               <option value="alojamiento">Alojamiento</option>
@@ -4727,7 +4728,7 @@ function showSection(name){
   if(name==='stats'){ loadStats(); loadCashReport(); }
   if(name==='extras-cat') loadExtrasCat();
   if(name==='emails') loadEmailBookingConfig();
-  if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); adminCheckPushState(); if(_userIsSuper) loadAdminUsers(); }
+  if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); adminCheckPushState(); if(_userIsSuper) loadAdminUsers(); onHighSeasonTypeChange(); }
   if(name==='alojamientos-admin') loadAlojamientos();
   if(name==='experiencias') loadExperiencias();
   if(name==='packs-admin') loadPacksAdmin();
@@ -7417,6 +7418,13 @@ async function onHighSeasonTypeChange(){
   const typeEl = document.getElementById('hs-scope-type');
   const t = typeEl ? typeEl.value : 'experience';
   if(!sel) return;
+  if(t === 'hotboat'){
+    sel.disabled = true;
+    sel.innerHTML = '<option value="">🚤 HotBoat (general)</option>';
+    await loadHighSeasonDays();
+    return;
+  }
+  sel.disabled = false;
   sel.innerHTML = '<option value="">— Cargando —</option>';
   try{
     if(t === 'experience'){
@@ -7459,7 +7467,7 @@ async function onHighSeasonTypeChange(){
 async function loadHighSeasonDays(){
   try{
     const {entity_type, entity_slug} = hsScopeQuery();
-    if(!entity_slug){
+    if(entity_type !== 'hotboat' && !entity_slug){
       highSeasonDays = {};
       renderHighSeasonCal();
       renderHighSeasonList();
@@ -7512,7 +7520,7 @@ function renderHighSeasonCal(){
 
 async function cycleHighSeasonDay(dateStr){
   const {entity_type, entity_slug} = hsScopeQuery();
-  if(!entity_slug){ showToast('Elige un producto primero'); return; }
+  if(entity_type !== 'hotboat' && !entity_slug){ showToast('Elige un producto primero'); return; }
   const cur = highSeasonDays.hasOwnProperty(dateStr) ? highSeasonDays[dateStr] : null;
   const scope = {entity_type, entity_slug};
   try{
