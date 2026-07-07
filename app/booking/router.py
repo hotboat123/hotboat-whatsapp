@@ -299,16 +299,21 @@ async def get_availability(days: int = Query(150, ge=1, le=150)):
                     ghost_times_set = set(cfg.get("ghost_times") or [])
 
                     # This profile defines the day's displayed schedule
-                    # directly: only its seeds (bookable) and explicit ghost
-                    # times (shown locked) should appear as options — not the
-                    # full hourly grid the day's operating-hours config would
-                    # otherwise generate. Real bookings always stay visible
-                    # even if they land outside that set. Only restrict when
-                    # at least one seed genuinely exists in today's schedule —
-                    # otherwise (misconfigured profile) leave the full real
-                    # schedule showing, caught by the safety-net below.
+                    # directly: only its seeds (bookable), explicit ghost
+                    # times (shown locked), real bookings, and the slots
+                    # adjacent to a real booking (±gap_hours — these can turn
+                    # bookable via green_from_expansion below) should appear
+                    # as options — not the full hourly grid the day's
+                    # operating-hours config would otherwise generate. Only
+                    # restrict when at least one seed genuinely exists in
+                    # today's schedule — otherwise (misconfigured profile)
+                    # leave the full real schedule showing, caught by the
+                    # safety-net below.
                     if seed_set & avail_set:
-                        restricted = sorted((seed_set | ghost_times_set | booked_set) & avail_set, key=_slot_to_min)
+                        restricted = sorted(
+                            (seed_set | ghost_times_set | booked_set | booked_expansion) & avail_set,
+                            key=_slot_to_min,
+                        )
                         grouped[dk] = restricted
                         times = restricted
                         avail_set = set(times)
