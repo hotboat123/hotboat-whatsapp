@@ -497,8 +497,7 @@ const I18N = {
     returnMenu: 'Volver',
     backToMenu: 'Volver al menú',
     bookNowBtn: 'Reservar ahora 🚤',
-    pricesTitle: '💰 Precios HotBoat',
-    pricesFallback: 'Los precios varían según fecha, horario, cantidad de personas y anticipación de la reserva.\n\n*Niños pagan desde los 6 años.',
+    pricesFallback: '💰 Precios HotBoat\n\nEl precio varía según:\n\n📅 La fecha\n🌅 El horario\n👥 La cantidad de personas\n⏰ Qué tan anticipado reservas\n\nNiños pagan desde los 6 años.',
     alojListTitle: '🏠 Alojamientos',
     alojListSubtitle: 'Open Sky & Raíces de Relikura · Entre Pucón y Curarrehue',
     alojPerNight: '/noche',
@@ -629,8 +628,7 @@ const I18N = {
     returnMenu: 'Back to menu',
     backToMenu: 'Back to menu',
     bookNowBtn: 'Book now 🚤',
-    pricesTitle: '💰 HotBoat Prices',
-    pricesFallback: 'Prices vary by date, time, number of people, and how far in advance you book.\n\n*Children pay from age 6.',
+    pricesFallback: '💰 HotBoat Prices\n\nPrices vary depending on:\n\n📅 Date\n🌅 Time\n👥 Number of people\n⏰ How early you book\n\nChildren pay from 6 years old.',
     alojListTitle: '🏠 Accommodation',
     alojListSubtitle: 'Open Sky & Raíces de Relikura · Between Pucón and Curarrehue',
     alojPerNight: '/night',
@@ -761,8 +759,7 @@ const I18N = {
     returnMenu: 'Voltar',
     backToMenu: 'Voltar ao menu',
     bookNowBtn: 'Reservar agora 🚤',
-    pricesTitle: '💰 Preços HotBoat',
-    pricesFallback: 'Os preços variam conforme a data, o horário, a quantidade de pessoas e a antecedência da reserva.\n\n*Crianças pagam a partir dos 6 anos.',
+    pricesFallback: '💰 Preços HotBoat\n\nO preço varia conforme:\n\n📅 A data\n🌅 O horário\n👥 A quantidade de pessoas\n⏰ Com quanta antecedência você reserva\n\nCrianças pagam a partir dos 6 anos.',
     alojListTitle: '🏠 Hospedagem',
     alojListSubtitle: 'Open Sky & Raíces de Relikura · Entre Pucón e Curarrehue',
     alojPerNight: '/noite',
@@ -1342,10 +1339,12 @@ function renderExperienceCartPaymentScreen(itemCount){
 }
 
 function _pricesCardHtml(bodyHtml){
+  // No separate card-title here on purpose: the message itself (both the
+  // template and the fallback) already opens with its own "💰 ..." title
+  // line, so a second heading would just duplicate it.
   return `
   <div class="card">
-    <div class="card-title">${t('pricesTitle')}</div>
-    <div style="font-size:1rem;color:var(--text);text-align:left;white-space:pre-wrap;line-height:1.6;margin-top:.8rem">${bodyHtml}</div>
+    <div style="font-size:1rem;color:var(--text);text-align:left;white-space:pre-wrap;line-height:1.6">${bodyHtml}</div>
   </div>
   <button class="btn" onclick="goReservar()">${t('bookNowBtn')}</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;

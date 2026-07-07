@@ -477,16 +477,22 @@ def get_urgency_fake_slots(config: Optional[dict] = None) -> list:
 # {TOTAL_MIN}/{TOTAL_MAX} are resolved live from the current config;
 # {LINK} is left untouched — it's filled in later when the message is sent.
 DP_MESSAGE_TEMPLATE_DEFAULT = (
-    "El valor cambia según la fecha, el horario, la cantidad de personas y "
-    "la anticipación de la reserva.\n"
+    "💰 Precios HotBoat\n"
     "\n"
-    "🎁 Mientras antes reserves, mejor precio puedes obtener.\n"
+    "El precio varía según:\n"
     "\n"
-    "💰 Valores desde {PRECIO_MIN} por persona.\n"
+    "📅 La fecha\n"
+    "🌅 El horario\n"
+    "👥 La cantidad de personas\n"
+    "⏰ Qué tan anticipado reservas\n"
     "\n"
-    "En menos de 20 segundos puedes ver el precio exacto para tu grupo y fecha:\n"
+    "Desde {PRECIO_MIN} por persona\n"
     "\n"
-    "👉 {LINK}"
+    "⚡ Revisa tu precio exacto en menos de 20 segundos:\n"
+    "\n"
+    "👉 {LINK}\n"
+    "\n"
+    "Niños pagan desde los 6 años."
 )
 
 DP_CONFIG_DEFAULT = {
@@ -769,7 +775,7 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
     # shouldn't silently disappear just because the free-text template got
     # edited and someone forgot to keep it in.
     if "niñ" not in message.lower():
-        message = f"{message}\n\n*Niños pagan desde los 6 años."
+        message = f"{message}\n\nNiños pagan desde los 6 años."
 
     return {
         "enabled": bool(cfg.get("enabled")),
