@@ -1406,7 +1406,12 @@ def _translate_text(text: str, target_lang: str) -> str:
         resp = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": f"You are a translator. Translate the user's message to {lang_name}. Return ONLY the translated text, no explanations, no quotes."},
+                {"role": "system", "content": (
+                    f"You are a translator. Translate the user's message to {lang_name}. "
+                    "Keep every emoji exactly where it appears (don't remove, add, or move them), "
+                    "and keep line breaks and any URLs/links unchanged. "
+                    "Return ONLY the translated text, no explanations, no quotes."
+                )},
                 {"role": "user", "content": text},
             ],
             max_tokens=1024,
