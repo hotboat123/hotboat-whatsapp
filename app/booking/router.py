@@ -340,6 +340,15 @@ async def get_availability(days: int = Query(150, ge=1, le=150)):
                         grey = {t for t in times if t not in green_set}
                         grey |= (ghost_times_set & avail_set)
                         grey |= booked_set
+                        # Availability from a real booking always wins: a slot
+                        # that qualifies as "close to this booking" (e.g. X-gap)
+                        # stays bookable even if it's also in the profile's
+                        # static ghost_times list — that list describes the
+                        # no-bookings case, it shouldn't override a real,
+                        # earned green slot. The booking itself stays grey
+                        # regardless (booked_set is re-added after).
+                        grey -= green_set
+                        grey |= booked_set
                         fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
 
                 elif not booked:
