@@ -2883,19 +2883,22 @@ function renderTimeSelect(){
   <button class="btn btn-secondary" onclick="renderCal()">← ${t('back')}</button>`;
 }
 
-function selectTime(t){
-  S.selectedTime = t;
-  renderPeopleSelect();
-  // El multiplicador inicial (al elegir fecha) no conoce la hora todavía — el
-  // factor por horario recién se puede calcular ahora. Se vuelve a pedir con
-  // la hora incluida y se refresca el precio si el cliente sigue en esta pantalla.
-  fetch(`/api/booking/dynamic-price?date=${S.selectedDate}&persons=${S.numPeople}&time=${encodeURIComponent(t)}`)
-    .then(r=>r.ok?r.json():null)
-    .then(d=>{
-      if(!d || S.selectedTime!==t) return;
+async function selectTime(tm){
+  S.selectedTime = tm;
+  // El multiplicador que ya teníamos (de selectDate) no conoce la hora
+  // todavía — el factor por horario recién se puede calcular ahora. Espera
+  // el precio correcto ANTES de mostrar la pantalla de personas, para que el
+  // cliente nunca vea el precio "normal" y después un salto al precio real
+  // (se sentía como que estuviéramos subiendo el precio frente a él).
+  mc.innerHTML = `${stepsHtml('fecha')}<div class="card"><p style="color:var(--muted);text-align:center;padding:1rem 0">${t('loading')}</p></div>`;
+  try{
+    const d = await fetch(`/api/booking/dynamic-price?date=${S.selectedDate}&persons=${S.numPeople}&time=${encodeURIComponent(tm)}`)
+      .then(r=>r.ok?r.json():null);
+    if(d && S.selectedTime===tm){
       S.dpMultiplier=d.multiplier||1.0; S.dpEnabled=d.dp_enabled||false; S.dpFactors=d.active_factors||[];
-      if(document.getElementById('pp-price')) renderPeopleSelect();
-    }).catch(()=>{});
+    }
+  }catch(e){}
+  if(S.selectedTime===tm) renderPeopleSelect();
 }
 
 function renderPeopleSelect(){
