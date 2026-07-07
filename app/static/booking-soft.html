@@ -2906,22 +2906,6 @@ function renderPeopleSelect(){
     const total = pp * S.numPeople;
     $('pp-val').textContent = S.numPeople;
     $('pp-price').textContent = `$${pp.toLocaleString('es-CL')} por persona`;
-    const badge = document.getElementById('dp-badge');
-    if(badge){
-      if(S.dpEnabled && mult !== 1.0){
-        const pct = Math.round((mult-1)*100);
-        const sign = pct>0?'+':'';
-        const col = pct>0?'#e74c3c':'#2ecc71';
-        badge.innerHTML = `<span style="background:${col}22;color:${col};border:1px solid ${col}44;border-radius:20px;padding:.2rem .6rem;font-size:.72rem;font-weight:600">${sign}${pct}% precio dinamico</span>`;
-        if(S.dpFactors&&S.dpFactors.length) badge.title = S.dpFactors.join(' · ');
-      } else {
-        badge.innerHTML = '';
-      }
-      if(mult<1.0){
-        const oldPrice = document.getElementById('pp-price-old');
-        if(oldPrice) oldPrice.textContent = `Precio normal: $${basepp.toLocaleString('es-CL')}/pers`;
-      }
-    }
   }
   mc.innerHTML = `
   ${stepsHtml('personas')}
@@ -2935,7 +2919,6 @@ function renderPeopleSelect(){
     </div>
     <div class="price-tag">
       <div class="price-big" id="pp-price"></div>
-      <div id="dp-badge" style="margin-top:.3rem"></div>
     </div>
   </div>
   <button class="btn" onclick="goExtras()">${t('nextExtras')}</button>
