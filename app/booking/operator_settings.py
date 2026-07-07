@@ -764,6 +764,13 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
         .replace("{TOTAL_MAX}", _clp(total_max))
     )
 
+    # Always include the children-pricing note, even if the admin's custom
+    # template doesn't mention it — this is business-critical info that
+    # shouldn't silently disappear just because the free-text template got
+    # edited and someone forgot to keep it in.
+    if "niñ" not in message.lower():
+        message = f"{message}\n\n*Niños pagan desde los 6 años."
+
     return {
         "enabled": bool(cfg.get("enabled")),
         "min_mult": round(min_mult, 4),

@@ -1312,18 +1312,14 @@ function renderExperienceCartPaymentScreen(itemCount){
 
 function showPrices(){
   _trackEvent('view_prices');
-  const rows = Object.entries(S.prices).map(([n,p])=>`
-    <div class="summary-row">
-      <span>👥 ${n} persona${n>1?'s':''}</span>
-      <span><strong>$${p.toLocaleString('es-CL')}</strong>/pers · Total $${(p*n).toLocaleString('es-CL')}</span>
-    </div>`).join('');
+  const noteHtml = S.pricingNote
+    ? String(S.pricingNote).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    : 'Los precios varían según fecha, horario, cantidad de personas y anticipación de la reserva.\n\n*Niños pagan desde los 6 años.';
   mc.innerHTML = `
   <div class="card">
     <div class="card-title">💰 Precios HotBoat</div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">Paseo 2 horas · Lago Villarrica · Motor electrico</p>
-    ${rows}
-    <p style="color:var(--muted);font-size:.75rem;margin-top:.5rem">*Ninos pagan desde los 6 anos</p>
-    ${S.pricingNote ? `<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:.8rem 1rem;margin-top:.8rem;font-size:.78rem;color:var(--muted);text-align:left;white-space:pre-wrap;line-height:1.5">${String(S.pricingNote).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Paseo 2 horas · Lago Villarrica · Motor electrico</p>
+    <div style="font-size:1rem;color:var(--text);text-align:left;white-space:pre-wrap;line-height:1.6">${noteHtml}</div>
   </div>
   <button class="btn" onclick="goReservar()">Reservar ahora 🚤</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
