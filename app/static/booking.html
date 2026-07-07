@@ -814,7 +814,7 @@ async function loadPricesAndAvail(){
   try{
     const [pr, av] = await Promise.all([
       fetch('/api/booking/prices').then(r=>r.json()),
-      fetch('/api/booking/availability?days=270').then(r=>r.json()),
+      fetch('/api/booking/availability?days=150').then(r=>r.json()),
     ]);
     S.prices = pr.prices || {};
     S.availability = av.availability || {};
