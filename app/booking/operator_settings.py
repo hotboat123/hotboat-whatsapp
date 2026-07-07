@@ -488,11 +488,14 @@ DP_CONFIG_DEFAULT = {
         {"min_days":  0, "multiplier": 1.12, "label": "0-2 días (última hora)"},
     ],
     # Meses (1=Ene … 12=Dic) que caen en temporada alta; el resto es temporada
-    # baja. Cada temporada tiene su propio multiplicador.
+    # baja. Cada temporada tiene su propio multiplicador. day_overrides fuerza
+    # una fecha puntual ("YYYY-MM-DD" -> "high"|"low") sin importar su mes —
+    # tiene prioridad sobre high_months (útil para fines de semana largos).
     "season": {
         "high_months": [12, 1, 2, 3],
         "high_multiplier": 1.15,
         "low_multiplier": 0.92,
+        "day_overrides": {},
     },
     # Each entry: {min_hour, multiplier, label}  (sorted descending → first match wins)
     # Ej: 16:00-17:59 (tarde) más caro, 00:00-11:59 (mañana) más barato.
@@ -531,6 +534,19 @@ def get_dp_config() -> dict:
 
 def set_dp_config(cfg: dict) -> bool:
     return set_setting("dynamic_pricing", json.dumps(cfg))
+
+
+def is_high_season(booking_date: date, season_cfg: dict) -> bool:
+    """True if booking_date falls in high season. A per-day override in
+    season_cfg['day_overrides'] (e.g. a specific long weekend) always wins
+    over the month-based classification."""
+    override = (season_cfg.get("day_overrides") or {}).get(str(booking_date))
+    if override == "high":
+        return True
+    if override == "low":
+        return False
+    high_months = {int(m) for m in season_cfg.get("high_months", [])}
+    return booking_date.month in high_months
 
 
 def calculate_dynamic_multiplier(
@@ -586,11 +602,10 @@ def calculate_dynamic_multiplier(
                 mult *= float(rule["multiplier"])
                 break
 
-    # ── 3. Season (high vs low, by calendar month) ────────────────────────────
+    # ── 3. Season (high vs low, by calendar month — or a per-day override) ────
     if _factor_on("season"):
         season_cfg = cfg.get("season") or {}
-        high_months = {int(m) for m in season_cfg.get("high_months", [])}
-        if booking_date.month in high_months:
+        if is_high_season(booking_date, season_cfg):
             mult *= float(season_cfg.get("high_multiplier", 1.0))
         else:
             mult *= float(season_cfg.get("low_multiplier", 1.0))

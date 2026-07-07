@@ -92,7 +92,7 @@ async def get_dynamic_price(
 ):
     """Return dynamic price multiplier and adjusted prices for a given booking date."""
     try:
-        from app.booking.operator_settings import get_dp_config, calculate_dynamic_multiplier
+        from app.booking.operator_settings import get_dp_config, calculate_dynamic_multiplier, is_high_season
         from app.booking.db import PRICES
         from datetime import date as _date
 
@@ -150,8 +150,7 @@ async def get_dynamic_price(
                         break
             if factors_on.get("season", True):
                 season_cfg = cfg.get("season") or {}
-                high_months = {int(m) for m in season_cfg.get("high_months", [])}
-                is_high = booking_date.month in high_months
+                is_high = is_high_season(booking_date, season_cfg)
                 season_mult = float(season_cfg.get("high_multiplier" if is_high else "low_multiplier", 1.0))
                 if season_mult != 1.0:
                     pct = round((season_mult - 1) * 100)

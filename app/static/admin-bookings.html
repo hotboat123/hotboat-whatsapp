@@ -214,6 +214,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .cal-day.urgency-on .cal-day-num{color:var(--gold)}
 .cal-day.urgency-off{background:rgba(112,112,160,.12);border-color:rgba(112,112,160,.3)}
 .cal-day.urgency-off .cal-day-num{color:var(--muted)}
+/* DP season day override */
+.cal-day.season-high{background:rgba(245,200,66,.18);border-color:rgba(245,200,66,.5)}
+.cal-day.season-high .cal-day-num{color:var(--gold)}
+.cal-day.season-low{background:rgba(90,160,220,.16);border-color:rgba(90,160,220,.4)}
+.cal-day.season-low .cal-day-num{color:#5aa0dc}
 /* Payment rows */
 .pago-row{display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem}
 .pago-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);
@@ -1352,6 +1357,22 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <div>
                 <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.3rem">Multiplicador temporada baja</label>
                 <input type="number" id="dp-season-low" min="0.5" max="3" step="0.01" style="width:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .5rem;font-size:.9rem;text-align:center" oninput="_dpCfg.season.low_multiplier=+this.value">
+              </div>
+            </div>
+
+            <!-- Per-day exceptions (long weekends, holidays) — override the month -->
+            <div style="border-top:1px solid var(--border);margin-top:1rem;padding-top:.8rem">
+              <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Excepciones por día (fin de semana largo, feriado, etc.) — tienen prioridad sobre el mes.</div>
+              <div style="display:flex;gap:.6rem;margin-bottom:.5rem;align-items:center">
+                <button onclick="dpSeasonCalPrev()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">‹</button>
+                <span id="dp-season-cal-title" style="font-size:.85rem;flex:1;text-align:center"></span>
+                <button onclick="dpSeasonCalNext()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.3rem .7rem;cursor:pointer">›</button>
+              </div>
+              <div class="cal-grid" id="dp-season-cal-grid" style="gap:2px"></div>
+              <div style="display:flex;gap:1rem;margin-top:.6rem;font-size:.75rem;color:var(--muted);flex-wrap:wrap">
+                <span><span style="background:rgba(245,200,66,.4);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>🔥 Forzado alta</span>
+                <span><span style="background:rgba(90,160,220,.4);display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3rem"></span>❄️ Forzado baja</span>
+                <span>Sin marcar = según el mes</span>
               </div>
             </div>
           </div>
@@ -6253,6 +6274,53 @@ function toggleSeasonMonth(m){
   renderDpConfig();
 }
 
+// ── Season day overrides (excepciones puntuales: fines de semana largos, feriados) ──
+let dpSeasonCalYear = new Date().getFullYear(), dpSeasonCalMonth = new Date().getMonth();
+
+function dpSeasonCalPrev(){ dpSeasonCalMonth--; if(dpSeasonCalMonth<0){dpSeasonCalMonth=11;dpSeasonCalYear--;} renderDpSeasonCal(); }
+function dpSeasonCalNext(){ dpSeasonCalMonth++; if(dpSeasonCalMonth>11){dpSeasonCalMonth=0;dpSeasonCalYear++;} renderDpSeasonCal(); }
+
+function renderDpSeasonCal(){
+  const grid = document.getElementById('dp-season-cal-grid');
+  const title = document.getElementById('dp-season-cal-title');
+  if(!grid || !_dpCfg || !_dpCfg.season) return;
+  if(!_dpCfg.season.day_overrides) _dpCfg.season.day_overrides = {};
+  title.textContent = `${MONTHS[dpSeasonCalMonth]} ${dpSeasonCalYear}`;
+  const firstDayJs = new Date(dpSeasonCalYear, dpSeasonCalMonth, 1).getDay();
+  const leadDays = calLeadDaysMonFirst(firstDayJs);
+  const daysInMonth = new Date(dpSeasonCalYear, dpSeasonCalMonth+1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const highMonths = new Set((_dpCfg.season.high_months||[]).map(Number));
+  const monthIsHigh = highMonths.has(dpSeasonCalMonth+1);
+  let html = DAYS_SHORT.map(d=>`<div class="cal-hdr">${d}</div>`).join('');
+  for(let i=0;i<leadDays;i++) html += `<div class="cal-day empty"></div>`;
+  for(let d=1; d<=daysInMonth; d++){
+    const dateStr = `${dpSeasonCalYear}-${String(dpSeasonCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const override = _dpCfg.season.day_overrides[dateStr];
+    const isToday = new Date(dpSeasonCalYear,dpSeasonCalMonth,d).getTime()===today.getTime();
+    const cls = `cal-day${override==='high'?' season-high':override==='low'?' season-low':''}${isToday?' today':''}`;
+    const icon = override==='high'?'🔥':override==='low'?'❄️':'';
+    const tip = override
+      ? `Forzado ${override==='high'?'alta':'baja'} — click para ${override==='high'?'cambiar a baja':'quitar'}`
+      : `Temporada ${monthIsHigh?'alta':'baja'} (según el mes) — click para forzar`;
+    html += `<div class="${cls}" onclick="cycleDpSeasonDay('${dateStr}')" title="${tip}">
+      <div class="cal-day-num">${d}</div>
+      ${icon?`<div style="font-size:.6rem">${icon}</div>`:''}
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function cycleDpSeasonDay(dateStr){
+  if(!_dpCfg.season.day_overrides) _dpCfg.season.day_overrides = {};
+  const cur = _dpCfg.season.day_overrides[dateStr];
+  if(cur === undefined){ _dpCfg.season.day_overrides[dateStr] = 'high'; }
+  else if(cur === 'high'){ _dpCfg.season.day_overrides[dateStr] = 'low'; }
+  else { delete _dpCfg.season.day_overrides[dateStr]; }
+  renderDpSeasonCal();
+  previewDpMessage();
+}
+
 // ── Operating Hours ───────────────────────────────────────────────────────────
 let _opHours = ['10:00','18:00','21:00'];
 
@@ -6902,7 +6970,8 @@ function renderDpConfig(){
   // Season grid (temporada alta / baja por mes)
   const seasonGrid = document.getElementById('dp-season-grid');
   if(seasonGrid){
-    if(!_dpCfg.season) _dpCfg.season = {high_months:[12,1,2,3], high_multiplier:1.15, low_multiplier:0.92};
+    if(!_dpCfg.season) _dpCfg.season = {high_months:[12,1,2,3], high_multiplier:1.15, low_multiplier:0.92, day_overrides:{}};
+    if(!_dpCfg.season.day_overrides) _dpCfg.season.day_overrides = {};
     const highMonths = new Set((_dpCfg.season.high_months||[]).map(Number));
     seasonGrid.innerHTML = MONTH_NAMES_SHORT.map((name,idx)=>{
       const m = idx+1;
@@ -6914,6 +6983,7 @@ function renderDpConfig(){
     const lowEl = document.getElementById('dp-season-low');
     if(highEl) highEl.value = _dpCfg.season.high_multiplier ?? 1.15;
     if(lowEl) lowEl.value = _dpCfg.season.low_multiplier ?? 0.92;
+    renderDpSeasonCal();
   }
 
   // Min/max
