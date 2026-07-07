@@ -295,23 +295,31 @@ async def get_availability(days: int = Query(150, ge=1, le=150)):
                         pass
 
                 if day_override and cfg.get("seed_times"):
+                    seed_set = set(cfg["seed_times"])
                     ghost_times_set = set(cfg.get("ghost_times") or [])
 
                     if not booked:
-                        # No bookings → grey ONLY the slots this profile actually
-                        # configured (seed±gap computation + explicit ghost_times).
-                        # Any other real slot that isn't part of that configured
-                        # set stays bookable — don't blanket-grey everything that
-                        # simply isn't an exact seed.
-                        grey = computed_fakes & avail_set  # seed±gap + ghost_times
+                        # No bookings → only the exact seed times are bookable;
+                        # every other real slot that day is fantasma. The
+                        # safety-net below (never hide 100% with no real
+                        # bookings) is what catches a misconfigured profile
+                        # whose seeds don't match this day's actual schedule —
+                        # this branch itself intentionally greys "everything
+                        # that isn't a seed", that's the point of seed_times.
+                        grey = {t for t in times if t not in seed_set}
+                        grey |= computed_fakes  # seed±gap + ghost_times
                         fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
                     else:
-                        # With a booking at X: grey = the booking itself + the
-                        # profile's configured ghost slots + X±gap expansion.
-                        grey = set(booked_set)
-                        grey |= (computed_fakes & avail_set)
+                        # With a booking at X → green = (available non-booked seeds)
+                        # + (X±gap slots that are available). Everything else is grey.
+                        green_from_seeds = {
+                            t for t in times if t in seed_set and t not in booked_set
+                        }
+                        green_from_expansion = booked_expansion & avail_set
+                        green_set = green_from_seeds | green_from_expansion
+                        grey = {t for t in times if t not in green_set}
                         grey |= ghost_times_set
-                        grey |= (booked_expansion & avail_set)
+                        grey |= booked_set
                         fake_booked_by_day[dk] = sorted(grey, key=_slot_to_min)
 
                 elif not booked:
