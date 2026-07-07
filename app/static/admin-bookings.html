@@ -1418,12 +1418,23 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <button onclick="saveDpConfig()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.5rem 1.2rem;font-size:.85rem;font-weight:700;cursor:pointer">Guardar precios dinamicos</button>
           </div>
 
-          <!-- Live preview of the customer-facing price message -->
+          <!-- Editable customer-facing price message -->
           <div style="border-top:1px solid var(--border);padding-top:1rem">
             <label style="font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.6rem">
-              💬 Vista previa del mensaje para clientes
+              💬 Mensaje de precios para clientes
             </label>
-            <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Se recalcula automaticamente segun los multiplicadores de arriba (y si estan activos o no).</div>
+            <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">
+              Editalo como quieras. Placeholders disponibles: <code>{PRECIO_MIN}</code>, <code>{PRECIO_MAX}</code>,
+              <code>{TOTAL_MIN}</code>, <code>{TOTAL_MAX}</code> (se calculan solos segun los multiplicadores de arriba)
+              y <code>{LINK}</code> (se reemplaza por el link de cotizacion al enviar).
+            </div>
+            <textarea id="dp-msg-template" rows="9" oninput="_dpCfg.message_template=this.value"
+              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.8rem 1rem;font-size:.85rem;line-height:1.6;font-family:inherit;resize:vertical"></textarea>
+            <div style="margin-top:.5rem">
+              <button type="button" onclick="restoreDpMessageDefault()" style="background:none;border:1px dashed var(--border);color:var(--muted);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer">↺ Restaurar mensaje por defecto</button>
+            </div>
+
+            <div style="font-size:.75rem;color:var(--muted);margin:.9rem 0 .5rem">Vista previa (con los valores ya calculados):</div>
             <pre id="dp-msg-preview" style="white-space:pre-wrap;font-family:inherit;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;font-size:.85rem;line-height:1.6;color:var(--text);margin:0"></pre>
           </div>
         </div>
@@ -6992,6 +7003,29 @@ function renderDpConfig(){
   if(minEl){ minEl.value=_dpCfg.min_mult||0.80; document.getElementById('dp-min-pct').textContent=pctLabelText(_dpCfg.min_mult||0.80); }
   if(maxEl){ maxEl.value=_dpCfg.max_mult||1.60; document.getElementById('dp-max-pct').textContent=pctLabelText(_dpCfg.max_mult||1.60); }
 
+  // Editable message template
+  if(!_dpCfg.message_template) _dpCfg.message_template = DP_MESSAGE_TEMPLATE_DEFAULT;
+  const msgEl = document.getElementById('dp-msg-template');
+  if(msgEl && document.activeElement !== msgEl) msgEl.value = _dpCfg.message_template;
+
+  previewDpMessage();
+}
+
+const DP_MESSAGE_TEMPLATE_DEFAULT =
+`El valor cambia según la fecha, el horario, la cantidad de personas y la anticipación de la reserva.
+
+🎁 Mientras antes reserves, mejor precio puedes obtener.
+
+💰 Valores desde {PRECIO_MIN} por persona.
+
+En menos de 20 segundos puedes ver el precio exacto para tu grupo y fecha:
+
+👉 {LINK}`;
+
+function restoreDpMessageDefault(){
+  _dpCfg.message_template = DP_MESSAGE_TEMPLATE_DEFAULT;
+  const msgEl = document.getElementById('dp-msg-template');
+  if(msgEl) msgEl.value = DP_MESSAGE_TEMPLATE_DEFAULT;
   previewDpMessage();
 }
 

@@ -473,8 +473,25 @@ def get_urgency_fake_slots(config: Optional[dict] = None) -> list:
 
 # ── Dynamic Pricing ───────────────────────────────────────────────────────────
 
+# Editable in the admin panel. Placeholders {PRECIO_MIN}/{PRECIO_MAX}/
+# {TOTAL_MIN}/{TOTAL_MAX} are resolved live from the current config;
+# {LINK} is left untouched — it's filled in later when the message is sent.
+DP_MESSAGE_TEMPLATE_DEFAULT = (
+    "El valor cambia según la fecha, el horario, la cantidad de personas y "
+    "la anticipación de la reserva.\n"
+    "\n"
+    "🎁 Mientras antes reserves, mejor precio puedes obtener.\n"
+    "\n"
+    "💰 Valores desde {PRECIO_MIN} por persona.\n"
+    "\n"
+    "En menos de 20 segundos puedes ver el precio exacto para tu grupo y fecha:\n"
+    "\n"
+    "👉 {LINK}"
+)
+
 DP_CONFIG_DEFAULT = {
     "enabled": False,
+    "message_template": DP_MESSAGE_TEMPLATE_DEFAULT,
     # Each entry: {min_bookings, multiplier}  (sorted descending to find first match)
     "fill_rate": [
         {"min_bookings": 2, "multiplier": 1.18, "label": "2+ reservas"},
@@ -738,18 +755,14 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
     def _clp(n: int) -> str:
         return f"${n:,.0f}".replace(",", ".")
 
-    lines = [
-        "El valor cambia según la fecha, el horario, la cantidad de personas y "
-        "la anticipación de la reserva.",
-        "",
-        "🎁 Mientras antes reserves, mejor precio puedes obtener.",
-        "",
-        f"💰 Valores desde {_clp(pp_min)} por persona.",
-        "",
-        "En menos de 20 segundos puedes ver el precio exacto para tu grupo y fecha:",
-        "",
-        "👉 {LINK}",
-    ]
+    template = cfg.get("message_template") or DP_MESSAGE_TEMPLATE_DEFAULT
+    message = (
+        template
+        .replace("{PRECIO_MIN}", _clp(pp_min))
+        .replace("{PRECIO_MAX}", _clp(pp_max))
+        .replace("{TOTAL_MIN}", _clp(total_min))
+        .replace("{TOTAL_MAX}", _clp(total_max))
+    )
 
     return {
         "enabled": bool(cfg.get("enabled")),
@@ -759,7 +772,8 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
         "price_per_person_max": pp_max,
         "price_total_min": total_min,
         "price_total_max": total_max,
-        "message": "\n".join(lines),
+        "message_template": template,
+        "message": message,
     }
 
 
