@@ -531,17 +531,10 @@ async def create_booking_endpoint(request: CreateBookingRequest):
                                 "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
                                 (str(woo_order_id), booking_ref),
                             )
-                            if cur.rowcount == 0:
-                                cur.execute(
-                                    "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
-                                    (str(woo_order_id), booking_ref),
-                                )
                             conn.commit()
                 except Exception as ue:
                     logger.warning(f"Could not save woo_order_id for {booking_ref}: {ue}")
 
-        # NOTE: we do NOT sync to all_appointments here.
-        # _sync_hotboat_to_all is called by the WooCommerce webhook once payment is confirmed.
         return {
             "booking_ref": booking_ref,
             "status": result["status"],
@@ -768,47 +761,6 @@ async def arma_pack_pay(request: ArmaPackPayRequest):
         "deposit_amount": request.deposit_amount,
         "mp_error": mp_error,
     }
-
-
-def _sync_hotboat_to_all(booking_ref: str, data: dict, status: str):
-    """Upsert a hotboat web booking into all_appointments."""
-    from app.db.connection import get_connection
-    from psycopg.types.json import Jsonb as PgJson
-    import re
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id FROM all_appointments WHERE source='hotboat_web' AND source_id=%s", (booking_ref,))
-            existing = cur.fetchone()
-            if existing:
-                # Update status (and total in case it changed) instead of silently returning
-                cur.execute(
-                    "UPDATE all_appointments SET status=%s, updated_at=NOW() WHERE id=%s",
-                    (status, existing[0])
-                )
-                conn.commit()
-                return
-            fecha = data.get("booking_date")
-            hora = data.get("booking_time")
-            num_p = data.get("num_people")
-            cur.execute("""
-                INSERT INTO all_appointments
-                (source, source_id, appointment_id, fecha, hora,
-                 nombre_cliente, email, telefono,
-                 servicio, num_personas,
-                 ingreso_reserva, ingreso_extras, ingreso_total,
-                 has_flex, flex_amount,
-                 costo_operativo_fijo, costo_operativo_total,
-                 status, extras_json, observaciones, created_at, updated_at)
-                VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18000,18000,%s,%s,%s,NOW(),NOW())
-            """, (
-                booking_ref, booking_ref, fecha, hora,
-                data.get("customer_name"), data.get("customer_email"), data.get("customer_phone"),
-                f"HotBoat Web ({num_p}p)", str(num_p),
-                float(data.get("subtotal", 0)), float(data.get("extras_total", 0)), float(data.get("total_price", 0)),
-                bool(data.get("has_flex", False)), float(data.get("flex_amount", 0)),
-                status, PgJson(data.get("extras") or []), data.get("notes")
-            ))
-            conn.commit()
 
 
 def _slug_for_extra_catalog_item(name: str, idx: int) -> str:
@@ -1547,12 +1499,6 @@ async def create_accommodation_booking(request: AlojBookingRequest):
                         (hotboat_ref,),
                     )
                     row = cur.fetchone()
-                    if not row:
-                        cur.execute(
-                            "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
-                            (hotboat_ref,),
-                        )
-                        row = cur.fetchone()
                     if row:
                         hotboat_deposit = round(float(row[0]) * 0.5)
         except Exception as le:
@@ -1704,11 +1650,6 @@ async def create_accommodation_booking(request: AlojBookingRequest):
                                 "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
                                 (str(woo_order_id), hotboat_ref),
                             )
-                            if cur.rowcount == 0:
-                                cur.execute(
-                                    "UPDATE hotboat_appointments SET payment_order_id=%s WHERE booking_ref=%s",
-                                    (str(woo_order_id), hotboat_ref),
-                                )
                         conn.commit()
         except Exception as pe:
             import traceback
@@ -1944,16 +1885,6 @@ async def create_experience_booking(request: ExperienceBookingRequest):
                     hotboat_deposit = round(float(hb_total or 0) * 0.5)
                     hb_hhmm = str(hb_hora or "")[:5]
                     hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
-                else:
-                    # Combined flow can exist before all_appointments row is synced.
-                    cur.execute(
-                        "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
-                        (hotboat_ref,),
-                    )
-                    row2 = cur.fetchone()
-                    if row2:
-                        hotboat_deposit = round(float(row2[0] or 0) * 0.5)
-                        hotboat_label = "HotBoat · deposito 50%"
 
     if hotboat_ref:
         try:
@@ -2255,15 +2186,6 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
                     hotboat_deposit = round(float(hb_total or 0) * 0.5)
                     hb_hhmm = str(hb_hora or "")[:5]
                     hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
-                else:
-                    cur.execute(
-                        "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
-                        (hotboat_ref,),
-                    )
-                    row2 = cur.fetchone()
-                    if row2:
-                        hotboat_deposit = round(float(row2[0] or 0) * 0.5)
-                        hotboat_label = "HotBoat · deposito 50%"
 
     if hotboat_ref and hotboat_deposit:
         fee_lines.append({"name": hotboat_label or "HotBoat · deposito 50%", "total": str(hotboat_deposit)})
@@ -2395,16 +2317,6 @@ async def create_pack_booking(request: PackBookingRequest):
                     hotboat_deposit = round(float(hb_total or 0) * 0.5)
                     hb_hhmm = str(hb_hora or "")[:5]
                     hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
-                else:
-                    # Combined flow can exist before all_appointments row is synced.
-                    cur.execute(
-                        "SELECT total_price FROM hotboat_appointments WHERE booking_ref=%s",
-                        (hotboat_ref,),
-                    )
-                    row2 = cur.fetchone()
-                    if row2:
-                        hotboat_deposit = round(float(row2[0] or 0) * 0.5)
-                        hotboat_label = "HotBoat · deposito 50%"
 
     if hotboat_ref:
         try:

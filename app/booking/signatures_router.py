@@ -32,7 +32,7 @@ def _resolve_booking(booking_ref: str) -> Optional[dict]:
     """
     Resolve any booking ref format to a dict with booking info.
     Supports:
-      - 'HB-YYYY-XXXXX'  → hotboat_appointments.booking_ref
+      - 'HB-YYYY-XXXXX'  → all_appointments (source='hotboat_web', source_id)
       - 'AA-{int}'       → all_appointments.id
     """
     from app.db.connection import get_connection
@@ -64,7 +64,7 @@ def _resolve_booking(booking_ref: str) -> Optional[dict]:
                     "booking_ref": booking_ref,
                 }
 
-    # HB-xxxx format → hotboat_appointments
+    # HB-xxxx format → all_appointments (source='hotboat_web')
     from app.booking.db import get_booking_by_ref
     b = get_booking_by_ref(booking_ref)
     if b:

@@ -1167,7 +1167,7 @@ def send_email_for_trigger_with_data(trigger: str, to_addr: str,
         bt = bt[:5]
     # Derive booking_ref (for display) and firma_ref (for the signing URL).
     # firma_ref must be resolvable by the /firma/ system:
-    #   HB-xxx → hotboat_appointments
+    #   HB-xxx → all_appointments (source='hotboat_web')
     #   AA-{int} → all_appointments
     # MANUAL-xxx / source_id-only refs use AA-{id} for the signing link.
     apt_id = data.get("id") or data.get("appointment_id_int")

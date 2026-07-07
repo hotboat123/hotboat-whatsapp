@@ -1,7 +1,8 @@
 """Database operations for bookings.
 
-Primary storage is ``all_appointments`` (source ``hotboat_web`` + ``source_id`` = HB ref).
-Legacy reads from ``hotboat_appointments`` remain only for old rows not yet migrated.
+Single source of truth is ``all_appointments`` (source ``hotboat_web`` +
+``source_id`` = HB ref). The legacy ``hotboat_appointments`` table has been
+dropped.
 """
 import logging, json, random, string
 from datetime import datetime, date as date_type, time as time_type
@@ -265,18 +266,9 @@ def update_booking_payment(booking_ref: str, payment_id: str, payment_order_id: 
                 """,
                 (payment_id, payment_order_id, payment_status, new_status, payment_status, br),
             )
-            if cur.rowcount > 0:
-                conn.commit()
-                return True
-            cur.execute(
-                "UPDATE hotboat_appointments"
-                " SET payment_id=%s, payment_order_id=%s, payment_status=%s, status=%s,"
-                "     paid_at=CASE WHEN %s='approved' THEN NOW() ELSE paid_at END"
-                " WHERE booking_ref=%s",
-                (payment_id, payment_order_id, payment_status, new_status, payment_status, br),
-            )
+            updated = cur.rowcount > 0
             conn.commit()
-            return cur.rowcount > 0
+            return updated
 
 
 def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
@@ -347,50 +339,7 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                         out[k] = str(out[k])
                 return out
 
-            cur.execute(
-                "SELECT id,booking_ref,customer_name,customer_phone,customer_email,"
-                "       booking_date,booking_time,num_people,price_per_person,"
-                "       subtotal,extras_total,flex_amount,total_price,"
-                "       extras,has_flex,status,payment_id,payment_status,"
-                "       paid_at,source,notes,created_at,confirmation_email_sent_at,"
-                "       COALESCE(customer_language,'es')"
-                " FROM hotboat_appointments WHERE booking_ref=%s",
-                (br,),
-            )
-            row = cur.fetchone()
-            if not row:
-                return None
-            cols = [
-                "id",
-                "booking_ref",
-                "customer_name",
-                "customer_phone",
-                "customer_email",
-                "booking_date",
-                "booking_time",
-                "num_people",
-                "price_per_person",
-                "subtotal",
-                "extras_total",
-                "flex_amount",
-                "total_price",
-                "extras",
-                "has_flex",
-                "status",
-                "payment_id",
-                "payment_status",
-                "paid_at",
-                "source",
-                "notes",
-                "created_at",
-                "confirmation_email_sent_at",
-                "customer_language",
-            ]
-            result = dict(zip(cols, row))
-            for k in ("booking_date", "booking_time", "paid_at", "created_at", "confirmation_email_sent_at"):
-                if result.get(k):
-                    result[k] = str(result[k])
-            return result
+            return None
 
 
 def get_bookings_pending_payment_email(delay_minutes: int = 5) -> list:
@@ -405,10 +354,6 @@ def get_bookings_pending_payment_email(delay_minutes: int = 5) -> list:
         with conn.cursor() as cur:
             cur.execute("""
                 ALTER TABLE all_appointments
-                    ADD COLUMN IF NOT EXISTS pending_email_sent_at TIMESTAMPTZ
-            """)
-            cur.execute("""
-                ALTER TABLE hotboat_appointments
                     ADD COLUMN IF NOT EXISTS pending_email_sent_at TIMESTAMPTZ
             """)
             conn.commit()
@@ -451,41 +396,6 @@ def get_bookings_pending_payment_email(delay_minutes: int = 5) -> list:
                 except (TypeError, ValueError):
                     pass
                 out.append(d)
-            cur.execute(
-                "SELECT id, booking_ref, customer_name, customer_phone, customer_email, "
-                "       booking_date, booking_time, num_people, subtotal, extras_total, "
-                "       total_price, extras "
-                "FROM hotboat_appointments "
-                "WHERE status = 'pending_payment' "
-                "  AND customer_email IS NOT NULL AND customer_email <> '' "
-                "  AND pending_email_sent_at IS NULL "
-                "  AND created_at <= %s "
-                "  AND NOT EXISTS ("
-                "    SELECT 1 FROM all_appointments aa "
-                "    WHERE aa.source='hotboat_web' AND TRIM(aa.source_id)=TRIM(hotboat_appointments.booking_ref)"
-                "  )",
-                (cutoff,),
-            )
-            cols2 = [
-                "id",
-                "booking_ref",
-                "customer_name",
-                "customer_phone",
-                "customer_email",
-                "booking_date",
-                "booking_time",
-                "num_people",
-                "subtotal",
-                "extras_total",
-                "total_price",
-                "extras",
-            ]
-            for row in cur.fetchall():
-                d = dict(zip(cols2, row))
-                for k in ("booking_date", "booking_time"):
-                    if d.get(k):
-                        d[k] = str(d[k])
-                out.append(d)
             return out
 
 
@@ -499,16 +409,9 @@ def mark_pending_email_sent(booking_ref: str) -> bool:
                 "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) AND pending_email_sent_at IS NULL",
                 (br,),
             )
-            if cur.rowcount > 0:
-                conn.commit()
-                return True
-            cur.execute(
-                "UPDATE hotboat_appointments SET pending_email_sent_at=NOW(), updated_at=NOW() "
-                "WHERE booking_ref=%s AND pending_email_sent_at IS NULL",
-                (br,),
-            )
+            updated = cur.rowcount > 0
             conn.commit()
-            return cur.rowcount > 0
+            return updated
 
 
 def mark_confirmation_email_sent(booking_ref: str) -> bool:
@@ -521,16 +424,9 @@ def mark_confirmation_email_sent(booking_ref: str) -> bool:
                 "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) AND confirmation_email_sent_at IS NULL",
                 (br,),
             )
-            if cur.rowcount > 0:
-                conn.commit()
-                return True
-            cur.execute(
-                "UPDATE hotboat_appointments SET confirmation_email_sent_at=NOW(), updated_at=NOW() "
-                "WHERE booking_ref=%s AND confirmation_email_sent_at IS NULL",
-                (br,),
-            )
+            updated = cur.rowcount > 0
             conn.commit()
-            return cur.rowcount > 0
+            return updated
 
 
 def get_bookings_for_followup(hours_after: int) -> list:
@@ -598,7 +494,7 @@ def get_bookings_for_followup(hours_after: int) -> list:
 
 def mark_followup_email_sent(booking_ref: str) -> bool:
     """Set followup_email_sent_at once (idempotent).
-    Handles both hotboat_appointments (real ref) and all_appointments (MANUAL-<id> / AA-<id>).
+    Handles both real HB refs and all_appointments (MANUAL-<id> / AA-<id>).
     """
     br = (booking_ref or "").strip()
     with get_connection() as conn:
@@ -619,14 +515,9 @@ def mark_followup_email_sent(booking_ref: str) -> bool:
                     "AND followup_email_sent_at IS NULL",
                     (br,),
                 )
-                n_aa = cur.rowcount
-                cur.execute(
-                    "UPDATE hotboat_appointments SET followup_email_sent_at=NOW(), updated_at=NOW() "
-                    "WHERE booking_ref=%s AND followup_email_sent_at IS NULL",
-                    (br,),
-                )
+                updated = cur.rowcount > 0
                 conn.commit()
-                return (n_aa + cur.rowcount) > 0
+                return updated
 
 
 def mark_followup_sent_after_manual_send(rid: int) -> None:
@@ -726,14 +617,9 @@ def mark_pre_booking_notif_sent(booking_ref: str) -> bool:
                 "AND pre_booking_notif_sent_at IS NULL",
                 (br,),
             )
-            if cur.rowcount == 0:
-                cur.execute(
-                    "UPDATE hotboat_appointments SET pre_booking_notif_sent_at=NOW() "
-                    "WHERE booking_ref=%s AND pre_booking_notif_sent_at IS NULL",
-                    (br,),
-                )
+            updated = cur.rowcount > 0
             conn.commit()
-            return cur.rowcount > 0
+            return updated
 
 
 def count_previous_bookings(customer_email: str = "", customer_phone: str = "",
@@ -741,8 +627,6 @@ def count_previous_bookings(customer_email: str = "", customer_phone: str = "",
     """
     Return the number of *previous confirmed* bookings for this customer
     (matched by email OR phone, excluding the current booking_ref).
-    Primary source is ``all_appointments``; legacy ``hotboat_appointments`` rows
-    without a synced AA row are still counted once.
     """
     if not customer_email and not customer_phone:
         return 0
@@ -782,37 +666,7 @@ def count_previous_bookings(customer_email: str = "", customer_phone: str = "",
                 tuple(aa_params),
             )
             n_aa = int(cur.fetchone()[0] or 0)
-
-            ha_parts = []
-            ha_params: List[Any] = []
-            if em:
-                ha_parts.append("LOWER(TRIM(customer_email)) = %s")
-                ha_params.append(em)
-            if ph:
-                ha_parts.append("customer_phone = %s")
-                ha_params.append(ph)
-            ha_match = " OR ".join(ha_parts)
-            ha_excl = " AND booking_ref <> %s" if er else ""
-            if er:
-                ha_params.append(er)
-
-            cur.execute(
-                f"""
-                SELECT COUNT(*) FROM hotboat_appointments ha
-                WHERE ha.status = 'confirmed'
-                  AND ({ha_match})
-                  {ha_excl}
-                  AND NOT EXISTS (
-                    SELECT 1 FROM all_appointments aa
-                    WHERE aa.source = 'hotboat_web'
-                      AND TRIM(aa.source_id) = TRIM(ha.booking_ref)
-                  )
-                """,
-                tuple(ha_params),
-            )
-            n_hb = int(cur.fetchone()[0] or 0)
-
-            return n_aa + n_hb
+            return n_aa
 
 
 def get_relevant_booking_by_phone(phone: str) -> Optional[dict]:
@@ -912,42 +766,10 @@ def get_customers_for_birthday_email() -> list:
                           SELECT LOWER(TRIM(customer_email)) FROM birthday_emails_sent
                           WHERE sent_year = %s
                       )
-
-                    UNION ALL
-
-                    SELECT ha.customer_email,
-                           ha.customer_name,
-                           ha.customer_phone,
-                           ha.booking_ref,
-                           ha.booking_date,
-                           ha.booking_time,
-                           ha.num_people,
-                           ha.total_price,
-                           ha.subtotal,
-                           ha.extras_total,
-                           COALESCE(ha.customer_language, 'es'),
-                           ha.created_at
-                    FROM hotboat_appointments ha
-                    WHERE ha.customer_birthday IS NOT NULL
-                      AND ha.customer_email IS NOT NULL AND ha.customer_email <> ''
-                      AND EXTRACT(MONTH FROM ha.customer_birthday) = %s
-                      AND EXTRACT(DAY FROM ha.customer_birthday) = %s
-                      AND NOT EXISTS (
-                          SELECT 1 FROM all_appointments aa
-                          WHERE aa.source = 'hotboat_web'
-                            AND TRIM(aa.source_id) = TRIM(ha.booking_ref)
-                      )
-                      AND LOWER(TRIM(ha.customer_email)) NOT IN (
-                          SELECT LOWER(TRIM(customer_email)) FROM birthday_emails_sent
-                          WHERE sent_year = %s
-                      )
                 ) q
                 ORDER BY LOWER(TRIM(q.customer_email)), q.created_at DESC
                 """,
                 (
-                    today.month,
-                    today.day,
-                    today.year,
                     today.month,
                     today.day,
                     today.year,
@@ -996,14 +818,6 @@ def ensure_db_columns() -> None:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                -- 019: customer language on web bookings
-                ALTER TABLE hotboat_appointments
-                    ADD COLUMN IF NOT EXISTS customer_language VARCHAR(5) DEFAULT 'es';
-
-                -- 020: pre-booking notification tracker (web bookings)
-                ALTER TABLE hotboat_appointments
-                    ADD COLUMN IF NOT EXISTS pre_booking_notif_sent_at TIMESTAMPTZ;
-
                 -- 020b: pre-booking notification tracker (manual/all_appointments)
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS pre_booking_notif_sent_at TIMESTAMPTZ;
@@ -1048,10 +862,6 @@ def ensure_db_columns() -> None:
                 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS valid_from DATE DEFAULT NULL;
                 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS booking_date_from DATE DEFAULT NULL;
                 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS booking_date_to DATE DEFAULT NULL;
-                ALTER TABLE hotboat_appointments
-                    ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
-                ALTER TABLE hotboat_appointments
-                    ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0;
 
                 -- 027: stock management tables
                 CREATE TABLE IF NOT EXISTS stock_products (
@@ -1078,8 +888,6 @@ def ensure_db_columns() -> None:
                 );
                 CREATE INDEX IF NOT EXISTS idx_movements_product ON stock_movements(product_id);
                 CREATE INDEX IF NOT EXISTS idx_movements_booking  ON stock_movements(booking_ref);
-                ALTER TABLE hotboat_appointments
-                    ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
 
@@ -1361,28 +1169,6 @@ def get_bookings_with_signatures_for_date(target_date) -> list:
                 JOIN hotboat_signatures hs ON hs.booking_ref = TRIM(aa.source_id)
                 WHERE aa.source = 'hotboat_web'
                   AND aa.fecha = %s
-                """,
-                (target_date,),
-            )
-            for row in cur.fetchall():
-                d = dict(zip(cols, row))
-                for k in ("booking_date", "booking_time"):
-                    if d.get(k):
-                        d[k] = str(d[k])
-                _append(d)
-
-            cur.execute(
-                """
-                SELECT DISTINCT ha.booking_ref, ha.customer_name, ha.customer_email,
-                       ha.customer_phone, ha.booking_date, ha.booking_time, ha.num_people
-                FROM hotboat_appointments ha
-                JOIN hotboat_signatures hs ON hs.booking_ref = ha.booking_ref
-                WHERE ha.booking_date = %s
-                  AND NOT EXISTS (
-                      SELECT 1 FROM all_appointments aa
-                      WHERE aa.source = 'hotboat_web'
-                        AND TRIM(aa.source_id) = TRIM(ha.booking_ref)
-                  )
                 """,
                 (target_date,),
             )

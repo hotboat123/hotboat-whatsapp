@@ -561,36 +561,6 @@ async def delete_reserva(rid: int, x_admin_key: str = Header("")):
         logger.error(f"Error deleting reserva {rid}: {e}")
 
 
-@admin_router.post("/api/admin/hotboat-cancel-orphan")
-async def cancel_orphan_hotboat(
-    x_admin_key: str = Header(""),
-    fecha: str = Query(...),
-    hora: str = Query(...),
-):
-    """Cancel hotboat_appointments entries at a given date/time that have no matching all_appointments row."""
-    _check_auth(x_admin_key)
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """UPDATE hotboat_appointments SET status='cancelled', updated_at=NOW()
-                       WHERE booking_date=%s::date AND booking_time=%s::time
-                         AND status NOT IN ('cancelled','rejected','cancelada')
-                         AND NOT EXISTS (
-                             SELECT 1 FROM all_appointments
-                             WHERE source='hotboat_web' AND source_id=hotboat_appointments.booking_ref
-                         )
-                       RETURNING booking_ref, customer_name, status""",
-                    (fecha, hora)
-                )
-                rows = cur.fetchall()
-                conn.commit()
-        return {"ok": True, "cancelled": [{"ref": r[0], "customer": r[1], "new_status": r[2]} for r in rows]}
-    except Exception as e:
-        logger.error(f"cancel_orphan_hotboat error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @admin_router.post("/api/admin/fix-blocked-slot")
 async def fix_blocked_slot(
     x_admin_key: str = Header(""),
@@ -1369,41 +1339,6 @@ async def post_email_workflow_test(trigger: str, body: EmailWorkflowTestBody,
     return {"ok": True, **result}
 
 
-@admin_router.post("/api/admin/resend-confirmation/{booking_ref}")
-async def resend_real_confirmation(booking_ref: str, x_admin_key: str = Header("")):
-    """Resend the real booking confirmation email for an existing booking_ref.
-    Clears confirmation_email_sent_at so the idempotency guard doesn't block it."""
-    _check_auth(x_admin_key)
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE hotboat_appointments SET confirmation_email_sent_at=NULL WHERE booking_ref=%s"
-                    " RETURNING booking_ref, customer_name, customer_email, status",
-                    (booking_ref,)
-                )
-                row = cur.fetchone()
-                conn.commit()
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Booking {booking_ref} not found")
-        _, cname, cemail, cstatus = row
-        from app.booking.booking_email import try_send_booking_confirmation_after_payment
-        result = try_send_booking_confirmation_after_payment(booking_ref)
-        return {
-            "ok": True,
-            "booking_ref": booking_ref,
-            "customer": cname,
-            "email": cemail,
-            "booking_status": cstatus,
-            "email_result": result,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"resend_confirmation {booking_ref}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @admin_router.post("/api/admin/reservas/{rid}/send-confirmation")
 async def send_confirmation_for_reserva(rid: int, x_admin_key: str = Header("")):
     """Send (or resend) the booking_confirmed email for any reservation, regardless of source."""
@@ -1571,8 +1506,8 @@ async def get_email_booking_legacy(x_admin_key: str = Header("")):
 
 
 # ── Incremental sync ──────────────────────────────────────────────────────────
-# Syncs reservas_con_extras → all_appointments (full upsert)
-# Then pulls legacy hotboat_appointments rows into all_appointments (Booknetic is ingested elsewhere).
+# Syncs reservas_con_extras → all_appointments (full upsert; Booknetic/hotboat_web
+# rows are ingested elsewhere).
 
 @admin_router.post("/api/admin/sync")
 async def sync_tables(x_admin_key: str = Header("")):
@@ -1721,42 +1656,6 @@ async def sync_tables(x_admin_key: str = Header("")):
                       )
                 """)
                 dedup_deleted += cur.rowcount
-
-                # Sync hotboat_appointments (no reservas MAX fecha cutoff)
-                cur.execute("""
-                    SELECT booking_ref, customer_name, customer_email, customer_phone,
-                           booking_date, booking_time, num_people,
-                           subtotal, extras_total, total_price, extras, status,
-                           payment_id, payment_status, notes, created_at
-                    FROM hotboat_appointments
-                    WHERE booking_date IS NOT NULL
-                      AND booking_date >= (CURRENT_DATE - INTERVAL '3 years')
-                      AND booking_date <= (CURRENT_DATE + INTERVAL '3 years')
-                      AND status NOT IN ('solicitud','cancelled','cancelada','rejected','rechazada')
-                """)
-                for row in cur.fetchall():
-                    (ref, nombre, email, phone, fecha, hora, num_p,
-                     sub, ext, total, extras, status, pay_id, pay_st, notes, created) = row
-                    cur.execute(f"SELECT id, status FROM {TABLE} WHERE source='hotboat_web' AND source_id=%s", (ref,))
-                    existing = cur.fetchone()
-                    if existing:
-                        if status and status != existing[1]:
-                            cur.execute(f"UPDATE {TABLE} SET status=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
-                                        (status, pay_st, existing[0]))
-                            updated_status += 1
-                        continue
-                    cur.execute(f"""
-                        INSERT INTO {TABLE}
-                        (source, source_id, appointment_id, fecha, hora, nombre_cliente, email, telefono,
-                         servicio, num_personas, ingreso_reserva, ingreso_extras, ingreso_total,
-                         costo_operativo_fijo, costo_operativo_total,
-                         status, extras_json, observaciones, payment_id, payment_status, created_at, updated_at)
-                        VALUES ('hotboat_web',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18000,18000,%s,%s,%s,%s,%s,%s,NOW())
-                    """, (ref, ref, fecha, hora, nombre, email, normalize_phone(phone),
-                          f"HotBoat Web ({num_p}p)", str(num_p),
-                          float(sub or 0), float(ext or 0), float(total or 0),
-                          status, PgJson(extras or {}), notes, pay_id, pay_st, created))
-                    inserted_hb += 1
 
                 conn.commit()
 
@@ -2560,90 +2459,9 @@ async def woo_webhook(request: Request):
                             except Exception as em_err:
                                 logger.warning("WC webhook: confirmation email error: %s", em_err)
                         else:
-                            cur.execute(
-                                "SELECT id, customer_name, customer_phone, customer_email, "
-                                "booking_date, booking_time, num_people, subtotal, extras_total, "
-                                "total_price, has_flex, flex_amount, extras, notes "
-                                "FROM hotboat_appointments WHERE booking_ref=%s",
-                                (booking_ref_wc,),
+                            logger.warning(
+                                "WC webhook: no all_appointments row found for %s", booking_ref_wc
                             )
-                            ha_row = cur.fetchone()
-                            if ha_row:
-                                (
-                                    _ha_id,
-                                    ha_name,
-                                    ha_phone,
-                                    ha_email,
-                                    ha_date,
-                                    ha_time,
-                                    ha_people,
-                                    ha_sub,
-                                    ha_ext,
-                                    ha_total,
-                                    ha_flex,
-                                    ha_flex_amt,
-                                    ha_extras_json,
-                                    ha_notes,
-                                ) = ha_row
-                                cur.execute(
-                                    "UPDATE hotboat_appointments "
-                                    "SET status='confirmed', payment_order_id=%s, payment_status=%s, "
-                                    "paid_at=NOW(), updated_at=NOW() WHERE booking_ref=%s",
-                                    (str(wc_id), status, booking_ref_wc),
-                                )
-                                conn.commit()
-                                from app.booking.router import _sync_hotboat_to_all
-                                import json as _json
-
-                                booking_data = {
-                                    "customer_name": ha_name,
-                                    "customer_phone": ha_phone,
-                                    "customer_email": ha_email,
-                                    "booking_date": str(ha_date),
-                                    "booking_time": str(ha_time)[:5],
-                                    "num_people": ha_people,
-                                    "subtotal": float(ha_sub or 0),
-                                    "extras_total": float(ha_ext or 0),
-                                    "total_price": float(ha_total or 0),
-                                    "has_flex": ha_flex,
-                                    "flex_amount": float(ha_flex_amt or 0),
-                                    "extras": _json.loads(ha_extras_json)
-                                    if isinstance(ha_extras_json, str)
-                                    else (ha_extras_json or []),
-                                    "notes": ha_notes,
-                                }
-                                _sync_hotboat_to_all(booking_ref_wc, booking_data, "confirmed")
-                                with get_connection() as conn2:
-                                    with conn2.cursor() as cur2:
-                                        cur2.execute(
-                                            f"SELECT id, COALESCE(pagos,'[]'::jsonb), created_at::date::text FROM {TABLE} "
-                                            f"WHERE source='hotboat_web' AND source_id=%s",
-                                            (booking_ref_wc,),
-                                        )
-                                        ar2 = cur2.fetchone()
-                                        if ar2:
-                                            aid2, pr2, c2 = ar2
-                                            pg2 = _add_pago(
-                                                list(pr2) if pr2 else [],
-                                                total,
-                                                "transbank",
-                                                c2 or "",
-                                            )
-                                            cur2.execute(
-                                                f"UPDATE {TABLE} SET pagos=%s, payment_status=%s, updated_at=NOW() WHERE id=%s",
-                                                (PgJson(pg2), status, aid2),
-                                            )
-                                            conn2.commit()
-                                logger.info("WC webhook: legacy hotboat %s confirmed + synced to all_appointments", booking_ref_wc)
-                                try:
-                                    from app.booking.booking_email import (
-                                        try_send_booking_confirmation_after_payment,
-                                    )
-
-                                    em = try_send_booking_confirmation_after_payment(booking_ref_wc)
-                                    logger.info("WC webhook: confirmation email %s", em)
-                                except Exception as em_err:
-                                    logger.warning("WC webhook: confirmation email error: %s", em_err)
             except Exception as he:
                 logger.error(f"WC webhook: error confirming web booking {booking_ref_wc}: {he}")
 
@@ -2700,14 +2518,6 @@ async def woo_webhook(request: Request):
                                     " WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
                                     (str(wc_id), status, combined_hb_ref),
                                 )
-                                if cur.rowcount == 0:
-                                    cur.execute(
-                                        "UPDATE hotboat_appointments"
-                                        " SET status='confirmed', payment_order_id=%s, payment_status=%s,"
-                                        "     paid_at=NOW(), updated_at=NOW()"
-                                        " WHERE booking_ref=%s",
-                                        (str(wc_id), status, combined_hb_ref),
-                                    )
                                 conn.commit()
                                 logger.info("WC webhook: combined HotBoat booking %s confirmed", combined_hb_ref)
                             nights_ab = (ab_checkout - ab_checkin).days if ab_checkin and ab_checkout else 0
@@ -3580,10 +3390,6 @@ def _ensure_coupons_table():
                 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS valid_from DATE DEFAULT NULL;
                 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS booking_date_from DATE DEFAULT NULL;
                 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS booking_date_to DATE DEFAULT NULL;
-                ALTER TABLE hotboat_appointments
-                    ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
-                ALTER TABLE hotboat_appointments
-                    ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0;
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT NULL;
                 ALTER TABLE all_appointments

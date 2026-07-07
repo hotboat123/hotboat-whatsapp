@@ -62,8 +62,6 @@ def _ensure_tables():
                 );
                 CREATE INDEX IF NOT EXISTS idx_movements_product ON stock_movements(product_id);
                 CREATE INDEX IF NOT EXISTS idx_movements_booking  ON stock_movements(booking_ref);
-                ALTER TABLE hotboat_appointments
-                    ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
                 -- Unidades de este producto que se descuentan por cada tabla que lo
@@ -623,12 +621,6 @@ def get_movements(product_id: Optional[int] = None, limit: int = 100,
             label_map = {}  # booking_ref -> (nombre, fecha)
             if refs:
                 cur.execute(
-                    "SELECT booking_ref, customer_name, booking_date FROM hotboat_appointments WHERE booking_ref = ANY(%s)",
-                    (refs,),
-                )
-                for br, nm, dt in cur.fetchall():
-                    label_map[br] = (nm, dt)
-                cur.execute(
                     "SELECT source_id, nombre_cliente, fecha FROM all_appointments WHERE source_id = ANY(%s)",
                     (refs,),
                 )
@@ -873,17 +865,7 @@ def auto_consume_past_bookings() -> dict:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # hotboat_appointments uses different column names
-                cur.execute("""
-                    SELECT id, booking_ref, booking_date, booking_time, extras, stock_consumed_at, customer_name
-                    FROM hotboat_appointments
-                    WHERE booking_date <= %s
-                      AND status IN ('confirmed', 'CONFIRMED', 'pending', 'PENDING')
-                      AND stock_consumed_at IS NULL
-                """, (today,))
-                web_rows = cur.fetchall()
-
-                # all_appointments: synced/historical reservations
+                # all_appointments: single source of truth for all reservations
                 cur.execute("""
                     SELECT id, source_id, fecha, hora, extras_json, stock_consumed_at, nombre_cliente
                     FROM all_appointments
@@ -895,9 +877,9 @@ def auto_consume_past_bookings() -> dict:
 
             processed_refs = set()
 
-            for table_name, rows in [("hotboat_appointments", web_rows), ("all_appointments", all_rows)]:
+            for table_name, rows in [("all_appointments", all_rows)]:
                 for (row_id, source_id, fecha, hora, extras_json, _, customer_name) in rows:
-                    ref = source_id or (f"HA-{row_id}" if table_name == "hotboat_appointments" else f"AA-{row_id}")
+                    ref = source_id or f"AA-{row_id}"
                     if ref in processed_refs:
                         continue
                     processed_refs.add(ref)
@@ -1157,24 +1139,15 @@ def reconsume_booking(booking_ref: str, x_admin_key: str = Header("")):
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Resolver la reserva en ambas tablas
             found_table = found_id = customer_name = extras_json = booking_date = None
             cur.execute(
-                "SELECT id, customer_name, extras, booking_date FROM hotboat_appointments WHERE booking_ref=%s ORDER BY id LIMIT 1",
-                (ref,),
+                "SELECT id, nombre_cliente, extras_json, fecha FROM all_appointments "
+                "WHERE source_id=%s OR id::text=%s ORDER BY id LIMIT 1",
+                (ref, ref.replace("AA-", "").lstrip("0") or "0"),
             )
             r = cur.fetchone()
             if r:
-                found_table, found_id, customer_name, extras_json, booking_date = "hotboat_appointments", r[0], r[1], r[2], r[3]
-            else:
-                cur.execute(
-                    "SELECT id, nombre_cliente, extras_json, fecha FROM all_appointments "
-                    "WHERE source_id=%s OR id::text=%s ORDER BY id LIMIT 1",
-                    (ref, ref.replace("AA-", "").lstrip("0") or "0"),
-                )
-                r = cur.fetchone()
-                if r:
-                    found_table, found_id, customer_name, extras_json, booking_date = "all_appointments", r[0], r[1], r[2], r[3]
+                found_table, found_id, customer_name, extras_json, booking_date = "all_appointments", r[0], r[1], r[2], r[3]
             if not found_table:
                 raise HTTPException(404, f"Reserva {ref!r} no encontrada")
 
