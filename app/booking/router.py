@@ -373,6 +373,23 @@ async def get_availability(days: int = Query(150, ge=1, le=150)):
         except Exception as e:
             logger.warning(f"Booked-grey pass failed: {e}")
 
+        # Safety net: with zero real bookings, urgency/ghost overlays should
+        # never be able to grey out 100% of a day's slots. That's not
+        # intentional scarcity — it means the configured seed_times don't
+        # match any of the day's actual schedule, so every real slot ends up
+        # classified as a "ghost" and the customer sees a fully-booked day
+        # with nothing to click. Fall back to showing real availability.
+        for dk, greys in list(fake_booked_by_day.items()):
+            real_times = set(grouped.get(dk, []))
+            if real_times and not booked_by_day.get(dk) and set(greys) >= real_times:
+                logger.warning(
+                    "Urgency config for %s would hide all %d slot(s) with no real "
+                    "bookings — showing real availability instead. Check that the "
+                    "profile's seed_times match this day's actual schedule.",
+                    dk, len(real_times),
+                )
+                fake_booked_by_day[dk] = []
+
         result = {
             "availability": grouped,
             "operating_hours": get_operating_hours(),
