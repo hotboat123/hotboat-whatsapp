@@ -651,17 +651,91 @@ def calculate_dynamic_multiplier(
     return round(max(lo, min(hi, mult)), 4)
 
 
-def get_dynamic_multiplier_for_booking(booking_date: date, booking_time: Optional[str] = None) -> float:
+def describe_dynamic_price_factors(
+    booking_date: date,
+    bookings_on_day: int,
+    days_advance: int,
+    config: Optional[dict] = None,
+    booking_hour: Optional[int] = None,
+    include_fill_rate: bool = True,
+) -> list:
+    """Human-readable breakdown of which factors applied to a price
+    calculation and by how much — the "why did this cost what it cost"
+    explanation. Mirrors calculate_dynamic_multiplier()'s own rule-matching
+    exactly, so the % shown always matches the multiplier actually used.
+
+    include_fill_rate=False hides occupancy (used for the customer-facing
+    preview — we compute the price from it but never tell the customer the
+    price depends on how full the boat is that day). The admin-facing
+    reservation summary should pass True to see the full picture.
+    """
+    cfg = config if config is not None else get_dp_config()
+    factors: list = []
+    if not cfg.get("enabled"):
+        return factors
+
+    factors_on = cfg.get("factors_enabled") or {}
+    def _on(key: str) -> bool:
+        return factors_on.get(key, True)
+
+    if include_fill_rate and _on("fill_rate"):
+        for rule in sorted(cfg.get("fill_rate", []), key=lambda r: r["min_bookings"], reverse=True):
+            if bookings_on_day >= rule["min_bookings"]:
+                pct = round((float(rule["multiplier"]) - 1) * 100)
+                sign = "+" if pct >= 0 else ""
+                factors.append(f"Ocupación ({rule.get('label','')}): {sign}{pct}%")
+                break
+
+    if _on("advance_booking"):
+        for rule in sorted(cfg.get("advance_booking", []), key=lambda r: r["min_days"], reverse=True):
+            if days_advance >= rule["min_days"]:
+                pct = round((float(rule["multiplier"]) - 1) * 100)
+                sign = "+" if pct >= 0 else ""
+                factors.append(f"Anticipación ({rule.get('label','')}): {sign}{pct}%")
+                break
+
+    if _on("season"):
+        season_cfg = cfg.get("season") or {}
+        is_high = is_high_season(booking_date, season_cfg)
+        season_mult = float(season_cfg.get("high_multiplier" if is_high else "low_multiplier", 1.0))
+        if season_mult != 1.0:
+            pct = round((season_mult - 1) * 100)
+            sign = "+" if pct >= 0 else ""
+            factors.append(f"Temporada {'alta' if is_high else 'baja'}: {sign}{pct}%")
+
+    if booking_hour is not None and _on("hour_of_day"):
+        for rule in sorted(cfg.get("hour_of_day", []), key=lambda r: r["min_hour"], reverse=True):
+            if booking_hour >= rule["min_hour"]:
+                pct = round((float(rule["multiplier"]) - 1) * 100)
+                sign = "+" if pct >= 0 else ""
+                factors.append(f"Horario ({rule.get('label','')}): {sign}{pct}%")
+                break
+
+    return factors
+
+
+def get_dynamic_multiplier_for_booking(
+    booking_date: date,
+    booking_time: Optional[str] = None,
+    *,
+    include_factors: bool = False,
+):
     """
     Single source of truth for the dynamic-price multiplier of a HotBoat
     booking: counts same-day web bookings, days of advance, and (if given)
     the hour of the slot. Used by BOTH the price-preview endpoint (shown to
     the customer before they pay) and the booking-creation endpoint (what
     they're actually charged) — so the two can never drift apart.
+
+    include_factors=True returns (multiplier, factors) instead of just the
+    multiplier — factors is the same "why" breakdown as
+    describe_dynamic_price_factors(), computed from the exact same
+    days_advance/bookings_on_day/booking_hour used for the multiplier, so
+    it's safe to store alongside the price at booking-creation time.
     """
     cfg = get_dp_config()
     if not cfg.get("enabled"):
-        return 1.0
+        return (1.0, []) if include_factors else 1.0
 
     today = date.today()
     days_advance = max(0, (booking_date - today).days)
@@ -688,9 +762,16 @@ def get_dynamic_multiplier_for_booking(booking_date: date, booking_time: Optiona
         except (ValueError, IndexError):
             booking_hour = None
 
-    return calculate_dynamic_multiplier(
+    mult = calculate_dynamic_multiplier(
         booking_date, bookings_on_day, days_advance, cfg, booking_hour=booking_hour
     )
+    if not include_factors:
+        return mult
+    factors = describe_dynamic_price_factors(
+        booking_date, bookings_on_day, days_advance, cfg,
+        booking_hour=booking_hour, include_fill_rate=True,
+    )
+    return mult, factors
 
 
 def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:

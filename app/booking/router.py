@@ -451,11 +451,13 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         # que haya mostrado el frontend) — mismo cálculo que /api/booking/dynamic-price,
         # así lo que ve el cliente y lo que se le cobra son consistentes.
         base_pp = PRICES.get(n, 76990)
+        _dp_factors: list = []
         try:
             from datetime import date as _date
             from app.booking.operator_settings import get_dynamic_multiplier_for_booking
-            _dp_mult = get_dynamic_multiplier_for_booking(
-                _date.fromisoformat(request.booking_date), request.booking_time
+            _dp_mult, _dp_factors = get_dynamic_multiplier_for_booking(
+                _date.fromisoformat(request.booking_date), request.booking_time,
+                include_factors=True,
             )
         except Exception as _dpe:
             logger.warning(f"dynamic pricing at create-booking failed, using base price: {_dpe}")
@@ -488,6 +490,8 @@ async def create_booking_endpoint(request: CreateBookingRequest):
             "booking_time": request.booking_time,
             "num_people": n,
             "price_per_person": price_pp,
+            "dp_multiplier": _dp_mult,
+            "dp_factors": _dp_factors,
             "subtotal": subtotal,
             "extras": extras_list,
             "extras_total": extras_total,

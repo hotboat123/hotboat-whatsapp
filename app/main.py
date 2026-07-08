@@ -787,6 +787,12 @@ async def lifespan(app: FastAPI):
         ensure_analytics_views()
     except Exception as _e:
         logger.warning(f"ensure_analytics_views skipped: {_e}")
+    # Ensure dynamic-pricing audit columns exist (dp_multiplier, dp_factors)
+    try:
+        from app.booking.db import ensure_dynamic_pricing_columns
+        ensure_dynamic_pricing_columns()
+    except Exception as _e:
+        logger.warning(f"ensure_dynamic_pricing_columns skipped: {_e}")
     try:
         _ensure_bot_tables()
         seed_bot_defaults()

@@ -271,7 +271,7 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
                 if r.get("hora"): r["hora"] = str(r["hora"])
                 for k in ("ingreso_reserva", "ingreso_extras", "ingreso_total",
                           "costo_operativo_fijo", "costo_operativo_variable", "costo_operativo_total",
-                          "coupon_discount"):
+                          "coupon_discount", "dp_multiplier"):
                     if r.get(k) is not None: r[k] = float(r[k])
                 # Ensure every reservation has a usable booking_ref for T&C firma links.
                 # hotboat_web bookings: source_id IS the booking_ref (HB-xxxx).

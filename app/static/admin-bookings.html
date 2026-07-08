@@ -5412,6 +5412,12 @@ async function openModal(id){
         <div class="form-group"><label>Ingreso extras</label>
           <input id="e-ingreso_extras" value="${r.ingreso_extras||0}" readonly style="opacity:.7;cursor:default"></div>
       </div>
+      ${r.dp_multiplier != null ? `<div class="form-row" style="margin-top:-.4rem">
+        <div style="font-size:.76rem;color:var(--muted);background:rgba(255,255,255,.03);border-radius:8px;padding:.4rem .6rem">
+          💰 Precio dinámico aplicado al reservar: <strong style="color:var(--gold)">×${(+r.dp_multiplier).toFixed(3)}</strong>
+          ${Array.isArray(r.dp_factors) && r.dp_factors.length ? ` — ${r.dp_factors.map(f=>escHtml(f)).join(' · ')}` : ' (sin factores activos ese día)'}
+        </div>
+      </div>` : ''}
       <div class="form-row">
         <div class="form-group"><label>Total ingresos</label>
           <input id="e-ingreso_total" value="${r.ingreso_total||0}" inputmode="numeric" style="color:var(--gold);font-weight:700"

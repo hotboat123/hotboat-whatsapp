@@ -187,6 +187,7 @@ def create_booking(data: dict) -> dict:
                     coupon_code, coupon_discount, coupon_extra_benefit,
                     customer_birthday,
                     utm_source, utm_medium, utm_campaign, utm_content, parametro_url,
+                    dp_multiplier, dp_factors,
                     created_at, updated_at
                 )
                 VALUES (
@@ -201,6 +202,7 @@ def create_booking(data: dict) -> dict:
                     %s, %s, %s,
                     %s,
                     %s, %s, %s, %s, %s,
+                    %s, %s,
                     NOW(), NOW()
                 )
                 RETURNING id, status
@@ -232,6 +234,8 @@ def create_booking(data: dict) -> dict:
                     utm_campaign,
                     utm_content,
                     parametro_url,
+                    data.get("dp_multiplier"),
+                    json.dumps(data.get("dp_factors") or []),
                 ),
             )
             row = cur.fetchone()
@@ -1146,6 +1150,21 @@ def ensure_analytics_views() -> None:
                 FROM booking_visitor_events bve
                 LEFT JOIN tracked_quote_links tql ON tql.token = bve.link_token
                 ORDER BY bve.recorded_at DESC;
+            """)
+            conn.commit()
+
+
+def ensure_dynamic_pricing_columns() -> None:
+    """Add the columns that record, at booking-creation time, the exact
+    dynamic-pricing multiplier applied and why (which factors contributed).
+    Isolated from ensure_db_columns() for the same reason as
+    ensure_analytics_views() — a single bad statement there once blocked
+    every migration listed after it."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS dp_multiplier NUMERIC;
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS dp_factors JSONB;
             """)
             conn.commit()
 
