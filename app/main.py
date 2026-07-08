@@ -1175,23 +1175,37 @@ async def webhook_verify(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _process_webhook_in_background(body: dict):
+    try:
+        await handle_webhook(body, conversation_manager)
+    except Exception as e:
+        logger.error(f"Error processing webhook in background: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 @app.post("/webhook")
 async def webhook_receive(request: Request):
     """
     Webhook endpoint to receive WhatsApp messages
+
+    Acks Meta immediately and processes the payload in the background.
+    Meta retries (re-delivering the same event) whenever this endpoint is
+    slow to respond — awaiting the full handler here (bot logic, DB writes,
+    push notifications) made that timeout easy to hit and caused duplicate
+    notifications/replies on every retry.
     """
     try:
         # Get the request body
         body = await request.json()
-        
+
         logger.info(f"📩 Received webhook: {body}")
-        
-        # Process the webhook
-        result = await handle_webhook(body, conversation_manager)
-        
+
+        asyncio.create_task(_process_webhook_in_background(body))
+
         # WhatsApp expects a 200 OK response quickly
         return JSONResponse(content={"status": "ok"}, status_code=200)
-        
+
     except Exception as e:
         logger.error(f"Error processing webhook: {e}")
         # Still return 200 to WhatsApp to avoid retries

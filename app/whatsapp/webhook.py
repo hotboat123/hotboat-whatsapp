@@ -25,6 +25,27 @@ _pending_followups: dict[str, asyncio.Task] = {}
 _outgoing_wamid: dict[str, str] = {}
 _OUTGOING_WAMID_MAX = 2000
 
+# ── Incoming message dedup ────────────────────────────────────────────────────
+# Meta redelivers the same webhook event when our handler doesn't ack fast
+# enough (or just as at-least-once delivery). Without this guard, every
+# redelivery re-sends push notifications, re-runs the bot, and can send a
+# duplicate WhatsApp reply to the real customer. Checked before anything else
+# runs for a given message_id.
+_seen_incoming_wamid: dict[str, bool] = {}
+_INCOMING_WAMID_MAX = 2000
+
+
+def _is_duplicate_incoming(message_id: Optional[str]) -> bool:
+    if not message_id:
+        return False
+    if message_id in _seen_incoming_wamid:
+        return True
+    _seen_incoming_wamid[message_id] = True
+    if len(_seen_incoming_wamid) > _INCOMING_WAMID_MAX:
+        oldest = next(iter(_seen_incoming_wamid))
+        del _seen_incoming_wamid[oldest]
+    return False
+
 
 def _register_outgoing(result: dict, text: str, conversation_manager=None, phone: str = "") -> None:
     """Store the outgoing wamid returned by Meta's API and patch the in-memory
@@ -220,9 +241,15 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
         # Extract contact info
         contacts = value.get("contacts", [])
         contact_name = contacts[0].get("profile", {}).get("name", "Usuario") if contacts else "Usuario"
-        
+
+        # Meta may redeliver the same webhook event (e.g. if we ack slowly) —
+        # bail out before mark-as-read / push notification / bot processing.
+        if _is_duplicate_incoming(message_id):
+            logger.info(f"⏭️ Duplicate webhook delivery for message_id {message_id}, ignoring")
+            return
+
         logger.info(f"📩 New message from {contact_name} ({from_number}): type={message_type}")
-        
+
         # Mark as read
         try:
             await whatsapp_client.mark_as_read(message_id)
