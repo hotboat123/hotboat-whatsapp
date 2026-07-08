@@ -2901,9 +2901,17 @@ async function selectTime(tm){
   if(S.selectedTime===tm) renderPeopleSelect();
 }
 
+// Per-n fallback if the backend's price list is ever missing a tier for
+// some reason — falls back to the actual known price for THAT n, not a
+// single shared value that silently misrepresents every other group size.
+const _PRICES_FALLBACK = {2:76990, 3:59990, 4:48990, 5:42990, 6:36990, 7:33990};
+function basePriceFor(n){
+  return S.prices[n] || _PRICES_FALLBACK[n] || 76990;
+}
+
 function renderPeopleSelect(){
   function update(){
-    const basepp = S.prices[S.numPeople] || 76990;
+    const basepp = basePriceFor(S.numPeople);
     const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
     const pp = Math.round(basepp * mult / 1000) * 1000;
     const total = pp * S.numPeople;
@@ -2969,7 +2977,7 @@ function renderExtras(){
   }).join('');
   const flexCls = S.hasFlex ? 'selected' : '';
   // Calculate actual flex price to display (same formula as renderForm)
-  const _basepp = S.prices[S.numPeople] || 76990;
+  const _basepp = basePriceFor(S.numPeople);
   const _mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const _pp = Math.round(_basepp * _mult / 1000) * 1000;
   const _sub = _pp * S.numPeople;
@@ -3074,7 +3082,7 @@ function _composeBirthday(){
 
 function renderForm(){
   window._lastSummaryFn = renderForm;   // so applyCoupon can re-render
-  const basepp = S.prices[S.numPeople] || 76990;
+  const basepp = basePriceFor(S.numPeople);
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const pp = Math.round(basepp * mult / 1000) * 1000;
   const sub = pp * S.numPeople;
@@ -3306,7 +3314,7 @@ async function applyCoupon(){
   S.couponCode = ''; S.couponDiscount = 0; S.couponExtra = ''; S.couponPercent = 0;
   if(btn){ btn.disabled=true; btn.textContent='...'; }
 
-  const pp = S.prices[S.numPeople] || 76990;
+  const pp = basePriceFor(S.numPeople);
   const sub = pp * S.numPeople;   // base boat price only — coupon applies to this
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
   // Discount base: only the boat reservation (sub), NOT extras
@@ -3374,7 +3382,7 @@ async function submitBooking(){
     return;
   }
   _isSubmittingBooking = true;
-  const basepp = S.prices[S.numPeople] || 76990;
+  const basepp = basePriceFor(S.numPeople);
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const pp = Math.round(basepp * mult / 1000) * 1000;
   const sub = pp * S.numPeople;

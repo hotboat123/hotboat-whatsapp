@@ -3444,15 +3444,28 @@ async def put_prices_config(request: Request, x_admin_key: str = Header(...)):
             pass
     if not validated:
         raise HTTPException(status_code=400, detail="Sin precios válidos")
-    set_setting("prices_per_person", json.dumps(validated))
+
+    # Merge over what's already stored (defaults first, then the previously
+    # saved config, then this submission) — a partial save (e.g. the admin's
+    # form only posts the tiers it rendered) must never silently delete the
+    # tiers it didn't touch. This used to clear() + update(validated), which
+    # wiped out any people-count not present in this specific request.
+    existing_raw = get_setting("prices_per_person", "")
+    try:
+        existing = {int(k): int(v) for k, v in json.loads(existing_raw).items()} if existing_raw else {}
+    except Exception:
+        existing = {}
+    merged = {**PRICES_DEFAULT, **existing, **validated}
+
+    set_setting("prices_per_person", json.dumps(merged))
     # Refresh live PRICES constant used by the booking engine
     try:
         from app.booking import db as booking_db
         booking_db.PRICES.clear()
-        booking_db.PRICES.update(validated)
+        booking_db.PRICES.update(merged)
     except Exception as e:
         logger.warning(f"Could not refresh live PRICES: {e}")
-    return {"ok": True, "prices": validated}
+    return {"ok": True, "prices": merged}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
