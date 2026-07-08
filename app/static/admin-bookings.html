@@ -10069,11 +10069,6 @@ function generarRecibo(){
       </tbody>
     </table>
 
-    ${r.dp_multiplier != null ? `<div class="no-print" style="margin-top:.8rem;font-size:.78rem;color:#7070a0;background:#f5f7fa;border-radius:8px;padding:.5rem .7rem">
-      💰 Precio dinámico aplicado al reservar: <strong style="color:#1a3a7a">×${(+r.dp_multiplier).toFixed(3)}</strong>
-      ${Array.isArray(r.dp_factors) && r.dp_factors.length ? ` — ${r.dp_factors.map(f=>$(f)).join(' · ')}` : ' (sin factores activos ese día)'}
-    </div>` : ''}
-
     <div class="section-title">Pagos recibidos</div>
     <table>
       <thead><tr><th>Método de pago</th><th>Fecha</th><th style="text-align:right">Monto</th></tr></thead>
