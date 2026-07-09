@@ -440,54 +440,30 @@ class AvailabilityChecker:
             available_slots = await self.get_available_slots(start_date, end_date)
 
             # ── Filtro de urgencia (para que el bot responda lo MISMO que la app web) ──
-            # La web muestra solo las horas "verdes" en modo urgencia; el bot debe igualar.
+            # Antes esto reimplementaba el filtro llamando a apply_urgency_filter()
+            # directo — una función más simple que NUNCA recibió las correcciones
+            # iterativas (booked±gap, prioridad de ghost_times, restricción del
+            # listado del día, etc.) que sí se le hicieron a la lógica real del
+            # endpoint web (/api/booking/availability en router.py). Esas dos
+            # implementaciones se fueron desalineando con el tiempo — la app y el
+            # bot mostraban disponibilidades distintas. En vez de mantener una
+            # segunda copia de esa lógica, se llama directo a la función del
+            # endpoint web (misma fuente de verdad, con su propio cache de 30s).
             try:
-                from app.booking.operator_settings import (
-                    is_urgency_mode, get_urgency_days, get_urgency_config,
-                    get_day_urgency_config_map, apply_urgency_filter,
-                )
-                global_urgency = is_urgency_mode()
-                day_overrides = {
-                    v["date"]: v["enabled"]
-                    for v in get_urgency_days(start_date.date(), end_date.date())
+                from app.booking.router import get_availability as _web_get_availability
+                web_data = await _web_get_availability(days=150)
+                web_avail = web_data.get("availability", {})
+                web_fake = web_data.get("fake_booked_slots", {})
+                bookable_by_day = {
+                    dk: set(times) - set(web_fake.get(dk, []))
+                    for dk, times in web_avail.items()
                 }
-                # Solo nos molestamos si hay urgencia activa en algún lado
-                if global_urgency or any(day_overrides.values()):
-                    global_cfg = get_urgency_config()
-                    day_cfg_map = get_day_urgency_config_map(start_date.date(), end_date.date())
-                    # Reservas por día (HH:MM) para el cálculo reserva±gap — reusa las
-                    # que ya trajo get_available_slots() en vez de volver a golpear la DB.
-                    if self._last_booked_range == (start_date, end_date) and self._last_booked_slots is not None:
-                        booked_for_urgency = self._last_booked_slots
-                    else:
-                        booked_for_urgency = await get_booked_slots(
-                            start_date, end_date, exclude_statuses=self.config.exclude_statuses
-                        )
-                    booked_by_day: dict = {}
-                    for bs in booked_for_urgency:
-                        sa = bs.get("starts_at")
-                        if sa:
-                            if isinstance(sa, str):
-                                sa = datetime.fromisoformat(sa.replace("Z", "+00:00"))
-                            booked_by_day.setdefault(str(sa.date()), []).append(sa.strftime("%H:%M"))
-
-                    by_date_slots: dict = {}
-                    for slot in available_slots:
-                        by_date_slots.setdefault(str(slot["date"]), []).append(slot)
-
-                    filtered_slots = []
-                    for dk, day_slots in by_date_slots.items():
-                        urgency_active = day_overrides.get(dk, global_urgency)
-                        if not urgency_active:
-                            filtered_slots.extend(day_slots)
-                            continue
-                        cfg = {**global_cfg, **(day_cfg_map.get(dk) or {})}
-                        times = [s["time"] for s in day_slots]
-                        green = set(apply_urgency_filter(times, booked_by_day.get(dk, []), cfg))
-                        filtered_slots.extend([s for s in day_slots if s["time"] in green])
-                    available_slots = filtered_slots
+                available_slots = [
+                    s for s in available_slots
+                    if s["time"] in bookable_by_day.get(str(s["date"]), set())
+                ]
             except Exception as _ue:
-                logger.warning("Bot urgency filter failed (continuing sin filtrar): %s", _ue, exc_info=True)
+                logger.warning("Bot urgency filter (web sync) failed (continuing sin filtrar): %s", _ue, exc_info=True)
 
             logger.info(f"Found {len(available_slots)} available slots between {start_date.date()} and {end_date.date()}")
             
