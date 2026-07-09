@@ -52,6 +52,14 @@ class WhatsAppClient:
                 result = response.json()
                 logger.info(f"✅ Message sent to {to}: {result}")
                 return result
+        except httpx.HTTPStatusError as e:
+            body = ""
+            try:
+                body = e.response.text
+            except Exception:
+                pass
+            logger.error(f"❌ Error sending message to {to}: {e} | Meta response: {body}")
+            raise
         except httpx.HTTPError as e:
             logger.error(f"❌ Error sending message to {to}: {e}")
             raise
@@ -96,6 +104,14 @@ class WhatsAppClient:
                 result = response.json()
                 logger.info(f"✅ Template message sent to {to}: {result}")
                 return result
+        except httpx.HTTPStatusError as e:
+            body = ""
+            try:
+                body = e.response.text
+            except Exception:
+                pass
+            logger.error(f"❌ Error sending template '{template_name}' to {to}: {e} | Meta response: {body}")
+            raise
         except httpx.HTTPError as e:
             logger.error(f"❌ Error sending template to {to}: {e}")
             raise
