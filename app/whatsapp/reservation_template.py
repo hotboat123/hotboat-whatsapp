@@ -101,7 +101,10 @@ async def send_reservation_contact_template(
     tmpl = (os.getenv("WA_REENGAGE_TEMPLATE", "") or "").strip()
     if not tmpl:
         raise RuntimeError("WA_REENGAGE_TEMPLATE no está configurado (Railway → Variables).")
-    lang = (os.getenv("WA_REENGAGE_LANG", "") or "es").strip() or "es"
+    # Meta rejected "es" with 132001 ("template does not exist in the
+    # translation") — la plantilla se creó sin cambiar el idioma, así que
+    # quedó en el default de Meta al crear plantillas: English (US).
+    lang = (os.getenv("WA_REENGAGE_LANG", "") or "en_US").strip() or "en_US"
 
     components = [
         {"type": "body", "parameters": [
