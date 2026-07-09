@@ -2494,7 +2494,20 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             return get_text("time_invalid_format", language)
 
         date_iso = pending.get("date_obj_iso", "")[:10]  # YYYY-MM-DD
+        # Link trackeado por cliente (mismo mecanismo que _build_dynamic_price_response
+        # en faq.py) — antes esto era un link plano sin seguimiento; ahora el admin
+        # puede ver si Matías (o quien sea) efectivamente entró, vio precios, eligió
+        # fecha o completó la reserva después de que el bot le pasó este link.
         booking_url = f"https://whatsapp.hotboat.cl/booking?date={date_iso}&time={normalized_time}"
+        try:
+            from app.booking.link_tracking_router import create_tracked_link_for_phone
+            tracked = create_tracked_link_for_phone(
+                phone_number, contact_name or "",
+                dest=f"/booking?date={date_iso}&time={normalized_time}",
+            )
+            booking_url = tracked.get("url") or booking_url
+        except Exception as e:
+            logger.warning(f"Tracked link creation failed for {phone_number}: {e}")
 
         self._reset_reservation_flow(conversation)
 
