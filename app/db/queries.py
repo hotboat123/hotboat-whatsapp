@@ -295,6 +295,33 @@ async def save_conversation(
         # Don't fail if we can't save - this is not critical
 
 
+async def has_recent_inbound_message(phone_number: str, hours: int = 24) -> bool:
+    """True si el cliente escribió (mensaje 'incoming') en las últimas `hours`.
+
+    WhatsApp acepta un envío de texto libre con 200 OK aunque el cliente esté
+    fuera de la ventana de 24h — el rechazo ('re-engagement', code 131047)
+    llega recién después por un webhook de estado, cuando ya es tarde. Este
+    chequeo evita depender de esa respuesta síncrona engañosa: si no hay un
+    mensaje entrante reciente en nuestra propia DB, ni intentamos el texto
+    libre.
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 1 FROM whatsapp_conversations
+                    WHERE phone_number = %s
+                      AND direction = 'incoming'
+                      AND created_at > NOW() - (%s * INTERVAL '1 hour')
+                    LIMIT 1
+                """, (phone_number, hours))
+                return cur.fetchone() is not None
+    except Exception as e:
+        logger.warning(f"Could not check recent inbound message for {phone_number}: {e}")
+        # Fail closed: if we can't verify, don't risk a silently-dropped free text
+        return False
+
+
 async def get_recent_conversations(limit: int = 50) -> List[Dict]:
     """
     Get recent conversations from database grouped by phone number

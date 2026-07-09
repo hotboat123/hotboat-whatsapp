@@ -2294,12 +2294,23 @@ async def send_custom_message(request: SendMessageRequest):
             message_id = result.get('messages', [{}])[0].get('id', '')
             message_type = "image"
         else:
-            try:
-                result = await whatsapp_client.send_text_message(request.to, request.message)
-            except httpx.HTTPStatusError as _wae:
-                from app.whatsapp.reservation_template import is_24h_window_error
-                if not is_24h_window_error(_wae):
-                    raise
+            # WhatsApp acepta el texto libre con 200 OK aunque el cliente esté
+            # fuera de la ventana de 24h — el rechazo real ('re-engagement')
+            # llega recién después por un webhook de estado async, cuando ya
+            # creemos que se entregó. No confiamos en la respuesta síncrona:
+            # chequeamos primero en nuestra propia DB si escribió de verdad.
+            from app.db.queries import has_recent_inbound_message
+            _window_blocked = not await has_recent_inbound_message(request.to)
+            result = None
+            if not _window_blocked:
+                try:
+                    result = await whatsapp_client.send_text_message(request.to, request.message)
+                except httpx.HTTPStatusError as _wae:
+                    from app.whatsapp.reservation_template import is_24h_window_error
+                    if not is_24h_window_error(_wae):
+                        raise
+                    _window_blocked = True
+            if _window_blocked:
                 import os as _os
                 _tmpl = (_os.getenv("WA_REENGAGE_TEMPLATE", "") or "").strip()
                 if _tmpl:

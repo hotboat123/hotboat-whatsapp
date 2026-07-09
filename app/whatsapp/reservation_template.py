@@ -55,21 +55,32 @@ async def send_free_text_or_template(
     más: el fallback a plantilla solo ocurre cuando es estrictamente
     necesario, sin depender de qué política de precios tenga Meta vigente.
 
+    IMPORTANTE: WhatsApp acepta el envío de texto libre con 200 OK aunque el
+    cliente esté fuera de la ventana de 24h — el rechazo real ('re-engagement',
+    code 131047) llega recién después por un webhook de estado async, cuando
+    el admin ya cree que el mensaje se entregó. Por eso NO confiamos en la
+    respuesta síncrona de Meta para decidir: primero chequeamos en nuestra
+    propia DB si el cliente escribió realmente en las últimas 24h, y solo
+    intentamos texto libre si es así.
+
     Devuelve {"via": "text"|"template", **datos de la respuesta de Meta}.
     """
     import httpx
     from app.whatsapp.client import whatsapp_client
+    from app.db.queries import has_recent_inbound_message
 
-    try:
-        result = await whatsapp_client.send_text_message(phone, message)
-        return {"via": "text", **result}
-    except httpx.HTTPStatusError as e:
-        if not is_24h_window_error(e):
-            raise
-        result = await send_reservation_contact_template(
-            phone=phone, booking_ref=booking_ref, customer_name=customer_name,
-            booking_date=booking_date, booking_time=booking_time)
-        return {"via": "template", **result}
+    if await has_recent_inbound_message(phone):
+        try:
+            result = await whatsapp_client.send_text_message(phone, message)
+            return {"via": "text", **result}
+        except httpx.HTTPStatusError as e:
+            if not is_24h_window_error(e):
+                raise
+
+    result = await send_reservation_contact_template(
+        phone=phone, booking_ref=booking_ref, customer_name=customer_name,
+        booking_date=booking_date, booking_time=booking_time)
+    return {"via": "template", **result}
 
 
 async def send_reservation_contact_template(
