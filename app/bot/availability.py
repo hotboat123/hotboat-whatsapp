@@ -158,7 +158,8 @@ class AvailabilityChecker:
         normalized = date.replace(hour=0, minute=0, second=0, microsecond=0)
         start_date = normalized
         end_date = normalized.replace(hour=23, minute=59, second=59, microsecond=999999)
-        return await self.get_available_slots(start_date, end_date)
+        slots = await self.get_available_slots(start_date, end_date)
+        return await self._filter_to_web_bookable(slots)
     
     def _generate_time_slots_for_date(self, date: datetime, override_hours: list = None) -> List[datetime]:
         """Generate all possible time slots for a given date.
@@ -358,7 +359,39 @@ class AvailabilityChecker:
             import traceback
             traceback.print_exc()
             return []
-    
+
+    async def _filter_to_web_bookable(self, slots: List[Dict]) -> List[Dict]:
+        """Restrict raw slots to whatever the web booking page would actually
+        show as bookable (green), so the bot never offers a time the customer
+        can't actually pick on the site.
+
+        Antes esto reimplementaba el filtro de modo urgencia llamando a
+        apply_urgency_filter() directo — una función más simple que nunca
+        recibió las correcciones iterativas (booked±gap, prioridad de
+        ghost_times, restricción del listado del día, etc.) que sí se le
+        hicieron a la lógica real del endpoint web
+        (/api/booking/availability en router.py). Esas dos implementaciones
+        se fueron desalineando con el tiempo. En vez de mantener una segunda
+        copia de esa lógica, se llama directo a la función del endpoint web
+        (misma fuente de verdad, con su propio cache de 30s).
+        """
+        try:
+            from app.booking.router import get_availability as _web_get_availability
+            web_data = await _web_get_availability(days=150)
+            web_avail = web_data.get("availability", {})
+            web_fake = web_data.get("fake_booked_slots", {})
+            bookable_by_day = {
+                dk: set(times) - set(web_fake.get(dk, []))
+                for dk, times in web_avail.items()
+            }
+            return [
+                s for s in slots
+                if s["time"] in bookable_by_day.get(str(s["date"]), set())
+            ]
+        except Exception as _ue:
+            logger.warning("Bot availability web-sync filter failed (continuing sin filtrar): %s", _ue, exc_info=True)
+            return slots
+
     async def check_availability(self, message: str) -> str:
         """
         Check availability based on user query
@@ -436,34 +469,9 @@ class AvailabilityChecker:
             if is_next_3_days and self.phone_number:
                 await self._auto_set_priority_high(self.phone_number, "Consulta disponibilidad próximos 3 días")
             
-            # Get available slots
+            # Get available slots, restricted to what the web actually shows as bookable
             available_slots = await self.get_available_slots(start_date, end_date)
-
-            # ── Filtro de urgencia (para que el bot responda lo MISMO que la app web) ──
-            # Antes esto reimplementaba el filtro llamando a apply_urgency_filter()
-            # directo — una función más simple que NUNCA recibió las correcciones
-            # iterativas (booked±gap, prioridad de ghost_times, restricción del
-            # listado del día, etc.) que sí se le hicieron a la lógica real del
-            # endpoint web (/api/booking/availability en router.py). Esas dos
-            # implementaciones se fueron desalineando con el tiempo — la app y el
-            # bot mostraban disponibilidades distintas. En vez de mantener una
-            # segunda copia de esa lógica, se llama directo a la función del
-            # endpoint web (misma fuente de verdad, con su propio cache de 30s).
-            try:
-                from app.booking.router import get_availability as _web_get_availability
-                web_data = await _web_get_availability(days=150)
-                web_avail = web_data.get("availability", {})
-                web_fake = web_data.get("fake_booked_slots", {})
-                bookable_by_day = {
-                    dk: set(times) - set(web_fake.get(dk, []))
-                    for dk, times in web_avail.items()
-                }
-                available_slots = [
-                    s for s in available_slots
-                    if s["time"] in bookable_by_day.get(str(s["date"]), set())
-                ]
-            except Exception as _ue:
-                logger.warning("Bot urgency filter (web sync) failed (continuing sin filtrar): %s", _ue, exc_info=True)
+            available_slots = await self._filter_to_web_bookable(available_slots)
 
             logger.info(f"Found {len(available_slots)} available slots between {start_date.date()} and {end_date.date()}")
             
