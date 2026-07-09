@@ -1059,7 +1059,11 @@ const _linkToken = (()=>{
   try{ return sessionStorage.getItem('_hb_lt') || ''; }catch(e){ return ''; }
 })();
 
+let _lastTrackedEvent = 'page_visit';
+let _bookingCompletedTracked = false;
 function _trackEvent(event, date){
+  _lastTrackedEvent = event;
+  if(event === 'booking_completed') _bookingCompletedTracked = true;
   try{
     const payload = JSON.stringify({
       event, date: date||null,
@@ -1073,6 +1077,29 @@ function _trackEvent(event, date){
     fetch('/api/booking/track',{method:'POST',headers:{'Content-Type':'application/json'},body:payload}).catch(()=>{});
   }catch(e){}
 }
+
+// Abandono: si el visitante cierra/cambia de pestaña sin completar la reserva,
+// se manda un evento con el último paso alcanzado (sendBeacon, no fetch — el
+// navegador puede matar la página antes de que un fetch normal termine).
+function _trackLeave(){
+  if(_bookingCompletedTracked) return;
+  try{
+    const payload = JSON.stringify({
+      event: 'page_left', date: _lastTrackedEvent,
+      lang: (typeof S!=='undefined'&&S.lang)||'es',
+      referrer: document.referrer?document.referrer.substring(0,200):'',
+      session_id: _sessionId,
+      is_returning: _isReturning,
+      ..._landingAttribution,
+      link_token: _linkToken || '',
+    });
+    navigator.sendBeacon('/api/booking/track', new Blob([payload], {type:'application/json'}));
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'hidden') _trackLeave();
+});
+window.addEventListener('pagehide', _trackLeave);
 
 async function loadPricesAndAvail(){
   _trackEvent('page_visit');
@@ -2944,6 +2971,7 @@ function changePeople(d){
 
 function goExtras(){
   S.step = 'extras';
+  _trackEvent('selected_people', String(S.numPeople));
   renderExtras();
 }
 
@@ -2994,8 +3022,18 @@ function renderExtras(){
       <div class="extra-price">+$${flexPrice.toLocaleString('es-CL')}</div>
     </div>
   </div>
-  <button class="btn" onclick="renderForm()">${t('nextData')}</button>
+  <button class="btn" onclick="goDatos()">${t('nextData')}</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderPeopleSelect()">${t('back')}</button>`;
+}
+
+function goDatos(){
+  S.step = 'datos';
+  const chosen = EXTRAS_CATALOG
+    .filter(e=>(S.extras[e.id]||0)>0)
+    .map(e=>`${e.name}${S.extras[e.id]>1?` x${S.extras[e.id]}`:''}`);
+  if(S.hasFlex) chosen.push('FLEX');
+  _trackEvent('extras_selected', chosen.join(', ') || 'ninguno');
+  renderForm();
 }
 
 async function addExtra(id){

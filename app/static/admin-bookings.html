@@ -5178,7 +5178,7 @@ async function loadActivity(){
       const when = (a.recorded_at||'').substring(0,16).replace('T',' ');
       const who = a.customer_name || a.phone || `<span style="color:var(--muted)">visita anónima</span>`;
       const label = _TRACKED_EVENT_LABELS[a.event_type] || `• ${escHtml(a.event_type||'')}`;
-      const extra = a.extra_date ? ` <span style="color:var(--muted)">(${escHtml(a.extra_date)})</span>` : '';
+      const extra = _trackedExtraLabel(a.event_type, a.extra_date);
       return `<tr style="border-bottom:1px solid var(--border)">
         <td style="padding:.4rem .7rem;color:var(--muted);font-size:.75rem;white-space:nowrap">${when}</td>
         <td style="padding:.4rem .7rem">${who}</td>
@@ -7273,7 +7273,21 @@ const _TRACKED_EVENT_LABELS = {
   cart_only_payment_ready: '💳 Carrito listo para pagar',
   solicitud_form: '📝 Llenó formulario de solicitud',
   booking_completed: '✅ Completó la reserva',
+  selected_people: '👥 Eligió cantidad de personas',
+  extras_selected: '🛍️ Seleccionó extras',
+  page_left: '🚪↩️ Abandonó la página',
 };
+
+// page_left manda el último evento (clave cruda, ej. "extras_selected") en
+// extra_date — se resuelve a su label legible en vez de mostrar la clave tal cual.
+function _trackedExtraLabel(eventType, extraDate){
+  if(!extraDate) return '';
+  if(eventType === 'page_left'){
+    const raw = (_TRACKED_EVENT_LABELS[extraDate] || extraDate).replace(/^\S+\s/, '');
+    return ` <span style="color:var(--muted)">(último paso: ${escHtml(raw)})</span>`;
+  }
+  return ` <span style="color:var(--muted)">(${escHtml(extraDate)})</span>`;
+}
 
 async function openLinkFunnel(token){
   const modal = document.getElementById('link-funnel-modal');
@@ -7302,7 +7316,7 @@ async function openLinkFunnel(token){
         </div>`;
       }
       const label = _TRACKED_EVENT_LABELS[item.event_type] || `• ${escHtml(item.event_type||'')}`;
-      const extra = item.extra_date ? ` <span style="color:var(--muted)">(${escHtml(item.extra_date)})</span>` : '';
+      const extra = _trackedExtraLabel(item.event_type, item.extra_date);
       return `<div style="display:flex;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--border)">
         <span style="color:var(--muted);font-size:.78rem;white-space:nowrap">${when}</span>
         <span>${label}${extra}</span>
