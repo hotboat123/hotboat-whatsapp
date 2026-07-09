@@ -26,7 +26,11 @@ self.addEventListener('push', (event) => {
         renotify: true,
         data: {
             phone: data.phone || null,
-            url: data.phone ? `/admin-bookings?phone=${data.phone}` : '/admin-bookings',
+            // El panel admin se sirve en "/" (ver app/main.py) — "/admin-bookings"
+            // nunca existió como ruta y devolvía 404 al abrir la notificación con
+            // la app cerrada (con la app abierta, el otro branch de abajo la
+            // enfoca y navega por postMessage, por eso no siempre fallaba).
+            url: data.phone ? `/?phone=${data.phone}` : '/',
         },
         vibrate: [200, 100, 200],
     };
