@@ -2330,11 +2330,19 @@ async def send_custom_message(request: SendMessageRequest):
                         booking_date=_bk["booking_date"], booking_time=_bk["booking_time"])
                     _tid = _tr.get('messages', [{}])[0].get('id', '')
                     try:
+                        from app.whatsapp.reservation_template import _fmt_fecha
+                        _logged_text = (
+                            f"📋 Plantilla '{_tmpl}' enviada — "
+                            f"Nombre: {_name} · Servicio: HotBoat · "
+                            f"Fecha: {_fmt_fecha(_bk['booking_date']) if _bk['booking_date'] else ''} · "
+                            f"Hora: {(_bk['booking_time'] or '')[:5]} · "
+                            f"Botón: Ver mi reserva → /mireserva/{_bk['booking_ref']}"
+                        )
                         await save_conversation(
                             phone_number=request.to,
                             customer_name=lead.get('customer_name', request.to) if lead else request.to,
                             message_text='',
-                            response_text=f"[Plantilla de re-enganche enviada: {_tmpl}]",
+                            response_text=_logged_text,
                             message_type='text', message_id=_tid or None, direction='outgoing')
                     except Exception:
                         pass

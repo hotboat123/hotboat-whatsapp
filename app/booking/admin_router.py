@@ -2379,12 +2379,25 @@ async def send_reservation_template_route(rid: int, x_admin_key: str = Header(""
     message_id = result.get('messages', [{}])[0].get('id', '')
     try:
         from app.db.queries import save_conversation
+        if via == "text":
+            logged_text = greeting
+        else:
+            # No tenemos el texto fijo aprobado de la plantilla (eso vive en
+            # Meta, no en nuestra DB) — mostramos los datos reales que sí se
+            # le enviaron, para que el resumen sea fiel a lo que el cliente
+            # recibió aunque no reproduzca la redacción exacta.
+            from app.whatsapp.reservation_template import _fmt_fecha
+            logged_text = (
+                "📋 Plantilla 'contactar_cliente_por_reserva' enviada — "
+                f"Nombre: {(nombre or '').strip() or 'cliente'} · Servicio: HotBoat · "
+                f"Fecha: {_fmt_fecha(str(fecha)) if fecha else ''} · Hora: {hora_str} · "
+                f"Botón: Ver mi reserva → /mireserva/{booking_ref}"
+            )
         await save_conversation(
             phone_number=phone_clean,
             customer_name=nombre or phone_clean,
             message_text='',
-            response_text=(greeting if via == "text" else
-                           "[Plantilla 'contactar_cliente_por_reserva' enviada desde Popeye]"),
+            response_text=logged_text,
             message_type='text', message_id=message_id or None, direction='outgoing')
     except Exception as e:
         logger.warning(f"Could not log popeye send in DB: {e}")
