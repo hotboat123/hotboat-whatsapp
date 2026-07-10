@@ -2575,12 +2575,21 @@ function showPackDetail(id){
 function showArmaPack(){
   _trackEvent('view_arma_pack');
   if(!S.armaActividades) S.armaActividades = {};
-  const acts = ACTIVIDADES.map(a=>`
+  // "Arma tu Pack" tenía su propio listado sin filtrar — dejaba agregar
+  // otras experiencias y alojamiento aunque esas secciones estuvieran
+  // desactivadas en Configuración. Se respetan los mismos toggles que
+  // ocultan los botones del menú principal (el producto base "hotboat"
+  // nunca se filtra, solo las "otras experiencias" cargadas de DYN_EXPERIENCIAS).
+  const actsList = S.menuSettings.show_experiencias===false
+    ? ACTIVIDADES.filter(a=>a.id==='hotboat')
+    : ACTIVIDADES;
+  const acts = actsList.map(a=>`
     <div class="extra-item ${S.armaActividades[a.id]?'selected':''}" onclick="toggleActividad('${a.id}')">
       <div><div class="extra-name">${a.icon} ${a.name}</div>
         <div style="font-size:.75rem;color:var(--muted)">${a.desc}</div></div>
       <span style="font-size:1.2rem">${S.armaActividades[a.id]?'✓':''}</span>
     </div>`).join('');
+  const showAloj = S.menuSettings.show_alojamientos !== false;
   const aljs = ALOJAMIENTOS.map(a=>`
     <option value="${a.id}" ${S.armaAlojamiento===a.id?'selected':''}>${a.name} · ${a.price}${a.unit}</option>`).join('');
   mc.innerHTML = `
@@ -2589,11 +2598,12 @@ function showArmaPack(){
     <p style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">Elige las actividades que quieras</p>
     <div class="extra-list">${acts}</div>
     <br>
+    ${showAloj ? `
     <label>Alojamiento (opcional)</label>
     <select id="alj-sel" onchange="S.armaAlojamiento=this.value"
       style="width:100%;background:var(--deep);border:1.5px solid var(--border);color:var(--text);border-radius:10px;padding:.7rem;font-family:inherit;font-size:.9rem;outline:none">
       <option value="">Sin alojamiento</option>${aljs}
-    </select>
+    </select>` : ''}
   </div>
   <button class="btn" onclick="submitArmaPack()">Siguiente: Mis datos →</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver</button>`;
