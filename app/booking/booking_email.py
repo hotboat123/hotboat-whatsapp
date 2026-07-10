@@ -1458,11 +1458,15 @@ def run_pending_payment_email_sweep(delay_minutes: int = 5) -> dict:
 
 # ── Legacy aliases (backwards compat) ─────────────────────────────────────────
 
-def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
+def send_confirmation_admin_force(booking_id: int, dry_run: bool = False) -> Dict[str, Any]:
     """
     Force-send booking_confirmed email for any all_appointments row by integer id.
     Shows real extras, flex, coupon, and actual paid/balance amounts from the DB.
     Bypasses status/idempotency guards and any custom body_html template.
+
+    dry_run=True builds the exact same subject/html but does not touch the
+    idempotency flag nor actually send — used for the admin "preview before
+    sending" flow (mirrors the receipt: see it, then click send).
     """
     import json as _json
     from app.booking.db import get_connection, _legacy_booking_from_aa
@@ -1700,18 +1704,19 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
     after_total_rows_html = "".join(after_rows)
 
     # ── Build and send email ──────────────────────────────────────────────────
-    # Clear idempotency flag so resend is not blocked
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE all_appointments SET confirmation_email_sent_at=NULL WHERE id=%s",
-                (booking_id,),
-            )
-            conn.commit()
+    if not dry_run:
+        # Clear idempotency flag so resend is not blocked
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE all_appointments SET confirmation_email_sent_at=NULL WHERE id=%s",
+                    (booking_id,),
+                )
+                conn.commit()
 
     s = get_settings()
     api_key = (getattr(s, "resend_api_key", "") or "").strip()
-    if not api_key:
+    if not api_key and not dry_run:
         return {"sent": False, "reason": "no_resend_key"}
 
     cfg = get_email_workflow("booking_confirmed")
@@ -1791,7 +1796,10 @@ def send_confirmation_admin_force(booking_id: int) -> Dict[str, Any]:
 
     from_addr = _get_from_addr(s)
     reply_to_addr = _get_admin_email(s) or None
-    out: Dict[str, Any] = {"sent": False, "reason": ""}
+    out: Dict[str, Any] = {"sent": False, "reason": "", "to": to_addr, "subject": subject, "html": html}
+    if dry_run:
+        out["reason"] = "preview"
+        return out
     try:
         send_booking_html(
             to=to_addr,

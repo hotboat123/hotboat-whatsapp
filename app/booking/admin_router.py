@@ -1450,7 +1450,7 @@ async def send_confirmation_for_reserva(rid: int, x_admin_key: str = Header(""))
         if not email:
             raise HTTPException(status_code=422, detail="La reserva no tiene email del cliente")
         from app.booking.booking_email import send_confirmation_admin_force
-        result = send_confirmation_admin_force(rid)
+        result = await asyncio.to_thread(send_confirmation_admin_force, rid)
         return {
             "ok": True,
             "rid": rid,
@@ -1466,6 +1466,42 @@ async def send_confirmation_for_reserva(rid: int, x_admin_key: str = Header(""))
         raise
     except Exception as e:
         logger.error(f"send_confirmation {rid}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get("/api/admin/reservas/{rid}/confirmation-preview")
+async def preview_confirmation_for_reserva(rid: int, x_admin_key: str = Header("")):
+    """Render the exact booking_confirmed email (subject + html) without
+    sending it, so the admin can review it first — same idea as the receipt:
+    see it, then press send. Reuses send_confirmation_admin_force's own
+    rendering (real extras/flex/coupon/paid amounts from the DB) so the
+    preview can never drift from what actually gets sent."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT nombre_cliente, email FROM {TABLE} WHERE id=%s", (rid,))
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Reserva {rid} no encontrada")
+        nombre, email = row
+        email = (email or "").strip()
+        if not email:
+            raise HTTPException(status_code=422, detail="La reserva no tiene email del cliente")
+        from app.booking.booking_email import send_confirmation_admin_force
+        result = await asyncio.to_thread(send_confirmation_admin_force, rid, dry_run=True)
+        return {
+            "ok": True,
+            "rid": rid,
+            "customer": nombre,
+            "to": result.get("to") or email,
+            "subject": result.get("subject") or "",
+            "html": result.get("html") or "",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"preview_confirmation {rid}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
