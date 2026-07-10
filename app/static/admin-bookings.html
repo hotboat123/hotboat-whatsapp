@@ -5412,12 +5412,20 @@ async function openModal(id){
         <div class="form-group"><label>Ingreso extras</label>
           <input id="e-ingreso_extras" value="${r.ingreso_extras||0}" readonly style="opacity:.7;cursor:default"></div>
       </div>
-      ${r.dp_multiplier != null ? `<div class="form-row" style="margin-top:-.4rem">
-        <div style="font-size:.76rem;color:var(--muted);background:rgba(255,255,255,.03);border-radius:8px;padding:.4rem .6rem">
-          💰 Precio dinámico aplicado al reservar: <strong style="color:var(--gold)">×${(+r.dp_multiplier).toFixed(3)}</strong>
-          ${Array.isArray(r.dp_factors) && r.dp_factors.length ? ` — ${r.dp_factors.map(f=>escHtml(f)).join(' · ')}` : ' (sin factores activos ese día)'}
+      <div class="form-row" style="margin-top:-.4rem;align-items:flex-end">
+        <div class="form-group">
+          <label>Multiplicador precio dinámico
+            <span style="color:var(--muted);font-size:.7rem;font-weight:400;margin-left:.4rem">(1.10 = +10%, 1.20 = +20%, 0.90 = -10%)</span>
+          </label>
+          <input id="e-dp_multiplier" type="number" step="0.01" min="0" placeholder="1.00"
+            value="${r.dp_multiplier != null ? (+r.dp_multiplier) : ''}">
         </div>
-      </div>` : ''}
+        <div style="font-size:.76rem;color:var(--muted);padding-bottom:.6rem;flex:1;min-width:0">
+          ${r.dp_multiplier != null
+            ? (Array.isArray(r.dp_factors) && r.dp_factors.length ? r.dp_factors.map(f=>escHtml(f)).join(' · ') : 'sin factores activos ese día')
+            : 'No calculado (reserva no hecha por la web) — puedes ingresarlo manualmente'}
+        </div>
+      </div>
       <div class="form-row">
         <div class="form-group"><label>Total ingresos</label>
           <input id="e-ingreso_total" value="${r.ingreso_total||0}" inputmode="numeric" style="color:var(--gold);font-weight:700"
@@ -6238,6 +6246,7 @@ async function saveModal(id){
     num_personas: g('e-num_personas') ? +g('e-num_personas') : null,
     num_adultos: g('e-num_adultos') ? +g('e-num_adultos') : null,
     num_ninos:   g('e-num_ninos')   ? +g('e-num_ninos')   : null,
+    dp_multiplier: g('e-dp_multiplier') ? +g('e-dp_multiplier') : null,
     nombre_adultos: g('e-nombre_adultos')||null,
     nombre_ninos:   g('e-nombre_ninos')||null,
     ingreso_reserva:ingresoReserva,

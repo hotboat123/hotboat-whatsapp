@@ -307,6 +307,7 @@ class UpdateReservaRequest(BaseModel):
     num_personas: Optional[int] = None
     num_adultos: Optional[int] = None
     num_ninos: Optional[int] = None
+    dp_multiplier: Optional[float] = None
     nombre_adultos: Optional[str] = None
     nombre_ninos: Optional[str] = None
     ingreso_reserva: Optional[float] = None
