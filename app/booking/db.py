@@ -1170,45 +1170,49 @@ def ensure_dynamic_pricing_columns() -> None:
 
 
 def ensure_alojamientos_table() -> None:
-    """Recreates the `alojamientos` table if missing (CREATE TABLE IF NOT
-    EXISTS — no-op if it already exists, so this is safe to run on every
-    startup). Unlike accommodation_bookings/accommodation_blocked_dates,
-    this table was never part of a tracked migration, so an accidental
-    DROP TABLE had no automatic recovery path. Schema matches exactly what
+    """Self-heals the `alojamientos` table, whatever state it's actually in.
+
+    Turns out the table wasn't fully dropped — it survived but is missing
+    specific columns (e.g. `group_name`, while `group_name_en`/`group_name_pt`
+    are still there), which a plain CREATE TABLE IF NOT EXISTS silently
+    no-ops on since the table object already exists. So: create a minimal
+    skeleton if the table is truly gone, then ADD COLUMN IF NOT EXISTS for
+    every column individually — converges to the full correct schema
+    whether the table is missing entirely, missing a handful of columns
+    (this case), or already fine. Schema matches exactly what
     /api/content/alojamientos and the admin CRUD endpoints
-    (admin_router.py AlojamientoBody) read/write — an accidental drop of
-    this table previously took down /api/content/alojamientos with an
-    uncaught 500, which in turn broke booking-soft.html's menu-visibility
-    load entirely (Promise.all([...]) rejects on a non-JSON error body, so
-    S.menuSettings never gets updated past its all-true defaults)."""
+    (admin_router.py AlojamientoBody) read/write.
+
+    Isolated from ensure_db_columns() — a single bad statement there once
+    blocked every migration listed after it."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS alojamientos (
                     id SERIAL PRIMARY KEY,
                     slug TEXT UNIQUE NOT NULL,
-                    name TEXT NOT NULL,
-                    group_name TEXT DEFAULT '',
-                    icon TEXT DEFAULT '🏠',
-                    description TEXT DEFAULT '',
-                    name_en TEXT DEFAULT '',
-                    name_pt TEXT DEFAULT '',
-                    description_en TEXT DEFAULT '',
-                    description_pt TEXT DEFAULT '',
-                    group_name_en TEXT DEFAULT '',
-                    group_name_pt TEXT DEFAULT '',
-                    price_from INTEGER DEFAULT 0,
-                    cost_from INTEGER DEFAULT 0,
-                    capacity INTEGER DEFAULT 2,
-                    total_units INTEGER DEFAULT 1,
-                    owner_whatsapp TEXT DEFAULT '',
-                    image_path TEXT,
-                    extra_images JSONB DEFAULT '[]'::jsonb,
-                    is_active BOOLEAN DEFAULT TRUE,
-                    display_order INTEGER DEFAULT 0,
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                    name TEXT NOT NULL
                 );
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS group_name TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT '🏠';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS name_en TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS name_pt TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS description_en TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS description_pt TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS group_name_en TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS group_name_pt TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS price_from INTEGER DEFAULT 0;
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS cost_from INTEGER DEFAULT 0;
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS capacity INTEGER DEFAULT 2;
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS total_units INTEGER DEFAULT 1;
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS owner_whatsapp TEXT DEFAULT '';
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS image_path TEXT;
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb;
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
                 CREATE INDEX IF NOT EXISTS idx_alojamientos_slug   ON alojamientos(slug);
                 CREATE INDEX IF NOT EXISTS idx_alojamientos_active ON alojamientos(is_active);
             """)
