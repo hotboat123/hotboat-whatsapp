@@ -854,7 +854,13 @@ app = FastAPI(
 @app.middleware("http")
 async def add_no_cache_headers(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith("/static/"):
+    path = request.url.path
+    # /api/* and /booking* serve config the admin edits constantly (precios,
+    # toggles de menu, disponibilidad) — if a CDN/proxy in front of the
+    # custom domain caches these, admin changes never show up on the live
+    # site until that cache happens to expire. Force no-store everywhere
+    # dynamic, same as the existing /static/ rule below.
+    if path.startswith("/static/") or path.startswith("/api/") or path.startswith("/booking"):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"

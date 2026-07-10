@@ -28,13 +28,18 @@ router = APIRouter()
 CHILE_TZ = ZoneInfo("America/Santiago")
 
 
-def _booking_html() -> str:
+def _booking_html() -> HTMLResponse:
     # Diseño nuevo (verde / "soft"). El antiguo queda en booking.html como respaldo.
     path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "booking-soft.html")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            return apply_meta_pixel_placeholder(f.read(), get_settings().meta_pixel_id)
-    return "<h1>Booking page not found</h1>"
+            content = apply_meta_pixel_placeholder(f.read(), get_settings().meta_pixel_id)
+    else:
+        content = "<h1>Booking page not found</h1>"
+    # no-store: la pagina lee config (precios, toggles de menu, disponibilidad)
+    # que cambia seguido desde el admin -- un CDN/navegador cacheando el HTML
+    # deja a los clientes viendo una version vieja indefinidamente.
+    return HTMLResponse(content=content, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @router.get("/booking", response_class=HTMLResponse)

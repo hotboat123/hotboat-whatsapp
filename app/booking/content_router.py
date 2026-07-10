@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel
 from app.db.connection import get_connection
 
@@ -370,8 +370,12 @@ def list_packs(active_only: bool = True, lang: str = Query("es", description="es
 # ── Public menu visibility settings (read-only) ───────────────────────────────
 
 @content_router.get("/api/content/menu-settings")
-def public_menu_settings():
+def public_menu_settings(response: Response):
     from app.booking.operator_settings import get_menu_settings
+    # Nunca cachear: el admin espera que un toggle apagado desaparezca de
+    # inmediato de la web/WhatsApp, no en la proxima vez que expire un cache
+    # de CDN/navegador.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return get_menu_settings()
 
 
