@@ -24,27 +24,34 @@ def persist_booking_visitor_event(
     is_returning: bool,
     recorded_at: datetime,
     link_token: Optional[str] = None,
+    visitor_id: Optional[str] = None,
 ) -> None:
     """Append one tracking event (one row per /api/booking/track call).
     link_token (if present) ties this visit's whole funnel back to a specific
-    per-client tracked link (see app/booking/link_tracking_router.py)."""
+    per-client tracked link (see app/booking/link_tracking_router.py).
+    visitor_id (if present) is the persistent anonymous id forwarded from
+    hotboat-marketing-web's landing tracker — joins landing behavior with
+    booking-site behavior for the same anonymous visitor (see tracker.js
+    in that repo, and the visitor_id column it already added to this
+    shared table)."""
     sid = (session_id or "").strip()[:64]
     et = (event_type or "").strip()[:96]
     if not sid or not et:
         return
     extra = (extra_date or "").strip()[:120] if extra_date else None
     lt = (link_token or "").strip()[:16] or None
+    vid = (visitor_id or "").strip()[:64] or None
 
     sql = """
         INSERT INTO booking_visitor_events (
             session_id, event_type, extra_date, time_label,
-            lang, referrer, is_returning, recorded_at, link_token
+            lang, referrer, is_returning, recorded_at, link_token, visitor_id
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         sid, et, extra, (time_label or "")[:16], (lang or "es")[:8],
-        (referrer or "")[:500], bool(is_returning), recorded_at, lt,
+        (referrer or "")[:500], bool(is_returning), recorded_at, lt, vid,
     )
     try:
         with get_connection() as conn:
@@ -54,11 +61,14 @@ def persist_booking_visitor_event(
     except pg_errors.UndefinedColumn:
         # Self-heal: the startup migration that adds this column may not have
         # run yet on this deployment. Add it once, then retry the insert.
-        _log.warning("booking_visitor_events.link_token missing — adding it now")
+        _log.warning("booking_visitor_events.link_token/visitor_id missing — adding now")
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS link_token VARCHAR(16)"
+                )
+                cur.execute(
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS visitor_id VARCHAR(64)"
                 )
             conn.commit()
         with get_connection() as conn:

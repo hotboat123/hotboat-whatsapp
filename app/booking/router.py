@@ -2451,6 +2451,7 @@ class TrackEventRequest(BaseModel):
     # Custom ad URL parameter (landing pages / Meta website URL fields)
     parametro_url: Optional[str] = ""
     link_token: Optional[str] = ""  # present when the visit came from a per-client tracked link (/ir/{token})
+    visitor_id: Optional[str] = ""  # persistent anonymous id forwarded from hotboat-marketing-web (landing)
 
 
 def _merge_visitor_session_attribution(dst: dict, body: TrackEventRequest) -> None:
@@ -2512,6 +2513,7 @@ async def track_booking_event(body: TrackEventRequest):
             is_returning=bool(body.is_returning),
             recorded_at=now_cl,
             link_token=(body.link_token or "").strip() or None,
+            visitor_id=(body.visitor_id or "").strip() or None,
         )
     except Exception as _persist_e:
         logger.warning("visitor event persist failed: %s", _persist_e)

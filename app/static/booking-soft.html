@@ -1059,6 +1059,16 @@ const _linkToken = (()=>{
   try{ return sessionStorage.getItem('_hb_lt') || ''; }catch(e){ return ''; }
 })();
 
+// Visitor id que manda hotboat-marketing-web (landing) cuando alguien llega
+// clickeando "Reservar" desde ahí — mismo patron que _linkToken. Une el
+// comportamiento en la landing con el embudo del sitio de reservas por
+// visitor_id, aunque el visitante sea anonimo (sin telefono/email/nombre).
+const _landingVisitorId = (()=>{
+  const fromUrl = _queryParam(['vid'],64);
+  if(fromUrl){ try{ sessionStorage.setItem('_hb_vid', fromUrl); }catch(e){} return fromUrl; }
+  try{ return sessionStorage.getItem('_hb_vid') || ''; }catch(e){ return ''; }
+})();
+
 let _lastTrackedEvent = 'page_visit';
 let _bookingCompletedTracked = false;
 function _trackEvent(event, date){
@@ -1073,6 +1083,7 @@ function _trackEvent(event, date){
       is_returning: _isReturning,
       ..._landingAttribution,
       link_token: _linkToken || '',
+      visitor_id: _landingVisitorId || '',
     });
     fetch('/api/booking/track',{method:'POST',headers:{'Content-Type':'application/json'},body:payload}).catch(()=>{});
   }catch(e){}
@@ -1092,6 +1103,7 @@ function _trackLeave(){
       is_returning: _isReturning,
       ..._landingAttribution,
       link_token: _linkToken || '',
+      visitor_id: _landingVisitorId || '',
     });
     navigator.sendBeacon('/api/booking/track', new Blob([payload], {type:'application/json'}));
   }catch(e){}
