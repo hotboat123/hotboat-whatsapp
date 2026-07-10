@@ -5418,7 +5418,7 @@ async function openModal(id){
             <span style="color:var(--muted);font-size:.7rem;font-weight:400;margin-left:.4rem">(1.10 = +10%, 1.20 = +20%, 0.90 = -10%)</span>
           </label>
           <input id="e-dp_multiplier" type="number" step="0.01" min="0" placeholder="1.00"
-            value="${r.dp_multiplier != null ? (+r.dp_multiplier) : ''}">
+            value="${r.dp_multiplier != null ? (+r.dp_multiplier) : ''}" oninput="applyDpMultiplierToPrice()">
         </div>
         <div style="font-size:.76rem;color:var(--muted);padding-bottom:.6rem;flex:1;min-width:0">
           ${r.dp_multiplier != null
@@ -8615,17 +8615,41 @@ function lookupBasePrice(nStr){
   const n = +nStr;
   if(!n) return;
   const pricePerPerson = getPriceForPersons(n);
-  const total = pricePerPerson * n;
   const hint = document.getElementById('e-precio-hint');
-  const inp  = document.getElementById('e-ingreso_reserva');
-  if(pricePerPerson && inp){
-    inp.value = total;
-    if(hint) hint.textContent = `→ $${pricePerPerson.toLocaleString('es-CL')}/p × ${n}p = ${fmtMoney(total)}`;
-    updateExtrasTotals();
-    syncPagoFaltante();
-  } else {
+  if(!pricePerPerson){
     if(hint) hint.textContent = n ? `sin precio configurado para ${n}p` : '';
+    return;
   }
+  applyDpMultiplierToPrice();
+}
+
+// Recalcula el precio de la experiencia (e-ingreso_reserva) a partir del
+// precio base por persona × el multiplicador de precio dinamico ingresado.
+// Se dispara al cambiar personas o el multiplicador, para que el mail de
+// confirmacion (que lee ingreso_reserva) siempre muestre lo que el cliente
+// realmente debe pagar, no el precio base sin el ajuste.
+function applyDpMultiplierToPrice(){
+  const n = +document.getElementById('e-num_personas')?.value || 0;
+  const hint = document.getElementById('e-precio-hint');
+  if(!n) return;
+  const pricePerPerson = getPriceForPersons(n);
+  if(!pricePerPerson){
+    if(hint) hint.textContent = `sin precio configurado para ${n}p`;
+    return;
+  }
+  const multRaw = document.getElementById('e-dp_multiplier')?.value;
+  const mult = multRaw ? (+multRaw || 1) : 1;
+  const finalPP = Math.round(pricePerPerson * mult / 1000) * 1000;
+  const total = finalPP * n;
+  const inp = document.getElementById('e-ingreso_reserva');
+  if(inp) inp.value = total;
+  if(hint){
+    hint.textContent = (mult !== 1)
+      ? `→ $${pricePerPerson.toLocaleString('es-CL')}/p × ${mult} = $${finalPP.toLocaleString('es-CL')}/p × ${n}p = ${fmtMoney(total)}`
+      : `→ $${pricePerPerson.toLocaleString('es-CL')}/p × ${n}p = ${fmtMoney(total)}`;
+  }
+  updateExtrasTotals();
+  syncPagoFaltante();
 }
 
 function syncCostoTotal(){
