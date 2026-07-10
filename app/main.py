@@ -800,6 +800,14 @@ async def lifespan(app: FastAPI):
         ensure_dynamic_pricing_columns()
     except Exception as _e:
         logger.warning(f"ensure_dynamic_pricing_columns skipped: {_e}")
+    # Ensure alojamientos table exists (self-heals if accidentally dropped —
+    # its absence previously broke /api/content/alojamientos with an
+    # uncaught 500, which cascaded into menu-visibility never loading)
+    try:
+        from app.booking.db import ensure_alojamientos_table
+        ensure_alojamientos_table()
+    except Exception as _e:
+        logger.warning(f"ensure_alojamientos_table skipped: {_e}")
     try:
         _ensure_bot_tables()
         seed_bot_defaults()

@@ -1169,6 +1169,52 @@ def ensure_dynamic_pricing_columns() -> None:
             conn.commit()
 
 
+def ensure_alojamientos_table() -> None:
+    """Recreates the `alojamientos` table if missing (CREATE TABLE IF NOT
+    EXISTS — no-op if it already exists, so this is safe to run on every
+    startup). Unlike accommodation_bookings/accommodation_blocked_dates,
+    this table was never part of a tracked migration, so an accidental
+    DROP TABLE had no automatic recovery path. Schema matches exactly what
+    /api/content/alojamientos and the admin CRUD endpoints
+    (admin_router.py AlojamientoBody) read/write — an accidental drop of
+    this table previously took down /api/content/alojamientos with an
+    uncaught 500, which in turn broke booking-soft.html's menu-visibility
+    load entirely (Promise.all([...]) rejects on a non-JSON error body, so
+    S.menuSettings never gets updated past its all-true defaults)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS alojamientos (
+                    id SERIAL PRIMARY KEY,
+                    slug TEXT UNIQUE NOT NULL,
+                    name TEXT NOT NULL,
+                    group_name TEXT DEFAULT '',
+                    icon TEXT DEFAULT '🏠',
+                    description TEXT DEFAULT '',
+                    name_en TEXT DEFAULT '',
+                    name_pt TEXT DEFAULT '',
+                    description_en TEXT DEFAULT '',
+                    description_pt TEXT DEFAULT '',
+                    group_name_en TEXT DEFAULT '',
+                    group_name_pt TEXT DEFAULT '',
+                    price_from INTEGER DEFAULT 0,
+                    cost_from INTEGER DEFAULT 0,
+                    capacity INTEGER DEFAULT 2,
+                    total_units INTEGER DEFAULT 1,
+                    owner_whatsapp TEXT DEFAULT '',
+                    image_path TEXT,
+                    extra_images JSONB DEFAULT '[]'::jsonb,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    display_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_alojamientos_slug   ON alojamientos(slug);
+                CREATE INDEX IF NOT EXISTS idx_alojamientos_active ON alojamientos(is_active);
+            """)
+            conn.commit()
+
+
 def create_signature(booking_ref: str, data: dict, ip: str = "") -> dict:
     """Save a passenger T&C signature. Returns the created row as dict."""
     from datetime import date as _date

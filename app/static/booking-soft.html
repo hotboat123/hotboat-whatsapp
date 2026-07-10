@@ -1461,10 +1461,14 @@ let DYN_ALOJAMIENTOS = [];
 
 async function loadDynamicContent(){
   try{
+    // Cada fetch tiene su propio catch: antes, si UNO fallaba (ej. un 500 con
+    // cuerpo no-JSON), Promise.all([...]) entero se rechazaba y S.menuSettings
+    // nunca se actualizaba desde sus defaults (todo true) -- un solo endpoint
+    // roto terminaba mostrando TODAS las secciones sin importar la config real.
     const [er, pr, ar, ms] = await Promise.all([
-      fetch(`/api/content/experiencias?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
-      fetch(`/api/content/packs?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
-      fetch(`/api/content/alojamientos?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()),
+      fetch(`/api/content/experiencias?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()).catch(()=>({})),
+      fetch(`/api/content/packs?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()).catch(()=>({})),
+      fetch(`/api/content/alojamientos?lang=${encodeURIComponent(LANG||'es')}`).then(r=>r.json()).catch(()=>({})),
       fetch('/api/content/menu-settings').then(r=>r.json()).catch(()=>({})),
     ]);
     if(ms && typeof ms === 'object') S.menuSettings = {...S.menuSettings, ...ms};
