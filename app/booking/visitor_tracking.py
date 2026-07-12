@@ -24,27 +24,32 @@ def persist_booking_visitor_event(
     is_returning: bool,
     recorded_at: datetime,
     link_token: Optional[str] = None,
+    visitor_id: Optional[str] = None,
 ) -> None:
     """Append one tracking event (one row per /api/booking/track call).
     link_token (if present) ties this visit's whole funnel back to a specific
-    per-client tracked link (see app/booking/link_tracking_router.py)."""
+    per-client tracked link (see app/booking/link_tracking_router.py).
+    visitor_id (if present) is the persistent hb_uid set by hotboat-marketing-web's
+    tracker.js on hotboat.cl — the same column that repo already writes to on the
+    shared Postgres, so a person's landing + booking browsing share one id."""
     sid = (session_id or "").strip()[:64]
     et = (event_type or "").strip()[:96]
     if not sid or not et:
         return
     extra = (extra_date or "").strip()[:120] if extra_date else None
     lt = (link_token or "").strip()[:16] or None
+    vid = (visitor_id or "").strip()[:64] or None
 
     sql = """
         INSERT INTO booking_visitor_events (
             session_id, event_type, extra_date, time_label,
-            lang, referrer, is_returning, recorded_at, link_token
+            lang, referrer, is_returning, recorded_at, link_token, visitor_id
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         sid, et, extra, (time_label or "")[:16], (lang or "es")[:8],
-        (referrer or "")[:500], bool(is_returning), recorded_at, lt,
+        (referrer or "")[:500], bool(is_returning), recorded_at, lt, vid,
     )
     try:
         with get_connection() as conn:
@@ -54,11 +59,12 @@ def persist_booking_visitor_event(
     except pg_errors.UndefinedColumn:
         # Self-heal: the startup migration that adds this column may not have
         # run yet on this deployment. Add it once, then retry the insert.
-        _log.warning("booking_visitor_events.link_token missing — adding it now")
+        _log.warning("booking_visitor_events.link_token/visitor_id missing — adding now")
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS link_token VARCHAR(16)"
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS link_token VARCHAR(16);"
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS visitor_id VARCHAR(64);"
                 )
             conn.commit()
         with get_connection() as conn:
@@ -126,3 +132,181 @@ def persist_booking_visitor_session_closed(
                 ),
             )
         conn.commit()
+
+
+def persist_booking_visitor_identity(
+    session_id: str,
+    *,
+    visitor_id: Optional[str] = None,
+    phone: Optional[str] = None,
+    email: Optional[str] = None,
+    name: Optional[str] = None,
+    booking_ref: Optional[str] = None,
+) -> None:
+    """Link an anonymous browsing session (and its persistent visitor_id, if any)
+    to the identity captured at booking time, so booking_visitor_events — landing
+    (hotboat.cl) and booking (booking-soft.html), same table — can be joined back
+    to a phone for people who never went through a tracked_quote_links link."""
+    sid = (session_id or "").strip()[:64]
+    if not sid:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO booking_visitor_identity (
+                    session_id, visitor_id, phone, email, name, booking_ref
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    sid,
+                    (visitor_id or "").strip()[:64] or None,
+                    (phone or "").strip()[:32] or None,
+                    (email or "").strip()[:200] or None,
+                    (name or "").strip()[:200] or None,
+                    (booking_ref or "").strip()[:50] or None,
+                ),
+            )
+        conn.commit()
+
+
+def get_identity_phone(session_id: str, visitor_id: Optional[str] = None) -> Optional[str]:
+    """Look up a phone already linked (via a previous booking) to this session or
+    visitor_id, so later browsing from the same person can refresh their web
+    activity summary even though this particular session never books."""
+    sid = (session_id or "").strip()[:64] or None
+    vid = (visitor_id or "").strip()[:64] or None
+    if not sid and not vid:
+        return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT phone FROM booking_visitor_identity
+                WHERE phone IS NOT NULL AND phone <> ''
+                  AND (session_id = %s OR (%s IS NOT NULL AND visitor_id = %s))
+                ORDER BY linked_at DESC
+                LIMIT 1
+                """,
+                (sid, vid, vid),
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+
+
+_DEEP_INTEREST_EVENTS = {
+    # booking-soft.html
+    "view_prices", "view_alojamientos", "view_alojamiento_detail",
+    "view_experiencias", "view_packs", "view_arma_pack",
+    # hotboat-marketing-web (landing) — same booking_visitor_events table
+    "view_precio", "faq_open",
+}
+
+_BOOKING_INTENT_EVENTS = {"view_reservar", "click_reservar", "click_whatsapp"}
+
+
+def _classify_event_types(types: set) -> tuple:
+    """Mirrors _classify_visitor() in app/booking/router.py (duplicated here on
+    purpose: router.py imports from this module, not the reverse, so importing
+    back would be circular), extended to also recognize the landing-page event
+    vocabulary from hotboat-marketing-web's tracker.js (page_visit, view_precio,
+    click_whatsapp, click_reservar, faq_open, etc — same booking_visitor_events
+    table, different site). Keep in sync with _classify_visitor if it changes."""
+    if "booking_completed" in types:
+        return "✅ Reservó", "Completó una reserva en la página"
+    if "solicitud_form" in types:
+        return "🎯 Listo para reservar", "Abrió el formulario de solicitud de reserva"
+    if "date_selected" in types:
+        return "⭐ Muy interesado", "Seleccionó una fecha en el calendario"
+    deep = types & _DEEP_INTEREST_EVENTS
+    if (types & _BOOKING_INTENT_EVENTS) or len(deep) >= 2:
+        return "🔍 Explorando activamente", "Visitó varias secciones y mostró interés real"
+    if deep:
+        return "🔍 Explorando", "Revisó algunas secciones de la página"
+    return "👀 Solo mirando", "Entró a la página pero no interactuó mucho"
+
+
+def _referrer_short_label(referrer: str) -> str:
+    if not referrer:
+        return ""
+    r = referrer.lower()
+    if "instagram" in r:
+        return "📸 Instagram"
+    if "facebook" in r or "fb.com" in r:
+        return "👥 Facebook"
+    if "tiktok" in r:
+        return "🎵 TikTok"
+    if "google" in r:
+        return "🔍 Google"
+    if "whatsapp" in r or "wa.me" in r:
+        return "💬 WhatsApp"
+    return referrer[:80]
+
+
+def upsert_visitor_summary(phone: str) -> None:
+    """Aggregate everything we know about this phone's site browsing — landing
+    (hotboat.cl) and booking (booking-soft.html), across every session/visitor_id
+    linked to it via booking_visitor_identity — into a single summary row, so the
+    CRM 'Llamadas' dashboard (hotboat-email-marketing-spec) can show a rich
+    classification without joining raw events on every sync."""
+    raw_phone = (phone or "").strip()
+    if not raw_phone:
+        return
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COUNT(DISTINCT bve.session_id) AS session_count,
+                        COUNT(bve.id)                   AS event_count,
+                        MIN(bve.recorded_at)             AS first_seen_at,
+                        MAX(bve.recorded_at)             AS last_seen_at,
+                        array_agg(DISTINCT bve.event_type) AS event_types,
+                        (array_agg(bve.referrer ORDER BY bve.recorded_at DESC))[1] AS last_referrer,
+                        (array_agg(bvi.visitor_id ORDER BY bve.recorded_at DESC))[1] AS visitor_id
+                    FROM booking_visitor_identity bvi
+                    JOIN booking_visitor_events bve
+                      ON bve.session_id = bvi.session_id
+                         OR (bvi.visitor_id IS NOT NULL AND bve.visitor_id = bvi.visitor_id)
+                    WHERE bvi.phone = %s
+                    """,
+                    (raw_phone,),
+                )
+                row = cur.fetchone()
+                if not row or not row[0]:
+                    return
+                (session_count, event_count, first_seen_at, last_seen_at,
+                 event_types, last_referrer, visitor_id) = row
+                classification, classification_desc = _classify_event_types(set(event_types or []))
+                referrer_label = _referrer_short_label(last_referrer or "")
+
+                cur.execute(
+                    """
+                    INSERT INTO booking_visitor_summary (
+                        phone, visitor_id, session_count, event_count,
+                        first_seen_at, last_seen_at, classification, classification_desc,
+                        referrer_label, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (phone) DO UPDATE SET
+                        visitor_id           = EXCLUDED.visitor_id,
+                        session_count        = EXCLUDED.session_count,
+                        event_count          = EXCLUDED.event_count,
+                        first_seen_at        = EXCLUDED.first_seen_at,
+                        last_seen_at         = EXCLUDED.last_seen_at,
+                        classification       = EXCLUDED.classification,
+                        classification_desc  = EXCLUDED.classification_desc,
+                        referrer_label       = EXCLUDED.referrer_label,
+                        updated_at           = NOW()
+                    """,
+                    (
+                        raw_phone, visitor_id, session_count, event_count,
+                        first_seen_at, last_seen_at, classification, classification_desc,
+                        referrer_label,
+                    ),
+                )
+            conn.commit()
+    except Exception as e:
+        _log.warning("upsert_visitor_summary failed for %s: %s", raw_phone, e)

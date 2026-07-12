@@ -33,6 +33,8 @@ class CreateBookingRequest(BaseModel):
     utm_campaign: Optional[str] = ""
     utm_content: Optional[str] = ""
     parametro_url: Optional[str] = ""
+    session_id: Optional[str] = ""  # browsing session (hb_sid) that led to this booking
+    visitor_id: Optional[str] = ""  # persistent visitor (hb_uid), spans landing + booking
 
 
 class BookingResponse(BaseModel):

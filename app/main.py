@@ -794,6 +794,12 @@ async def lifespan(app: FastAPI):
         ensure_analytics_views()
     except Exception as _e:
         logger.warning(f"ensure_analytics_views skipped: {_e}")
+    # Ensure direct-web visitor identity tables exist (session/visitor_id -> phone)
+    try:
+        from app.booking.db import ensure_visitor_identity_tables
+        ensure_visitor_identity_tables()
+    except Exception as _e:
+        logger.warning(f"ensure_visitor_identity_tables skipped: {_e}")
     # Ensure dynamic-pricing audit columns exist (dp_multiplier, dp_factors)
     try:
         from app.booking.db import ensure_dynamic_pricing_columns

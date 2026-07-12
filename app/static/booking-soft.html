@@ -1013,13 +1013,28 @@ function mediaBlock(id, imgSrc, pdfSrc){
   return imgBtn + pdfLink;
 }
 
-// Visitor session: one UUID per browser tab, stored in sessionStorage
+// Visitor session: one UUID per browser tab (hb_sid), reused if tracker.js on
+// hotboat.cl already forwarded one via ?sid= when the visitor clicked through
+// to book — same id, so that browsing session's funnel joins landing + booking.
+const _qsIdentity = new URLSearchParams(window.location.search);
 const _sessionId = (()=>{
   try{
-    let id = sessionStorage.getItem('hb_sid');
-    if(!id){ id = crypto.randomUUID(); sessionStorage.setItem('hb_sid', id); }
+    let id = _qsIdentity.get('sid') || sessionStorage.getItem('hb_sid');
+    if(!id){ id = crypto.randomUUID(); }
+    sessionStorage.setItem('hb_sid', id);
     return id;
   }catch(e){ return 'anon-'+Math.random().toString(36).slice(2); }
+})();
+// Persistent visitor id (hb_uid), same mechanism as tracker.js on hotboat.cl:
+// reused via ?vid= if they came from the landing, otherwise generated once here
+// and kept in localStorage so repeat visits straight to /booking still link up.
+const _visitorId = (()=>{
+  try{
+    let id = _qsIdentity.get('vid') || localStorage.getItem('hb_uid');
+    if(!id){ id = crypto.randomUUID(); }
+    localStorage.setItem('hb_uid', id);
+    return id;
+  }catch(e){ return ''; }
 })();
 const _isReturning = (()=>{
   try{ const v=!!localStorage.getItem('hb_visited'); localStorage.setItem('hb_visited','1'); return v; }
@@ -1070,6 +1085,7 @@ function _trackEvent(event, date){
       lang: (typeof S!=='undefined'&&S.lang)||'es',
       referrer: document.referrer?document.referrer.substring(0,200):'',
       session_id: _sessionId,
+      visitor_id: _visitorId,
       is_returning: _isReturning,
       ..._landingAttribution,
       link_token: _linkToken || '',
@@ -1089,6 +1105,7 @@ function _trackLeave(){
       lang: (typeof S!=='undefined'&&S.lang)||'es',
       referrer: document.referrer?document.referrer.substring(0,200):'',
       session_id: _sessionId,
+      visitor_id: _visitorId,
       is_returning: _isReturning,
       ..._landingAttribution,
       link_token: _linkToken || '',
@@ -3473,6 +3490,8 @@ async function submitBooking(){
       utm_campaign: S.utm_campaign || '',
       utm_content: S.utm_content || '',
       parametro_url: S.parametro_url || '',
+      session_id: _sessionId,
+      visitor_id: _visitorId,
     };
     if(S.isGift){
       const _gl = ['\u{1F381} REGALO'];
@@ -3763,6 +3782,7 @@ async function init(){
         const d = JSON.stringify({
           event:'exit',
           session_id:_sessionId,
+          visitor_id:_visitorId,
           is_returning:_isReturning,
           lang:S.lang||'es',
           referrer: document.referrer?document.referrer.substring(0,200):'',

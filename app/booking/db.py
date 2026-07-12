@@ -1154,6 +1154,55 @@ def ensure_analytics_views() -> None:
             conn.commit()
 
 
+def ensure_visitor_identity_tables() -> None:
+    """Create the tables that link anonymous browsing (session_id/visitor_id) to a
+    real phone once someone books directly from the web (ads/organic/direct — not
+    via a tracked_quote_links link, which is the only identity source the other
+    analytics views above cover). Isolated from ensure_db_columns() for the same
+    reason as ensure_analytics_views(): one bad statement here shouldn't block
+    every migration listed after it.
+
+    visitor_id matches hb_uid, the persistent localStorage id already set by
+    hotboat-marketing-web's tracker.js on hotboat.cl (and forwarded as ?vid= to
+    /booking) — so a summary aggregated by visitor_id spans landing + booking,
+    not just the single session in which someone happens to book.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS visitor_id VARCHAR(64);
+                CREATE INDEX IF NOT EXISTS idx_bve_visitor_id ON booking_visitor_events(visitor_id);
+
+                CREATE TABLE IF NOT EXISTS booking_visitor_identity (
+                    id           SERIAL PRIMARY KEY,
+                    session_id   VARCHAR(64) NOT NULL,
+                    visitor_id   VARCHAR(64),
+                    phone        VARCHAR(32),
+                    email        VARCHAR(200),
+                    name         VARCHAR(200),
+                    booking_ref  VARCHAR(50),
+                    linked_at    TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_bvi_session_id ON booking_visitor_identity(session_id);
+                CREATE INDEX IF NOT EXISTS idx_bvi_visitor_id ON booking_visitor_identity(visitor_id);
+                CREATE INDEX IF NOT EXISTS idx_bvi_phone      ON booking_visitor_identity(phone);
+
+                CREATE TABLE IF NOT EXISTS booking_visitor_summary (
+                    phone               VARCHAR(32) PRIMARY KEY,
+                    visitor_id          VARCHAR(64),
+                    session_count       INTEGER DEFAULT 0,
+                    event_count         INTEGER DEFAULT 0,
+                    first_seen_at       TIMESTAMPTZ,
+                    last_seen_at        TIMESTAMPTZ,
+                    classification      TEXT DEFAULT '',
+                    classification_desc TEXT DEFAULT '',
+                    referrer_label      TEXT DEFAULT '',
+                    updated_at          TIMESTAMPTZ DEFAULT NOW()
+                );
+            """)
+            conn.commit()
+
+
 def ensure_dynamic_pricing_columns() -> None:
     """Add the columns that record, at booking-creation time, the exact
     dynamic-pricing multiplier applied and why (which factors contributed).

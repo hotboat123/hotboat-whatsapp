@@ -517,6 +517,28 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         result = create_booking(data)
         booking_ref = result["booking_ref"]
 
+        # Link the anonymous browsing session (if any) to the identity just
+        # captured, so booking_visitor_events — landing (hotboat.cl) + booking,
+        # same table — can be joined back to this phone (e.g. by the CRM sync).
+        if request.session_id:
+            try:
+                from app.booking.visitor_tracking import (
+                    persist_booking_visitor_identity,
+                    upsert_visitor_summary,
+                )
+                persist_booking_visitor_identity(
+                    request.session_id,
+                    visitor_id=request.visitor_id,
+                    phone=request.customer_phone,
+                    email=request.customer_email,
+                    name=request.customer_name,
+                    booking_ref=booking_ref,
+                )
+                if request.customer_phone:
+                    upsert_visitor_summary(request.customer_phone)
+            except Exception as _link_e:
+                logger.warning(f"visitor identity link failed for {booking_ref}: {_link_e}")
+
         # Update leads.ad_source by phone if UTM campaign/parametro_url present
         _utm_label = data["utm_campaign"] or data["parametro_url"] or data["utm_source"]
         if _utm_label:
@@ -2451,6 +2473,7 @@ class TrackEventRequest(BaseModel):
     # Custom ad URL parameter (landing pages / Meta website URL fields)
     parametro_url: Optional[str] = ""
     link_token: Optional[str] = ""  # present when the visit came from a per-client tracked link (/ir/{token})
+    visitor_id: Optional[str] = ""  # persistent hb_uid (localStorage), spans landing (hotboat.cl) + booking
 
 
 def _merge_visitor_session_attribution(dst: dict, body: TrackEventRequest) -> None:
@@ -2512,6 +2535,7 @@ async def track_booking_event(body: TrackEventRequest):
             is_returning=bool(body.is_returning),
             recorded_at=now_cl,
             link_token=(body.link_token or "").strip() or None,
+            visitor_id=(body.visitor_id or "").strip() or None,
         )
     except Exception as _persist_e:
         logger.warning("visitor event persist failed: %s", _persist_e)
@@ -2764,3 +2788,11 @@ def _send_session_summary(session: dict):
         )
     except Exception as pe:
         logger.warning("visitor_session DB persist failed: %s", pe)
+
+    try:
+        from app.booking.visitor_tracking import get_identity_phone, upsert_visitor_summary
+        known_phone = get_identity_phone(session.get("session_id", ""))
+        if known_phone:
+            upsert_visitor_summary(known_phone)
+    except Exception as se:
+        logger.warning("visitor_summary refresh on session close failed: %s", se)
