@@ -789,3 +789,46 @@ async def migrate_ad_sources() -> dict:
     return {"updated": updated, "skipped": skipped, "errors": errors}
 
 
+def get_crm_summary_for_phone(phone_number: str) -> Optional[Dict]:
+    """Look up this phone in contacts_crm (hotboat-email-marketing-spec's table —
+    same shared Postgres, read directly rather than over HTTP) to tell Kia-Ai
+    whether this person has more history than just this WhatsApp conversation
+    (an actual booking, or direct-web activity), and if so where to link out to.
+
+    Every WhatsApp lead already gets a contacts_crm row via that app's crm_sync,
+    so merely existing isn't "history" — has_history requires an extra signal
+    beyond being a bare lead.
+    """
+    phone = (phone_number or "").strip()
+    if not phone:
+        return None
+    phone_digits = phone.lstrip("+")
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, linked_contact_id, veces_hotboat, web_classification, link_clicked
+                    FROM contacts_crm
+                    WHERE phone IN (%s, %s)
+                    LIMIT 1
+                    """,
+                    (phone, phone_digits),
+                )
+                row = cur.fetchone()
+    except Exception as e:
+        logger.debug(f"get_crm_summary_for_phone skipped: {e}")
+        return None
+
+    if not row:
+        return None
+
+    contacts_crm_id, linked_contact_id, veces_hotboat, web_classification, link_clicked = row
+    has_history = bool((veces_hotboat or 0) > 0 or web_classification or link_clicked)
+    return {
+        "has_history": has_history,
+        "contacts_crm_id": contacts_crm_id,
+        "linked_contact_id": linked_contact_id,
+    }
+
+

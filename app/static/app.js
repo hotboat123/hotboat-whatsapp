@@ -21,6 +21,8 @@ function setViewportHeightVar() {
 // API Base URL
 const API_BASE = window.location.origin;
 const DEFAULT_TIME_ZONE = 'America/Santiago';
+// CRM (hotboat-email-marketing-spec) frontend, for the "ver historial completo" link
+const CRM_FRONTEND_BASE = 'https://hotboat-frontend-email-marketing-staging.up.railway.app';
 
 function normalizeMessages(messages = []) {
     if (!Array.isArray(messages)) {
@@ -628,6 +630,7 @@ async function selectConversation(phoneNumber) {
             ad_platform: data.lead?.ad_platform || null,
             ad_media_type: data.lead?.ad_media_type || null,
             ad_audience: data.lead?.ad_audience || null,
+            crmSummary: data.crm_summary || null,
         };
 
         // Update bot toggle state from lead info
@@ -804,6 +807,24 @@ function renderCurrentChat(options = {}) {
             adSourceText.textContent = '📢 no hay ad asociado';
             adSourceEl.style.background = 'transparent';
             adSourceEl.style.color = '#888';
+        }
+    }
+
+    // "Ver historial completo": solo si esta persona tiene mas que este chat
+    // (reservo, o navego la web) — el link abre su perfil unificado en el CRM
+    // de email marketing (contacts_crm/contacts, misma Postgres compartida).
+    const historyLinkEl = document.getElementById('currentChatHistoryLink');
+    if (historyLinkEl) {
+        const crm = currentConversation.crmSummary;
+        if (crm && crm.has_history) {
+            const target = crm.linked_contact_id
+                ? `${CRM_FRONTEND_BASE}/contacts/${crm.linked_contact_id}`
+                : `${CRM_FRONTEND_BASE}/calls/${crm.contacts_crm_id}`;
+            historyLinkEl.href = target;
+            historyLinkEl.style.display = 'inline-block';
+        } else {
+            historyLinkEl.style.display = 'none';
+            historyLinkEl.removeAttribute('href');
         }
     }
     messageInputArea.style.display = 'block';

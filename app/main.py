@@ -2202,7 +2202,10 @@ async def get_conversation_detail(
     """Get full conversation history for a specific phone number with optional pagination"""
     try:
         lead = await get_or_create_lead(phone_number)
-        
+
+        from app.db.leads import get_crm_summary_for_phone
+        crm_summary = get_crm_summary_for_phone(phone_number)
+
         before_dt = None
         if before:
             try:
@@ -2226,6 +2229,7 @@ async def get_conversation_detail(
         
         return {
             "lead": lead,
+            "crm_summary": crm_summary,
             "messages": messages,
             "total_messages": len(messages),
             "has_more": has_more,
