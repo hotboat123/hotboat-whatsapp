@@ -836,6 +836,8 @@ def get_crm_summary_for_phone(phone_number: str) -> Optional[Dict]:
         "has_history": has_history,
         "contacts_crm_id": contacts_crm_id,
         "linked_contact_id": linked_contact_id,
+        "web_classification": web_classification,
+        "veces_hotboat": veces_hotboat or 0,
     }
 
 

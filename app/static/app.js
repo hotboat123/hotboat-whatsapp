@@ -827,6 +827,21 @@ function renderCurrentChat(options = {}) {
             historyLinkEl.removeAttribute('href');
         }
     }
+
+    // Actividad web: clasificacion del funnel (booking_visitor_summary, via
+    // contacts_crm.web_classification) directo en el header, sin tener que
+    // clickear "Ver historial completo" para saberlo.
+    const webActivityEl = document.getElementById('currentChatWebActivity');
+    const webActivityText = document.getElementById('currentChatWebActivityText');
+    if (webActivityEl && webActivityText) {
+        const crm = currentConversation.crmSummary;
+        if (crm && crm.web_classification) {
+            webActivityText.textContent = crm.web_classification;
+            webActivityEl.style.display = 'inline-block';
+        } else {
+            webActivityEl.style.display = 'none';
+        }
+    }
     messageInputArea.style.display = 'block';
     
     // Render messages
