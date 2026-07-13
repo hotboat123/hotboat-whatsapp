@@ -828,15 +828,15 @@ function renderCurrentChat(options = {}) {
         }
     }
 
-    // Actividad web: clasificacion del funnel (booking_visitor_summary, via
-    // contacts_crm.web_classification) directo en el header, sin tener que
-    // clickear "Ver historial completo" para saberlo.
+    // Actividad web: misma escala que "Links de Seguimiento" en Configuracion
+    // (Clic en link / Vio precios / Eligió fecha / Pagó), directo en el header,
+    // sin tener que clickear "Ver historial completo" para saberlo.
     const webActivityEl = document.getElementById('currentChatWebActivity');
     const webActivityText = document.getElementById('currentChatWebActivityText');
     if (webActivityEl && webActivityText) {
         const crm = currentConversation.crmSummary;
-        if (crm && crm.web_classification) {
-            webActivityText.textContent = crm.web_classification;
+        if (crm && crm.web_activity_label) {
+            webActivityText.textContent = crm.web_activity_label;
             webActivityEl.style.display = 'inline-block';
         } else {
             webActivityEl.style.display = 'none';

@@ -815,7 +815,8 @@ def get_crm_summary_for_phone(phone_number: str) -> Optional[Dict]:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT id, linked_contact_id, veces_hotboat, web_classification, link_clicked
+                    SELECT id, linked_contact_id, veces_hotboat,
+                           link_clicked, link_viewed_prices, link_selected_date
                     FROM contacts_crm
                     WHERE phone = ANY(%s)
                     LIMIT 1
@@ -830,14 +831,32 @@ def get_crm_summary_for_phone(phone_number: str) -> Optional[Dict]:
     if not row:
         return None
 
-    contacts_crm_id, linked_contact_id, veces_hotboat, web_classification, link_clicked = row
-    has_history = bool((veces_hotboat or 0) > 0 or web_classification or link_clicked)
+    (contacts_crm_id, linked_contact_id, veces_hotboat,
+     link_clicked, link_viewed_prices, link_selected_date) = row
+    veces_hotboat = veces_hotboat or 0
+
+    # Escala unica de actividad web, de menos a mas — link_clicked/viewed_prices/
+    # selected_date ya vienen unificados por crm_sync (cubren tanto links de
+    # WhatsApp como visitas directas), asi que esto calza con lo que muestra
+    # "Links de Seguimiento" en Configuracion, no solo la clasificacion nueva.
+    if veces_hotboat > 0:
+        web_activity_label = "✅ Pagó"
+    elif link_selected_date:
+        web_activity_label = "🗓️ Eligió fecha"
+    elif link_viewed_prices:
+        web_activity_label = "💲 Vio precios"
+    elif link_clicked:
+        web_activity_label = "🔗 Clic en link"
+    else:
+        web_activity_label = None
+
+    has_history = bool(veces_hotboat > 0 or web_activity_label)
     return {
         "has_history": has_history,
         "contacts_crm_id": contacts_crm_id,
         "linked_contact_id": linked_contact_id,
-        "web_classification": web_classification,
-        "veces_hotboat": veces_hotboat or 0,
+        "web_activity_label": web_activity_label,
+        "veces_hotboat": veces_hotboat,
     }
 
 
