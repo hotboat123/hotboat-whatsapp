@@ -1074,7 +1074,7 @@ const _linkToken = (()=>{
   try{ return sessionStorage.getItem('_hb_lt') || ''; }catch(e){ return ''; }
 })();
 
-let _lastTrackedEvent = 'page_visit';
+let _lastTrackedEvent = 'page_visit_booking';
 let _bookingCompletedTracked = false;
 function _trackEvent(event, date){
   _lastTrackedEvent = event;
@@ -1119,7 +1119,10 @@ document.addEventListener('visibilitychange', function(){
 window.addEventListener('pagehide', _trackLeave);
 
 async function loadPricesAndAvail(){
-  _trackEvent('page_visit');
+  // page_visit_booking (not "page_visit") so this is distinguishable from
+  // hotboat.cl's tracker.js, which fires its own "page_visit" — both land in
+  // the same booking_visitor_events table via the shared Postgres.
+  _trackEvent('page_visit_booking');
   try{
     const [pr, av] = await Promise.all([
       fetch('/api/booking/prices').then(r=>r.json()),

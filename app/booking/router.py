@@ -2626,7 +2626,7 @@ def _referrer_label(referrer: str) -> str:
 
 
 _EVENT_LABELS = {
-    "page_visit":             ("👀", "Entró a la página"),
+    "page_visit_booking":     ("👀", "Entró a la página"),
     "view_reservar":          ("🗓️", "Fue al calendario de reservas"),
     "date_selected":          ("📅", "Seleccionó una fecha"),
     "view_prices":            ("💰", "Vio los precios"),
