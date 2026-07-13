@@ -2,6 +2,7 @@
 Leads and contacts management
 """
 import logging
+import re
 from typing import Optional, List, Dict
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -802,7 +803,13 @@ def get_crm_summary_for_phone(phone_number: str) -> Optional[Dict]:
     phone = (phone_number or "").strip()
     if not phone:
         return None
-    phone_digits = phone.lstrip("+")
+    # contacts_crm.phone is normalized E.164 (always has a leading '+'), but
+    # WhatsApp delivers phone numbers without one — try both so the lookup
+    # still matches regardless of which format arrived here.
+    digits = re.sub(r"[^\d]", "", phone)
+    candidates = {phone, digits}
+    if digits:
+        candidates.add(f"+{digits}")
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -810,10 +817,10 @@ def get_crm_summary_for_phone(phone_number: str) -> Optional[Dict]:
                     """
                     SELECT id, linked_contact_id, veces_hotboat, web_classification, link_clicked
                     FROM contacts_crm
-                    WHERE phone IN (%s, %s)
+                    WHERE phone = ANY(%s)
                     LIMIT 1
                     """,
-                    (phone, phone_digits),
+                    (list(candidates),),
                 )
                 row = cur.fetchone()
     except Exception as e:
