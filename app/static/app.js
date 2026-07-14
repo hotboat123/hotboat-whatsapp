@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setViewportHeightVar();
     loadConversations();
     setupEventListeners();
-    setInterval(loadConversations, 10000); // Refresh every 10 seconds
+    setInterval(() => loadConversations(null, true), 10000); // Refresh every 10 seconds
     setInterval(refreshCurrentConversation, 5000); // Refresh current chat every 5 seconds
     setupResponsiveLayout();
     initPWA();
@@ -427,7 +427,7 @@ function updateCharCount(inputId, counterId) {
 }
 
 // Load Conversations
-async function loadConversations(limit = null) {
+async function loadConversations(limit = null, isAutoRefresh = false) {
     const useLimit = limit !== null ? limit : conversationsLimit;
     console.log('🔄 Loading conversations (limit:', useLimit, ')...');
     try {
@@ -495,7 +495,15 @@ async function loadConversations(limit = null) {
         // If user has search text, keep showing search results (like WhatsApp)
         const searchInput = document.getElementById('searchConversations');
         const hasSearch = searchInput && searchInput.value.trim().length > 0;
-        if (hasSearch) {
+        if (hasSearch && isAutoRefresh) {
+            // Background 10s refresh: re-apply the search locally instead of re-hitting the
+            // backend search-messages/search endpoints every cycle — those do a full-database
+            // scan, and a stale search left in the box (from a tab nobody closed) was firing
+            // that full scan every 10 seconds indefinitely. A local filter still surfaces newly
+            // arrived conversations that match by name/phone; a fresh full-text search only
+            // re-runs when the user actually edits the search box.
+            searchInContactInfo(searchInput.value.trim().toLowerCase());
+        } else if (hasSearch) {
             await filterConversations();
         } else {
             conversations = processed;
