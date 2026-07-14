@@ -185,6 +185,21 @@ def _do_auto_sync():
                         existing = cur.fetchone()
 
                     if existing:
+                        # COALESCE(%s, col) means "new value, or keep the old one if the
+                        # source didn't send one" — but without the IS DISTINCT FROM guard
+                        # below, that UPDATE fired for all ~425 rows on every single 30-min
+                        # cycle regardless of whether anything actually changed, since the
+                        # WHERE only matched on id. Same params reused in WHERE so the row
+                        # is only touched (and counted) when something is genuinely new.
+                        update_params = (
+                            PgJson(extras) if extras else None,
+                            float(ing_ext) if ing_ext else None,
+                            float(ing_total) if ing_total else None,
+                            num_adultos, num_ninos, ciudad, como_sup, clima, categoria,
+                            tipo_cli, tiene_cruce,
+                            float(costo_var) if costo_var else None,
+                            float(costo_total) if costo_total else None,
+                        )
                         cur.execute(f"""
                             UPDATE {TABLE}
                             SET extras_json=COALESCE(%s, extras_json),
@@ -202,15 +217,24 @@ def _do_auto_sync():
                                 costo_operativo_total=COALESCE(%s, costo_operativo_total),
                                 updated_at=NOW()
                             WHERE id=%s
-                        """, (PgJson(extras) if extras else None,
-                              float(ing_ext) if ing_ext else None,
-                              float(ing_total) if ing_total else None,
-                              num_adultos, num_ninos, ciudad, como_sup, clima, categoria,
-                              tipo_cli, tiene_cruce,
-                              float(costo_var) if costo_var else None,
-                              float(costo_total) if costo_total else None,
-                              existing[0]))
-                        updated_reservas += 1
+                              AND (
+                                extras_json IS DISTINCT FROM COALESCE(%s, extras_json) OR
+                                ingreso_extras IS DISTINCT FROM COALESCE(%s, ingreso_extras) OR
+                                ingreso_total IS DISTINCT FROM COALESCE(%s, ingreso_total) OR
+                                num_adultos IS DISTINCT FROM COALESCE(%s, num_adultos) OR
+                                num_ninos IS DISTINCT FROM COALESCE(%s, num_ninos) OR
+                                ciudad_origen IS DISTINCT FROM COALESCE(%s, ciudad_origen) OR
+                                como_supieron IS DISTINCT FROM COALESCE(%s, como_supieron) OR
+                                clima_del_dia IS DISTINCT FROM COALESCE(%s, clima_del_dia) OR
+                                categoria_clientes IS DISTINCT FROM COALESCE(%s, categoria_clientes) OR
+                                tipo_clientes IS DISTINCT FROM COALESCE(%s, tipo_clientes) OR
+                                tiene_cruce IS DISTINCT FROM COALESCE(%s, tiene_cruce) OR
+                                costo_operativo_variable IS DISTINCT FROM COALESCE(%s, costo_operativo_variable) OR
+                                costo_operativo_total IS DISTINCT FROM COALESCE(%s, costo_operativo_total)
+                              )
+                        """, update_params + (existing[0],) + update_params)
+                        if cur.rowcount:
+                            updated_reservas += 1
                     else:
                         cur.execute(f"""
                             INSERT INTO {TABLE}
