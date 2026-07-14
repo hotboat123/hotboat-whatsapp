@@ -948,7 +948,7 @@ function _trackEvent(event, date){
       is_returning: _isReturning,
       ..._landingAttribution,
     });
-    fetch('/api/booking/track',{method:'POST',headers:{'Content-Type':'application/json'},body:payload}).catch(()=>{});
+    fetch('/api/booking/track',{method:'POST',headers:{'Content-Type':'application/json'},body:payload,keepalive:true}).catch(()=>{});
   }catch(e){}
 }
 
@@ -1206,7 +1206,7 @@ function renderExperienceCartPaymentScreen(itemCount){
       ${t('expCartPayFootnote')}
     </div>` : ''}
     ${S.paymentUrl ? `
-      <a href="${S.paymentUrl}" class="btn" style="text-decoration:none;margin-top:.5rem;font-size:1rem;padding:.9rem">
+      <a href="${S.paymentUrl}" onclick="_trackEvent('click_pagar', S.selectedDate)" class="btn" style="text-decoration:none;margin-top:.5rem;font-size:1rem;padding:.9rem">
         ${t('expCartPayOnly')} $${deposit.toLocaleString('es-CL')}
       </a>
       <p style="color:var(--muted);font-size:.78rem;margin-top:.7rem">${t('expCartSecureLine')}</p>` : `
@@ -3423,7 +3423,7 @@ function renderPayment(){
     </div>
 
     ${S.paymentUrl ? `
-      <a href="${S.paymentUrl}" class="btn" style="text-decoration:none;margin-top:.5rem;font-size:1rem;padding:.9rem">
+      <a href="${S.paymentUrl}" onclick="_trackEvent('click_pagar', S.selectedDate)" class="btn" style="text-decoration:none;margin-top:.5rem;font-size:1rem;padding:.9rem">
         Pagar $${deposit.toLocaleString('es-CL')} 💳
       </a>
       <p style="color:var(--muted);font-size:.78rem;margin-top:.7rem">
