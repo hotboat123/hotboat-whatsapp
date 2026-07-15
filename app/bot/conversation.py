@@ -2,6 +2,7 @@
 Conversation manager - handles message flow and context
 """
 import asyncio
+import json
 import logging
 import re
 import unicodedata
@@ -60,6 +61,28 @@ MANUAL_HANDOVER_TRIGGERS = [
     "Tomás de HotBoat por Aquí",
     "hola tomas de hotboat por aqui",
 ]
+
+
+def ensure_conversation_state_table() -> None:
+    """self.conversations (message history, flow flags like awaiting_extra_selection,
+    manual_override_active, language, etc.) used to live only in this process's
+    memory — fine with one process, broken with multiple replicas, since a
+    customer's next message can land on a different one with no memory of the
+    conversation so far. This table is the shared backing store for it."""
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS bot_conversation_state (
+                        phone_number TEXT PRIMARY KEY,
+                        state        JSONB NOT NULL,
+                        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"bot_conversation_state table setup failed: {e}")
 
 
 class ConversationManager:
@@ -797,54 +820,152 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             import traceback
             traceback.print_exc()
             return "Disculpa, tuve un problema procesando tu mensaje. ¿Podrías intentar de nuevo?"
-    
+        finally:
+            # Always persist, on every exit path (including the error path
+            # above) — the next message for this phone might land on a
+            # different replica and needs this to pick up where we left off.
+            await self._persist_conversation_state(from_number)
+
+    async def _load_persisted_conversation_state(self, phone_number: str) -> Optional[dict]:
+        """Read the shared conversation-state blob another replica (or this
+        one, in a previous process) last saved for this phone. Returns None
+        if there is none yet (brand-new conversation, or pre-dates this
+        mechanism)."""
+        from app.db.connection import get_connection
+
+        def _read():
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT state FROM bot_conversation_state WHERE phone_number=%s",
+                        (phone_number,),
+                    )
+                    row = cur.fetchone()
+                    return row[0] if row else None
+
+        try:
+            raw = await asyncio.get_event_loop().run_in_executor(None, _read)
+            if not raw:
+                return None
+            state = json.loads(raw) if isinstance(raw, str) else raw
+            state["processed_message_ids"] = set(state.get("processed_message_ids") or [])
+            return state
+        except Exception as e:
+            logger.warning(f"Failed to load persisted conversation state for {phone_number}: {e}")
+            return None
+
+    async def _persist_conversation_state(self, phone_number: str) -> None:
+        """Save this phone's in-memory conversation dict so any replica can
+        pick up exactly where another left off on the next message."""
+        conv = self.conversations.get(phone_number)
+        if not conv:
+            return
+
+        payload = dict(conv)
+        payload["processed_message_ids"] = list(payload.get("processed_message_ids") or [])
+        # Cap stored history — only recent messages matter for context/flow
+        # state; unbounded growth here would bloat the JSONB blob forever.
+        if len(payload.get("messages", [])) > 100:
+            payload["messages"] = payload["messages"][-100:]
+
+        from app.db.connection import get_connection
+
+        def _write(data: str):
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO bot_conversation_state (phone_number, state, updated_at)
+                        VALUES (%s, %s, NOW())
+                        ON CONFLICT (phone_number) DO UPDATE SET
+                            state = EXCLUDED.state, updated_at = NOW()
+                        """,
+                        (phone_number, data),
+                    )
+                conn.commit()
+
+        try:
+            data = json.dumps(payload, default=str)
+            await asyncio.get_event_loop().run_in_executor(None, _write, data)
+        except Exception as e:
+            logger.warning(f"Failed to persist conversation state for {phone_number}: {e}")
+
     async def get_conversation(self, phone_number: str, contact_name: str) -> dict:
         """
-        Get or create conversation context, loading history from database if available
+        Get or create conversation context. Checks the in-memory cache first
+        (fast path for consecutive messages that land on the same replica),
+        then the shared DB-persisted state (another replica's cache), and
+        only falls back to reconstructing from raw whatsapp_conversations
+        history for a phone that's genuinely never been through this since
+        bot_conversation_state existed.
         """
         # Check if already in memory
         if phone_number not in self.conversations:
-            # Load lead info and conversation history from database
-            try:
-                lead = await get_or_create_lead(phone_number, contact_name)
-            except Exception as e:
-                logger.warning(f"Error loading lead for {phone_number}: {e}")
-                lead = None
-            
-            try:
-                history = await get_conversation_history(phone_number, limit=50)
-            except Exception as e:
-                logger.warning(f"Error loading history for {phone_number}: {e}")
-                history = []
-            
-            # Restore language preference from DB; fall back to 'es' for brand-new users
-            pref_lang = lead.get("preferred_language") if lead else None
-            detected_language = pref_lang or "es"
+            persisted = await self._load_persisted_conversation_state(phone_number)
+            if persisted:
+                self.conversations[phone_number] = persisted
+                logger.info(
+                    f"Restored persisted conversation state for {phone_number} "
+                    f"({len(persisted.get('messages', []))} messages)"
+                )
+            else:
+                # Load lead info and conversation history from database
+                try:
+                    lead = await get_or_create_lead(phone_number, contact_name)
+                except Exception as e:
+                    logger.warning(f"Error loading lead for {phone_number}: {e}")
+                    lead = None
 
-            self.conversations[phone_number] = {
-                "phone": phone_number,
-                "name": contact_name,
-                "messages": history if history else [],
-                "created_at": datetime.now(CHILE_TZ).isoformat(),
-                "last_interaction": datetime.now(CHILE_TZ).isoformat(),
-                "metadata": {
-                    "lead_status": lead.get("lead_status") if lead else "unknown",
-                    "lead_id": lead.get("id") if lead else None,
-                    "language": detected_language,
-                    "language_selected": True,
-                },
-                "processed_message_ids": set()
-            }
-            
-            if history:
-                logger.info(f"Loaded {len(history)} messages from history for {phone_number}")
-        
+                try:
+                    history = await get_conversation_history(phone_number, limit=50)
+                except Exception as e:
+                    logger.warning(f"Error loading history for {phone_number}: {e}")
+                    history = []
+
+                # get_conversation_history returns {message_text, direction, ...}
+                # rows straight from whatsapp_conversations — translate to the
+                # {role, content, ...} shape the rest of this file uses (e.g.
+                # _is_first_message checks msg["role"]), otherwise a real
+                # multi-message conversation looks empty and the bot re-sends
+                # the welcome menu from scratch.
+                translated_messages = [
+                    {
+                        "role": "user" if h.get("direction") == "incoming" else "assistant",
+                        "content": h.get("message_text") or "",
+                        "timestamp": h.get("timestamp"),
+                        "message_id": None,
+                    }
+                    for h in history
+                ]
+
+                # Restore language preference from DB; fall back to 'es' for brand-new users
+                pref_lang = lead.get("preferred_language") if lead else None
+                detected_language = pref_lang or "es"
+
+                self.conversations[phone_number] = {
+                    "phone": phone_number,
+                    "name": contact_name,
+                    "messages": translated_messages,
+                    "created_at": datetime.now(CHILE_TZ).isoformat(),
+                    "last_interaction": datetime.now(CHILE_TZ).isoformat(),
+                    "metadata": {
+                        "lead_status": lead.get("lead_status") if lead else "unknown",
+                        "lead_id": lead.get("id") if lead else None,
+                        "language": detected_language,
+                        "language_selected": True,
+                    },
+                    "processed_message_ids": set()
+                }
+
+                if history:
+                    logger.info(f"Loaded {len(history)} messages from history for {phone_number}")
+
         # Update name if different
         if contact_name and self.conversations[phone_number]["name"] != contact_name:
             self.conversations[phone_number]["name"] = contact_name
-        
+
         return self.conversations[phone_number]
-    
+
     def _is_asking_how_to_add_to_cart(self, message: str, conversation: dict) -> bool:
         """
         Check if user is asking how to add items to cart

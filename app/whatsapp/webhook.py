@@ -14,9 +14,13 @@ from app.db.leads import increment_unread_count
 logger = logging.getLogger(__name__)
 
 # ── Menu follow-up: send nudge if user doesn't reply within FOLLOWUP_DELAY_S ──
+# Backed by Postgres (not an in-memory dict + asyncio.Task) so scheduling and
+# cancellation both work correctly across replicas — the message that
+# schedules a follow-up and the reply that should cancel it can land on
+# different processes, which an in-memory dict has no way to know about.
 FOLLOWUP_DELAY_S = 120  # 2 minutes
-
-_pending_followups: dict[str, asyncio.Task] = {}
+FOLLOWUP_MSG_1 = "¿Todo bien? 😊"
+FOLLOWUP_MSG_2 = "¿Quieres que te ayude con algo? 🙌"
 
 # ── Outgoing message ID cache ─────────────────────────────────────────────────
 # Maps wamid (outgoing) → message text so that when a customer uses WhatsApp's
@@ -31,20 +35,59 @@ _OUTGOING_WAMID_MAX = 2000
 # redelivery re-sends push notifications, re-runs the bot, and can send a
 # duplicate WhatsApp reply to the real customer. Checked before anything else
 # runs for a given message_id.
-_seen_incoming_wamid: dict[str, bool] = {}
-_INCOMING_WAMID_MAX = 2000
+#
+# Backed by Postgres (not an in-memory dict) so it works correctly with
+# multiple uvicorn replicas — a redelivered webhook can land on a different
+# process than the one that handled the original, and an in-memory dict on
+# that process would have no idea it was already seen.
+
+
+def _ensure_dedup_table() -> None:
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS incoming_message_dedup (
+                        message_id TEXT PRIMARY KEY,
+                        seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"incoming_message_dedup table setup failed: {e}")
 
 
 def _is_duplicate_incoming(message_id: Optional[str]) -> bool:
+    """Atomically claims message_id via INSERT ... ON CONFLICT DO NOTHING.
+    Returns True (duplicate) only when another process already claimed it
+    first — the DB, not process memory, is the single source of truth.
+    Fails open (returns False) on any DB error: a rare double-process is far
+    better than silently dropping a real customer message."""
     if not message_id:
         return False
-    if message_id in _seen_incoming_wamid:
-        return True
-    _seen_incoming_wamid[message_id] = True
-    if len(_seen_incoming_wamid) > _INCOMING_WAMID_MAX:
-        oldest = next(iter(_seen_incoming_wamid))
-        del _seen_incoming_wamid[oldest]
-    return False
+    import random
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO incoming_message_dedup (message_id) VALUES (%s) ON CONFLICT DO NOTHING",
+                    (message_id,),
+                )
+                inserted = cur.rowcount > 0
+                # Opportunistic cleanup — Meta's redelivery window is minutes,
+                # not days, so 24h of history is generous. ~1% of calls avoids
+                # needing a dedicated scheduler for such a small table.
+                if random.random() < 0.01:
+                    cur.execute(
+                        "DELETE FROM incoming_message_dedup WHERE seen_at < NOW() - INTERVAL '24 hours'"
+                    )
+            conn.commit()
+        return not inserted
+    except Exception as e:
+        logger.warning(f"dedup check failed for {message_id}: {e}")
+        return False
 
 
 def _register_outgoing(result: dict, text: str, conversation_manager=None, phone: str = "") -> None:
@@ -71,49 +114,119 @@ def _register_outgoing(result: dict, text: str, conversation_manager=None, phone
         pass
 
 
-async def _menu_followup_task(phone_number: str, contact_name: str) -> None:
-    """Wait FOLLOWUP_DELAY_S then send a friendly nudge if still pending."""
+def _ensure_followup_table() -> None:
+    from app.db.connection import get_connection
     try:
-        await asyncio.sleep(FOLLOWUP_DELAY_S)
-        logger.info(f"⏰ Sending menu follow-up to {phone_number}")
-        msg1 = "¿Todo bien? 😊"
-        msg2 = "¿Quieres que te ayude con algo? 🙌"
-        await whatsapp_client.send_text_message(phone_number, msg1)
-        await asyncio.sleep(1.5)
-        await whatsapp_client.send_text_message(phone_number, msg2)
-        # Persist both messages
-        for msg in (msg1, msg2):
-            try:
-                await save_conversation(
-                    phone_number=phone_number,
-                    customer_name=contact_name,
-                    message_text="",
-                    response_text=msg,
-                    message_type="text",
-                    direction="outgoing",
-                )
-            except Exception:
-                pass
-    except asyncio.CancelledError:
-        logger.debug(f"Follow-up cancelled for {phone_number} (user replied)")
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS pending_followups (
+                        phone_number TEXT PRIMARY KEY,
+                        contact_name TEXT,
+                        due_at       TIMESTAMPTZ NOT NULL,
+                        cancelled    BOOLEAN NOT NULL DEFAULT FALSE,
+                        sent_at      TIMESTAMPTZ
+                    )
+                """)
+            conn.commit()
     except Exception as e:
-        logger.error(f"Error in menu follow-up for {phone_number}: {e}")
-    finally:
-        _pending_followups.pop(phone_number, None)
+        logger.warning(f"pending_followups table setup failed: {e}")
 
 
 def _cancel_followup(phone_number: str) -> None:
     """Cancel any pending follow-up for this user (they replied)."""
-    task = _pending_followups.pop(phone_number, None)
-    if task and not task.done():
-        task.cancel()
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE pending_followups SET cancelled=TRUE WHERE phone_number=%s AND sent_at IS NULL",
+                    (phone_number,),
+                )
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"cancel_followup failed for {phone_number}: {e}")
 
 
 def _schedule_followup(phone_number: str, contact_name: str) -> None:
-    """Schedule a menu follow-up, replacing any existing one."""
-    _cancel_followup(phone_number)
-    task = asyncio.create_task(_menu_followup_task(phone_number, contact_name))
-    _pending_followups[phone_number] = task
+    """Schedule a menu follow-up ~FOLLOWUP_DELAY_S from now, replacing any
+    existing one for this phone. A periodic job (run_followup_nudge_scheduler,
+    gated by the scheduler advisory lock so only one replica runs it) sends
+    it — nothing here schedules an in-process timer."""
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO pending_followups (phone_number, contact_name, due_at, cancelled, sent_at)
+                    VALUES (%s, %s, NOW() + (%s || ' seconds')::interval, FALSE, NULL)
+                    ON CONFLICT (phone_number) DO UPDATE SET
+                        contact_name = EXCLUDED.contact_name,
+                        due_at       = EXCLUDED.due_at,
+                        cancelled    = FALSE,
+                        sent_at      = NULL
+                    """,
+                    (phone_number, contact_name, FOLLOWUP_DELAY_S),
+                )
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"schedule_followup failed for {phone_number}: {e}")
+
+
+async def run_followup_nudge_scheduler() -> None:
+    """Periodic job replacing the old in-memory 5-min-style debounce: polls
+    pending_followups for rows that are due, not cancelled, and not yet sent,
+    sends the two-message nudge, and marks them sent. Runs on whichever
+    process holds the scheduler advisory lock (see try_acquire_scheduler_lock
+    in app/db/connection.py) — same pattern as the visitor-session closer."""
+    from app.db.connection import get_connection
+    while True:
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT phone_number, contact_name FROM pending_followups
+                        WHERE NOT cancelled AND sent_at IS NULL AND due_at <= NOW()
+                    """)
+                    due = cur.fetchall()
+
+            for phone_number, contact_name in due:
+                try:
+                    logger.info(f"⏰ Sending menu follow-up to {phone_number}")
+                    await whatsapp_client.send_text_message(phone_number, FOLLOWUP_MSG_1)
+                    await asyncio.sleep(1.5)
+                    await whatsapp_client.send_text_message(phone_number, FOLLOWUP_MSG_2)
+                    for msg in (FOLLOWUP_MSG_1, FOLLOWUP_MSG_2):
+                        try:
+                            await save_conversation(
+                                phone_number=phone_number,
+                                customer_name=contact_name,
+                                message_text="",
+                                response_text=msg,
+                                message_type="text",
+                                direction="outgoing",
+                            )
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.error(f"Error sending follow-up to {phone_number}: {e}")
+                finally:
+                    # Mark done either way — a permanently-failing send (bad
+                    # number, etc.) shouldn't retry forever.
+                    try:
+                        with get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "UPDATE pending_followups SET sent_at=NOW() WHERE phone_number=%s",
+                                    (phone_number,),
+                                )
+                            conn.commit()
+                    except Exception as e:
+                        logger.warning(f"failed to mark follow-up sent for {phone_number}: {e}")
+        except Exception as e:
+            logger.warning(f"followup_nudge_scheduler error: {e}")
+        await asyncio.sleep(15)
 
 
 def _resolve_quoted_message(message: dict, conversation_manager, from_number: str) -> Optional[str]:

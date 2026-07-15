@@ -11,6 +11,7 @@ import httpx
 
 from app.booking.router import router as booking_router
 from app.booking.router import _run_visitor_session_closer_scheduler
+from app.whatsapp.webhook import run_followup_nudge_scheduler
 from app.booking.admin_router import admin_router
 from app.booking.content_router import content_router
 from app.booking.signatures_router import signatures_router
@@ -780,6 +781,11 @@ def _seed_packs_catalog():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
+    from app.whatsapp.webhook import _ensure_dedup_table, _ensure_followup_table
+    from app.bot.conversation import ensure_conversation_state_table
+    _ensure_dedup_table()
+    _ensure_followup_table()
+    ensure_conversation_state_table()
     _ensure_web_push_table()
     _ensure_extras_visibility_table()
     _seed_extras_visibility()
@@ -874,6 +880,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_yesterday_weekly_scheduler()),
             asyncio.create_task(_run_stock_consume_scheduler()),
             asyncio.create_task(_run_visitor_session_closer_scheduler()),
+            asyncio.create_task(run_followup_nudge_scheduler()),
         ]
         logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
         logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
@@ -882,6 +889,7 @@ async def lifespan(app: FastAPI):
         logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
         logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
         logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
+        logger.info("💬 Follow-up nudge scheduler iniciado (cada 15s, envía a los 2 min sin respuesta)")
         logger.info("🌐 Visitor session closer iniciado (cada 2 min, cierra sesiones tras 5 min de inactividad)")
     else:
         logger.info("⏭️ Schedulers ya corren en otro worker/réplica — este proceso solo atiende requests")
@@ -2188,10 +2196,15 @@ async def get_booking_context(phone_number: str):
     import re as _re
     lead = await get_or_create_lead(phone_number)
 
-    # Pull pending_reservation from in-memory conversation state if available
+    # Pull pending_reservation from conversation state — in-memory first (this
+    # replica may already have it warm), else the shared DB-persisted state
+    # (another replica handled this customer's messages).
     pending: dict = {}
-    if phone_number in conversation_manager.conversations:
-        meta = conversation_manager.conversations[phone_number].get("metadata", {})
+    conv_state = conversation_manager.conversations.get(phone_number)
+    if not conv_state:
+        conv_state = await conversation_manager._load_persisted_conversation_state(phone_number)
+    if conv_state:
+        meta = conv_state.get("metadata", {})
         pending = meta.get("pending_reservation") or {}
 
     history = await get_conversation_history(phone_number, limit=80)
