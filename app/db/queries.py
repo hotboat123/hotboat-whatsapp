@@ -244,10 +244,10 @@ async def save_conversation(
     message_type: str = "text",
     message_id: str = None,
     direction: str = "incoming"
-) -> None:
+) -> Optional[int]:
     """
     Save conversation to database for analytics
-    
+
     Args:
         phone_number: Customer phone
         customer_name: Customer name
@@ -256,6 +256,15 @@ async def save_conversation(
         message_type: Type of message
         message_id: WhatsApp message ID (to avoid duplicates)
         direction: 'incoming' or 'outgoing'
+
+    Returns:
+        The inserted row's id (whatsapp_conversations.id), or None if the
+        insert was skipped (duplicate message_id) or failed. Callers that
+        optimistically render this message client-side before this returns
+        (e.g. /api/send-message) need this id to match the "{id}_out"/"{id}_in"
+        format get_conversation_history() uses, or the optimistic bubble and
+        the one from the next refresh look like two different messages and
+        both stay on screen.
     """
     try:
         with get_connection() as conn:
@@ -263,18 +272,21 @@ async def save_conversation(
                 # Check if message already exists (by message_id if available)
                 if message_id:
                     cur.execute("""
-                        SELECT id FROM whatsapp_conversations 
+                        SELECT id FROM whatsapp_conversations
                         WHERE message_id = %s
                     """, (message_id,))
-                    if cur.fetchone():
+                    existing = cur.fetchone()
+                    if existing:
                         logger.info(f"Conversation with message_id {message_id} already exists, skipping")
-                        return
-                
+                        return existing[0]
+
                 cur.execute("""
                     INSERT INTO whatsapp_conversations
                     (phone_number, customer_name, message_text, response_text, message_type, message_id, direction, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    RETURNING id
                 """, (phone_number, customer_name, message_text, response_text, message_type, message_id, direction))
+                new_id = cur.fetchone()[0]
 
                 # Trim old rows so history doesn't grow unbounded per customer
                 cur.execute("""
@@ -289,10 +301,12 @@ async def save_conversation(
                 """, (phone_number, phone_number, MAX_CONVERSATION_ROWS_PER_PHONE))
             conn.commit()
             logger.info(f"Conversation saved for {phone_number}")
-    
+            return new_id
+
     except Exception as e:
         logger.warning(f"Could not save conversation: {e}")
         # Don't fail if we can't save - this is not critical
+        return None
 
 
 async def has_recent_inbound_message(phone_number: str, hours: int = 24) -> bool:

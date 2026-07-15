@@ -2429,8 +2429,9 @@ async def send_custom_message(request: SendMessageRequest):
             logger.warning(f"Could not activate manual handover for {request.to}: {handover_error}")
         
         # Log in database
+        db_id = None
         try:
-            await save_conversation(
+            db_id = await save_conversation(
                 phone_number=request.to,
                 customer_name=lead.get('customer_name', request.to) if lead else request.to,
                 message_text=(request.caption or request.message or "") if message_type == "image" else '',
@@ -2442,11 +2443,19 @@ async def send_custom_message(request: SendMessageRequest):
         except Exception as db_error:
             logger.error(f"Error storing message in DB: {db_error}")
             # Don't fail the request if DB logging fails
-        
+
+        # Same id format get_conversation_history() will use once this row shows
+        # up in a refresh — lets Kia-Ai's optimistic bubble and the refreshed one
+        # be recognized as the same message instead of showing up twice.
+        frontend_id = None
+        if db_id is not None:
+            frontend_id = f"{db_id}_out" if message_type == "text" else f"{db_id}"
+
         return {
             "status": "sent",
             "to": request.to,
             "message_id": message_id,
+            "frontend_id": frontend_id,
             "details": result
         }
         
@@ -2609,10 +2618,11 @@ async def upload_and_send_image(
                 logger.error(f"Error loading lead: {lead_error}")
             
             # Log in database
+            db_id = None
             try:
                 # Save with the media URL so it can be displayed in the interface
                 media_url = f"/api/media/{media_id}"
-                await save_conversation(
+                db_id = await save_conversation(
                     phone_number=to,
                     customer_name=lead.get('customer_name', to) if lead else to,
                     message_text=caption or '',
@@ -2623,11 +2633,12 @@ async def upload_and_send_image(
                 )
             except Exception as db_error:
                 logger.error(f"Error storing message in DB: {db_error}")
-            
+
             return {
                 "status": "sent",
                 "to": to,
                 "message_id": message_id,
+                "frontend_id": f"{db_id}" if db_id is not None else None,
                 "media_id": media_id,
                 "media_url": media_url,
                 "details": result
@@ -2794,9 +2805,10 @@ async def upload_and_send_audio(
                 logger.error(f"Error loading lead: {lead_error}")
             
             # Log in database with media_id so it can be served from local storage
+            db_id = None
             try:
                 media_url = f"/api/media/{media_id}"
-                await save_conversation(
+                db_id = await save_conversation(
                     phone_number=to,
                     customer_name=lead.get('customer_name', to) if lead else to,
                     message_text='[Audio]',
@@ -2807,11 +2819,12 @@ async def upload_and_send_audio(
                 )
             except Exception as db_error:
                 logger.error(f"Error storing audio message in DB: {db_error}")
-            
+
             return {
                 "status": "sent",
                 "to": to,
                 "message_id": message_id,
+                "frontend_id": f"{db_id}" if db_id is not None else None,
                 "media_id": media_id,
                 "media_url": media_url,
                 "details": result

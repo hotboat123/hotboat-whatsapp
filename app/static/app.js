@@ -1476,10 +1476,15 @@ async function sendMessage(event) {
             return;
         }
 
-        // Optimistically append outgoing message to the UI
+        // Optimistically append outgoing message to the UI. Use the same id
+        // format get_conversation_history() returns for this row (frontend_id,
+        // e.g. "42_out") — not the WhatsApp wamid — so that when the next
+        // refresh/selectConversation fetches this same row from the DB,
+        // mergeMessageLists() recognizes it as the SAME message by id instead
+        // of keeping both and showing the bubble twice.
         const timestamp = new Date().toISOString();
         const newMessage = {
-            id: result?.message_id || `temp_${Date.now()}`,
+            id: result?.frontend_id || result?.message_id || `temp_${Date.now()}`,
             message_text: message,
             direction: 'outgoing',
             message_type: 'text',
@@ -1568,10 +1573,12 @@ async function sendImageFromFile(file, caption = '') {
             throw new Error('El servidor no devolvió información de la imagen');
         }
         
-        // Now add the image to the UI only if everything succeeded
+        // Now add the image to the UI only if everything succeeded. Same id
+        // format get_conversation_history() uses for this row (frontend_id) so
+        // the next refresh recognizes it as the same message instead of a dupe.
         const timestamp = new Date().toISOString();
         const newMessage = {
-            id: result?.message_id || `temp_${Date.now()}`,
+            id: result?.frontend_id || result?.message_id || `temp_${Date.now()}`,
             message_text: caption || '',
             direction: 'outgoing',
             message_type: 'image',
@@ -2198,10 +2205,12 @@ async function sendAudioFromRecording() {
         const result = await response.json();
         console.log('✅ Audio sent successfully:', result);
         
-        // Add to UI
+        // Add to UI. Same id format get_conversation_history() uses for this
+        // row (frontend_id) so the next refresh recognizes it as the same
+        // message instead of a dupe.
         const timestamp = new Date().toISOString();
         const newMessage = {
-            id: result?.message_id || `temp_${Date.now()}`,
+            id: result?.frontend_id || result?.message_id || `temp_${Date.now()}`,
             message_text: '[Audio]',
             direction: 'outgoing',
             message_type: 'audio',
