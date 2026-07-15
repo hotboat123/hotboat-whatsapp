@@ -1141,6 +1141,7 @@ async function _submitExperienceCartPayOnly(){
         customer_phone: S.customerPhone,
         customer_email: S.customerEmail||null,
         hotboat_booking_ref: null,
+        session_id: _sessionId,
       }),
     });
     const edata = await er.json();
@@ -3208,6 +3209,7 @@ async function submitBooking(){
       utm_campaign: _landingAttribution.utm_campaign || '',
       utm_content: _landingAttribution.utm_content || '',
       parametro_url: _landingAttribution.parametro_url || '',
+      session_id: _sessionId,
     };
     if(testPrice) payload.test_price = parseInt(testPrice);
     // If coming from accommodation flow, create HotBoat booking without payment order
@@ -3294,6 +3296,7 @@ async function submitBooking(){
           customer_phone: S.customerPhone,
           customer_email: S.customerEmail||null,
           hotboat_booking_ref: data.booking_ref,
+          session_id: _sessionId,
         }),
       });
       const edata = await er.json();
@@ -3330,6 +3333,7 @@ async function submitBooking(){
       packPayload.customer_phone = S.customerPhone;
       packPayload.customer_email = S.customerEmail || null;
       packPayload.num_people = S.numPeople;
+      packPayload.session_id = _sessionId;
       const start = new Date(packPayload.start_date);
       const end   = packPayload.end_date ? new Date(packPayload.end_date) : null;
       const daysCount = (!end || packPayload.end_date === packPayload.start_date)

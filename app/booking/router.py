@@ -1837,6 +1837,8 @@ class ExperienceCartRequest(BaseModel):
     customer_phone: str
     customer_email: Optional[str] = None
     hotboat_booking_ref: Optional[str] = None
+    session_id: Optional[str] = None
+    visitor_id: Optional[str] = None
 
 
 class PackBookingRequest(BaseModel):
@@ -1852,6 +1854,8 @@ class PackBookingRequest(BaseModel):
     customer_email: Optional[str] = None
     hotboat_booking_ref: Optional[str] = None
     notes: Optional[str] = None
+    session_id: Optional[str] = None
+    visitor_id: Optional[str] = None
 
 
 def _gen_extras_booking_ref(prefix: str) -> str:
@@ -2228,6 +2232,29 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
             except Exception as ex_merge:
                 logger.warning("experience-cart merge failed %s + %s: %s", hotboat_ref, exp_ref, ex_merge)
 
+    # Link the anonymous browsing session (if any) to the identity just captured —
+    # this endpoint never did this at all before, unlike create_booking_endpoint,
+    # so every "Arma tu pack"/cart booking was invisible in booking_visitor_identity
+    # even when it completed.
+    if request.session_id and booking_refs:
+        try:
+            from app.booking.visitor_tracking import (
+                persist_booking_visitor_identity,
+                upsert_visitor_summary,
+            )
+            persist_booking_visitor_identity(
+                request.session_id,
+                visitor_id=request.visitor_id,
+                phone=request.customer_phone,
+                email=request.customer_email,
+                name=request.customer_name,
+                booking_ref=booking_refs[0],
+            )
+            if request.customer_phone:
+                upsert_visitor_summary(request.customer_phone)
+        except Exception as _link_e:
+            logger.warning("visitor identity link failed for %s: %s", booking_refs[0], _link_e)
+
     if any_high_season:
         fee_lines.clear()
         with _gc() as conn:
@@ -2350,6 +2377,29 @@ async def create_pack_booking(request: PackBookingRequest):
                 ),
             )
             conn.commit()
+
+    # Link the anonymous browsing session (if any) to the identity just captured —
+    # this endpoint never did this at all before, unlike create_booking_endpoint,
+    # so every pack booking was invisible in booking_visitor_identity even when
+    # it completed.
+    if request.session_id:
+        try:
+            from app.booking.visitor_tracking import (
+                persist_booking_visitor_identity,
+                upsert_visitor_summary,
+            )
+            persist_booking_visitor_identity(
+                request.session_id,
+                visitor_id=request.visitor_id,
+                phone=request.customer_phone,
+                email=request.customer_email,
+                name=request.customer_name,
+                booking_ref=pack_ref,
+            )
+            if request.customer_phone:
+                upsert_visitor_summary(request.customer_phone)
+        except Exception as _link_e:
+            logger.warning("visitor identity link failed for %s: %s", pack_ref, _link_e)
 
     # Notify admin (WhatsApp) - similar to /api/booking/solicitud
     try:
