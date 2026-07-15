@@ -855,29 +855,42 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         logger.warning(f"tabla table setup skipped: {_e}")
 
-    sync_task       = asyncio.create_task(_run_auto_sync())
-    email_task      = asyncio.create_task(_run_email_sweeps_scheduler())
-    pending_task    = asyncio.create_task(_run_pending_payment_email_scheduler())
-    daily_task      = asyncio.create_task(_run_daily_summary_scheduler())
-    sig_task        = asyncio.create_task(_run_signature_summary_scheduler())
-    prebooking_task = asyncio.create_task(_run_pre_booking_notif_scheduler())
-    notif_task      = asyncio.create_task(_run_yesterday_weekly_scheduler())
-    stock_task      = asyncio.create_task(_run_stock_consume_scheduler())
-    logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
-    logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
-    logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
-    logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
-    logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
-    logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
-    logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
+    # With multiple workers/replicas, each is a separate process sharing the
+    # same DB — without this lock, every one of them would start its own
+    # copy of the schedulers below and every automated email/WhatsApp
+    # message would go out once per process. Only the process that wins the
+    # advisory lock runs them; the rest just serve requests.
+    from app.db.connection import try_acquire_scheduler_lock
+    scheduler_tasks = []
+    if try_acquire_scheduler_lock():
+        scheduler_tasks = [
+            asyncio.create_task(_run_auto_sync()),
+            asyncio.create_task(_run_email_sweeps_scheduler()),
+            asyncio.create_task(_run_pending_payment_email_scheduler()),
+            asyncio.create_task(_run_daily_summary_scheduler()),
+            asyncio.create_task(_run_signature_summary_scheduler()),
+            asyncio.create_task(_run_pre_booking_notif_scheduler()),
+            asyncio.create_task(_run_yesterday_weekly_scheduler()),
+            asyncio.create_task(_run_stock_consume_scheduler()),
+        ]
+        logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
+        logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
+        logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
+        logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
+        logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
+        logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
+        logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
+    else:
+        logger.info("⏭️ Schedulers ya corren en otro worker/réplica — este proceso solo atiende requests")
     yield
-    for task in (sync_task, email_task, pending_task, daily_task, sig_task, prebooking_task, notif_task, stock_task):
+    for task in scheduler_tasks:
         task.cancel()
         try:
             await task
         except asyncio.CancelledError:
             pass
-    logger.info("🛑 Background tasks detenidos")
+    if scheduler_tasks:
+        logger.info("🛑 Background tasks detenidos")
 
 
 # Create FastAPI app
