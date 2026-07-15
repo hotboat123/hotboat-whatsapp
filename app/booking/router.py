@@ -2564,7 +2564,6 @@ async def track_booking_event(body: TrackEventRequest):
     Events are persisted to the DB for analytics on every tracked call (when session_id exists).
     """
     import asyncio
-    from app.booking.operator_settings import get_setting
 
     sid = (body.session_id or "").strip()[:64]
     if not sid:
@@ -2589,9 +2588,6 @@ async def track_booking_event(body: TrackEventRequest):
         )
     except Exception as _persist_e:
         logger.warning("visitor event persist failed: %s", _persist_e)
-
-    if get_setting("booking_visitor_notif", "false").lower() != "true":
-        return {"ok": True, "sent": False}
 
     if sid not in _visitor_sessions:
         _visitor_sessions[sid] = {
@@ -2725,14 +2721,14 @@ def _build_ad_label(
     return ""
 
 
-def _send_session_summary(session: dict):
-    from app.booking.visitor_tracking import persist_booking_visitor_session_closed
-
-    ended_at = datetime.now(CHILE_TZ)
-    events = session.get("events", []) or []
-    classification, cls_desc = _classify_visitor(events)
+def _send_visitor_email(session: dict, classification: str, cls_desc: str, events: list) -> bool:
+    """Best-effort email summary of a closed visitor session. Gated by the
+    booking_visitor_notif operator setting — kept separate from
+    _send_session_summary so that flipping this setting off (e.g. because
+    the 5-min emails got noisy) only silences the email, not the DB write
+    that persist_booking_visitor_session_closed does right after (used by
+    the Embudo/Llamadas anonymous-visitor tracking)."""
     sent_ok = False
-
     try:
         from app.config import get_settings
         from app.booking.booking_email import _get_admin_email, _get_from_addr
@@ -2831,6 +2827,19 @@ def _send_session_summary(session: dict):
                         session.get("session_id", "?"), len(events), classification)
     except Exception as e:
         logger.warning("_send_session_summary error: %s", e)
+    return sent_ok
+
+
+def _send_session_summary(session: dict):
+    from app.booking.visitor_tracking import persist_booking_visitor_session_closed
+    from app.booking.operator_settings import get_setting
+
+    ended_at = datetime.now(CHILE_TZ)
+    events = session.get("events", []) or []
+    classification, cls_desc = _classify_visitor(events)
+    sent_ok = False
+    if get_setting("booking_visitor_notif", "false").lower() == "true":
+        sent_ok = _send_visitor_email(session, classification, cls_desc, events)
 
     try:
         persist_booking_visitor_session_closed(
