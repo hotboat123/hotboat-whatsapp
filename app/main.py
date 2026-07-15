@@ -10,6 +10,7 @@ import logging
 import httpx
 
 from app.booking.router import router as booking_router
+from app.booking.router import _run_visitor_session_closer_scheduler
 from app.booking.admin_router import admin_router
 from app.booking.content_router import content_router
 from app.booking.signatures_router import signatures_router
@@ -872,6 +873,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_pre_booking_notif_scheduler()),
             asyncio.create_task(_run_yesterday_weekly_scheduler()),
             asyncio.create_task(_run_stock_consume_scheduler()),
+            asyncio.create_task(_run_visitor_session_closer_scheduler()),
         ]
         logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
         logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
@@ -880,6 +882,7 @@ async def lifespan(app: FastAPI):
         logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
         logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
         logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
+        logger.info("🌐 Visitor session closer iniciado (cada 2 min, cierra sesiones tras 5 min de inactividad)")
     else:
         logger.info("⏭️ Schedulers ya corren en otro worker/réplica — este proceso solo atiende requests")
     yield

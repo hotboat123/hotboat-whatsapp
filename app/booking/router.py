@@ -2502,10 +2502,17 @@ async def create_pack_booking(request: PackBookingRequest):
 
 
 # ── Booking page visitor tracking ─────────────────────────────────────────────
-
-# In-memory session store: session_id → {events, start_time, ...}
-_visitor_sessions: dict = {}
-_visitor_tasks: dict = {}  # session_id → asyncio.Task
+#
+# Session classification used to be built in-memory per uvicorn process (events
+# accumulated in a dict, a 5-min asyncio debounce closed it). That broke once
+# the app started running multiple replicas: a visitor's events land on
+# whichever replica the load balancer picks, so each replica only ever saw a
+# fragment of the session and closed its own incomplete copy — one visit
+# turned into several partial rows. _close_stale_visitor_sessions() below
+# replaces that: it reads the full event history straight from the DB (always
+# complete, no matter which replica handled each event) on a periodic sweep
+# instead. Raw event persistence (persist_booking_visitor_event, below) was
+# never affected by this — it writes straight to the DB on every call.
 
 
 class TrackEventRequest(BaseModel):
@@ -2526,45 +2533,14 @@ class TrackEventRequest(BaseModel):
     visitor_id: Optional[str] = ""  # persistent hb_uid (localStorage), spans landing (hotboat.cl) + booking
 
 
-def _merge_visitor_session_attribution(dst: dict, body: TrackEventRequest) -> None:
-    """Fill empty attribution slots (handles out-of-order / exit-only beacons after slow first request)."""
-    lim = {
-        "utm_source": 100,
-        "utm_medium": 100,
-        "utm_campaign": 200,
-        "utm_content": 200,
-        "parametro_url": 240,
-        "referrer": 200,
-    }
-    pairs = [
-        ("utm_source", (body.utm_source or "").strip()),
-        ("utm_medium", (body.utm_medium or "").strip()),
-        ("utm_campaign", (body.utm_campaign or "").strip()),
-        ("utm_content", (body.utm_content or "").strip()),
-        ("parametro_url", (body.parametro_url or "").strip()),
-        ("referrer", (body.referrer or "").strip()),
-    ]
-    for key, val in pairs:
-        if not val:
-            continue
-        cap = lim.get(key, 200)
-        if not (dst.get(key) or "").strip():
-            dst[key] = val[:cap]
-
-    fb = str(body.fbclid or "").strip()
-    if fb:
-        dst["fbclid"] = True
-
-
 @router.post("/api/booking/track")
 async def track_booking_event(body: TrackEventRequest):
     """
-    Collects visitor events per session, then after 5 min of inactivity
-    sends a single summary email with activity timeline and classification.
-    Events are persisted to the DB for analytics on every tracked call (when session_id exists).
+    Persists one visitor event to the DB on every call. Session classification
+    (grouping a visitor's events, deciding "Muy interesado" vs "Solo mirando",
+    closing after 5 min of inactivity) happens later, out of band, in
+    _close_stale_visitor_sessions — see the module docstring above.
     """
-    import asyncio
-
     sid = (body.session_id or "").strip()[:64]
     if not sid:
         return {"ok": True, "sent": False}
@@ -2589,57 +2565,88 @@ async def track_booking_event(body: TrackEventRequest):
     except Exception as _persist_e:
         logger.warning("visitor event persist failed: %s", _persist_e)
 
-    if sid not in _visitor_sessions:
-        _visitor_sessions[sid] = {
-            "session_id": sid,
-            "start_time": now_cl,
-            "lang": body.lang or "es",
-            "referrer": "",
-            "is_returning": body.is_returning or False,
-            "events": [],
-            "utm_source": "",
-            "utm_medium": "",
-            "utm_campaign": "",
-            "utm_content": "",
-            "parametro_url": "",
-            "fbclid": False,
-        }
-    sess = _visitor_sessions[sid]
-    _merge_visitor_session_attribution(sess, body)
-    if body.lang:
-        sess["lang"] = body.lang or sess.get("lang") or "es"
-    sess["is_returning"] = bool(sess.get("is_returning")) or bool(body.is_returning)
-
-    _visitor_sessions[sid]["events"].append({
-        "event": body.event,
-        "date": body.date,
-        "time": now_cl.strftime("%H:%M"),
-    })
-    _visitor_sessions[sid]["last_time"] = now_cl
-
-    # Cancel existing 5-min timer, restart it (reset on each new event)
-    if sid in _visitor_tasks and not _visitor_tasks[sid].done():
-        _visitor_tasks[sid].cancel()
-    _visitor_tasks[sid] = asyncio.create_task(_delayed_session_email(sid, 300))
-
     return {"ok": True, "sent": False}
 
 
-async def _delayed_session_email(session_id: str, delay: int = 300):
-    import asyncio
-    try:
-        await asyncio.sleep(delay)
-        session = _visitor_sessions.pop(session_id, None)
-        _visitor_tasks.pop(session_id, None)
-        if session and session.get("events"):
-            try:
-                await asyncio.get_event_loop().run_in_executor(
-                    None, _send_session_summary, session
+def _close_stale_visitor_sessions(inactivity_minutes: int = 5, batch_limit: int = 200) -> dict:
+    """Find sessions whose last event is older than `inactivity_minutes` and
+    that haven't been closed yet (no row in booking_visitor_sessions), rebuild
+    each one's full event list from the DB, classify it, and persist it via
+    the existing _send_session_summary (same email-gating + DB-write logic the
+    old in-memory path used). Runs on whichever process holds the scheduler
+    advisory lock (see try_acquire_scheduler_lock), so a session is only ever
+    closed once — no cross-replica races.
+
+    UTM/ad attribution (utm_source, fbclid, etc.) isn't persisted per-event to
+    booking_visitor_events, so a rebuilt session has none of it; the optional
+    summary email just omits the "Anuncio"/"Audiencia" rows in that case. The
+    DB write that Llamadas/Embudo actually depend on doesn't use those fields.
+    """
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT session_id, MIN(recorded_at), MAX(recorded_at),
+                       (array_agg(lang ORDER BY recorded_at DESC))[1],
+                       (array_agg(referrer ORDER BY recorded_at DESC)
+                            FILTER (WHERE referrer IS NOT NULL AND referrer <> ''))[1],
+                       bool_or(is_returning)
+                FROM booking_visitor_events
+                WHERE session_id NOT IN (SELECT DISTINCT session_id FROM booking_visitor_sessions)
+                GROUP BY session_id
+                HAVING MAX(recorded_at) < NOW() - (%s || ' minutes')::interval
+                LIMIT %s
+                """,
+                (inactivity_minutes, batch_limit),
+            )
+            stale = cur.fetchall()
+
+    closed = 0
+    for session_id, started_at, ended_at, lang, referrer, is_returning in stale:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT event_type, extra_date, time_label FROM booking_visitor_events
+                    WHERE session_id = %s ORDER BY recorded_at
+                    """,
+                    (session_id,),
                 )
-            except Exception as e:
-                logger.warning("_delayed_session_email summary failed: %s", e)
-    except asyncio.CancelledError:
-        pass  # timer was reset by a new event; a new task was already scheduled
+                ev_rows = cur.fetchall()
+        events = [{"event": r[0], "date": r[1], "time": r[2]} for r in ev_rows]
+        if not events:
+            continue
+        session = {
+            "session_id": session_id,
+            "start_time": started_at,
+            "lang": lang or "es",
+            "referrer": referrer or "",
+            "is_returning": bool(is_returning),
+            "events": events,
+            "utm_source": "", "utm_medium": "", "utm_campaign": "",
+            "utm_content": "", "parametro_url": "", "fbclid": False,
+        }
+        try:
+            _send_session_summary(session)
+            closed += 1
+        except Exception as e:
+            logger.warning("_close_stale_visitor_sessions: failed to close %s: %s", session_id, e)
+
+    return {"closed": closed, "found": len(stale)}
+
+
+async def _run_visitor_session_closer_scheduler():
+    import asyncio
+    while True:
+        try:
+            result = await asyncio.get_event_loop().run_in_executor(None, _close_stale_visitor_sessions)
+            if result.get("closed"):
+                logger.info("visitor_session_closer: closed %d session(s)", result["closed"])
+        except Exception as e:
+            logger.warning("visitor_session_closer error: %s", e)
+        await asyncio.sleep(120)
 
 
 def _classify_visitor(events: list) -> tuple:

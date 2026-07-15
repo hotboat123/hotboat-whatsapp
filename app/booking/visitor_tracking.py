@@ -185,7 +185,7 @@ def get_identity_phone(session_id: str, visitor_id: Optional[str] = None) -> Opt
                 """
                 SELECT phone FROM booking_visitor_identity
                 WHERE phone IS NOT NULL AND phone <> ''
-                  AND (session_id = %s OR (%s IS NOT NULL AND visitor_id = %s))
+                  AND (session_id = %s OR (%s::text IS NOT NULL AND visitor_id = %s::text))
                 ORDER BY linked_at DESC
                 LIMIT 1
                 """,
