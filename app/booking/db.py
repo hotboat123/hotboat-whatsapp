@@ -360,6 +360,15 @@ def get_bookings_pending_payment_email(delay_minutes: int = 5) -> list:
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS pending_email_sent_at TIMESTAMPTZ
             """)
+            # Separate from pending_email_sent_at (the customer reminder) —
+            # if the customer send keeps failing/never completes, the query
+            # below keeps returning this booking every 3-minute sweep, and
+            # without its own flag the admin "pago pendiente" alert would
+            # keep re-firing forever alongside it instead of only once.
+            cur.execute("""
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS pending_admin_email_sent_at TIMESTAMPTZ
+            """)
             conn.commit()
     out: List[dict] = []
     with get_connection() as conn:
@@ -367,12 +376,13 @@ def get_bookings_pending_payment_email(delay_minutes: int = 5) -> list:
             cur.execute(
                 """
                 SELECT id, TRIM(source_id) AS booking_ref, nombre_cliente, telefono, email,
-                       fecha, hora, num_personas, ingreso_reserva, ingreso_extras, ingreso_total
+                       fecha, hora, num_personas, ingreso_reserva, ingreso_extras, ingreso_total,
+                       pending_admin_email_sent_at
                 FROM all_appointments
                 WHERE source = 'hotboat_web'
                   AND status = 'pending_payment'
                   AND email IS NOT NULL AND TRIM(email) <> ''
-                  AND pending_email_sent_at IS NULL
+                  AND (pending_email_sent_at IS NULL OR pending_admin_email_sent_at IS NULL)
                   AND created_at <= %s
                 """,
                 (cutoff,),
@@ -389,6 +399,7 @@ def get_bookings_pending_payment_email(delay_minutes: int = 5) -> list:
                 "subtotal",
                 "extras_total",
                 "total_price",
+                "admin_pending_email_sent_at",
             ]
             for row in cur.fetchall():
                 d = dict(zip(cols, row))
@@ -411,6 +422,23 @@ def mark_pending_email_sent(booking_ref: str) -> bool:
             cur.execute(
                 "UPDATE all_appointments SET pending_email_sent_at=NOW(), updated_at=NOW() "
                 "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) AND pending_email_sent_at IS NULL",
+                (br,),
+            )
+            updated = cur.rowcount > 0
+            conn.commit()
+            return updated
+
+
+def mark_admin_pending_email_sent(booking_ref: str) -> bool:
+    """Mark the pending-payment ADMIN alert as sent (idempotent). Separate
+    from mark_pending_email_sent (the customer reminder) so a customer send
+    that keeps failing doesn't keep re-triggering the admin alert too."""
+    br = (booking_ref or "").strip()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE all_appointments SET pending_admin_email_sent_at=NOW(), updated_at=NOW() "
+                "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) AND pending_admin_email_sent_at IS NULL",
                 (br,),
             )
             updated = cur.rowcount > 0
