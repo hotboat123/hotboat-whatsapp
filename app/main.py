@@ -95,9 +95,47 @@ import hmac as _hmac, hashlib as _hashlib, secrets as _secrets, time as _time
 _SESSION_SECRET: str = ""
 
 def _get_secret() -> str:
+    """Return the HMAC secret used to sign/verify login session cookies.
+
+    Must be identical across every replica, or a session created by
+    whichever replica handled /api/auth/login fails to verify on any other
+    replica that serves the next request — the observed symptom was being
+    asked to log in again on almost every navigation once numReplicas > 1.
+    settings.session_secret (env var) is preferred; if unset, fall back to
+    a value persisted in Postgres (shared by all replicas) instead of a
+    fresh random secret per-process, which is what silently broke this.
+    """
     global _SESSION_SECRET
-    if not _SESSION_SECRET:
-        _SESSION_SECRET = settings.session_secret or _secrets.token_hex(32)
+    if _SESSION_SECRET:
+        return _SESSION_SECRET
+    if settings.session_secret:
+        _SESSION_SECRET = settings.session_secret
+        return _SESSION_SECRET
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS app_secrets (
+                        key   TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    )
+                """)
+                cur.execute("SELECT value FROM app_secrets WHERE key = 'session_secret'")
+                row = cur.fetchone()
+                if not row:
+                    cur.execute(
+                        "INSERT INTO app_secrets (key, value) VALUES ('session_secret', %s) "
+                        "ON CONFLICT (key) DO NOTHING",
+                        (_secrets.token_hex(32),),
+                    )
+                    conn.commit()
+                    cur.execute("SELECT value FROM app_secrets WHERE key = 'session_secret'")
+                    row = cur.fetchone()
+                _SESSION_SECRET = row[0]
+    except Exception as e:
+        logger.error(f"Could not load/persist shared session secret from DB: {e}")
+        _SESSION_SECRET = _secrets.token_hex(32)
     return _SESSION_SECRET
 
 def _make_session_token(username: str) -> str:
