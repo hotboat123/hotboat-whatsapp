@@ -892,73 +892,77 @@ Yo lo agrego automáticamente al carrito y luego puedes:
 
     async def get_conversation(self, phone_number: str, contact_name: str) -> dict:
         """
-        Get or create conversation context. Checks the in-memory cache first
-        (fast path for consecutive messages that land on the same replica),
-        then the shared DB-persisted state (another replica's cache), and
-        only falls back to reconstructing from raw whatsapp_conversations
-        history for a phone that's genuinely never been through this since
-        bot_conversation_state existed.
+        Get or create conversation context. Always re-reads the shared
+        DB-persisted state first: with numReplicas > 1, a sibling replica
+        may have advanced this conversation (e.g. set
+        awaiting_reservation_time after the user picked a date) since this
+        replica's own local copy was last touched. Trusting the in-memory
+        cache whenever *any* entry exists for this phone — even a stale one
+        from a much earlier turn — was causing mid-flow replies (like a
+        time selection) to fall through to the in-memory replica's stale
+        flags and land on the main-menu fallback instead of being
+        recognized. Only falls back to reconstructing from raw
+        whatsapp_conversations history for a phone that's genuinely never
+        been through this since bot_conversation_state existed.
         """
-        # Check if already in memory
-        if phone_number not in self.conversations:
-            persisted = await self._load_persisted_conversation_state(phone_number)
-            if persisted:
-                self.conversations[phone_number] = persisted
-                logger.info(
-                    f"Restored persisted conversation state for {phone_number} "
-                    f"({len(persisted.get('messages', []))} messages)"
-                )
-            else:
-                # Load lead info and conversation history from database
-                try:
-                    lead = await get_or_create_lead(phone_number, contact_name)
-                except Exception as e:
-                    logger.warning(f"Error loading lead for {phone_number}: {e}")
-                    lead = None
+        persisted = await self._load_persisted_conversation_state(phone_number)
+        if persisted:
+            self.conversations[phone_number] = persisted
+            logger.info(
+                f"Restored persisted conversation state for {phone_number} "
+                f"({len(persisted.get('messages', []))} messages)"
+            )
+        elif phone_number not in self.conversations:
+            # Load lead info and conversation history from database
+            try:
+                lead = await get_or_create_lead(phone_number, contact_name)
+            except Exception as e:
+                logger.warning(f"Error loading lead for {phone_number}: {e}")
+                lead = None
 
-                try:
-                    history = await get_conversation_history(phone_number, limit=50)
-                except Exception as e:
-                    logger.warning(f"Error loading history for {phone_number}: {e}")
-                    history = []
+            try:
+                history = await get_conversation_history(phone_number, limit=50)
+            except Exception as e:
+                logger.warning(f"Error loading history for {phone_number}: {e}")
+                history = []
 
-                # get_conversation_history returns {message_text, direction, ...}
-                # rows straight from whatsapp_conversations — translate to the
-                # {role, content, ...} shape the rest of this file uses (e.g.
-                # _is_first_message checks msg["role"]), otherwise a real
-                # multi-message conversation looks empty and the bot re-sends
-                # the welcome menu from scratch.
-                translated_messages = [
-                    {
-                        "role": "user" if h.get("direction") == "incoming" else "assistant",
-                        "content": h.get("message_text") or "",
-                        "timestamp": h.get("timestamp"),
-                        "message_id": None,
-                    }
-                    for h in history
-                ]
-
-                # Restore language preference from DB; fall back to 'es' for brand-new users
-                pref_lang = lead.get("preferred_language") if lead else None
-                detected_language = pref_lang or "es"
-
-                self.conversations[phone_number] = {
-                    "phone": phone_number,
-                    "name": contact_name,
-                    "messages": translated_messages,
-                    "created_at": datetime.now(CHILE_TZ).isoformat(),
-                    "last_interaction": datetime.now(CHILE_TZ).isoformat(),
-                    "metadata": {
-                        "lead_status": lead.get("lead_status") if lead else "unknown",
-                        "lead_id": lead.get("id") if lead else None,
-                        "language": detected_language,
-                        "language_selected": True,
-                    },
-                    "processed_message_ids": set()
+            # get_conversation_history returns {message_text, direction, ...}
+            # rows straight from whatsapp_conversations — translate to the
+            # {role, content, ...} shape the rest of this file uses (e.g.
+            # _is_first_message checks msg["role"]), otherwise a real
+            # multi-message conversation looks empty and the bot re-sends
+            # the welcome menu from scratch.
+            translated_messages = [
+                {
+                    "role": "user" if h.get("direction") == "incoming" else "assistant",
+                    "content": h.get("message_text") or "",
+                    "timestamp": h.get("timestamp"),
+                    "message_id": None,
                 }
+                for h in history
+            ]
 
-                if history:
-                    logger.info(f"Loaded {len(history)} messages from history for {phone_number}")
+            # Restore language preference from DB; fall back to 'es' for brand-new users
+            pref_lang = lead.get("preferred_language") if lead else None
+            detected_language = pref_lang or "es"
+
+            self.conversations[phone_number] = {
+                "phone": phone_number,
+                "name": contact_name,
+                "messages": translated_messages,
+                "created_at": datetime.now(CHILE_TZ).isoformat(),
+                "last_interaction": datetime.now(CHILE_TZ).isoformat(),
+                "metadata": {
+                    "lead_status": lead.get("lead_status") if lead else "unknown",
+                    "lead_id": lead.get("id") if lead else None,
+                    "language": detected_language,
+                    "language_selected": True,
+                },
+                "processed_message_ids": set()
+            }
+
+            if history:
+                logger.info(f"Loaded {len(history)} messages from history for {phone_number}")
 
         # Update name if different
         if contact_name and self.conversations[phone_number]["name"] != contact_name:
