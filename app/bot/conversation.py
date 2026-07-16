@@ -2567,33 +2567,45 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
         message_clean = message.strip()
         message_lower = message_clean.lower()
         language = conversation.get("metadata", {}).get("language", "es")
-        
-        if message_clean in ["19"] or message_lower in ["menu", "menú", "principal"]:
+
+        if message_lower in ["menu", "menú", "principal"]:
             self._reset_reservation_flow(conversation)
-            language = conversation.get("metadata", {}).get("language", "es")
             return self._get_main_menu_message(language)
-        if message_clean == "18":
-            return self.faq_handler.get_response("extras", language)
-        if message_clean == "20":
-            cart = await self.cart_manager.get_cart(phone_number)
-            if not cart:
-                return get_text("cart_empty", language)
-            has_reservation = any(item.item_type == "reservation" for item in cart)
-            if has_reservation:
-                confirm_message = await self._build_cart_confirmation(cart, contact_name, phone_number, language)
-                await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
-                await self.cart_manager.clear_cart(phone_number)
+
+        available_times = metadata.get("available_times_for_date", [])
+        # "18"/"19"/"20" double as global shortcuts (extras / main menu /
+        # cart) elsewhere in the bot, but 18:00/19:00/20:00 are common
+        # HotBoat departure times — if the bare number matches a time
+        # actually being offered right now, treat it as the time selection
+        # instead of hijacking it as a shortcut (e.g. "19" with 19:00 on
+        # offer must confirm 19:00, not reset to the main menu).
+        is_offered_time = message_clean in ("18", "19", "20") and f"{message_clean}:00" in available_times
+
+        if not is_offered_time:
+            if message_clean == "19":
                 self._reset_reservation_flow(conversation)
-                conversation["metadata"]["awaiting_party_size"] = False
-                return confirm_message
-            return f"{self.cart_manager.format_cart_message(cart, language)}\n\n{self._cart_needs_reservation_message(conversation)}"
+                return self._get_main_menu_message(language)
+            if message_clean == "18":
+                return self.faq_handler.get_response("extras", language)
+            if message_clean == "20":
+                cart = await self.cart_manager.get_cart(phone_number)
+                if not cart:
+                    return get_text("cart_empty", language)
+                has_reservation = any(item.item_type == "reservation" for item in cart)
+                if has_reservation:
+                    confirm_message = await self._build_cart_confirmation(cart, contact_name, phone_number, language)
+                    await self._notify_capitan_tomas(contact_name, phone_number, cart, reason="reservation")
+                    await self.cart_manager.clear_cart(phone_number)
+                    self._reset_reservation_flow(conversation)
+                    conversation["metadata"]["awaiting_party_size"] = False
+                    return confirm_message
+                return f"{self.cart_manager.format_cart_message(cart, language)}\n\n{self._cart_needs_reservation_message(conversation)}"
 
         pending = metadata.get("pending_reservation")
         if not pending or not pending.get("date_obj_iso"):
             self._reset_reservation_flow(conversation)
             return get_text("date_lost", language)
 
-        available_times = metadata.get("available_times_for_date", [])
         normalized_time = self._normalize_time_input(message_lower)
         if not normalized_time:
             return get_text("time_not_recognized", language).format(
