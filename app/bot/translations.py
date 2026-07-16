@@ -2048,20 +2048,26 @@ Por favor digite o número de pessoas
 def get_text(key: str, language: str = "es") -> str:
     """
     Get translated text for a given key and language
-    
+
     Args:
         key: Translation key
         language: Language code (es, en, pt)
-    
+
     Returns:
         Translated text, defaults to Spanish if not found
     """
+    if language == "es":
+        from app.bot.variant_overrides import get_override
+        override = get_override(key)
+        if override:
+            return override
+
     if key not in TRANSLATIONS:
         return f"[Missing translation: {key}]"
-    
+
     if language not in TRANSLATIONS[key]:
         language = "es"  # Default to Spanish
-    
+
     return TRANSLATIONS[key][language]
 
 

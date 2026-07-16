@@ -2,6 +2,7 @@
 Leads and contacts management
 """
 import logging
+import random
 import re
 from typing import Optional, List, Dict
 from datetime import datetime
@@ -42,6 +43,32 @@ def _ensure_lang_col(cur) -> None:
     _lang_col_ensured = True
 
 
+_variant_col_ensured: bool = False
+
+def _ensure_variant_col(cur) -> None:
+    """Add bot_variant column if not present (runs once per process)."""
+    global _variant_col_ensured
+    if _variant_col_ensured:
+        return
+    cur.execute(
+        "ALTER TABLE whatsapp_leads ADD COLUMN IF NOT EXISTS bot_variant TEXT"
+    )
+    _variant_col_ensured = True
+
+
+def _pick_active_variant(cur) -> Optional[str]:
+    """Randomly pick one currently-active A/B variant for a brand-new lead,
+    or None if no experiment is running (bot_ab_variants table missing or
+    empty is a normal, expected state — most of the time there's no test
+    active)."""
+    try:
+        cur.execute("SELECT variant_key FROM bot_ab_variants WHERE is_active = TRUE")
+        keys = [r[0] for r in cur.fetchall()]
+    except Exception:
+        return None
+    return random.choice(keys) if keys else None
+
+
 def save_lead_language(phone_number: str, language: str) -> None:
     """Persist the user's preferred language to the DB (synchronous)."""
     try:
@@ -72,6 +99,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
         with get_connection() as conn:
             with conn.cursor() as cur:
                 _ensure_lang_col(cur)
+                _ensure_variant_col(cur)
                 try:
                     cur.execute("""
                         SELECT
@@ -79,7 +107,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
                             unread_count, last_read_at, priority, ad_source,
                             ad_platform, ad_media_type, ad_creative_url, ad_ctwa_clid, ad_audience,
-                            preferred_language
+                            preferred_language, bot_variant
                         FROM whatsapp_leads
                         WHERE phone_number = %s
                     """, (phone_number,))
@@ -136,15 +164,19 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "ad_ctwa_clid": row[17] if len(row) > 17 else None,
                         "ad_audience": row[18] if len(row) > 18 else None,
                         "preferred_language": row[19] if len(row) > 19 else None,
+                        "bot_variant": row[20] if len(row) > 20 else None,
                     }
                 else:
-                    # Create new lead
+                    # Create new lead — randomly assign an active A/B variant
+                    # (if any experiment is running) so it sticks for the
+                    # whole conversation.
+                    variant_key = _pick_active_variant(cur)
                     cur.execute("""
                         INSERT INTO whatsapp_leads
-                        (phone_number, customer_name, lead_status, last_interaction_at, created_at, updated_at)
-                        VALUES (%s, %s, 'unknown', NOW(), NOW(), NOW())
+                        (phone_number, customer_name, lead_status, last_interaction_at, created_at, updated_at, bot_variant)
+                        VALUES (%s, %s, 'unknown', NOW(), NOW(), NOW(), %s)
                         RETURNING id
-                    """, (phone_number, customer_name))
+                    """, (phone_number, customer_name, variant_key))
 
                     lead_id = cur.fetchone()[0]
                     conn.commit()
@@ -162,7 +194,8 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "bot_enabled": True,
                         "unread_count": 0,
                         "last_read_at": None,
-                        "priority": 0
+                        "priority": 0,
+                        "bot_variant": variant_key,
                     }
     
     except Exception as e:

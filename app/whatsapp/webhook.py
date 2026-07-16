@@ -456,9 +456,13 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 # Send error message to user
                 response = "🥬 ¡Ahoy, grumete! ⚓ Disculpa, estoy teniendo problemas técnicos. ¿Podrías intentar de nuevo en un momento?"
 
-            # Check if the bot just sent the welcome menu → schedule a follow-up
-            _conv = conversation_manager.conversations.get(from_number, {})
-            if _conv.get("metadata", {}).pop("schedule_followup", False):
+            # Check if the bot just sent the welcome menu → schedule a follow-up.
+            # This flag is transient (conversation_manager.pending_followup_requests,
+            # not conversation["metadata"]) precisely so it never gets persisted —
+            # see the comment on that attribute for why it used to cause the nudge
+            # to reschedule itself on every single reply.
+            if from_number in conversation_manager.pending_followup_requests:
+                conversation_manager.pending_followup_requests.discard(from_number)
                 _schedule_followup(from_number, contact_name)
                 logger.info(f"⏰ Follow-up scheduled for {from_number} in {FOLLOWUP_DELAY_S}s")
 

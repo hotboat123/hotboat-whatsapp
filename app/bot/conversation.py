@@ -107,6 +107,17 @@ class ConversationManager:
         self.conversations: Dict[str, dict] = {}
         # Track scheduled summary emails per phone number
         self.conversation_summary_tasks: Dict[str, asyncio.Task] = {}
+        # Phones for which this call to process_message() just decided a
+        # follow-up nudge should be scheduled. Deliberately NOT part of
+        # `conversation["metadata"]` (and so never persisted): webhook.py
+        # reads and clears this synchronously, on this same replica, right
+        # after process_message() returns. Living in metadata used to cause
+        # it to be persisted to bot_conversation_state *before* webhook.py
+        # got a chance to pop it, so the next message's fresh reload from DB
+        # (see get_conversation()) kept resurrecting "schedule_followup:
+        # True" and rescheduling the nudge on every single reply — the
+        # customer only avoided it by never going 2 minutes without typing.
+        self.pending_followup_requests: set = set()
     
     def _normalize_text(self, text: str) -> str:
         """
@@ -430,7 +441,13 @@ class ConversationManager:
             logger.info(f"Processing message from {contact_name}: {message_text}")
             logger.info(f"Current metadata state: {conversation.get('metadata', {})}")
             metadata = conversation.setdefault("metadata", {})
-            
+
+            # A/B test: make this lead's assigned variant (if any) available
+            # to every get_text()/get_bot_response() call for the rest of
+            # this message via a contextvar — see app/bot/variant_overrides.py.
+            from app.bot.variant_overrides import set_current_variant
+            set_current_variant(metadata.get("bot_variant"))
+
             # Check if it's the first message - send welcome message
             # Check BEFORE adding the message to history
             is_first = self._is_first_message(conversation)
@@ -489,7 +506,7 @@ class ConversationManager:
                         f"Language switch from lead phrase: {current_lang} -> {inferred_language} ({from_number})"
                     )
                     if is_first:
-                        metadata["schedule_followup"] = True
+                        self.pending_followup_requests.add(from_number)
                     response = self._switch_language(conversation, inferred_language)
                 else:
                     logger.info(
@@ -513,7 +530,7 @@ class ConversationManager:
                     metadata["language_selected"] = True
                     language = metadata.get("language", "es")
                     # Signal webhook to schedule a 2-min follow-up if user doesn't reply
-                    metadata["schedule_followup"] = True
+                    self.pending_followup_requests.add(from_number)
                     response = self._get_main_menu_message(language)
             elif self._is_thanks_message(message_text):
                 logger.info("Gratitude detected - sending friendly reply")
@@ -825,6 +842,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             # above) — the next message for this phone might land on a
             # different replica and needs this to pick up where we left off.
             await self._persist_conversation_state(from_number)
+            from app.bot.variant_overrides import set_current_variant
+            set_current_variant(None)
 
     async def _load_persisted_conversation_state(self, phone_number: str) -> Optional[dict]:
         """Read the shared conversation-state blob another replica (or this
@@ -957,6 +976,7 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                     "lead_id": lead.get("id") if lead else None,
                     "language": detected_language,
                     "language_selected": True,
+                    "bot_variant": lead.get("bot_variant") if lead else None,
                 },
                 "processed_message_ids": set()
             }

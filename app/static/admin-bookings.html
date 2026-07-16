@@ -4500,6 +4500,34 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
         </div>
 
+        <!-- A/B test card -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+          <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
+            <span style="font-weight:600;font-size:.95rem">🧪 Test A/B de Popeye</span>
+            <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Cada cliente nuevo se asigna al azar a una variante activa. Define textos alternativos para los momentos que quieras — lo que no reescribas queda igual al texto de siempre.</span>
+            <button onclick="toggleNewVariantForm()" style="margin-left:auto;background:rgba(16,185,129,.15);border:1px solid #10b981;color:#10b981;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">+ Nueva variante</button>
+            <button onclick="loadAbVariants()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
+          </div>
+          <div id="new-variant-form" style="display:none;padding:.9rem 1.2rem;border-bottom:1px solid var(--border);background:rgba(16,185,129,.05)">
+            <div style="font-size:.82rem;font-weight:600;color:#10b981;margin-bottom:.6rem">Nueva variante</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">
+              <div>
+                <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem">Clave (sin espacios) *</label>
+                <input id="nv-key" type="text" placeholder="ej: urgencia" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none">
+              </div>
+              <div>
+                <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem">Nombre visible</label>
+                <input id="nv-label" type="text" placeholder="ej: Urgencia / cupos limitados" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none">
+              </div>
+            </div>
+            <div style="display:flex;gap:.5rem;justify-content:flex-end">
+              <button onclick="toggleNewVariantForm()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer">Cancelar</button>
+              <button onclick="createAbVariant()" style="background:#10b981;color:#fff;border:none;border-radius:7px;padding:.35rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600">Crear variante</button>
+            </div>
+          </div>
+          <div id="ab-variants-list" style="padding:.8rem 1.2rem;display:flex;flex-direction:column;gap:.9rem"></div>
+        </div>
+
       </div>
     </div><!-- /section-chatbot -->
 
@@ -4811,7 +4839,7 @@ function showSection(name){
   if(name==='cal-extras') loadCalExtras();
   if(name==='financial') initFinancialSection();
   if(name==='simulator') requestAnimationFrame(()=>{ simCalc(); });
-  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); }
+  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); loadAbVariants(); }
   if(name==='logs') initLogsSection();
   else clearInterval(_logAutoRefresh);
 }
@@ -13710,6 +13738,180 @@ async function rebuildWelcomeMenu(){
     const ta = document.getElementById('br-es-main_menu');
     if(ta){ ta.value = d.text; showToast('✅ Menú reconstruido — guarda para aplicar'); }
     else { showToast('Abre la tarjeta "Mensaje de bienvenida" primero', true); }
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+// ── A/B test (Popeye variants) ──────────────────────────────────────────────
+let _abVariants = [];
+let _abSuggestedKeys = [];
+let _abOpenVariant = null; // variant_key currently expanded
+
+function toggleNewVariantForm(){
+  const f = document.getElementById('new-variant-form');
+  const open = f.style.display === 'none';
+  f.style.display = open ? 'block' : 'none';
+  if(open) document.getElementById('nv-key').focus();
+}
+
+async function createAbVariant(){
+  const variant_key = (document.getElementById('nv-key').value || '').trim().toLowerCase().replace(/\s+/g,'_');
+  const label = (document.getElementById('nv-label').value || '').trim();
+  if(!variant_key){ showToast('❌ La clave es obligatoria', true); return; }
+  try {
+    const r = await fetch('/api/admin/bot/ab-variants', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({variant_key, label: label || variant_key})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Variante creada: ' + variant_key);
+    document.getElementById('nv-key').value = '';
+    document.getElementById('nv-label').value = '';
+    document.getElementById('new-variant-form').style.display = 'none';
+    loadAbVariants();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function loadAbVariants(){
+  const el = document.getElementById('ab-variants-list');
+  el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Cargando…</span>';
+  try {
+    const r = await fetch('/api/admin/bot/ab-variants');
+    const d = await r.json();
+    _abVariants = d.variants || [];
+    _abSuggestedKeys = d.suggested_keys || [];
+    el.innerHTML = '';
+    if(!_abVariants.length){ el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Sin variantes — crea una para empezar un test.</span>'; return; }
+    _abVariants.forEach(v => {
+      const safeKey = v.variant_key.replace(/[^a-z0-9_]/gi,'_');
+      const isOpen = _abOpenVariant === v.variant_key;
+      const div = document.createElement('div');
+      div.style.cssText = `background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;display:flex;flex-direction:column;gap:.5rem;${v.is_active?'':'opacity:.55'}`;
+      div.innerHTML = `
+        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+          <span style="font-weight:600;font-size:.85rem;cursor:pointer" onclick="toggleVariantOverrides('${v.variant_key}','${safeKey}')">${isOpen?'▾':'▸'} ${escHtml(v.label)}</span>
+          <code style="font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.06);padding:.1rem .4rem;border-radius:4px">${escHtml(v.variant_key)}</code>
+          <span style="font-size:.72rem;color:var(--muted)">${v.override_count} texto${v.override_count===1?'':'s'} alternativo${v.override_count===1?'':'s'}</span>
+          <label style="display:flex;align-items:center;gap:.28rem;cursor:pointer;user-select:none;margin-left:auto" title="Recibe clientes nuevos">
+            <input type="checkbox" ${v.is_active?'checked':''} onchange="toggleVariantActive(${v.id}, this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:var(--gold)">
+            <span style="font-size:.75rem;color:var(--muted)">Activa</span>
+          </label>
+          <button onclick="deleteAbVariant(${v.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem" title="Eliminar variante">✕</button>
+        </div>
+        <div id="ab-overrides-${safeKey}" style="display:${isOpen?'flex':'none'};flex-direction:column;gap:.5rem"></div>
+      `;
+      el.appendChild(div);
+      if(isOpen) loadVariantOverrides(v.variant_key, safeKey);
+    });
+  } catch(e){
+    el.innerHTML = `<span style="color:var(--red);font-size:.83rem">Error: ${e.message}</span>`;
+  }
+}
+
+async function toggleVariantActive(id, isActive){
+  try {
+    const r = await fetch(`/api/admin/bot/ab-variants/${id}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({is_active: isActive})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    showToast(isActive ? '✅ Variante activada' : '⏸️ Variante pausada');
+  } catch(e){ showToast('❌ '+e.message, true); loadAbVariants(); }
+}
+
+async function deleteAbVariant(id){
+  if(!confirm('¿Eliminar esta variante y todos sus textos alternativos?')) return;
+  try {
+    const r = await fetch(`/api/admin/bot/ab-variants/${id}`, {method:'DELETE'});
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Variante eliminada');
+    loadAbVariants();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+function toggleVariantOverrides(variantKey, safeKey){
+  _abOpenVariant = (_abOpenVariant === variantKey) ? null : variantKey;
+  loadAbVariants();
+}
+
+async function loadVariantOverrides(variantKey, safeKey){
+  const wrap = document.getElementById(`ab-overrides-${safeKey}`);
+  if(!wrap) return;
+  wrap.innerHTML = '<span style="color:var(--muted);font-size:.8rem">Cargando…</span>';
+  try {
+    const r = await fetch(`/api/admin/bot/ab-overrides?variant_key=${encodeURIComponent(variantKey)}`);
+    const d = await r.json();
+    const overrides = d.overrides || [];
+    const rows = overrides.map(o => `
+      <div style="display:flex;flex-direction:column;gap:.3rem;border-top:1px solid var(--border);padding-top:.5rem">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <code style="font-size:.75rem;color:#38bdf8">${escHtml(o.message_key)}</code>
+          <button onclick="deleteVariantOverride(${o.id},'${variantKey}','${safeKey}')" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.82rem" title="Eliminar">✕</button>
+        </div>
+        <textarea id="ov-${safeKey}-${o.id}" data-message-key="${escHtml(o.message_key)}" rows="2" style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.8rem;font-family:inherit;resize:vertical;outline:none">${escHtml(o.content_es)}</textarea>
+        <div style="display:flex;justify-content:flex-end">
+          <button onclick="saveVariantOverride(${o.id},'${variantKey}','${safeKey}')" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.28rem .7rem;font-size:.78rem;cursor:pointer;font-weight:600">Guardar</button>
+        </div>
+      </div>`).join('');
+    const options = _abSuggestedKeys.map(k=>`<option value="${k}">${k}</option>`).join('');
+    wrap.innerHTML = rows + `
+      <div style="display:flex;flex-direction:column;gap:.3rem;border-top:1px solid var(--border);padding-top:.5rem">
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+          <select id="nov-key-${safeKey}" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.8rem;outline:none">
+            <option value="">— elige un momento —</option>${options}
+          </select>
+          <input id="nov-custom-${safeKey}" type="text" placeholder="o escribe otra clave…" style="flex:1;min-width:140px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .6rem;font-size:.8rem;outline:none">
+        </div>
+        <textarea id="nov-content-${safeKey}" rows="2" placeholder="Texto alternativo en español…" style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.4rem .6rem;font-size:.8rem;font-family:inherit;resize:vertical;outline:none"></textarea>
+        <div style="display:flex;justify-content:flex-end">
+          <button onclick="addVariantOverride('${variantKey}','${safeKey}')" style="background:#10b981;color:#fff;border:none;border-radius:7px;padding:.3rem .8rem;font-size:.8rem;cursor:pointer;font-weight:600">+ Agregar texto alternativo</button>
+        </div>
+      </div>`;
+  } catch(e){
+    wrap.innerHTML = `<span style="color:var(--red);font-size:.8rem">Error: ${e.message}</span>`;
+  }
+}
+
+async function saveVariantOverride(id, variantKey, safeKey){
+  const ta = document.getElementById(`ov-${safeKey}-${id}`);
+  const content_es = ta?.value || '';
+  const message_key = ta?.dataset.messageKey;
+  if(!content_es.trim()){ showToast('❌ El texto no puede quedar vacío', true); return; }
+  if(!message_key){ showToast('❌ No se encontró la clave del mensaje', true); return; }
+  try {
+    const r = await fetch('/api/admin/bot/ab-overrides', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({variant_key: variantKey, message_key, content_es})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Guardado');
+    loadAbVariants();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function addVariantOverride(variantKey, safeKey){
+  const sel = document.getElementById(`nov-key-${safeKey}`)?.value || '';
+  const custom = (document.getElementById(`nov-custom-${safeKey}`)?.value || '').trim();
+  const message_key = custom || sel;
+  const content_es = document.getElementById(`nov-content-${safeKey}`)?.value || '';
+  if(!message_key){ showToast('❌ Elige o escribe una clave', true); return; }
+  if(!content_es.trim()){ showToast('❌ Escribe el texto alternativo', true); return; }
+  try {
+    const r = await fetch('/api/admin/bot/ab-overrides', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({variant_key: variantKey, message_key, content_es})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Texto alternativo agregado');
+    loadAbVariants();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function deleteVariantOverride(id, variantKey, safeKey){
+  try {
+    const r = await fetch(`/api/admin/bot/ab-overrides/${id}`, {method:'DELETE'});
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Eliminado');
+    loadAbVariants();
   } catch(e){ showToast('❌ '+e.message, true); }
 }
 

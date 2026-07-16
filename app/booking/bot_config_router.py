@@ -79,8 +79,29 @@ def _ensure_tables():
                         created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
+                # A/B test variants for Popeye's messages — see
+                # app/bot/variant_overrides.py for how these are consumed.
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS bot_ab_variants (
+                        id           SERIAL PRIMARY KEY,
+                        variant_key  TEXT UNIQUE NOT NULL,
+                        label        TEXT NOT NULL,
+                        is_active    BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS bot_message_overrides (
+                        id           SERIAL PRIMARY KEY,
+                        variant_key  TEXT NOT NULL REFERENCES bot_ab_variants(variant_key) ON DELETE CASCADE,
+                        message_key  TEXT NOT NULL,
+                        content_es   TEXT NOT NULL,
+                        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE(variant_key, message_key)
+                    )
+                """)
                 conn.commit()
-        logger.info("✅ bot_responses / bot_keywords tables ready")
+        logger.info("✅ bot_responses / bot_keywords / bot_ab_variants tables ready")
     except Exception as e:
         logger.warning("bot config tables setup failed: %s", e)
 
@@ -197,6 +218,12 @@ async def get_quick_replies():
 
 def get_bot_response(key: str, lang: str = "es") -> Optional[str]:
     """Return bot response content from DB for the given key and language, or None."""
+    if lang == "es":
+        from app.bot.variant_overrides import get_override
+        override = get_override(key)
+        if override:
+            return override
+
     try:
         col = {"es": "content_es", "en": "content_en", "pt": "content_pt"}.get(lang, "content_es")
         with _get_conn() as conn:
@@ -233,7 +260,16 @@ _DEFAULT_FOOTERS = {
 
 
 def build_main_menu_text(lang: str = "es") -> Optional[str]:
-    """Auto-build the welcome menu from show_in_menu=true items."""
+    """Auto-build the welcome menu from show_in_menu=true items. If the
+    current lead's A/B variant has a "main_menu" override, that full text
+    is returned as-is instead — it's authored as a complete, ready-to-send
+    replacement, not a fragment to merge with the DB-driven menu."""
+    if lang == "es":
+        from app.bot.variant_overrides import get_override
+        override = get_override("main_menu")
+        if override:
+            return override
+
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -278,6 +314,170 @@ async def build_menu_preview(lang: str = "es"):
     if text is None:
         raise HTTPException(status_code=404, detail="No show_in_menu items found")
     return {"text": text, "lang": lang}
+
+
+# ── A/B test variants ──────────────────────────────────────────────────────────
+
+class VariantCreate(BaseModel):
+    variant_key: str
+    label: str
+
+
+class VariantUpdate(BaseModel):
+    label: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class OverrideUpsert(BaseModel):
+    variant_key: str
+    message_key: str
+    content_es: str
+
+
+# Common high-traffic keys an operator would want to vary — surfaced in the
+# admin UI as a dropdown; free text is also accepted for anything else.
+AB_SUGGESTED_KEYS = [
+    "main_menu", "date_has_availability", "time_confirmed_ask_party",
+    "time_not_recognized", "time_not_available", "pricing", "features",
+    "location", "extras_menu", "weather", "what_to_bring", "cancellation",
+]
+
+
+@bot_config_router.get("/ab-variants")
+async def list_ab_variants():
+    """Return all A/B variants with their override count."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT v.id, v.variant_key, v.label, v.is_active, v.created_at,
+                           COUNT(o.id) AS override_count
+                    FROM bot_ab_variants v
+                    LEFT JOIN bot_message_overrides o ON o.variant_key = v.variant_key
+                    GROUP BY v.id
+                    ORDER BY v.created_at
+                """)
+                rows = cur.fetchall()
+        return {
+            "variants": [
+                {
+                    "id": r[0], "variant_key": r[1], "label": r[2],
+                    "is_active": r[3], "created_at": r[4].isoformat() if r[4] else None,
+                    "override_count": r[5],
+                }
+                for r in rows
+            ],
+            "suggested_keys": AB_SUGGESTED_KEYS,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@bot_config_router.post("/ab-variants")
+async def create_ab_variant(data: VariantCreate):
+    key = data.variant_key.strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="variant_key requerido")
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO bot_ab_variants (variant_key, label) VALUES (%s, %s) RETURNING id",
+                    (key, data.label or key),
+                )
+                new_id = cur.fetchone()[0]
+                conn.commit()
+        return {"ok": True, "id": new_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@bot_config_router.put("/ab-variants/{variant_id}")
+async def update_ab_variant(variant_id: int, data: VariantUpdate):
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                if data.label is not None:
+                    cur.execute("UPDATE bot_ab_variants SET label = %s WHERE id = %s", (data.label, variant_id))
+                if data.is_active is not None:
+                    cur.execute("UPDATE bot_ab_variants SET is_active = %s WHERE id = %s", (data.is_active, variant_id))
+                conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@bot_config_router.delete("/ab-variants/{variant_id}")
+async def delete_ab_variant(variant_id: int):
+    """Deleting a variant cascades to its overrides. Leads already assigned
+    to it simply stop getting overrides and fall back to the normal text —
+    they are not reassigned."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM bot_ab_variants WHERE id = %s", (variant_id,))
+                conn.commit()
+        from app.bot.variant_overrides import invalidate_cache
+        invalidate_cache()
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@bot_config_router.get("/ab-overrides")
+async def list_ab_overrides(variant_key: str):
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, message_key, content_es, updated_at
+                       FROM bot_message_overrides WHERE variant_key = %s
+                       ORDER BY message_key""",
+                    (variant_key,),
+                )
+                rows = cur.fetchall()
+        return {"overrides": [
+            {"id": r[0], "message_key": r[1], "content_es": r[2], "updated_at": r[3].isoformat() if r[3] else None}
+            for r in rows
+        ]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@bot_config_router.put("/ab-overrides")
+async def upsert_ab_override(data: OverrideUpsert):
+    if not data.content_es.strip():
+        raise HTTPException(status_code=400, detail="content_es requerido")
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO bot_message_overrides (variant_key, message_key, content_es)
+                       VALUES (%s, %s, %s)
+                       ON CONFLICT (variant_key, message_key)
+                       DO UPDATE SET content_es = EXCLUDED.content_es, updated_at = NOW()""",
+                    (data.variant_key, data.message_key, data.content_es),
+                )
+                conn.commit()
+        from app.bot.variant_overrides import invalidate_cache
+        invalidate_cache()
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@bot_config_router.delete("/ab-overrides/{override_id}")
+async def delete_ab_override(override_id: int):
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM bot_message_overrides WHERE id = %s", (override_id,))
+                conn.commit()
+        from app.bot.variant_overrides import invalidate_cache
+        invalidate_cache()
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Keywords ──────────────────────────────────────────────────────────────────
