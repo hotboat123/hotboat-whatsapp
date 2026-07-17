@@ -10017,37 +10017,37 @@ function generarRecibo(){
     <tr>
       <td style="padding:.45rem .6rem;text-transform:capitalize">${p.method||'—'}</td>
       <td style="padding:.45rem .6rem">${p.date ? fmtDateDisplay(normalizePagoDate(p.date)||p.date) : '—'}</td>
-      <td style="padding:.45rem .6rem;text-align:right;font-weight:700;color:#1a7a3a">${money(p.amount)}</td>
+      <td style="padding:.45rem .6rem;text-align:right;font-weight:700;color:#2c7a72">${money(p.amount)}</td>
     </tr>`).join('') || `<tr><td colspan="3" style="padding:.45rem .6rem;color:#888">Sin pagos registrados</td></tr>`;
 
   const saldoHtml = saldoPend > 0
-    ? `<div style="margin-top:1rem;padding:.7rem 1rem;background:#fff3cd;border:1px solid #f0c040;border-radius:8px;display:flex;justify-content:space-between;align-items:center">
-         <span style="font-weight:600;color:#7a5a00">💸 Saldo pendiente</span>
-         <span style="font-weight:800;font-size:1.1rem;color:#b85000">${money(saldoPend)}</span>
+    ? `<div style="margin-top:1rem;padding:.7rem 1rem;background:rgba(201,138,60,.10);border:1px solid #c98a3c;border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+         <span style="font-weight:600;color:#92400e">💸 Saldo pendiente</span>
+         <span style="font-weight:800;font-size:1.1rem;color:#b45309">${money(saldoPend)}</span>
        </div>`
-    : `<div style="margin-top:1rem;padding:.7rem 1rem;background:#d4edda;border:1px solid #4caf50;border-radius:8px;text-align:center;font-weight:700;color:#1a7a3a">✅ Pago completo</div>`;
+    : `<div style="margin-top:1rem;padding:.7rem 1rem;background:rgba(44,122,114,.10);border:1px solid #2c7a72;border-radius:8px;text-align:center;font-weight:700;color:#1f6359">✅ Pago completo</div>`;
 
   // ── Email-safe version (all inline styles, table layout — no CSS classes) ──
-  const _eTh = 'background:#f0f2f8;padding:7px 9px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#7070a0;border:none';
-  const _eSec = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7070a0;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e8e8f0';
-  const _eTotalTd = 'padding:8px 9px;font-weight:700;font-size:15px;background:#f0f2f8';
+  const _eTh = 'background:#eef3f0;padding:7px 9px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6f7d79;border:none';
+  const _eSec = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6f7d79;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e3e9e6';
+  const _eTotalTd = 'padding:8px 9px;font-weight:700;font-size:15px;background:#eef3f0';
 
   const emailSaldo = saldoPend > 0
-    ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px;background:#fff3cd;border:1px solid #f0c040;border-radius:6px"><tr>
-         <td style="padding:10px 14px;font-weight:600;color:#7a5a00">💸 Saldo pendiente</td>
-         <td style="padding:10px 14px;text-align:right;font-weight:800;font-size:16px;color:#b85000">${money(saldoPend)}</td>
+    ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px;background:rgba(201,138,60,.10);border:1px solid #c98a3c;border-radius:6px"><tr>
+         <td style="padding:10px 14px;font-weight:600;color:#92400e">💸 Saldo pendiente</td>
+         <td style="padding:10px 14px;text-align:right;font-weight:800;font-size:16px;color:#b45309">${money(saldoPend)}</td>
        </tr></table>`
-    : `<div style="margin-top:14px;padding:10px 14px;background:#d4edda;border:1px solid #4caf50;border-radius:6px;text-align:center;font-weight:700;color:#1a7a3a">✅ Pago completo</div>`;
+    : `<div style="margin-top:14px;padding:10px 14px;background:rgba(44,122,114,.10);border:1px solid #2c7a72;border-radius:6px;text-align:center;font-weight:700;color:#1f6359">✅ Pago completo</div>`;
 
   const emailHtml = `<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8"><title>Recibo HotBoat #${ref}</title></head>
-<body style="margin:0;padding:0;background:#f5f7fa;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a2e">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7fa"><tr><td align="center" style="padding:24px 8px">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #e0e0e0">
-<tr><td style="background:#0d1b4e;padding:28px;text-align:center">
+<body style="margin:0;padding:0;background:#eef3f0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2a28">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#eef3f0"><tr><td align="center" style="padding:24px 8px">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #e3e9e6">
+<tr><td style="background:linear-gradient(135deg,#2f857c 0%,#246b64 100%);padding:28px;text-align:center">
   <img src="${window.location.origin}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png" alt="HotBoat" style="height:70px;display:block;margin:0 auto 8px;object-fit:contain">
-  <div style="color:#a8c4ff;font-size:13px">Hot Boat Villarrica · Pucón</div>
-  <div style="display:inline-block;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 14px;font-size:12px;margin-top:8px;color:#e8d87a;font-weight:700;letter-spacing:.05em">RECIBO #${ref}</div>
+  <div style="color:#d6e7e3;font-size:13px">Hot Boat Villarrica · Pucón</div>
+  <div style="display:inline-block;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 14px;font-size:12px;margin-top:8px;color:#f0d9a8;font-weight:700;letter-spacing:.05em">RECIBO #${ref}</div>
 </td></tr>
 <tr><td style="padding:20px 28px">
   <div style="${_eSec}">Datos del cliente</div>
@@ -10084,7 +10084,7 @@ function generarRecibo(){
       ${descHtml}
       <tr>
         <td colspan="3" style="${_eTotalTd}">TOTAL</td>
-        <td style="${_eTotalTd};text-align:right;color:#1a3a7a;font-size:16px">${money(totalFinal)}</td>
+        <td style="${_eTotalTd};text-align:right;color:#2c7a72;font-size:16px">${money(totalFinal)}</td>
       </tr>
     </tbody>
   </table>
@@ -10097,15 +10097,15 @@ function generarRecibo(){
     </tr></thead>
     <tbody>
       ${pagosHtml}
-      <tr style="border-top:2px solid #e8e8f0">
+      <tr style="border-top:2px solid #e3e9e6">
         <td colspan="2" style="padding:8px 9px;font-weight:700">Total pagado</td>
-        <td style="padding:8px 9px;text-align:right;font-weight:800;color:#1a7a3a;font-size:15px">${money(totalPagado)}</td>
+        <td style="padding:8px 9px;text-align:right;font-weight:800;color:#2c7a72;font-size:15px">${money(totalPagado)}</td>
       </tr>
     </tbody>
   </table>
   ${emailSaldo}
 </td></tr>
-<tr><td style="background:#f5f7fa;padding:14px 28px;text-align:center;font-size:11px;color:#999;border-top:1px solid #e8e8f0">
+<tr><td style="background:#eef3f0;padding:14px 28px;text-align:center;font-size:11px;color:#999;border-top:1px solid #e3e9e6">
   Documento generado el ${new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}
   &nbsp;·&nbsp; HotBoat Chile &nbsp;·&nbsp; hotboatchile.com
 </td></tr>
@@ -10120,24 +10120,24 @@ function generarRecibo(){
 <title>Recibo HotBoat – ${$(r.nombre_cliente)} – ${fechaFmt}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f5f7fa;color:#1a1a2e;font-size:14px;padding:2rem}
-  .page{max-width:680px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.1)}
-  .header{background:linear-gradient(135deg,#0d1b4e 0%,#1a3a7a 100%);padding:2rem;text-align:center;color:#fff}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;background:#eef3f0;color:#1f2a28;font-size:14px;padding:2rem}
+  .page{max-width:680px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(31,42,40,.12)}
+  .header{background:linear-gradient(135deg,#2f857c 0%,#246b64 100%);padding:2rem;text-align:center;color:#fff}
   .header h1{font-size:1.8rem;font-weight:800;letter-spacing:.5px;margin-bottom:.2rem}
-  .header p{color:#a8c4ff;font-size:.85rem}
-  .recibo-num{display:inline-block;background:rgba(255,255,255,.15);border-radius:20px;padding:.25rem .9rem;font-size:.8rem;margin-top:.6rem;color:#e8d87a;font-weight:700;letter-spacing:.05em}
+  .header p{color:#d6e7e3;font-size:.85rem}
+  .recibo-num{display:inline-block;background:rgba(255,255,255,.15);border-radius:20px;padding:.25rem .9rem;font-size:.8rem;margin-top:.6rem;color:#f0d9a8;font-weight:700;letter-spacing:.05em}
   .body{padding:1.5rem 2rem}
-  .section-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#7070a0;margin-bottom:.6rem;margin-top:1.4rem;border-bottom:1px solid #e8e8f0;padding-bottom:.3rem}
+  .section-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6f7d79;margin-bottom:.6rem;margin-top:1.4rem;border-bottom:1px solid #e3e9e6;padding-bottom:.3rem}
   .client-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .8rem}
   .client-field label{font-size:.7rem;color:#888;display:block;margin-bottom:.1rem}
-  .client-field span{font-weight:600;color:#1a1a2e}
+  .client-field span{font-weight:600;color:#1f2a28}
   table{width:100%;border-collapse:collapse;font-size:.88rem}
-  thead th{background:#f0f2f8;padding:.5rem .6rem;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:#7070a0}
+  thead th{background:#eef3f0;padding:.5rem .6rem;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:#6f7d79}
   thead th:last-child{text-align:right}
-  tbody tr:nth-child(even){background:#fafafe}
-  .total-row td{padding:.55rem .6rem;font-weight:700;font-size:1rem;background:#f0f2f8}
-  .total-row td:last-child{text-align:right;color:#1a3a7a;font-size:1.1rem}
-  .footer{background:#f5f7fa;padding:1rem 2rem;text-align:center;font-size:.75rem;color:#999;border-top:1px solid #e8e8f0}
+  tbody tr:nth-child(even){background:#f8faf9}
+  .total-row td{padding:.55rem .6rem;font-weight:700;font-size:1rem;background:#eef3f0}
+  .total-row td:last-child{text-align:right;color:#2c7a72;font-size:1.1rem}
+  .footer{background:#eef3f0;padding:1rem 2rem;text-align:center;font-size:.75rem;color:#999;border-top:1px solid #e3e9e6}
   .close-fab{position:fixed;top:1rem;left:1rem;z-index:999;background:rgba(20,20,40,.72);color:#fff;border:none;
     border-radius:999px;width:2.6rem;height:2.6rem;font-size:1.1rem;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.25)}
   @media print{
@@ -10153,7 +10153,7 @@ function generarRecibo(){
   <div class="header">
     <img src="${window.location.origin}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png"
          alt="HotBoat" style="height:80px;display:block;margin:0 auto .6rem;object-fit:contain">
-    <p style="color:#a8c4ff;font-size:.85rem">Hot Boat Villarrica · Pucón</p>
+    <p style="color:#d6e7e3;font-size:.85rem">Hot Boat Villarrica · Pucón</p>
     <div class="recibo-num">RECIBO #${ref}</div>
   </div>
   <div class="body">
@@ -10192,9 +10192,9 @@ function generarRecibo(){
       <thead><tr><th>Método de pago</th><th>Fecha</th><th style="text-align:right">Monto</th></tr></thead>
       <tbody>
         ${pagosHtml}
-        <tr style="border-top:2px solid #e8e8f0">
+        <tr style="border-top:2px solid #e3e9e6">
           <td colspan="2" style="padding:.55rem .6rem;font-weight:700">Total pagado</td>
-          <td style="padding:.55rem .6rem;text-align:right;font-weight:800;color:#1a7a3a;font-size:1rem">${money(totalPagado)}</td>
+          <td style="padding:.55rem .6rem;text-align:right;font-weight:800;color:#2c7a72;font-size:1rem">${money(totalPagado)}</td>
         </tr>
       </tbody>
     </table>
@@ -10212,7 +10212,7 @@ function generarRecibo(){
         📧 Enviar al cliente
       </button>
       <button onclick="window.print()"
-        style="background:#1a3a7a;color:#fff;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.9rem;font-weight:700;cursor:pointer">
+        style="background:#2c7a72;color:#fff;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.9rem;font-weight:700;cursor:pointer">
         🖨️ Imprimir / Guardar PDF
       </button>
     </div>
