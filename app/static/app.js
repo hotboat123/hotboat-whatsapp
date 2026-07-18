@@ -3,7 +3,7 @@ let currentConversation = null;
 let conversations = [];
 let messagesCache = {};
 let isLoadingOlderMessages = false;
-const MESSAGES_PAGE_SIZE = 20;
+const MESSAGES_PAGE_SIZE = 50;
 const MAX_REFRESH_LIMIT = 500;
 const mobileMediaQuery = window.matchMedia('(max-width: 900px)');
 let currentSearchTab = 'chats'; // 'chats' or 'messages'
@@ -413,6 +413,20 @@ function setupEventListeners() {
     if (newMessageText) {
         newMessageText.addEventListener('input', () => {
             updateCharCount('newMessageText', 'newMsgCharCount');
+        });
+    }
+
+    // Auto-load older messages when scrolling near the top, instead of
+    // relying on the admin to notice and click "Ver mensajes anteriores" —
+    // that button-only pagination is why a message from earlier in a long
+    // conversation could look "lost" after reopening the chat (a fresh
+    // selectConversation() only fetches the most recent MESSAGES_PAGE_SIZE).
+    const messagesContainer = document.getElementById('messagesContainer');
+    if (messagesContainer) {
+        messagesContainer.addEventListener('scroll', () => {
+            if (messagesContainer.scrollTop < 150 && currentConversation?.hasMore && !isLoadingOlderMessages) {
+                loadOlderMessages();
+            }
         });
     }
 }
