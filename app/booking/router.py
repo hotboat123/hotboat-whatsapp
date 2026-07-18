@@ -2869,13 +2869,20 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
             audience_row = (f'<tr><td style="color:#888;padding:.3rem 0">👥 Audiencia</td>'
                             f'<td><strong style="color:#7eb8f7">{audience_label}</strong></td></tr>') if audience_label else ""
 
+            # Always show name/phone/email — even blank ("—") — so it's clear
+            # at a glance whether this visitor was ever identified at all,
+            # rather than silently omitting the row when we don't know them.
             name_row = (f'<tr><td style="color:#888;padding:.3rem 0">👤 Nombre</td>'
-                        f'<td><strong>{contact_name}</strong></td></tr>') if contact_name else ""
-            wa_num = (contact_phone or "").replace(" ", "").replace("+", "")
+                        f'<td><strong>{contact_name or "—"}</strong></td></tr>')
+            if contact_phone:
+                wa_num = contact_phone.replace(" ", "").replace("+", "")
+                phone_value = f'<a href="https://wa.me/{wa_num}" style="color:#7eb8f7;text-decoration:none">{contact_phone}</a>'
+            else:
+                phone_value = "—"
             phone_row = (f'<tr><td style="color:#888;padding:.3rem 0">📱 Teléfono</td>'
-                         f'<td><strong><a href="https://wa.me/{wa_num}" style="color:#7eb8f7;text-decoration:none">{contact_phone}</a></strong></td></tr>') if contact_phone else ""
+                         f'<td><strong>{phone_value}</strong></td></tr>')
             email_row = (f'<tr><td style="color:#888;padding:.3rem 0">✉️ Email</td>'
-                         f'<td><strong>{contact_email}</strong></td></tr>') if contact_email else ""
+                         f'<td><strong>{contact_email or "—"}</strong></td></tr>')
             score_label = f"{score}/100" + (" · ya reservó antes" if veces_hotboat else "")
             score_row = (f'<tr><td style="color:#888;padding:.3rem 0">🎯 Score</td>'
                          f'<td><strong style="color:#f5c842">{score_label}</strong></td></tr>') if score is not None else ""
