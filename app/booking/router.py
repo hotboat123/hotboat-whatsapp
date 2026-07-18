@@ -2561,6 +2561,12 @@ async def track_booking_event(body: TrackEventRequest):
             recorded_at=now_cl,
             link_token=(body.link_token or "").strip() or None,
             visitor_id=(body.visitor_id or "").strip() or None,
+            utm_source=(body.utm_source or "").strip() or None,
+            utm_medium=(body.utm_medium or "").strip() or None,
+            utm_campaign=(body.utm_campaign or "").strip() or None,
+            utm_content=(body.utm_content or "").strip() or None,
+            fbclid=(body.fbclid or "").strip() or None,
+            parametro_url=(body.parametro_url or "").strip() or None,
         )
     except Exception as _persist_e:
         logger.warning("visitor event persist failed: %s", _persist_e)
@@ -2577,10 +2583,10 @@ def _close_stale_visitor_sessions(inactivity_minutes: int = 5, batch_limit: int 
     advisory lock (see try_acquire_scheduler_lock), so a session is only ever
     closed once — no cross-replica races.
 
-    UTM/ad attribution (utm_source, fbclid, etc.) isn't persisted per-event to
-    booking_visitor_events, so a rebuilt session has none of it; the optional
-    summary email just omits the "Anuncio"/"Audiencia" rows in that case. The
-    DB write that Llamadas/Embudo actually depend on doesn't use those fields.
+    UTM/ad attribution (utm_source, fbclid, etc.) is only ever non-empty on
+    the first event or two of a session (it comes from the landing URL's
+    query string) — picked per-session below via the same array_agg+FILTER
+    pattern already used for referrer, taking the earliest non-null value.
     """
     from app.db.connection import get_connection
 
@@ -2592,7 +2598,21 @@ def _close_stale_visitor_sessions(inactivity_minutes: int = 5, batch_limit: int 
                        (array_agg(lang ORDER BY recorded_at DESC))[1],
                        (array_agg(referrer ORDER BY recorded_at DESC)
                             FILTER (WHERE referrer IS NOT NULL AND referrer <> ''))[1],
-                       bool_or(is_returning)
+                       bool_or(is_returning),
+                       (array_agg(visitor_id ORDER BY recorded_at)
+                            FILTER (WHERE visitor_id IS NOT NULL))[1],
+                       (array_agg(utm_source ORDER BY recorded_at)
+                            FILTER (WHERE utm_source IS NOT NULL))[1],
+                       (array_agg(utm_medium ORDER BY recorded_at)
+                            FILTER (WHERE utm_medium IS NOT NULL))[1],
+                       (array_agg(utm_campaign ORDER BY recorded_at)
+                            FILTER (WHERE utm_campaign IS NOT NULL))[1],
+                       (array_agg(utm_content ORDER BY recorded_at)
+                            FILTER (WHERE utm_content IS NOT NULL))[1],
+                       (array_agg(fbclid ORDER BY recorded_at)
+                            FILTER (WHERE fbclid IS NOT NULL))[1],
+                       (array_agg(parametro_url ORDER BY recorded_at)
+                            FILTER (WHERE parametro_url IS NOT NULL))[1]
                 FROM booking_visitor_events
                 WHERE session_id NOT IN (SELECT DISTINCT session_id FROM booking_visitor_sessions)
                 GROUP BY session_id
@@ -2604,7 +2624,8 @@ def _close_stale_visitor_sessions(inactivity_minutes: int = 5, batch_limit: int 
             stale = cur.fetchall()
 
     closed = 0
-    for session_id, started_at, ended_at, lang, referrer, is_returning in stale:
+    for (session_id, started_at, ended_at, lang, referrer, is_returning, visitor_id,
+         utm_source, utm_medium, utm_campaign, utm_content, fbclid, parametro_url) in stale:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -2620,13 +2641,15 @@ def _close_stale_visitor_sessions(inactivity_minutes: int = 5, batch_limit: int 
             continue
         session = {
             "session_id": session_id,
+            "visitor_id": visitor_id or "",
             "start_time": started_at,
             "lang": lang or "es",
             "referrer": referrer or "",
             "is_returning": bool(is_returning),
             "events": events,
-            "utm_source": "", "utm_medium": "", "utm_campaign": "",
-            "utm_content": "", "parametro_url": "", "fbclid": False,
+            "utm_source": utm_source or "", "utm_medium": utm_medium or "",
+            "utm_campaign": utm_campaign or "", "utm_content": utm_content or "",
+            "parametro_url": parametro_url or "", "fbclid": bool(fbclid),
         }
         try:
             _send_session_summary(session)
@@ -2728,6 +2751,28 @@ def _build_ad_label(
     return ""
 
 
+def _platform_label(utm_source: str, utm_medium: str, referrer: str) -> str:
+    """Fallback platform label from utm_source/utm_medium when the referrer
+    header is empty or unrecognized — ad-network in-app browsers (TikTok,
+    Instagram) commonly strip the referrer, but the landing URL's own
+    ?utm_source= almost always survives since it's baked into the ad's
+    destination link."""
+    s = (utm_source or "").lower()
+    m = (utm_medium or "").lower()
+    combined = f"{s} {m}"
+    if "tiktok" in combined:
+        return "🎵 TikTok"
+    if "google" in combined or "adwords" in combined or "gclid" in combined:
+        return "🔍 Google"
+    if "instagram" in combined:
+        return "📸 Instagram"
+    if "facebook" in combined or combined.strip() in ("fb", "meta"):
+        return "👥 Facebook"
+    if "whatsapp" in combined:
+        return "💬 WhatsApp"
+    return _pretty_attribution_fragment(utm_source) if utm_source else ""
+
+
 def _send_visitor_email(session: dict, classification: str, cls_desc: str, events: list) -> bool:
     """Best-effort email summary of a closed visitor session. Gated by the
     booking_visitor_notif operator setting — kept separate from
@@ -2760,7 +2805,10 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
         if not api_key or not to_addr:
             logger.warning("visitor_session_summary: email not configured; skipping send")
         else:
-            ref_label = _referrer_label(referrer)
+            # Platform: referrer first, falling back to utm_source/medium —
+            # ad in-app browsers (TikTok, Instagram) often strip the referrer
+            # but the landing URL's own utm_source almost always survives.
+            ref_label = _referrer_label(referrer) or _platform_label(utm_source, utm_medium, referrer)
 
             # Build ad source label
             ad_label = _build_ad_label(
@@ -2772,6 +2820,37 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
             audience_label = ""
             if cand and cand.casefold() != (base_for_audience or "").casefold():
                 audience_label = cand
+
+            # Identity — filled in only if this session/visitor was ever linked
+            # to a real contact (e.g. partially filled a booking form, or
+            # arrived via a per-client tracked WhatsApp link). Anonymous
+            # sessions with no such link simply omit these rows.
+            contact_name = contact_phone = contact_email = None
+            score = None
+            veces_hotboat = 0
+            try:
+                from app.booking.visitor_tracking import get_identity_info
+                identity = get_identity_info(session.get("session_id", ""), session.get("visitor_id"))
+                if identity:
+                    contact_name = identity.get("name")
+                    contact_phone = identity.get("phone")
+                    contact_email = identity.get("email")
+            except Exception as ie:
+                logger.warning("visitor_session_summary: identity lookup failed: %s", ie)
+            if contact_phone:
+                try:
+                    from app.db.connection import get_connection as _get_conn
+                    with _get_conn() as _conn:
+                        with _conn.cursor() as _cur:
+                            _cur.execute(
+                                "SELECT reservation_score, veces_hotboat FROM contacts_crm WHERE phone = %s",
+                                (contact_phone,),
+                            )
+                            _row = _cur.fetchone()
+                            if _row:
+                                score, veces_hotboat = _row[0], (_row[1] or 0)
+                except Exception as se:
+                    logger.warning("visitor_session_summary: contacts_crm score lookup failed: %s", se)
 
             rows = ""
             for ev in events:
@@ -2790,6 +2869,17 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
             audience_row = (f'<tr><td style="color:#888;padding:.3rem 0">👥 Audiencia</td>'
                             f'<td><strong style="color:#7eb8f7">{audience_label}</strong></td></tr>') if audience_label else ""
 
+            name_row = (f'<tr><td style="color:#888;padding:.3rem 0">👤 Nombre</td>'
+                        f'<td><strong>{contact_name}</strong></td></tr>') if contact_name else ""
+            wa_num = (contact_phone or "").replace(" ", "").replace("+", "")
+            phone_row = (f'<tr><td style="color:#888;padding:.3rem 0">📱 Teléfono</td>'
+                         f'<td><strong><a href="https://wa.me/{wa_num}" style="color:#7eb8f7;text-decoration:none">{contact_phone}</a></strong></td></tr>') if contact_phone else ""
+            email_row = (f'<tr><td style="color:#888;padding:.3rem 0">✉️ Email</td>'
+                         f'<td><strong>{contact_email}</strong></td></tr>') if contact_email else ""
+            score_label = f"{score}/100" + (" · ya reservó antes" if veces_hotboat else "")
+            score_row = (f'<tr><td style="color:#888;padding:.3rem 0">🎯 Score</td>'
+                         f'<td><strong style="color:#f5c842">{score_label}</strong></td></tr>') if score is not None else ""
+
             subject = f"{classification} · {start_str}"
             html = f"""
 <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:1.5rem;
@@ -2803,6 +2893,9 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
   </div>
 
   <table style="width:100%;border-collapse:collapse;font-size:.85rem;margin-bottom:1rem">
+    {name_row}
+    {phone_row}
+    {email_row}
     <tr>
       <td style="color:#888;padding:.3rem 0;width:45%">Idioma</td>
       <td><strong>{lang}</strong></td>
@@ -2814,6 +2907,7 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
     {ref_row}
     {ad_row}
     {audience_row}
+    {score_row}
     <tr>
       <td style="color:#888;padding:.3rem 0">Acciones</td>
       <td><strong>{len(events)}</strong></td>

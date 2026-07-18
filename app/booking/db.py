@@ -1073,6 +1073,17 @@ def ensure_db_columns() -> None:
                 -- that brought that visitor in, so the funnel can be viewed per client.
                 ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS link_token VARCHAR(16);
                 CREATE INDEX IF NOT EXISTS idx_booking_visitor_events_link_token ON booking_visitor_events(link_token);
+
+                -- 039: ad attribution (utm_*/fbclid/parametro_url) — the frontend has always
+                -- sent these on every /api/booking/track call, but persist_booking_visitor_event
+                -- only ever stored link_token/visitor_id, silently dropping the rest. This is
+                -- what the visitor-session summary email needs to show "de dónde vino el anuncio".
+                ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_source    TEXT;
+                ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_medium    TEXT;
+                ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_campaign  TEXT;
+                ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_content   TEXT;
+                ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS fbclid        TEXT;
+                ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS parametro_url TEXT;
             """)
             conn.commit()
 

@@ -25,13 +25,24 @@ def persist_booking_visitor_event(
     recorded_at: datetime,
     link_token: Optional[str] = None,
     visitor_id: Optional[str] = None,
+    utm_source: Optional[str] = None,
+    utm_medium: Optional[str] = None,
+    utm_campaign: Optional[str] = None,
+    utm_content: Optional[str] = None,
+    fbclid: Optional[str] = None,
+    parametro_url: Optional[str] = None,
 ) -> None:
     """Append one tracking event (one row per /api/booking/track call).
     link_token (if present) ties this visit's whole funnel back to a specific
     per-client tracked link (see app/booking/link_tracking_router.py).
     visitor_id (if present) is the persistent hb_uid set by hotboat-marketing-web's
     tracker.js on hotboat.cl — the same column that repo already writes to on the
-    shared Postgres, so a person's landing + booking browsing share one id."""
+    shared Postgres, so a person's landing + booking browsing share one id.
+    The utm_*/fbclid/parametro_url ad-attribution fields are only ever
+    non-empty on the first event or two of a session (they come from the
+    landing URL's query string), but are stored on every row for simplicity —
+    _close_stale_visitor_sessions picks the first non-null value per session
+    when rebuilding it for the summary email."""
     sid = (session_id or "").strip()[:64]
     et = (event_type or "").strip()[:96]
     if not sid or not et:
@@ -39,17 +50,25 @@ def persist_booking_visitor_event(
     extra = (extra_date or "").strip()[:120] if extra_date else None
     lt = (link_token or "").strip()[:16] or None
     vid = (visitor_id or "").strip()[:64] or None
+    utm_s = (utm_source or "").strip()[:200] or None
+    utm_m = (utm_medium or "").strip()[:200] or None
+    utm_c = (utm_campaign or "").strip()[:200] or None
+    utm_ct = (utm_content or "").strip()[:200] or None
+    fbc = (fbclid or "").strip()[:200] or None
+    param_url = (parametro_url or "").strip()[:500] or None
 
     sql = """
         INSERT INTO booking_visitor_events (
             session_id, event_type, extra_date, time_label,
-            lang, referrer, is_returning, recorded_at, link_token, visitor_id
+            lang, referrer, is_returning, recorded_at, link_token, visitor_id,
+            utm_source, utm_medium, utm_campaign, utm_content, fbclid, parametro_url
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         sid, et, extra, (time_label or "")[:16], (lang or "es")[:8],
         (referrer or "")[:500], bool(is_returning), recorded_at, lt, vid,
+        utm_s, utm_m, utm_c, utm_ct, fbc, param_url,
     )
     try:
         with get_connection() as conn:
@@ -57,14 +76,20 @@ def persist_booking_visitor_event(
                 cur.execute(sql, params)
             conn.commit()
     except pg_errors.UndefinedColumn:
-        # Self-heal: the startup migration that adds this column may not have
-        # run yet on this deployment. Add it once, then retry the insert.
-        _log.warning("booking_visitor_events.link_token/visitor_id missing — adding now")
+        # Self-heal: the startup migration that adds these columns may not
+        # have run yet on this deployment. Add them once, then retry.
+        _log.warning("booking_visitor_events missing columns — adding now")
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS link_token VARCHAR(16);"
                     "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS visitor_id VARCHAR(64);"
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_source TEXT;"
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_medium TEXT;"
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_campaign TEXT;"
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_content TEXT;"
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS fbclid TEXT;"
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS parametro_url TEXT;"
                 )
             conn.commit()
         with get_connection() as conn:
@@ -193,6 +218,45 @@ def get_identity_phone(session_id: str, visitor_id: Optional[str] = None) -> Opt
             )
             row = cur.fetchone()
             return row[0] if row else None
+
+
+def get_identity_info(session_id: str, visitor_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Like get_identity_phone, but returns whatever name/phone/email this
+    session (or visitor_id) has ever been linked to — even a partial match
+    (e.g. a booking form filled with email but abandoned before phone), so
+    the visitor-session summary email can show real contact details instead
+    of just a session id. Coalesces across every linked row for this
+    session/visitor so a later, more complete identity fills in gaps left
+    by an earlier partial one."""
+    sid = (session_id or "").strip()[:64] or None
+    vid = (visitor_id or "").strip()[:64] or None
+    if not sid and not vid:
+        return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT name, phone, email
+                FROM booking_visitor_identity
+                WHERE (session_id = %s OR (%s::text IS NOT NULL AND visitor_id = %s::text))
+                ORDER BY linked_at DESC
+                """,
+                (sid, vid, vid),
+            )
+            rows = cur.fetchall()
+    if not rows:
+        return None
+    result: Dict[str, Any] = {"name": None, "phone": None, "email": None}
+    for name, phone, email in rows:
+        if not result["name"] and name:
+            result["name"] = name
+        if not result["phone"] and phone:
+            result["phone"] = phone
+        if not result["email"] and email:
+            result["email"] = email
+    if not any(result.values()):
+        return None
+    return result
 
 
 _DEEP_INTEREST_EVENTS = {
