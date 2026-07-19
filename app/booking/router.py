@@ -2883,9 +2883,12 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
                          f'<td><strong>{phone_value}</strong></td></tr>')
             email_row = (f'<tr><td style="color:#888;padding:.3rem 0">✉️ Email</td>'
                          f'<td><strong>{contact_email or "—"}</strong></td></tr>')
-            score_label = f"{score}/100" + (" · ya reservó antes" if veces_hotboat else "")
+            if score is not None:
+                score_label = f"{score}/100" + (" · ya reservó antes" if veces_hotboat else "")
+            else:
+                score_label = "—"
             score_row = (f'<tr><td style="color:#888;padding:.3rem 0">🎯 Score</td>'
-                         f'<td><strong style="color:#f5c842">{score_label}</strong></td></tr>') if score is not None else ""
+                         f'<td><strong style="color:#f5c842">{score_label}</strong></td></tr>')
 
             subject = f"{classification} · {start_str}"
             html = f"""
