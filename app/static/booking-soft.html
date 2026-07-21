@@ -1074,6 +1074,28 @@ const _linkToken = (()=>{
   try{ return sessionStorage.getItem('_hb_lt') || ''; }catch(e){ return ''; }
 })();
 
+// Cupón precargado por URL (?coupon=XXXX, ej. desde el botón "Reservar" de los
+// mails de marketing) — evita que el cliente tenga que copiar/pegar el código.
+// El input #coupon-input solo existe en el DOM una vez que renderForm() llega
+// al bloque del cupón (después de elegir fecha/personas), así que se espera
+// con un poll corto en vez de intentar engancharse a un render puntual.
+(()=>{
+  const pre = _queryParam(['coupon','cupon'],30).toUpperCase();
+  if(!pre) return;
+  let tries = 0;
+  const timer = setInterval(()=>{
+    tries++;
+    const input = document.getElementById('coupon-input');
+    if(input && !input.value){
+      input.value = pre;
+      try{ applyCoupon(); }catch(e){}
+      clearInterval(timer);
+    } else if(input || tries > 40){ // ya se aplicó a mano, o pasaron ~12s sin que aparezca
+      clearInterval(timer);
+    }
+  }, 300);
+})();
+
 let _lastTrackedEvent = 'page_visit_booking';
 let _bookingCompletedTracked = false;
 function _trackEvent(event, date){
