@@ -1077,23 +1077,25 @@ const _linkToken = (()=>{
 // Cupón precargado por URL (?coupon=XXXX, ej. desde el botón "Reservar" de los
 // mails de marketing) — evita que el cliente tenga que copiar/pegar el código.
 // El input #coupon-input solo existe en el DOM una vez que renderForm() llega
-// al bloque del cupón (después de elegir fecha/personas), así que se espera
-// con un poll corto en vez de intentar engancharse a un render puntual.
+// al bloque del cupón (después de elegir fecha, personas y extras) — un usuario
+// real puede tardar varios minutos en llegar ahí, así que se usa un
+// MutationObserver (sin límite de tiempo) en vez de un poll con timeout corto,
+// que se desconecta apenas encuentra y aplica el código una vez.
 (()=>{
   const pre = _queryParam(['coupon','cupon'],30).toUpperCase();
   if(!pre) return;
-  let tries = 0;
-  const timer = setInterval(()=>{
-    tries++;
+  const tryApply = () => {
     const input = document.getElementById('coupon-input');
-    if(input && !input.value){
-      input.value = pre;
-      try{ applyCoupon(); }catch(e){}
-      clearInterval(timer);
-    } else if(input || tries > 40){ // ya se aplicó a mano, o pasaron ~12s sin que aparezca
-      clearInterval(timer);
-    }
-  }, 300);
+    if(!input || input.value) return false;
+    input.value = pre;
+    try{ applyCoupon(); }catch(e){}
+    return true;
+  };
+  if(tryApply()) return;
+  const observer = new MutationObserver(() => {
+    if(tryApply()) observer.disconnect();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 })();
 
 let _lastTrackedEvent = 'page_visit_booking';
