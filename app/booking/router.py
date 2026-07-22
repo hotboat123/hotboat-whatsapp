@@ -1,10 +1,12 @@
 """FastAPI router for /booking and /api/booking/*"""
+import html as _html
 import logging, os, time as _time
 from typing import Any, Dict, Optional
 from datetime import datetime, timedelta
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 # Simple in-memory cache for availability (avoids re-running 60-day scan on rapid reloads)
@@ -87,6 +89,92 @@ async def booking_failure(booking_ref: str = Query(None)):
 @router.get("/booking/pending", response_class=HTMLResponse)
 async def booking_pending(booking_ref: str = Query(None)):
     return _booking_html()
+
+
+@router.get("/pagar/tbk", response_class=HTMLResponse)
+async def pagar_tbk(token: str = Query(...), url: str = Query(...)):
+    """Auto-submitting redirect to Webpay Plus — Transbank requires a POST
+    with token_ws, not a plain link, so this tiny page exists purely to do
+    that POST for the customer. This is what makes a single "Pagar" click
+    in booking-soft.html go straight to Transbank instead of the old
+    2-extra-click WooCommerce detour."""
+    return HTMLResponse(f"""<!doctype html><html><body onload="document.forms[0].submit()">
+      <form method="POST" action="{_html.escape(url)}">
+        <input type="hidden" name="token_ws" value="{_html.escape(token)}">
+      </form>
+      <p style="font-family:sans-serif;text-align:center;margin-top:40px;">Redirigiendo a Webpay…</p>
+    </body></html>""")
+
+
+@router.api_route("/api/transbank/return", methods=["GET", "POST"])
+async def transbank_return(request: Request):
+    """Webpay Plus comes back here with token_ws on completion (or TBK_TOKEN /
+    TBK_ORDEN_COMPRA if the customer cancelled) — commits the transaction and
+    reconciles it into whichever booking table it belongs to. Accepts both
+    GET (token_ws as a query param — what Transbank's integration
+    environment actually sends, confirmed live) and POST (form body, per the
+    SDK's own docs) since observed behavior didn't match the documented one."""
+    form = await request.form() if request.method == "POST" else {}
+    token_ws = form.get("token_ws") or request.query_params.get("token_ws")
+    if not token_ws:
+        booking_ref = form.get("TBK_ORDEN_COMPRA") or request.query_params.get("TBK_ORDEN_COMPRA", "")
+        return RedirectResponse(f"/booking/failure?booking_ref={booking_ref}", status_code=303)
+
+    from app.payment.transbank import commit_transaction
+    from app.payment.transbank_confirm import confirm_payment_by_ref
+
+    try:
+        result = commit_transaction(token_ws)
+    except Exception as e:
+        logger.error(f"Transbank commit error for token {token_ws}: {e}")
+        return RedirectResponse("/booking/failure", status_code=303)
+
+    approved = result.get("response_code") == 0 and result.get("status") == "AUTHORIZED"
+    buy_order = result.get("buy_order", "")
+    status = "approved" if approved else "rejected"
+    try:
+        confirm_payment_by_ref(buy_order, result.get("authorization_code"), status)
+    except Exception as e:
+        logger.error(f"Transbank confirm error for buy_order {buy_order}: {e}")
+
+    # Experience/pack/cart bookings combined with other refs (a HotBoat paseo,
+    # other cart items) carry those extra booking_refs comma-joined in
+    # session_id — extras_bookings has no hotboat_ref column to look them up
+    # from, unlike accommodation_bookings. Confirm each one too.
+    for extra_ref in result.get("session_id", "").split(","):
+        extra_ref = extra_ref.strip()
+        if extra_ref and extra_ref != buy_order:
+            try:
+                confirm_payment_by_ref(extra_ref, result.get("authorization_code"), status)
+            except Exception as e:
+                logger.error(f"Transbank confirm error for extra ref {extra_ref}: {e}")
+
+    dest = "success" if approved else "failure"
+    return RedirectResponse(f"/booking/{dest}?booking_ref={buy_order}", status_code=303)
+
+
+async def _create_transbank_payment(booking_ref: str, amount: float, session_id: Optional[str] = None) -> Optional[str]:
+    """Creates a Webpay Plus transaction for this booking and returns the
+    single-click payment URL to hand the customer (via /pagar/tbk — see
+    above). Returns None (never raises) if Transbank is unreachable, same
+    fail-soft contract woo_create_order() had.
+
+    session_id defaults to booking_ref, but pass a second booking_ref here
+    (e.g. a combined HotBoat paseo's ref) when this charge also needs to
+    confirm a second booking on payment — see transbank_return() above."""
+    from app.payment.transbank import create_transaction
+    base = os.getenv("PUBLIC_BASE_URL", os.getenv("APP_URL", "https://hotboat-whatsapp-staging-tom.up.railway.app"))
+    try:
+        tx = create_transaction(
+            buy_order=booking_ref,
+            session_id=session_id or booking_ref,
+            amount=int(amount),
+            return_url=f"{base}/api/transbank/return",
+        )
+        return f"{base}/pagar/tbk?token={quote(tx['token'])}&url={quote(tx['url'], safe='')}"
+    except Exception as e:
+        logger.warning(f"Transbank create skip [{booking_ref}]: {e}")
+        return None
 
 
 @router.get("/api/booking/dynamic-price")
@@ -564,55 +652,22 @@ async def create_booking_endpoint(request: CreateBookingRequest):
 
         # Determine amount to charge (50% deposit, support test_price override)
         if request.test_price is not None and request.test_price > 0:
-            woo_monto_reserva = request.test_price
-            woo_monto_extras  = 0
-            logger.info(f"TEST MODE: overriding WooCommerce total to {request.test_price} CLP for {booking_ref}")
+            monto_a_cobrar = request.test_price
+            logger.info(f"TEST MODE: overriding Transbank total to {request.test_price} CLP for {booking_ref}")
         else:
-            # Charge 50% upfront as deposit via Webpay/Transbank (coupon reduces boat line only)
+            # Charge 50% upfront as deposit via Transbank (coupon reduces boat line only)
             boat_net = max(0, int(subtotal + flex_amount - round(cdisc)))
-            woo_monto_reserva = round(boat_net * 0.5)
-            woo_monto_extras = round(extras_total * 0.5)
+            monto_a_cobrar = round(boat_net * 0.5) + round(extras_total * 0.5)
 
         payment_url = None
-        woo_order_id = None
         if not request.skip_payment:
-            try:
-                from app.payment.woocommerce import create_order as woo_create_order
-                woo_order = await woo_create_order(
-                    reservation_id=0,
-                    booking_ref=booking_ref,
-                    nombre=request.customer_name,
-                    telefono=request.customer_phone,
-                    email=request.customer_email,
-                    monto_reserva=woo_monto_reserva,
-                    monto_extras=woo_monto_extras,
-                    fecha=request.booking_date,
-                    num_personas=request.num_people,
-                )
-                payment_url  = woo_order.get("payment_url")
-                woo_order_id = woo_order.get("order_id")
-            except Exception as pe:
-                logger.warning(f"WooCommerce skip: {pe}")
+            payment_url = await _create_transbank_payment(booking_ref, monto_a_cobrar)
+            if not payment_url:
                 try:
                     deposit = round(total * 0.5)
                     payment_url = await _create_mp_preference(booking_ref, request, deposit)
                 except Exception as mpe:
                     logger.warning(f"MercadoPago skip: {mpe}")
-
-            # Store WooCommerce order ID so the webhook can find this booking
-            if woo_order_id:
-                try:
-                    from app.db.connection import get_connection as _gc
-                    with _gc() as conn:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                "UPDATE all_appointments SET payment_order_id=%s, updated_at=NOW() "
-                                "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
-                                (str(woo_order_id), booking_ref),
-                            )
-                            conn.commit()
-                except Exception as ue:
-                    logger.warning(f"Could not save woo_order_id for {booking_ref}: {ue}")
 
         return {
             "booking_ref": booking_ref,
@@ -1678,62 +1733,16 @@ async def create_accommodation_booking(request: AlojBookingRequest):
         except Exception as ex_merge:
             logger.warning("HotBoat↔aloj merge skipped for %s: %s", aloj_ref, ex_merge)
 
-    # Build WooCommerce order
+    # Reserva combinada (alojamiento + HotBoat opcional) cobrada como un solo
+    # cargo de Transbank sobre aloj_ref — confirm_payment_by_ref() cascadea a
+    # all_appointments vía la columna hotboat_ref una vez pagado.
     total_deposit = deposit_aloj + hotboat_deposit
     if request.test_price and request.test_price > 0:
         total_deposit = request.test_price
 
-    fee_lines = [
-        {
-            "name": f"Alojamiento: {request.accommodation_name} ({nights}n {check_in.strftime('%d/%m')} al {check_out.strftime('%d/%m')})",
-            "total": str(deposit_aloj),
-        }
-    ]
-    if hotboat_ref and hotboat_deposit:
-        fee_lines.append({
-            "name": f"HotBoat {request.hotboat_people}p · {request.hotboat_date} {request.hotboat_time}",
-            "total": str(hotboat_deposit),
-        })
-
-    extra_meta = [{"key": "accommodation_booking_ref", "value": aloj_ref}]
-    if hotboat_ref:
-        extra_meta.append({"key": "hotboat_combined_ref", "value": hotboat_ref})
-
     payment_url = None
     if not high_season_aloj:
-        try:
-            from app.payment.woocommerce import create_order as woo_create_order
-            woo_order = await woo_create_order(
-                reservation_id=0,
-                booking_ref=aloj_ref,
-                nombre=request.customer_name,
-                telefono=request.customer_phone,
-                email=request.customer_email,
-                monto_reserva=0,
-                custom_fee_lines=fee_lines,
-                extra_meta=extra_meta,
-            )
-            payment_url  = woo_order.get("payment_url")
-            woo_order_id = woo_order.get("order_id")
-            if woo_order_id:
-                with _gc() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE accommodation_bookings SET payment_order_id=%s WHERE booking_ref=%s",
-                            (str(woo_order_id), aloj_ref)
-                        )
-                        # Also link the combined order to the HotBoat booking
-                        if hotboat_ref:
-                            cur.execute(
-                                "UPDATE all_appointments SET payment_order_id=%s, updated_at=NOW() "
-                                "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
-                                (str(woo_order_id), hotboat_ref),
-                            )
-                        conn.commit()
-        except Exception as pe:
-            import traceback
-            logger.warning("WooCommerce accommodation skip [%s]: %r\n%s",
-                           type(pe).__name__, str(pe), traceback.format_exc())
+        payment_url = await _create_transbank_payment(aloj_ref, total_deposit)
     else:
         with _gc() as conn:
             with conn.cursor() as cur:
@@ -1952,22 +1961,17 @@ async def create_experience_booking(request: ExperienceBookingRequest):
 
     # If combined with HotBoat, compute hotboat deposit before merging extras into totals.
     hotboat_deposit = 0
-    hotboat_label = ""
     if hotboat_ref:
         with _gc() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT ingreso_total, fecha, hora, num_personas "
-                    "FROM all_appointments "
+                    "SELECT ingreso_total FROM all_appointments "
                     "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) LIMIT 1",
                     (hotboat_ref,),
                 )
                 row = cur.fetchone()
                 if row:
-                    hb_total, hb_fecha, hb_hora, hb_np = row
-                    hotboat_deposit = round(float(hb_total or 0) * 0.5)
-                    hb_hhmm = str(hb_hora or "")[:5]
-                    hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
+                    hotboat_deposit = round(float(row[0] or 0) * 0.5)
 
     if hotboat_ref:
         try:
@@ -1983,42 +1987,8 @@ async def create_experience_booking(request: ExperienceBookingRequest):
         except Exception as ex_merge:
             logger.warning("experience-create merge failed for %s + %s: %s", hotboat_ref, exp_ref, ex_merge)
 
-    fee_lines = [
-        {
-            "name": f"Experiencia: {request.experience_name} ({start_d}{f' al {end_d}' if end_d else ''})",
-            "total": str(deposit_paid),
-        }
-    ]
-    if hotboat_ref and hotboat_deposit:
-        fee_lines.append({"name": hotboat_label or "HotBoat · deposito 50%", "total": str(hotboat_deposit)})
-
-    payment_url = None
-    try:
-        from app.payment.woocommerce import create_order as woo_create_order
-
-        woo_order = await woo_create_order(
-            reservation_id=0,
-            booking_ref=exp_ref,
-            nombre=request.customer_name,
-            telefono=request.customer_phone,
-            email=request.customer_email,
-            monto_reserva=0,
-            monto_extras=0,
-            fecha=str(start_d),
-            num_personas=request.num_people,
-            custom_fee_lines=fee_lines,
-            extra_meta=[
-                {"key": "hotboat_booking_ref", "value": hotboat_ref},
-                {"key": "experience_booking_ref", "value": exp_ref},
-            ]
-            if hotboat_ref
-            else [
-                {"key": "experience_booking_ref", "value": exp_ref},
-            ],
-        )
-        payment_url = woo_order.get("payment_url")
-    except Exception as pe:
-        logger.warning("WooCommerce experience skip [%s]: %r", exp_ref, pe)
+    amount_to_charge = deposit_paid + (hotboat_deposit if hotboat_ref and hotboat_deposit else 0)
+    payment_url = await _create_transbank_payment(exp_ref, amount_to_charge, session_id=hotboat_ref or exp_ref)
 
     return {
         "booking_ref": exp_ref,
@@ -2276,52 +2246,28 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
         }
 
     hotboat_deposit = 0
-    hotboat_label = ""
     if hotboat_ref:
         with _gc() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT ingreso_total, fecha, hora, num_personas "
-                    "FROM all_appointments "
+                    "SELECT ingreso_total FROM all_appointments "
                     "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) LIMIT 1",
                     (hotboat_ref,),
                 )
                 row = cur.fetchone()
                 if row:
-                    hb_total, hb_fecha, hb_hora, hb_np = row
-                    hotboat_deposit = round(float(hb_total or 0) * 0.5)
-                    hb_hhmm = str(hb_hora or "")[:5]
-                    hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
+                    hotboat_deposit = round(float(row[0] or 0) * 0.5)
 
-    if hotboat_ref and hotboat_deposit:
-        fee_lines.append({"name": hotboat_label or "HotBoat · deposito 50%", "total": str(hotboat_deposit)})
-
+    # buy_order = primer ref del carrito (limite de 26 caracteres de Transbank);
+    # el resto de los refs (otros items + hotboat_ref combinado) viaja en
+    # session_id, separado por comas — ver transbank_return() más arriba.
+    amount_to_charge = sum(float(f["total"]) for f in fee_lines) + hotboat_deposit
+    extra_refs = booking_refs[1:] + ([hotboat_ref] if hotboat_ref else [])
     payment_url = None
     if fee_lines:
-        try:
-            from app.payment.woocommerce import create_order as woo_create_order
-
-            meta = [{"key": "experience_cart_refs", "value": ",".join(booking_refs)}]
-            if hotboat_ref:
-                meta.append({"key": "hotboat_booking_ref", "value": hotboat_ref})
-
-            first_start = _date_fromiso(request.items[0].start_date)
-            woo_order = await woo_create_order(
-                reservation_id=0,
-                booking_ref=booking_refs[0],
-                nombre=request.customer_name,
-                telefono=request.customer_phone,
-                email=request.customer_email,
-                monto_reserva=0,
-                monto_extras=0,
-                fecha=str(first_start) if first_start else None,
-                num_personas=request.items[0].num_people,
-                custom_fee_lines=fee_lines,
-                extra_meta=meta,
-            )
-            payment_url = woo_order.get("payment_url")
-        except Exception as pe:
-            logger.warning("WooCommerce experience-cart skip [%s]: %r", booking_refs, pe)
+        payment_url = await _create_transbank_payment(
+            booking_refs[0], amount_to_charge, session_id=",".join(extra_refs) or None,
+        )
 
     return {
         "booking_refs": booking_refs,
@@ -2430,22 +2376,17 @@ async def create_pack_booking(request: PackBookingRequest):
         return {"booking_ref": pack_ref, "total_price": total_price, "payment_url": None, "requires_email": True}
 
     hotboat_deposit = 0
-    hotboat_label = ""
     if hotboat_ref:
         with _gc() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT ingreso_total, fecha, hora, num_personas "
-                    "FROM all_appointments "
+                    "SELECT ingreso_total FROM all_appointments "
                     "WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s) LIMIT 1",
                     (hotboat_ref,),
                 )
                 row = cur.fetchone()
                 if row:
-                    hb_total, hb_fecha, hb_hora, hb_np = row
-                    hotboat_deposit = round(float(hb_total or 0) * 0.5)
-                    hb_hhmm = str(hb_hora or "")[:5]
-                    hotboat_label = f"HotBoat {hb_np}p · {hb_fecha} {hb_hhmm}".strip()
+                    hotboat_deposit = round(float(row[0] or 0) * 0.5)
 
     if hotboat_ref:
         try:
@@ -2461,42 +2402,8 @@ async def create_pack_booking(request: PackBookingRequest):
         except Exception as ex_merge:
             logger.warning("pack-create merge failed for %s + %s: %s", hotboat_ref, pack_ref, ex_merge)
 
-    fee_lines = [
-        {
-            "name": f"Pack: {request.pack_name} ({start_d}{f' al {end_d}' if end_d else ''})",
-            "total": str(deposit_paid),
-        }
-    ]
-    if hotboat_ref and hotboat_deposit:
-        fee_lines.append({"name": hotboat_label or "HotBoat · deposito 50%", "total": str(hotboat_deposit)})
-
-    payment_url = None
-    try:
-        from app.payment.woocommerce import create_order as woo_create_order
-
-        woo_order = await woo_create_order(
-            reservation_id=0,
-            booking_ref=pack_ref,
-            nombre=request.customer_name,
-            telefono=request.customer_phone,
-            email=request.customer_email,
-            monto_reserva=0,
-            monto_extras=0,
-            fecha=str(start_d),
-            num_personas=request.num_people,
-            custom_fee_lines=fee_lines,
-            extra_meta=[
-                {"key": "hotboat_booking_ref", "value": hotboat_ref},
-                {"key": "pack_booking_ref", "value": pack_ref},
-            ]
-            if hotboat_ref
-            else [
-                {"key": "pack_booking_ref", "value": pack_ref},
-            ],
-        )
-        payment_url = woo_order.get("payment_url")
-    except Exception as pe:
-        logger.warning("WooCommerce pack skip [%s]: %r", pack_ref, pe)
+    amount_to_charge = deposit_paid + (hotboat_deposit if hotboat_ref and hotboat_deposit else 0)
+    payment_url = await _create_transbank_payment(pack_ref, amount_to_charge, session_id=hotboat_ref or pack_ref)
 
     return {"booking_ref": pack_ref, "total_price": total_price, "payment_url": payment_url}
 
