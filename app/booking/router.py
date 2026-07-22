@@ -118,7 +118,9 @@ async def transbank_return(request: Request):
     token_ws = form.get("token_ws") or request.query_params.get("token_ws")
     if not token_ws:
         booking_ref = form.get("TBK_ORDEN_COMPRA") or request.query_params.get("TBK_ORDEN_COMPRA", "")
-        return RedirectResponse(f"/booking/failure?booking_ref={booking_ref}", status_code=303)
+        return RedirectResponse(
+            f"/booking/failure?booking_ref={quote(booking_ref)}&payment_status=rejected", status_code=303
+        )
 
     from app.payment.transbank import commit_transaction
     from app.payment.transbank_confirm import confirm_payment_by_ref
@@ -133,7 +135,7 @@ async def transbank_return(request: Request):
     buy_order = result.get("buy_order", "")
     status = "approved" if approved else "rejected"
     try:
-        confirm_payment_by_ref(buy_order, result.get("authorization_code"), status)
+        confirm_payment_by_ref(buy_order, result.get("authorization_code"), status, amount=result.get("amount"))
     except Exception as e:
         logger.error(f"Transbank confirm error for buy_order {buy_order}: {e}")
 
@@ -150,7 +152,13 @@ async def transbank_return(request: Request):
                 logger.error(f"Transbank confirm error for extra ref {extra_ref}: {e}")
 
     dest = "success" if approved else "failure"
-    return RedirectResponse(f"/booking/{dest}?booking_ref={buy_order}", status_code=303)
+    # booking-soft.html's checkReturnFromPayment() only shows the thank-you /
+    # failure screen when both booking_ref AND payment_status are present in
+    # the URL — booking_ref alone (what this used to send) silently falls
+    # through to the normal menu instead.
+    return RedirectResponse(
+        f"/booking/{dest}?booking_ref={quote(buy_order)}&payment_status={status}", status_code=303
+    )
 
 
 async def _create_transbank_payment(booking_ref: str, amount: float, session_id: Optional[str] = None) -> Optional[str]:

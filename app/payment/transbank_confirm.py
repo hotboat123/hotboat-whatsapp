@@ -22,14 +22,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def confirm_payment_by_ref(buy_order: str, payment_id: str | None, status: str) -> bool:
+def confirm_payment_by_ref(buy_order: str, payment_id: str | None, status: str, amount: float | None = None) -> bool:
     """status is 'approved' or 'rejected'. Returns True if some booking was
     found and updated (regardless of which table it lived in)."""
     buy_order = (buy_order or "").strip()
     if not buy_order:
         return False
 
-    if _confirm_hotboat_booking(buy_order, payment_id, status):
+    if _confirm_hotboat_booking(buy_order, payment_id, status, amount):
         return True
     if _confirm_accommodation_booking(buy_order, payment_id, status):
         return True
@@ -40,12 +40,61 @@ def confirm_payment_by_ref(buy_order: str, payment_id: str | None, status: str) 
     return False
 
 
-def _confirm_hotboat_booking(buy_order: str, payment_id: str | None, status: str) -> bool:
+def _record_pago(buy_order: str, payment_id: str | None, status: str, amount: float | None) -> None:
+    """Append this charge to all_appointments.pagos — the WooCommerce webhook
+    (admin_router.py's /api/woo-webhook) used to be what filled this column
+    for Transbank payments; the admin-force confirmation email sums it to
+    show the real amount paid (see send_confirmation_admin_force in
+    booking_email.py), so without this it always showed $0 for bookings
+    confirmed through this direct integration. Dedup on authorization_code
+    so a duplicate /api/transbank/return hit doesn't double-count."""
+    if amount is None or amount <= 0:
+        return
+    from app.db.connection import get_connection
+    import json as _json
+    from datetime import date as _date
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, COALESCE(pagos,'[]'::jsonb) FROM all_appointments"
+                " WHERE source='hotboat_web' AND TRIM(source_id)=TRIM(%s)",
+                (buy_order,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return
+            booking_id, pagos_raw = row
+            pagos = list(pagos_raw) if pagos_raw else []
+            already = any(p.get("authorization_code") == payment_id for p in pagos if payment_id)
+            if already:
+                return
+            pagos.append({
+                "amount": float(amount),
+                "method": "transbank",
+                "authorization_code": payment_id,
+                "date": _date.today().isoformat(),
+                "status": status,
+            })
+            cur.execute(
+                "UPDATE all_appointments SET pagos=%s, updated_at=NOW() WHERE id=%s",
+                (_json.dumps(pagos), booking_id),
+            )
+            conn.commit()
+
+
+def _confirm_hotboat_booking(buy_order: str, payment_id: str | None, status: str, amount: float | None = None) -> bool:
     from app.booking.db import update_booking_payment, get_booking_by_ref
 
     updated = update_booking_payment(buy_order, payment_id or "", buy_order, status)
     if not updated:
         return False
+
+    if status == "approved":
+        try:
+            _record_pago(buy_order, payment_id, status, amount)
+        except Exception as pago_err:
+            logger.warning(f"Transbank confirm: pagos record error for {buy_order}: {pago_err}")
 
     logger.info("Transbank confirm: all_appointments %s -> %s", buy_order, status)
     try:

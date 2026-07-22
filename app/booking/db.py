@@ -74,9 +74,20 @@ def _legacy_booking_from_aa(d: Dict[str, Any]) -> Dict[str, Any]:
         except (TypeError, ValueError):
             num_people = None
 
+    pagos = d.get("pagos")
+    if isinstance(pagos, str):
+        try:
+            pagos = json.loads(pagos)
+        except Exception:
+            pagos = []
+    if not isinstance(pagos, list):
+        pagos = []
+    deposit_paid = sum(float(p.get("amount") or 0) for p in pagos if isinstance(p, dict))
+
     return {
         "id": d["id"],
         "booking_ref": ref,
+        "deposit_paid": deposit_paid,
         "customer_name": d.get("nombre_cliente"),
         "customer_phone": d.get("telefono"),
         "customer_email": d.get("email"),
@@ -293,7 +304,7 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                        coupon_extra_benefit, customer_birthday, source,
                        COALESCE(utm_source,''), COALESCE(utm_medium,''),
                        COALESCE(utm_campaign,''), COALESCE(utm_content,''),
-                       COALESCE(parametro_url,'')
+                       COALESCE(parametro_url,''), COALESCE(pagos,'[]'::jsonb)
                 FROM all_appointments
                 WHERE source = 'hotboat_web' AND TRIM(source_id) = TRIM(%s)
                 """,
@@ -335,6 +346,7 @@ def get_booking_by_ref(booking_ref: str) -> Optional[dict]:
                     "utm_campaign",
                     "utm_content",
                     "parametro_url",
+                    "pagos",
                 ]
                 d = dict(zip(cols, row))
                 out = _legacy_booking_from_aa(d)

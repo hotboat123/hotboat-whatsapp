@@ -3768,21 +3768,79 @@ function renderPayment(){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al inicio</button>`;
 }
 
-function checkReturnFromPayment(){
+function _thankYouFallback(ref){
+  return `
+  <div class="card" style="text-align:center">
+    <div class="success-icon">🎉</div>
+    <div class="card-title">Reserva Confirmada!</div>
+    <p style="color:var(--muted);margin:.5rem 0">Ref: <strong>${ref}</strong></p>
+    <div class="info-box" style="margin-top:1rem">
+      Te enviaremos los detalles por WhatsApp. Nos vemos en el lago! 🚤🔥
+    </div>
+  </div>
+  <button class="btn" style="margin-top:1rem" onclick="renderMenu()">Nueva reserva</button>`;
+}
+
+// Misma info + mismos links que el mail de confirmación (booking_confirmed en
+// booking_email.py) — ref, fecha/hora/personas, extras, lo pagado/saldo, y
+// los CTA de firmar T&C / tablas / video, para que la persona no dependa de
+// revisar el correo para tener todo a mano apenas paga.
+function _renderThankYou(ref, b){
+  if(!b) return _thankYouFallback(ref);
+
+  const [yr,mo,dy] = String(b.booking_date||'').split('-');
+  const fechaStr = (yr&&mo&&dy) ? `${dy}/${mo}/${yr}` : (b.booking_date||'');
+  const horaStr = String(b.booking_time||'').slice(0,5);
+  const total = Number(b.total_price)||0;
+  const pagado = Number(b.deposit_paid)||0;
+  const saldo = Math.max(0, total - pagado);
+
+  const extrasList = Array.isArray(b.extras) ? b.extras : [];
+  const extrasRows = extrasList.filter(e=>e && e.name).map(e=>{
+    const qty = Number(e.quantity)||1;
+    return `<div style="display:flex;justify-content:space-between;padding:.25rem 0;font-size:.85rem">
+      <span>${e.name}${qty>1?` ×${qty}`:''}</span>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="card" style="text-align:center">
+    <div class="success-icon">🎉</div>
+    <div class="card-title">¡Reserva confirmada!</div>
+    <p style="color:var(--muted);margin:.2rem 0 1rem">Ref: <strong>${ref}</strong></p>
+
+    <div style="background:var(--bg);border-radius:12px;padding:1rem;text-align:left">
+      <div style="display:flex;justify-content:space-between;padding:.25rem 0"><span>📅 Fecha</span><strong>${fechaStr}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:.25rem 0"><span>⏰ Hora</span><strong>${horaStr} hrs</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:.25rem 0"><span>👥 Personas</span><strong>${b.num_people||''}</strong></div>
+      ${extrasRows}
+      <div style="display:flex;justify-content:space-between;padding:.5rem 0 .1rem;margin-top:.4rem;border-top:1px solid var(--border)">
+        <span>✅ Pagado</span><strong style="color:var(--gold)">$${pagado.toLocaleString('es-CL')}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:.1rem 0"><span>Saldo al llegar</span><strong>$${saldo.toLocaleString('es-CL')}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:.25rem 0"><span>💰 Total</span><strong>$${total.toLocaleString('es-CL')}</strong></div>
+    </div>
+
+    <div class="info-box" style="margin-top:1rem;text-align:left">
+      ✍️ Todos los mayores de 18 años deben firmar los Términos y Condiciones antes de subir al HotBoat.
+    </div>
+  </div>
+
+  <a href="/firma/${encodeURIComponent(ref)}" class="btn" style="text-decoration:none;display:block;text-align:center;margin-top:.75rem">✍️ Firmar Términos y Condiciones</a>
+  <a href="/tabla/${encodeURIComponent(ref)}" class="btn btn-secondary" style="text-decoration:none;display:block;text-align:center;margin-top:.5rem">🍹 Tablas y bebestibles</a>
+  <a href="https://www.youtube.com/shorts/-9Y23l40oSQ?si=_mZrnTlw33qhf2bb" target="_blank" class="btn btn-secondary" style="text-decoration:none;display:block;text-align:center;margin-top:.5rem">🎬 Video instructivo</a>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al inicio</button>`;
+}
+
+async function checkReturnFromPayment(){
   const params = new URLSearchParams(window.location.search);
   const ref = params.get('booking_ref');
   const status = params.get('collection_status') || params.get('payment_status');
   if(ref && status==='approved'){
-    mc.innerHTML = `
-    <div class="card" style="text-align:center">
-      <div class="success-icon">🎉</div>
-      <div class="card-title">Reserva Confirmada!</div>
-      <p style="color:var(--muted);margin:.5rem 0">Ref: <strong>${ref}</strong></p>
-      <div class="info-box" style="margin-top:1rem">
-        Te enviaremos los detalles por WhatsApp. Nos vemos en el lago! 🚤🔥
-      </div>
-    </div>
-    <button class="btn" style="margin-top:1rem" onclick="renderMenu()">Nueva reserva</button>`;
+    mc.innerHTML = `<div class="card" style="text-align:center"><p>${t('loading')}</p></div>`;
+    let b = null;
+    try{ b = await fetch(`/api/booking/${encodeURIComponent(ref)}`).then(r=>r.ok?r.json():null); }catch(e){}
+    mc.innerHTML = _renderThankYou(ref, b);
     return true;
   }
   if(ref && (status==='failure'||status==='rejected')){
@@ -3801,7 +3859,7 @@ function checkReturnFromPayment(){
 }
 
 async function init(){
-  if(!checkReturnFromPayment()){
+  if(!(await checkReturnFromPayment())){
     renderLangSwitcher();
     mc.innerHTML = `<div class="card" style="text-align:center"><p>${t('loading')}</p></div>`;
     await Promise.all([loadPricesAndAvail(), loadDynamicContent()]);
