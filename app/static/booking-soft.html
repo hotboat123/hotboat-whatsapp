@@ -2999,17 +2999,22 @@ function basePriceFor(n){
   return S.prices[n] || _PRICES_FALLBACK[n] || 76990;
 }
 
-// Adultos+niños deciden el tramo de precio (por total), luego se descuenta un
-// monto fijo por cada niño — mismo cálculo que price_breakdown() en db.py,
-// server sigue siendo la fuente de verdad (recalcula todo en /api/booking/create).
+// Adultos+niños deciden el tramo de precio (por total). En vez de mostrar un
+// precio "por persona" único y restar el descuento aparte, se reparte el
+// mismo descuento como una tarifa distinta para adultos ($pp) y niños
+// ($pp - CHILD_DISCOUNT_PER_CHILD) — adults*pp + children*childPP da
+// exactamente el mismo total que price_breakdown() en db.py, solo cambia
+// cómo se presenta. Server sigue siendo la fuente de verdad (recalcula todo
+// en /api/booking/create).
 function pricingFor(adults, children){
   const n = adults + children;
   const basepp = basePriceFor(n);
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
   const pp = Math.round(basepp * mult / 1000) * 1000;
+  const childPP = Math.max(0, pp - CHILD_DISCOUNT_PER_CHILD);
   const subBefore = pp * n;
   const childDiscount = Math.min(children * CHILD_DISCOUNT_PER_CHILD, subBefore);
-  return { n, pp, subBefore, childDiscount, sub: subBefore - childDiscount };
+  return { n, pp, childPP, subBefore, childDiscount, sub: subBefore - childDiscount };
 }
 
 function renderPeopleSelect(){
@@ -3017,10 +3022,9 @@ function renderPeopleSelect(){
     const p = pricingFor(S.numAdults, S.numChildren);
     $('pp-adults-val').textContent = S.numAdults;
     $('pp-children-val').textContent = S.numChildren;
-    $('pp-price').textContent = `$${p.pp.toLocaleString('es-CL')} por persona`;
-    $('pp-total').textContent = p.childDiscount > 0
-      ? `Total: $${p.sub.toLocaleString('es-CL')} (incluye −$${p.childDiscount.toLocaleString('es-CL')} por niños)`
-      : `Total: $${p.sub.toLocaleString('es-CL')}`;
+    $('pp-adults-price').textContent = `$${p.pp.toLocaleString('es-CL')} c/u`;
+    $('pp-children-price').textContent = `$${p.childPP.toLocaleString('es-CL')} c/u`;
+    $('pp-total-big').textContent = `Total: $${p.sub.toLocaleString('es-CL')}`;
     $('pp-adults-minus').disabled = S.numAdults <= 1;
     $('pp-adults-plus').disabled = (S.numAdults + S.numChildren) >= 7;
     $('pp-children-minus').disabled = S.numChildren <= 0 || (S.numAdults === 1 && S.numChildren === 1);
@@ -3033,7 +3037,10 @@ function renderPeopleSelect(){
     <p style="color:var(--muted);margin-bottom:1rem">Mínimo 1 adulto · Total 2-7 personas · Niños de 0 a 12 años: $${CHILD_DISCOUNT_PER_CHILD.toLocaleString('es-CL')} de descuento c/u</p>
 
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem">
-      <span style="font-weight:600">Adultos</span>
+      <div>
+        <div style="font-weight:600">Adultos</div>
+        <div id="pp-adults-price" style="font-size:.8rem;color:var(--gold);font-weight:600"></div>
+      </div>
       <div class="counter">
         <button class="counter-btn" id="pp-adults-minus" onclick="changeAdults(-1)">−</button>
         <div class="counter-val" id="pp-adults-val">${S.numAdults}</div>
@@ -3041,7 +3048,10 @@ function renderPeopleSelect(){
       </div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-      <span style="font-weight:600">Niños (0-12 años)</span>
+      <div>
+        <div style="font-weight:600">Niños (0-12 años)</div>
+        <div id="pp-children-price" style="font-size:.8rem;color:var(--gold);font-weight:600"></div>
+      </div>
       <div class="counter">
         <button class="counter-btn" id="pp-children-minus" onclick="changeChildren(-1)">−</button>
         <div class="counter-val" id="pp-children-val">${S.numChildren}</div>
@@ -3050,8 +3060,7 @@ function renderPeopleSelect(){
     </div>
 
     <div class="price-tag">
-      <div class="price-big" id="pp-price"></div>
-      <div id="pp-total" style="font-size:.85rem;color:var(--muted);margin-top:.3rem"></div>
+      <div class="price-big" id="pp-total-big"></div>
     </div>
   </div>
   <button class="btn" onclick="goExtras()">${t('nextExtras')}</button>
