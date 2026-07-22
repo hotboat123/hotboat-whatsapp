@@ -3699,6 +3699,15 @@ async function submitBooking(){
       window.location.href = `/tabla/${encodeURIComponent(S.bookingRef)}?next=${encodeURIComponent(nextUrl)}`;
       return;
     }
+    // Un solo clic en "Pagar": si ya hay payment_url, salta directo a Transbank
+    // en vez de mostrar la pantalla de resumen con su propio botón "Pagar"
+    // (que era el segundo clic). Esa pantalla (renderPayment) sigue existiendo
+    // para el caso sin payment_url (temporada alta, coordinamos por WhatsApp).
+    if(S.paymentUrl){
+      _trackEvent('click_pagar', S.selectedDate);
+      window.location.href = S.paymentUrl;
+      return;
+    }
     renderPayment();
   }catch(e){
     _pendingAlojBooking = null;
