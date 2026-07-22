@@ -106,15 +106,18 @@ async def pagar_tbk(token: str = Query(...), url: str = Query(...)):
     </body></html>""")
 
 
-@router.post("/api/transbank/return")
+@router.api_route("/api/transbank/return", methods=["GET", "POST"])
 async def transbank_return(request: Request):
-    """Webpay Plus posts back here (token_ws on completion, or TBK_TOKEN /
-    TBK_ORDEN_COMPRA if the customer cancelled) — commits the transaction
-    and reconciles it into whichever booking table it belongs to."""
-    form = await request.form()
-    token_ws = form.get("token_ws")
+    """Webpay Plus comes back here with token_ws on completion (or TBK_TOKEN /
+    TBK_ORDEN_COMPRA if the customer cancelled) — commits the transaction and
+    reconciles it into whichever booking table it belongs to. Accepts both
+    GET (token_ws as a query param — what Transbank's integration
+    environment actually sends, confirmed live) and POST (form body, per the
+    SDK's own docs) since observed behavior didn't match the documented one."""
+    form = await request.form() if request.method == "POST" else {}
+    token_ws = form.get("token_ws") or request.query_params.get("token_ws")
     if not token_ws:
-        booking_ref = form.get("TBK_ORDEN_COMPRA", "")
+        booking_ref = form.get("TBK_ORDEN_COMPRA") or request.query_params.get("TBK_ORDEN_COMPRA", "")
         return RedirectResponse(f"/booking/failure?booking_ref={booking_ref}", status_code=303)
 
     from app.payment.transbank import commit_transaction
