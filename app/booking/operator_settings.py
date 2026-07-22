@@ -827,6 +827,8 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
         max_mult = max(lo_clamp, min(max_mult, hi_clamp))
 
     def _round_pp(base: float, mult: float) -> int:
+        if mult == 1.0:
+            return int(round(base))
         return int(round(base * mult / 1000) * 1000)
 
     pp_min_vals = [_round_pp(p, min_mult) for p in PRICES.values()]

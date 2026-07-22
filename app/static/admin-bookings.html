@@ -5548,9 +5548,9 @@ async function openModal(id){
       </div>
       <div class="form-row">
         <div class="form-group"><label>Nº Adultos</label>
-          <input type="number" min="0" id="e-num_adultos" value="${r.num_adultos||''}"></div>
+          <input type="number" min="0" id="e-num_adultos" value="${r.num_adultos||''}" oninput="applyDpMultiplierToPrice()"></div>
         <div class="form-group"><label>Nº Niños</label>
-          <input type="number" min="0" id="e-num_ninos" value="${r.num_ninos||''}"></div>
+          <input type="number" min="0" id="e-num_ninos" value="${r.num_ninos||''}" oninput="applyDpMultiplierToPrice()"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Nombres adultos</label>
@@ -6569,6 +6569,7 @@ async function saveOpHours(){
 }
 
 let _pricesConfig = {2:76990,3:59990,4:48990,5:42990,6:36990,7:33990};
+const CHILD_DISCOUNT_PER_CHILD = 10000; // mirror app/booking/db.py CHILD_DISCOUNT_PER_CHILD
 
 function renderPricesGrid(){
   const grid = document.getElementById('prices-grid');
@@ -8652,12 +8653,22 @@ function lookupBasePrice(nStr){
 }
 
 // Recalcula el precio de la experiencia (e-ingreso_reserva) a partir del
-// precio base por persona × el multiplicador de precio dinamico ingresado.
-// Se dispara al cambiar personas o el multiplicador, para que el mail de
-// confirmacion (que lee ingreso_reserva) siempre muestre lo que el cliente
-// realmente debe pagar, no el precio base sin el ajuste.
+// precio base por persona × el multiplicador de precio dinamico ingresado,
+// menos el descuento fijo por niño (si Nº Niños > 0) — mismo modelo que usa
+// la reserva web (price_breakdown() en db.py). El tramo de precio se elige
+// por adultos+niños cuando ese desglose está cargado; si no (reservas viejas
+// sin el desglose), se usa el total del campo "Personas" tal cual.
+// Se dispara al cambiar personas/adultos/niños o el multiplicador, para que
+// el mail de confirmacion (que lee ingreso_reserva) siempre muestre lo que
+// el cliente realmente debe pagar, no el precio base sin el ajuste.
 function applyDpMultiplierToPrice(){
-  const n = +document.getElementById('e-num_personas')?.value || 0;
+  const adultosEl = document.getElementById('e-num_adultos');
+  const ninosEl = document.getElementById('e-num_ninos');
+  const personasEl = document.getElementById('e-num_personas');
+  const adultos = (adultosEl && adultosEl.value !== '') ? +adultosEl.value : null;
+  const ninos = +ninosEl?.value || 0;
+  const n = (adultos != null) ? (adultos + ninos) : (+personasEl?.value || 0);
+  if(adultos != null && personasEl) personasEl.value = n;
   const hint = document.getElementById('e-precio-hint');
   if(!n) return;
   const pricePerPerson = getPriceForPersons(n);
@@ -8667,14 +8678,19 @@ function applyDpMultiplierToPrice(){
   }
   const multRaw = document.getElementById('e-dp_multiplier')?.value;
   const mult = multRaw ? (+multRaw || 1) : 1;
-  const finalPP = Math.round(pricePerPerson * mult / 1000) * 1000;
-  const total = finalPP * n;
+  const finalPP = (mult === 1) ? pricePerPerson : Math.round(pricePerPerson * mult / 1000) * 1000;
+  const subBefore = finalPP * n;
+  const childDiscount = Math.min(ninos * CHILD_DISCOUNT_PER_CHILD, subBefore);
+  const total = subBefore - childDiscount;
   const inp = document.getElementById('e-ingreso_reserva');
   if(inp) inp.value = total;
   if(hint){
-    hint.textContent = (mult !== 1)
-      ? `→ $${pricePerPerson.toLocaleString('es-CL')}/p × ${mult} = $${finalPP.toLocaleString('es-CL')}/p × ${n}p = ${fmtMoney(total)}`
-      : `→ $${pricePerPerson.toLocaleString('es-CL')}/p × ${n}p = ${fmtMoney(total)}`;
+    let txt = (mult !== 1)
+      ? `→ $${pricePerPerson.toLocaleString('es-CL')}/p × ${mult} = $${finalPP.toLocaleString('es-CL')}/p × ${n}p`
+      : `→ $${finalPP.toLocaleString('es-CL')}/p × ${n}p`;
+    if(childDiscount > 0) txt += ` − $${childDiscount.toLocaleString('es-CL')} (${ninos} niño${ninos===1?'':'s'})`;
+    txt += ` = ${fmtMoney(total)}`;
+    hint.textContent = txt;
   }
   updateExtrasTotals();
   syncPagoFaltante();

@@ -572,9 +572,10 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         except Exception as _dpe:
             logger.warning(f"dynamic pricing at create-booking failed, using base price: {_dpe}")
             _dp_mult = 1.0
-        # Redondeo al millar más cercano — misma fórmula que ya usa el frontend
-        # (Math.round(basepp*mult/1000)*1000) para que lo cobrado sea EXACTO a lo mostrado.
-        price_pp = round(base_pp * _dp_mult / 1000) * 1000
+        # Sin precio dinámico activo (mult=1) se cobra el valor exacto de la tabla
+        # (ej. $76.990, no $77.000) — el redondeo al millar solo aplica cuando el
+        # multiplicador realmente escala el precio, mismo criterio que el frontend.
+        price_pp = base_pp if _dp_mult == 1.0 else round(base_pp * _dp_mult / 1000) * 1000
         # Tarifa por el tramo de personas (adultos+niños), menos el descuento fijo
         # por niño — FLEX y el tope de cupón, más abajo, se calculan sobre este
         # subtotal ya descontado (no sobre la tarifa llena).

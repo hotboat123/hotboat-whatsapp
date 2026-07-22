@@ -3010,7 +3010,7 @@ function pricingFor(adults, children){
   const n = adults + children;
   const basepp = basePriceFor(n);
   const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
-  const pp = Math.round(basepp * mult / 1000) * 1000;
+  const pp = (mult === 1) ? basepp : Math.round(basepp * mult / 1000) * 1000;
   const childPP = Math.max(0, pp - CHILD_DISCOUNT_PER_CHILD);
   const subBefore = pp * n;
   const childDiscount = Math.min(children * CHILD_DISCOUNT_PER_CHILD, subBefore);
