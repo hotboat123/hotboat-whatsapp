@@ -492,7 +492,7 @@ DP_MESSAGE_TEMPLATE_DEFAULT = (
     "\n"
     "👉 {LINK}\n"
     "\n"
-    "Niños pagan desde los 6 años."
+    "👶 Niños de 0 a 12 años: $10.000 de descuento por cada niño."
 )
 
 DP_CONFIG_DEFAULT = {
@@ -856,7 +856,7 @@ def build_dynamic_price_message(cfg: Optional[dict] = None) -> dict:
     # shouldn't silently disappear just because the free-text template got
     # edited and someone forgot to keep it in.
     if "niñ" not in message.lower():
-        message = f"{message}\n\nNiños pagan desde los 6 años."
+        message = f"{message}\n\n👶 Niños de 0 a 12 años: $10.000 de descuento por cada niño."
 
     return {
         "enabled": bool(cfg.get("enabled")),

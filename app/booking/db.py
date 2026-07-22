@@ -13,6 +13,25 @@ from app.db.connection import get_connection
 CHILE_TZ = ZoneInfo("America/Santiago")
 logger = logging.getLogger(__name__)
 PRICES = {2: 76990, 3: 59990, 4: 48990, 5: 42990, 6: 36990, 7: 33990}
+CHILD_DISCOUNT_PER_CHILD = 10000  # CLP descontado por cada niño (0-12 años) sobre el total
+
+
+def price_breakdown(adults: int, children: int, price_pp: int) -> dict:
+    """Total headcount (adults+children) picks the price tier (already
+    applied by the caller via `price_pp`), then a flat CHILD_DISCOUNT_PER_CHILD
+    is subtracted per child — children count toward the tier but are
+    discounted afterward, they're not simply excluded from headcount."""
+    n = adults + children
+    sub_before = price_pp * n
+    child_discount = min(children * CHILD_DISCOUNT_PER_CHILD, sub_before)
+    return {
+        "n": n,
+        "price_pp": price_pp,
+        "sub_before": sub_before,
+        "child_discount": child_discount,
+        "subtotal": sub_before - child_discount,
+    }
+
 
 def _parse_booking_date(val: Any) -> date_type:
     if isinstance(val, date_type):
@@ -190,7 +209,7 @@ def create_booking(data: dict) -> dict:
                     source, source_id, appointment_id,
                     fecha, hora,
                     nombre_cliente, email, telefono,
-                    servicio, num_personas,
+                    servicio, num_personas, num_adultos, num_ninos,
                     ingreso_reserva, ingreso_extras, ingreso_total,
                     has_flex, flex_amount,
                     extras_json, observaciones,
@@ -205,7 +224,7 @@ def create_booking(data: dict) -> dict:
                     'hotboat_web', %s, %s,
                     %s, %s,
                     %s, %s, %s,
-                    %s, %s,
+                    %s, %s, %s, %s,
                     %s, %s, %s,
                     %s, %s,
                     %s, %s,
@@ -228,6 +247,8 @@ def create_booking(data: dict) -> dict:
                     data["customer_phone"],
                     f"HotBoat Web ({data['num_people']}p)",
                     str(data["num_people"]),
+                    int(data.get("num_adultos") or 0),
+                    int(data.get("num_ninos") or 0),
                     float(data["subtotal"]),
                     float(data.get("extras_total", 0)),
                     float(data["total_price"]),

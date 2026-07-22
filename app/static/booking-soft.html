@@ -421,7 +421,9 @@ const S = {
   calMonth: new Date().getMonth(),
   selectedDate: null,
   selectedTime: null,
-  numPeople: 2,
+  numAdults: 2,
+  numChildren: 0,
+  numPeople: 2,   // derivado — siempre numAdults + numChildren, ver changeAdults/changeChildren
   extras: {},
   extraVariants: {},
   hasFlex: true,
@@ -1781,7 +1783,7 @@ function _startHotboatWithAddonExp(){
     customer_email:null,
     notes,
   });
-  S.numPeople=people;
+  S.numAdults=Math.max(1,people); S.numChildren=0; S.numPeople=S.numAdults;
   goReservar();
 }
 
@@ -1930,7 +1932,7 @@ function _startHotboatWithAddonPack(){
     customer_email:null,
     notes,
   };
-  S.numPeople=people;
+  S.numAdults=Math.max(1,people); S.numChildren=0; S.numPeople=S.numAdults;
   goReservar();
 }
 
@@ -2992,31 +2994,64 @@ async function selectTime(tm){
 // some reason — falls back to the actual known price for THAT n, not a
 // single shared value that silently misrepresents every other group size.
 const _PRICES_FALLBACK = {2:76990, 3:59990, 4:48990, 5:42990, 6:36990, 7:33990};
+const CHILD_DISCOUNT_PER_CHILD = 10000; // mirror app/booking/db.py CHILD_DISCOUNT_PER_CHILD
 function basePriceFor(n){
   return S.prices[n] || _PRICES_FALLBACK[n] || 76990;
 }
 
+// Adultos+niños deciden el tramo de precio (por total), luego se descuenta un
+// monto fijo por cada niño — mismo cálculo que price_breakdown() en db.py,
+// server sigue siendo la fuente de verdad (recalcula todo en /api/booking/create).
+function pricingFor(adults, children){
+  const n = adults + children;
+  const basepp = basePriceFor(n);
+  const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
+  const pp = Math.round(basepp * mult / 1000) * 1000;
+  const subBefore = pp * n;
+  const childDiscount = Math.min(children * CHILD_DISCOUNT_PER_CHILD, subBefore);
+  return { n, pp, subBefore, childDiscount, sub: subBefore - childDiscount };
+}
+
 function renderPeopleSelect(){
   function update(){
-    const basepp = basePriceFor(S.numPeople);
-    const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
-    const pp = Math.round(basepp * mult / 1000) * 1000;
-    const total = pp * S.numPeople;
-    $('pp-val').textContent = S.numPeople;
-    $('pp-price').textContent = `$${pp.toLocaleString('es-CL')} por persona`;
+    const p = pricingFor(S.numAdults, S.numChildren);
+    $('pp-adults-val').textContent = S.numAdults;
+    $('pp-children-val').textContent = S.numChildren;
+    $('pp-price').textContent = `$${p.pp.toLocaleString('es-CL')} por persona`;
+    $('pp-total').textContent = p.childDiscount > 0
+      ? `Total: $${p.sub.toLocaleString('es-CL')} (incluye −$${p.childDiscount.toLocaleString('es-CL')} por niños)`
+      : `Total: $${p.sub.toLocaleString('es-CL')}`;
+    $('pp-adults-minus').disabled = S.numAdults <= 1;
+    $('pp-adults-plus').disabled = (S.numAdults + S.numChildren) >= 7;
+    $('pp-children-minus').disabled = S.numChildren <= 0 || (S.numAdults === 1 && S.numChildren === 1);
+    $('pp-children-plus').disabled = (S.numAdults + S.numChildren) >= 7;
   }
   mc.innerHTML = `
   ${stepsHtml('personas')}
   <div class="card">
     <div class="card-title">${t('peopleTitle')}</div>
-    <p style="color:var(--muted);margin-bottom:1rem">Min 2 · Max 7 ${t('personsLabel')} · Niños menores de 6 años no pagan</p>
-    <div class="counter">
-      <button class="counter-btn" onclick="changePeople(-1)">−</button>
-      <div class="counter-val" id="pp-val">${S.numPeople}</div>
-      <button class="counter-btn" onclick="changePeople(1)">+</button>
+    <p style="color:var(--muted);margin-bottom:1rem">Mínimo 1 adulto · Total 2-7 personas · Niños de 0 a 12 años: $${CHILD_DISCOUNT_PER_CHILD.toLocaleString('es-CL')} de descuento c/u</p>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem">
+      <span style="font-weight:600">Adultos</span>
+      <div class="counter">
+        <button class="counter-btn" id="pp-adults-minus" onclick="changeAdults(-1)">−</button>
+        <div class="counter-val" id="pp-adults-val">${S.numAdults}</div>
+        <button class="counter-btn" id="pp-adults-plus" onclick="changeAdults(1)">+</button>
+      </div>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <span style="font-weight:600">Niños (0-12 años)</span>
+      <div class="counter">
+        <button class="counter-btn" id="pp-children-minus" onclick="changeChildren(-1)">−</button>
+        <div class="counter-val" id="pp-children-val">${S.numChildren}</div>
+        <button class="counter-btn" id="pp-children-plus" onclick="changeChildren(1)">+</button>
+      </div>
+    </div>
+
     <div class="price-tag">
       <div class="price-big" id="pp-price"></div>
+      <div id="pp-total" style="font-size:.85rem;color:var(--muted);margin-top:.3rem"></div>
     </div>
   </div>
   <button class="btn" onclick="goExtras()">${t('nextExtras')}</button>
@@ -3024,8 +3059,14 @@ function renderPeopleSelect(){
   update();
 }
 
-function changePeople(d){
-  S.numPeople = Math.max(2,Math.min(7,S.numPeople+d));
+function changeAdults(d){
+  S.numAdults = Math.max(1, Math.min(7 - S.numChildren, S.numAdults + d));
+  S.numPeople = S.numAdults + S.numChildren;
+  renderPeopleSelect();
+}
+function changeChildren(d){
+  S.numChildren = Math.max(0, Math.min(7 - S.numAdults, S.numChildren + d));
+  S.numPeople = S.numAdults + S.numChildren;
   renderPeopleSelect();
 }
 
@@ -3065,11 +3106,7 @@ function renderExtras(){
   }).join('');
   const flexCls = S.hasFlex ? 'selected' : '';
   // Calculate actual flex price to display (same formula as renderForm)
-  const _basepp = basePriceFor(S.numPeople);
-  const _mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
-  const _pp = Math.round(_basepp * _mult / 1000) * 1000;
-  const _sub = _pp * S.numPeople;
-  const flexPrice = Math.round(_sub * 0.1);
+  const flexPrice = Math.round(pricingFor(S.numAdults, S.numChildren).sub * 0.1);
   mc.innerHTML = `
   ${stepsHtml('personas')}
   <div class="card">
@@ -3180,10 +3217,10 @@ function _composeBirthday(){
 
 function renderForm(){
   window._lastSummaryFn = renderForm;   // so applyCoupon can re-render
-  const basepp = basePriceFor(S.numPeople);
-  const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
-  const pp = Math.round(basepp * mult / 1000) * 1000;
-  const sub = pp * S.numPeople;
+  const _pr = pricingFor(S.numAdults, S.numChildren);
+  const pp = _pr.pp;
+  const sub = _pr.sub;
+  const childDiscount = _pr.childDiscount;
   let extTotal = 0;
   const extRows = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>{
     const qty = S.extras[e.id];
@@ -3331,8 +3368,9 @@ function renderForm(){
 
   const hbDetailInner = `
     <div class="summary-row"><span>${t('labelDate')}</span><span>${dy}/${mo}/${yr} ${S.selectedTime}</span></div>
-    <div class="summary-row"><span>${t('labelPeople')}</span><span>${S.numPeople}</span></div>
-    <div class="summary-row"><span>${t('labelBase')}</span><span>$${sub.toLocaleString('es-CL')}</span></div>
+    <div class="summary-row"><span>${t('labelPeople')}</span><span>${S.numAdults} adulto${S.numAdults!==1?'s':''}${S.numChildren>0?` + ${S.numChildren} niño${S.numChildren!==1?'s':''}`:''}</span></div>
+    <div class="summary-row"><span>${t('labelBase')}</span><span>$${_pr.subBefore.toLocaleString('es-CL')}</span></div>
+    ${childDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>👶 Descuento niños (${S.numChildren})</span><span>− $${childDiscount.toLocaleString('es-CL')}</span></div>` : ''}
     ${extRows}
     ${flex ? `<div class="summary-row"><span>${t('labelFlex')}</span><span>$${flex.toLocaleString('es-CL')}</span></div>` : ''}
     ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón <strong>${S.couponCode}</strong></span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>` : ''}
@@ -3412,8 +3450,7 @@ async function applyCoupon(){
   S.couponCode = ''; S.couponDiscount = 0; S.couponExtra = ''; S.couponPercent = 0;
   if(btn){ btn.disabled=true; btn.textContent='...'; }
 
-  const pp = basePriceFor(S.numPeople);
-  const sub = pp * S.numPeople;   // base boat price only — coupon applies to this
+  const sub = pricingFor(S.numAdults, S.numChildren).sub;   // ya neto del descuento de niños — coupon applies to this
   const flex = S.hasFlex ? Math.round(sub*0.1) : 0;
   // Discount base: only the boat reservation (sub), NOT extras
   const discountBase = sub;
@@ -3480,10 +3517,7 @@ async function submitBooking(){
     return;
   }
   _isSubmittingBooking = true;
-  const basepp = basePriceFor(S.numPeople);
-  const mult = (S.dpEnabled && S.dpMultiplier) ? S.dpMultiplier : 1.0;
-  const pp = Math.round(basepp * mult / 1000) * 1000;
-  const sub = pp * S.numPeople;
+  const sub = pricingFor(S.numAdults, S.numChildren).sub;
   const extrasArr = EXTRAS_CATALOG.filter(e=>(S.extras[e.id]||0)>0).map(e=>({
     name:e.name, price:e.price, quantity:S.extras[e.id],
     ...(S.extraVariants[e.id] ? {variant_label:S.extraVariants[e.id].label, variant_product_id:S.extraVariants[e.id].product_id} : {}),
@@ -3509,6 +3543,8 @@ async function submitBooking(){
       booking_date: S.selectedDate,
       booking_time: S.selectedTime,
       num_people: S.numPeople,
+      num_adultos: S.numAdults,
+      num_ninos: S.numChildren,
       extras: extrasArr,
       has_flex: S.hasFlex,
       coupon_code: S.couponCode || null,
@@ -3878,7 +3914,9 @@ async function init(){
     const _preDate = _queryParam(['date','fecha']);
     const _preTime = _queryParam(['time','hora']);
     const _prePeople = parseInt(_queryParam(['people','personas'],2), 10);
-    if(_prePeople>=2 && _prePeople<=7) S.numPeople = _prePeople;
+    // Links generados antes de la separación adultos/niños solo mandan un
+    // número total — se interpreta como "todos adultos, 0 niños".
+    if(_prePeople>=2 && _prePeople<=7){ S.numAdults = _prePeople; S.numChildren = 0; S.numPeople = _prePeople; }
     if(_preDate && S.availability[_preDate] && S.availability[_preDate].length > 0){
       selectDate(_preDate);
       if(_preTime && S.availability[_preDate].includes(_preTime)){
