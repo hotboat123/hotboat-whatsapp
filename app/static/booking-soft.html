@@ -3859,10 +3859,18 @@ async function checkReturnFromPayment(){
 }
 
 async function init(){
+  renderLangSwitcher();
+  // Kicked off in parallel with checkReturnFromPayment() below (which does
+  // its own fetch+render for the thank-you/failure page) instead of only
+  // running in the "normal" branch — S.menuSettings/EXTRAS_CATALOG/etc used
+  // to keep their all-true/empty defaults on the payment-return pages, so
+  // "Volver al inicio" from there showed every menu button (packs, arma
+  // pack...) regardless of what's actually toggled off in admin.
+  const _dynLoad = Promise.all([loadPricesAndAvail(), loadDynamicContent()]);
+
   if(!(await checkReturnFromPayment())){
-    renderLangSwitcher();
     mc.innerHTML = `<div class="card" style="text-align:center"><p>${t('loading')}</p></div>`;
-    await Promise.all([loadPricesAndAvail(), loadDynamicContent()]);
+    await _dynLoad;
 
     // Auto-select date+time from URL params (e.g. links sent by WhatsApp bot,
     // or the abandoned-cart follow-up email, which additionally passes
@@ -3901,7 +3909,13 @@ async function init(){
     } else {
       renderMenu();
     }
+  } else {
+    // Thank-you/failure page already rendered — just make sure dynamic
+    // content is loaded before the user can click through to the menu.
+    await _dynLoad;
+  }
 
+  {
     // Track page exit via sendBeacon (survives page unload)
     window.addEventListener('visibilitychange', ()=>{
       if(document.visibilityState==='hidden'){
