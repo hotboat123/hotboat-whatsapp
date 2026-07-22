@@ -3797,13 +3797,39 @@ async function init(){
     mc.innerHTML = `<div class="card" style="text-align:center"><p>${t('loading')}</p></div>`;
     await Promise.all([loadPricesAndAvail(), loadDynamicContent()]);
 
-    // Auto-select date+time from URL params (e.g. links sent by WhatsApp bot)
+    // Auto-select date+time from URL params (e.g. links sent by WhatsApp bot,
+    // or the abandoned-cart follow-up email, which additionally passes
+    // people/extras/flex so the customer only has to review and pay).
     const _preDate = _queryParam(['date','fecha']);
     const _preTime = _queryParam(['time','hora']);
+    const _prePeople = parseInt(_queryParam(['people','personas'],2), 10);
+    if(_prePeople>=2 && _prePeople<=7) S.numPeople = _prePeople;
     if(_preDate && S.availability[_preDate] && S.availability[_preDate].length > 0){
       selectDate(_preDate);
       if(_preTime && S.availability[_preDate].includes(_preTime)){
-        selectTime(_preTime);
+        await selectTime(_preTime);
+        // Extras/flex can only come from a link we generated ourselves (the
+        // abandoned-cart email). Matched by NAME, not id — the booking API
+        // never stores a catalog id for a chosen extra (see ExtraItem in
+        // hotboat-whatsapp/app/booking/models.py), only name/price/quantity.
+        // has_variants extras (e.g. tabla de picoteo) are skipped since their
+        // product_id can't be reconstructed from just a name.
+        const _preExtras = _queryParam(['extras'],800);
+        if(_preExtras){
+          _preExtras.split(',').forEach(pair=>{
+            const [encName, qtyStr] = pair.split(':');
+            const name = decodeURIComponent(encName||'');
+            const cat = EXTRAS_CATALOG.find(x=>x.name===name);
+            if(cat && !cat.has_variants){
+              S.extras[cat.id] = Math.max(1, parseInt(qtyStr,10) || 1);
+            }
+          });
+        }
+        const _preFlex = _queryParam(['flex'],5) === '1';
+        if(_preFlex) S.hasFlex = true;
+        if(_preExtras || _preFlex || _prePeople>=2){
+          goDatos();
+        }
       }
     } else {
       renderMenu();

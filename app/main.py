@@ -344,20 +344,6 @@ async def _run_auto_sync():
         await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
 
 
-async def _run_pending_payment_email_scheduler():
-    """Every 3 minutes: send booking_created email to bookings still pending after 5 min."""
-    await asyncio.sleep(60)  # short delay after startup
-    while True:
-        try:
-            from app.booking.booking_email import run_pending_payment_email_sweep
-            result = await asyncio.to_thread(run_pending_payment_email_sweep, 5)
-            if result.get("sent", 0) or result.get("errors"):
-                logger.info("📧 pending-payment sweep: %s", result)
-        except Exception as _pe:
-            logger.error("Pending-payment sweep error: %s", _pe)
-        await asyncio.sleep(180)  # every 3 minutes
-
-
 async def _run_email_sweeps_scheduler():
     """Run followup + birthday email sweeps every 30 min (DB flags ensure idempotency)."""
     await asyncio.sleep(120)  # brief delay after startup
@@ -911,7 +897,6 @@ async def lifespan(app: FastAPI):
         scheduler_tasks = [
             asyncio.create_task(_run_auto_sync()),
             asyncio.create_task(_run_email_sweeps_scheduler()),
-            asyncio.create_task(_run_pending_payment_email_scheduler()),
             asyncio.create_task(_run_daily_summary_scheduler()),
             asyncio.create_task(_run_signature_summary_scheduler()),
             asyncio.create_task(_run_pre_booking_notif_scheduler()),

@@ -9,8 +9,6 @@ from app.booking.db import (
     get_bookings_for_followup, mark_followup_email_sent,
     mark_followup_sent_after_manual_send,
     get_customers_for_birthday_email, mark_birthday_email_sent,
-    get_bookings_pending_payment_email, mark_pending_email_sent,
-    mark_admin_pending_email_sent,
 )
 from app.booking.operator_settings import get_email_workflow, TRIGGER_META
 from app.email.resend_booking import send_booking_html
@@ -1415,56 +1413,6 @@ def run_birthday_email_sweep() -> dict:
             out["errors"].append({"email": to_addr, "reason": result.get("reason")})
 
     logger.info("Birthday sweep: checked=%s sent=%s", out["checked"], out["sent"])
-    return out
-
-
-# ── Pending-payment reminder sweep ───────────────────────────────────────────
-
-def run_pending_payment_email_sweep(delay_minutes: int = 5) -> dict:
-    """
-    Runs every few minutes: find bookings still in 'pending_payment' status
-    that were created >{delay_minutes} minutes ago and haven't received the
-    booking_created reminder email yet. Sends once, marks sent.
-    """
-    out: Dict[str, Any] = {"checked": 0, "sent": 0, "errors": []}
-    settings = get_settings()
-    if not (getattr(settings, "resend_api_key", "") or "").strip():
-        out["reason"] = "no_resend_key"
-        return out
-
-    bookings = get_bookings_pending_payment_email(delay_minutes)
-    out["checked"] = len(bookings)
-    for b in bookings:
-        to_addr = (b.get("customer_email") or "").strip()
-        if not to_addr:
-            continue
-        ctx = _booking_ctx(b)
-
-        # Notify customer with booking reminder
-        result = _render_and_send("booking_created", to_addr, ctx)
-        if result.get("sent"):
-            mark_pending_email_sent(b["booking_ref"])
-            out["sent"] += 1
-        else:
-            out["errors"].append({"ref": b["booking_ref"], "reason": result.get("reason")})
-
-        # Notify admin with WhatsApp contact button (fire-and-forget, don't block on failure).
-        # Gated on its own admin_pending_email_sent_at flag — independent of
-        # whether the customer reminder above succeeded — so a booking that
-        # keeps reappearing in this query (customer send failing) doesn't
-        # keep re-sending this alert every 3-minute sweep too.
-        if not b.get("admin_pending_email_sent_at") and _can_send("admin_pending_payment"):
-            admin_email = _get_admin_email(settings)
-            if admin_email:
-                try:
-                    admin_result = _render_and_send("admin_pending_payment", admin_email, ctx)
-                    if admin_result.get("sent"):
-                        mark_admin_pending_email_sent(b["booking_ref"])
-                except Exception as _e:
-                    logger.warning("admin_pending_payment email failed ref=%s: %s", b["booking_ref"], _e)
-
-    if out["checked"]:
-        logger.info("Pending-payment email sweep: checked=%s sent=%s", out["checked"], out["sent"])
     return out
 
 
