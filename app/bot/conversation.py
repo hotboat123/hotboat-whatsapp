@@ -537,12 +537,17 @@ class ConversationManager:
                 language = metadata.get("language", "es")
                 response = get_text("thanks_response", language)
             # PRIORITY 0.65: Kids / niños question — always answer regardless of active
-            # flow, EXCEPT when we're awaiting a party-size reply and the message
-            # actually parses as adults+children (e.g. "2 adultos, 3 niños") — that
-            # needs to reach _handle_party_size_response for a real price quote,
-            # not this canned info reply.
+            # flow, EXCEPT when the message itself parses as an adults+children party
+            # size (e.g. "2 adultos, 3 niños", or "Quiero reservar para 2 adultos y 3
+            # niños") — that's the customer specifying their party, not asking a
+            # policy question, so it needs to reach _handle_party_size_response /
+            # _is_reservation_intent / _try_parse_reservation_from_message for a real
+            # quote instead of this canned info reply. Not scoped to
+            # awaiting_party_size: a fresh unprompted reservation message mentioning
+            # "niños" was previously getting swallowed here before it ever reached the
+            # reservation-intent check further down the chain.
             elif (
-                not (metadata.get("awaiting_party_size") and self._parse_party_size(message_text) is not None)
+                self._parse_party_size(message_text) is None
                 and (
                     "niño" in message_text.lower() or "niña" in message_text.lower()
                     or "nino" in message_text.lower() or "nina" in message_text.lower()
