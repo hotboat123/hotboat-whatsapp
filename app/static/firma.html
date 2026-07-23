@@ -185,12 +185,13 @@ input.fi::placeholder{color:#adb5bd}
       </div>
 
       <div class="form-group">
-        <label class="fl" for="f-phone">Teléfono</label>
+        <label class="fl" for="f-phone">Teléfono *</label>
         <input class="fi" type="tel" id="f-phone" placeholder="+56 9 1234 5678" autocomplete="tel">
+        <div class="error-msg" id="err-phone">Ingresa tu teléfono</div>
       </div>
 
       <div class="form-group">
-        <label class="fl">Fecha de nacimiento</label>
+        <label class="fl">Fecha de nacimiento *</label>
         <div class="bday-row">
           <select class="fi" id="f-bday-d" aria-label="Día">
             <option value="">Día</option>
@@ -208,6 +209,7 @@ input.fi::placeholder{color:#adb5bd}
             <option value="">Año</option>
           </select>
         </div>
+        <div class="error-msg" id="err-bday">Selecciona tu fecha de nacimiento completa</div>
       </div>
     </div>
 
@@ -376,6 +378,16 @@ function validate(){
   if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ show('err-email'); fi('f-email',true); ok=false; }
   else{ hide('err-email'); fi('f-email',false); }
 
+  const phone=(document.getElementById('f-phone').value||'').trim();
+  if(!phone){ show('err-phone'); fi('f-phone',true); ok=false; }
+  else{ hide('err-phone'); fi('f-phone',false); }
+
+  const bd=document.getElementById('f-bday-d').value;
+  const bm=document.getElementById('f-bday-m').value;
+  const by=document.getElementById('f-bday-y').value;
+  if(!bd || !bm || !by){ show('err-bday'); ok=false; }
+  else{ hide('err-bday'); }
+
   if(!document.getElementById('f-accept').checked){ show('err-accept'); ok=false; }
   else{ hide('err-accept'); }
   return ok;
@@ -435,7 +447,7 @@ function resetForm(){
   const cb=document.getElementById('f-accept');
   cb.checked=false;
   document.getElementById('accept-row').classList.remove('checked');
-  ['err-name','err-email','err-accept'].forEach(hide);
+  ['err-name','err-email','err-phone','err-bday','err-accept'].forEach(hide);
   document.getElementById('success').style.display='none';
 
   if(isGeneric){
