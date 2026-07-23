@@ -410,7 +410,12 @@ async function submitForm(){
       const err=await r.json().catch(()=>({detail:'Error al guardar'}));
       throw new Error(err.detail||'Error al guardar');
     }
-    document.getElementById('step-form').style.display='none';
+    // Hide via the same .step/.active mechanism showStep() uses (and clear
+    // any leftover inline style) — setting style.display='none' directly
+    // here left a stale inline override that permanently hid step-form even
+    // after resetForm() -> showStep('step-form') re-added the 'active' class,
+    // so "Agregar otro pasajero" showed a blank screen on the 2nd+ signature.
+    document.querySelectorAll('.step').forEach(s=>{ s.classList.remove('active'); s.style.display=''; });
     document.getElementById('success').style.display='block';
     window.scrollTo({top:0,behavior:'smooth'});
   }catch(e){
