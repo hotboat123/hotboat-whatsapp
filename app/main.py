@@ -345,18 +345,17 @@ async def _run_auto_sync():
 
 
 async def _run_email_sweeps_scheduler():
-    """Run followup + birthday email sweeps every 30 min (DB flags ensure idempotency)."""
+    """Run the follow-up email sweep every 30 min (DB flags ensure idempotency)."""
     await asyncio.sleep(120)  # brief delay after startup
     while True:
         try:
-            from app.booking.booking_email import run_followup_email_sweep, run_birthday_email_sweep
-            for fn, name in ((run_followup_email_sweep, "followup"), (run_birthday_email_sweep, "birthday")):
-                try:
-                    result = await asyncio.to_thread(fn)
-                    if result.get("sent", 0) or result.get("errors"):
-                        logger.info("📧 %s email sweep: %s", name, result)
-                except Exception as _se:
-                    logger.error("Email sweep %s error: %s", name, _se)
+            from app.booking.booking_email import run_followup_email_sweep
+            try:
+                result = await asyncio.to_thread(run_followup_email_sweep)
+                if result.get("sent", 0) or result.get("errors"):
+                    logger.info("📧 followup email sweep: %s", result)
+            except Exception as _se:
+                logger.error("Email sweep followup error: %s", _se)
         except Exception as _fe:
             logger.error("Email sweeps scheduler error: %s", _fe)
         await asyncio.sleep(1800)  # re-check every 30 minutes
@@ -906,7 +905,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(run_followup_nudge_scheduler()),
         ]
         logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
-        logger.info("📧 Email sweeps scheduler iniciado (followup + birthday, cada 30 min)")
+        logger.info("📧 Email sweeps scheduler iniciado (followup, cada 30 min)")
         logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
         logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
         logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")

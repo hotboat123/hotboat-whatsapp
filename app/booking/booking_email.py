@@ -8,7 +8,6 @@ from app.booking.db import (
     get_booking_by_ref, mark_confirmation_email_sent,
     get_bookings_for_followup, mark_followup_email_sent,
     mark_followup_sent_after_manual_send,
-    get_customers_for_birthday_email, mark_birthday_email_sent,
 )
 from app.booking.operator_settings import get_email_workflow, TRIGGER_META
 from app.email.resend_booking import send_booking_html
@@ -979,26 +978,6 @@ def _default_html_admin_booking_confirmed(ctx: Dict[str, str]) -> str:
     )
 
 
-def _default_html_customer_birthday(ctx: Dict[str, str]) -> str:
-    lang  = ctx.get("customer_language", "es")
-    name  = ctx.get("customer_name", "")
-    biz   = ctx.get("business_name", "Hot Boat")
-    phone = ctx.get("business_phone", "")
-    return (
-        _header(ctx, _t(lang, "birthday_title"), "linear-gradient(135deg,#7c3aed,#db2777)")
-        + f"""<tr><td style="padding:26px 26px 8px;color:#0f172a;font-size:15px;line-height:1.65;">
-  <p style="margin:0 0 14px;">{_t(lang,"birthday_hello",name=name)}</p>
-  <p style="margin:0 0 14px;">{_t(lang,"birthday_body1",biz=biz)}</p>
-  <p style="margin:0 0 14px;">{_t(lang,"birthday_body2")}</p>
-</td></tr>
-<tr><td style="padding:0 26px 26px;font-size:13px;color:#64748b;line-height:1.6;">
-  <p style="margin:0;">{_t(lang,"birthday_cta",phone=phone)}</p>
-  <p style="margin:10px 0 0;"><a href="{ctx.get('business_website','#')}"
-     style="color:#7c3aed;">{ctx.get('business_website','')}</a></p>
-</td></tr></table></td></tr></table></body></html>"""
-    )
-
-
 _DEFAULT_TEMPLATES = {
     "booking_created":           _default_html_booking_created,
     "booking_confirmed":         _default_html_booking_confirmed,
@@ -1008,7 +987,6 @@ _DEFAULT_TEMPLATES = {
     "admin_new_lead":            _default_html_admin_new_lead,
     "admin_pending_payment":     _default_html_admin_pending_payment,
     "admin_booking_confirmed":   _default_html_admin_booking_confirmed,
-    "customer_birthday":         _default_html_customer_birthday,
 }
 
 
@@ -1364,55 +1342,6 @@ def run_followup_email_sweep() -> dict:
             out["errors"].append({"ref": b["booking_ref"], "reason": result.get("reason")})
 
     logger.info("Followup sweep: hours_after=%s checked=%s sent=%s", hours_after, out["checked"], out["sent"])
-    return out
-
-
-# ── Birthday sweep ───────────────────────────────────────────────────────────
-
-def run_birthday_email_sweep() -> dict:
-    """Run once per day: find customers whose birthday is today and send them the email."""
-    out = {"checked": 0, "sent": 0, "errors": []}
-    cfg = get_email_workflow("customer_birthday")
-    if not cfg.get("enabled"):
-        out["reason"] = "disabled"
-        return out
-
-    settings = get_settings()
-    if not (getattr(settings, "resend_api_key", "") or "").strip():
-        out["reason"] = "no_resend_key"
-        return out
-
-    customers = get_customers_for_birthday_email()
-    out["checked"] = len(customers)
-
-    for c in customers:
-        to_addr = (c.get("customer_email") or "").strip()
-        if not to_addr:
-            continue
-        ctx = {
-            "booking_ref":      str(c.get("booking_ref") or ""),
-            "customer_name":    str(c.get("customer_name") or "Cliente"),
-            "customer_email":   to_addr,
-            "customer_phone":   str(c.get("customer_phone") or ""),
-            "booking_date":     str(c.get("booking_date") or ""),
-            "booking_time":     str(c.get("booking_time") or "")[:5],
-            "num_people":       str(c.get("num_people") or ""),
-            "total_price":      str(c.get("total_price") or ""),
-            "total_price_fmt":  _fmt_clp(c.get("total_price")),
-            "subtotal_fmt":     _fmt_clp(c.get("subtotal")),
-            "extras_total_fmt": _fmt_clp(c.get("extras_total")),
-            "status":           "confirmed",
-            **{k: getattr(get_settings(), k, "") for k in
-               ("business_name", "business_phone", "business_email", "business_website")},
-        }
-        result = _render_and_send("customer_birthday", to_addr, ctx)
-        if result.get("sent"):
-            mark_birthday_email_sent(to_addr)
-            out["sent"] += 1
-        else:
-            out["errors"].append({"email": to_addr, "reason": result.get("reason")})
-
-    logger.info("Birthday sweep: checked=%s sent=%s", out["checked"], out["sent"])
     return out
 
 

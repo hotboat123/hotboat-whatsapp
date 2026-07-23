@@ -972,15 +972,6 @@ TRIGGER_META: dict = {
         "icon": "⚠️",
         "recipient": "admin",
     },
-    "customer_birthday": {
-        "label": "Cumpleaños del cliente",
-        "description": (
-            "El servidor revisa cada día si algún cliente cumple años hoy. "
-            "Requiere que el cliente ingrese su fecha de nacimiento al reservar."
-        ),
-        "default_subject": "¡Feliz cumpleaños de parte de HotBoat! 🎂",
-        "icon": "🎂",
-    },
 }
 
 # Triggers activos por defecto
