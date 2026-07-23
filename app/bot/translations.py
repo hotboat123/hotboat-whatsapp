@@ -325,7 +325,7 @@ Digite o idioma que deseja usar:
 - 5 personas: $42,990 por persona (Total: $214,950)
 - 6 personas: $36,990 por persona (Total: $221,940)
 - 7 personas: $33,990 por persona (Total: $237,930)
-*Niños pagan desde los 6 años""",
+👶 Niños de 0 a 12 años: $10.000 de descuento por cada niño sobre el total""",
 
         "en": """PRICES PER PERSON:
 - 2 people: $76,990 per person (Total: $153,980 CLP)
@@ -334,7 +334,7 @@ Digite o idioma que deseja usar:
 - 5 people: $42,990 per person (Total: $214,950 CLP)
 - 6 people: $36,990 per person (Total: $221,940 CLP)
 - 7 people: $33,990 per person (Total: $237,930 CLP)
-*Children pay from 6 years old""",
+👶 Children 0-12 years old: $10,000 CLP discount per child off the total""",
 
         "pt": """PREÇOS POR PESSOA:
 - 2 pessoas: $76.990 por pessoa (Total: $153.980 CLP)
@@ -343,7 +343,7 @@ Digite o idioma que deseja usar:
 - 5 pessoas: $42.990 por pessoa (Total: $214.950 CLP)
 - 6 pessoas: $36.990 por pessoa (Total: $221.940 CLP)
 - 7 pessoas: $33.990 por pessoa (Total: $237.930 CLP)
-*Crianças pagam a partir dos 6 anos"""
+👶 Crianças de 0 a 12 anos: $10.000 de desconto por criança sobre o total"""
     },
     
     # ===== FAQ RESPONSES =====
@@ -395,95 +395,59 @@ Gostaria de reservar sua experiência?"""
     
     # Pricing detailed
     "pricing": {
-        "es": """💰 *Precios HotBoat:*
+        "es": """💰 Precios HotBoat
 
-👥 *2 personas*
-• $76.990 x persona
-• Total: *$153.980*
+El valor depende únicamente de la cantidad de personas.
 
-👥 *3 personas*
-• $59.990 x persona
-• Total: *$179.970*
+2 personas: $153.980
+3 personas: $179.970
+4 personas: $195.960
+5 personas: $214.950
+6 personas: $221.940
+7 personas: $237.930
 
-👥 *4 personas*
-• $48.990 x persona
-• Total: *$195.960*
+👶 Niños de 0 a 12 años: $10.000 de descuento por cada niño sobre el valor total de la reserva.
 
-👥 *5 personas*
-• $42.990 x persona
-• Total: *$214.950*
-
-👥 *6 personas*
-• $36.990 x persona
-• Total: *$221.940*
-
-👥 *7 personas*
-• $33.990 x persona
-• Total: *$237.930*
-
-_*niños pagan desde los 6 años_
+Ejemplo:
+Una reserva para 2 adultos y 3 niños se cobra con la tarifa de 5 personas ($214.950) y luego se descuentan $30.000 por los tres niños, quedando en $184.950. Pagando $42.990 por adulto y $32.990 por niño.
 
 Aquí puedes reservar tu horario directo 👇
 https://whatsapp.hotboat.cl/booking""",
 
-        "en": """💰 *HotBoat Prices:*
+        "en": """💰 HotBoat Prices
 
-👥 *2 people*
-• $76,990 per person
-• Total: *$153,980 CLP*
+The price depends only on the number of people.
 
-👥 *3 people*
-• $59,990 per person
-• Total: *$179,970 CLP*
+2 people: $153,980 CLP
+3 people: $179,970 CLP
+4 people: $195,960 CLP
+5 people: $214,950 CLP
+6 people: $221,940 CLP
+7 people: $237,930 CLP
 
-👥 *4 people*
-• $48,990 per person
-• Total: *$195,960 CLP*
+👶 Children 0-12 years old: $10,000 CLP discount per child off the total price of the booking.
 
-👥 *5 people*
-• $42,990 per person
-• Total: *$214,950 CLP*
-
-👥 *6 people*
-• $36,990 per person
-• Total: *$221,940 CLP*
-
-👥 *7 people*
-• $33,990 per person
-• Total: *$237,930 CLP*
-
-_*children pay from 6 years old_
+Example:
+A booking for 2 adults and 3 children is charged at the 5-person rate ($214,950 CLP), then $30,000 CLP is discounted for the three children, leaving $184,950 CLP. That is $42,990 per adult and $32,990 per child.
 
 Book your time slot here 👇
 https://whatsapp.hotboat.cl/booking""",
 
-        "pt": """💰 *Preços HotBoat:*
+        "pt": """💰 Preços HotBoat
 
-👥 *2 pessoas*
-• $76.990 por pessoa
-• Total: *$153.980 CLP*
+O valor depende apenas da quantidade de pessoas.
 
-👥 *3 pessoas*
-• $59.990 por pessoa
-• Total: *$179.970 CLP*
+2 pessoas: $153.980 CLP
+3 pessoas: $179.970 CLP
+4 pessoas: $195.960 CLP
+5 pessoas: $214.950 CLP
+6 pessoas: $221.940 CLP
+7 pessoas: $237.930 CLP
 
-👥 *4 pessoas*
-• $48.990 por pessoa
-• Total: *$195.960 CLP*
+👶 Crianças de 0 a 12 anos: $10.000 CLP de desconto por criança sobre o valor total da reserva.
 
-👥 *5 pessoas*
-• $42.990 por pessoa
-• Total: *$214.950 CLP*
-
-👥 *6 pessoas*
-• $36.990 por pessoa
-• Total: *$221.940 CLP*
-
-👥 *7 pessoas*
-• $33.990 por pessoa
-• Total: *$237.930 CLP*
-
-_*crianças pagam a partir dos 6 anos_
+Exemplo:
+Uma reserva para 2 adultos e 3 crianças é cobrada na tarifa de 5 pessoas ($214.950 CLP), depois se desconta $30.000 CLP pelas três crianças, ficando em $184.950 CLP. Ou seja, $42.990 por adulto e $32.990 por criança.
 
 Reserve seu horário aqui 👇
 https://whatsapp.hotboat.cl/booking"""
@@ -1651,6 +1615,12 @@ Obrigado por escolher HotBoat! 🚤🌊"""
         "es": "Por favor indica el número de personas (entre 2 y 7) 🚤",
         "en": "Please indicate the number of people (between 2 and 7) 🚤",
         "pt": "Por favor, indique o número de pessoas (entre 2 e 7) 🚤"
+    },
+
+    "party_size_children_only": {
+        "es": "¿Y cuántos adultos van? Necesito la cantidad de adultos además de los niños 🚤",
+        "en": "And how many adults? I need the number of adults as well as the children 🚤",
+        "pt": "E quantos adultos vão? Preciso da quantidade de adultos além das crianças 🚤"
     },
 
     "reservation_pending_not_found": {

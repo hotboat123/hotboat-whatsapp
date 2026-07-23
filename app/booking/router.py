@@ -19,7 +19,7 @@ from app.config import get_settings
 from app.booking.db import (
     create_booking, update_booking_payment,
     get_booking_by_ref, get_all_bookings, PRICES,
-    generate_booking_ref,
+    generate_booking_ref, price_breakdown,
 )
 from app.bot.availability import AvailabilityChecker
 from app.availability.availability_config import AVAILABILITY_CONFIG
@@ -544,9 +544,18 @@ async def get_prices():
 @router.post("/api/booking/create")
 async def create_booking_endpoint(request: CreateBookingRequest):
     try:
-        n = request.num_people
+        # Adultos+niños deciden el tramo de precio (nunca se confía en el num_people
+        # que mande el cliente — se recalcula desde los dos campos separados, mismo
+        # criterio de "siempre recalculado en el servidor" que ya usa el precio).
+        adults = request.num_adultos
+        children = request.num_ninos
+        n = adults + children
+        if adults < 1:
+            raise HTTPException(status_code=400, detail="Se requiere al menos 1 adulto")
+        if children < 0:
+            raise HTTPException(status_code=400, detail="Cantidad de niños inválida")
         if not (2 <= n <= 7):
-            raise HTTPException(status_code=400, detail="Capacidad: 2-7 personas")
+            raise HTTPException(status_code=400, detail="Capacidad: 2-7 personas (adultos + niños)")
 
         # Precio dinámico: SIEMPRE recalculado en el servidor (nunca se confía en lo
         # que haya mostrado el frontend) — mismo cálculo que /api/booking/dynamic-price,
@@ -563,10 +572,14 @@ async def create_booking_endpoint(request: CreateBookingRequest):
         except Exception as _dpe:
             logger.warning(f"dynamic pricing at create-booking failed, using base price: {_dpe}")
             _dp_mult = 1.0
-        # Redondeo al millar más cercano — misma fórmula que ya usa el frontend
-        # (Math.round(basepp*mult/1000)*1000) para que lo cobrado sea EXACTO a lo mostrado.
-        price_pp = round(base_pp * _dp_mult / 1000) * 1000
-        subtotal = price_pp * n
+        # Sin precio dinámico activo (mult=1) se cobra el valor exacto de la tabla
+        # (ej. $76.990, no $77.000) — el redondeo al millar solo aplica cuando el
+        # multiplicador realmente escala el precio, mismo criterio que el frontend.
+        price_pp = base_pp if _dp_mult == 1.0 else round(base_pp * _dp_mult / 1000) * 1000
+        # Tarifa por el tramo de personas (adultos+niños), menos el descuento fijo
+        # por niño — FLEX y el tope de cupón, más abajo, se calculan sobre este
+        # subtotal ya descontado (no sobre la tarifa llena).
+        subtotal = price_breakdown(adults, children, price_pp)["subtotal"]
         extras_list = [e.dict() for e in request.extras]
         extras_total = sum(e["price"] * e["quantity"] for e in extras_list)
         flex_amount = int(subtotal * 0.1) if request.has_flex else 0
@@ -590,6 +603,8 @@ async def create_booking_endpoint(request: CreateBookingRequest):
             "booking_date": request.booking_date,
             "booking_time": request.booking_time,
             "num_people": n,
+            "num_adultos": adults,
+            "num_ninos": children,
             "price_per_person": price_pp,
             "dp_multiplier": _dp_mult,
             "dp_factors": _dp_factors,

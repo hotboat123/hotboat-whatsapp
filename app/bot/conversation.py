@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import unicodedata
-from typing import Dict, Optional, Union, List
+from typing import Dict, Optional, Union, List, Tuple
 from datetime import datetime, timedelta
 
 from app.bot.availability import AvailabilityChecker, SPANISH_MONTHS, CHILE_TZ
@@ -536,14 +536,26 @@ class ConversationManager:
                 logger.info("Gratitude detected - sending friendly reply")
                 language = metadata.get("language", "es")
                 response = get_text("thanks_response", language)
-            # PRIORITY 0.65: Kids / niños question — always answer regardless of active flow
-            elif "niño" in message_text.lower() or "niña" in message_text.lower() or "nino" in message_text.lower() or "nina" in message_text.lower() or "menor" in message_text.lower() or "menores" in message_text.lower() or "niños" in message_text.lower() or "niñas" in message_text.lower():
+            # PRIORITY 0.65: Kids / niños question — always answer regardless of active
+            # flow, EXCEPT when we're awaiting a party-size reply and the message
+            # actually parses as adults+children (e.g. "2 adultos, 3 niños") — that
+            # needs to reach _handle_party_size_response for a real price quote,
+            # not this canned info reply.
+            elif (
+                not (metadata.get("awaiting_party_size") and self._parse_party_size(message_text) is not None)
+                and (
+                    "niño" in message_text.lower() or "niña" in message_text.lower()
+                    or "nino" in message_text.lower() or "nina" in message_text.lower()
+                    or "menor" in message_text.lower() or "menores" in message_text.lower()
+                    or "niños" in message_text.lower() or "niñas" in message_text.lower()
+                )
+            ):
                 logger.info("Kids question detected - sending children info sequence")
                 response = {
                     "type": "sequence",
                     "messages": [
                         "Sí!, los niños lo pasan increíble 🎉",
-                        "Pagan desde los 6 años, a los menores no los consideres en el número de personas de la reserva 👍",
+                        "Cuentan en el número de personas de la reserva, y tienen $10.000 de descuento cada uno sobre el total 👍",
                     ],
                     "delay": 1.5
                 }
@@ -2073,21 +2085,30 @@ Escribe el número que prefieras 🚤"""
             date = None
             time = None
             party_size = None
-            
-            import re
-            
+            children_count = 0
+
+            # Look for "martes a las 16 para 3 personas" pattern, or the newer
+            # "para 2 adultos, 3 niños" phrasing, in user messages
             for msg in reversed(recent_messages):
                 content = msg.get("content", "")
-                
+
                 # Look for "martes a las 16 para 3 personas" pattern in user messages
                 if msg.get("role") == "user":
                     # Try to extract date/time/party size
-                    match = re.search(r'(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\s+a\s+las\s+(\d{1,2})\s+para\s+(\d+)\s+personas?', content.lower())
+                    match = re.search(
+                        r'(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\s+a\s+las\s+(\d{1,2})\s+para\s+'
+                        r'((?:\d+\s*adult[oa]?s?(?:\s*(?:y|,)\s*\d+\s*ni[ñn][oa]s?)?)|(?:\d+\s*personas?))',
+                        content.lower(),
+                    )
                     if match:
                         day_name = match.group(1)
                         hour = int(match.group(2))
-                        party_size = int(match.group(3))
-                        
+                        parsed = self._parse_party_size(match.group(3))
+                        if not parsed:
+                            continue
+                        adults, children_count = parsed
+                        party_size = adults + children_count
+
                         # Calculate date from day name
                         from datetime import datetime, timedelta
                         import pytz
@@ -2156,9 +2177,10 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
             reservation_item = self.cart_manager.create_reservation_item(
                 date=date,
                 time=time,
-                capacity=party_size
+                capacity=party_size,
+                children=children_count
             )
-            
+
             # Add to cart with Reserva FLEX
             await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
             cart = await self.cart_manager.get_cart(phone_number)
@@ -3070,18 +3092,19 @@ Cliente: {customer_name} ({customer_phone})"""
             return False
     
     async def _handle_party_size_response(self, message: str, phone_number: str, contact_name: str, conversation: dict) -> str:
-        """Handle user's response with party size after selecting date/time"""
+        """Handle user's response with party size (adults + optional children) after selecting date/time"""
         language = conversation.get("metadata", {}).get("language", "es")
         try:
-            import re
-            numbers = re.findall(r'\d+', message)
-
-            if not numbers:
+            parsed = self._parse_party_size(message)
+            if parsed is None:
+                if re.search(r'ni[ñn][oa]', message.lower()):
+                    return get_text("party_size_children_only", language)
                 return get_text("party_size_no_number", language)
 
-            party_size = int(numbers[0])
+            adults, children = parsed
+            party_size = adults + children
 
-            if party_size < 2 or party_size > 7:
+            if adults < 1 or party_size < 2 or party_size > 7:
                 return get_text("invalid_party_size", language)
 
             pending = conversation.get("metadata", {}).get("pending_reservation")
@@ -3092,7 +3115,8 @@ Cliente: {customer_name} ({customer_phone})"""
             reservation_item = self.cart_manager.create_reservation_item(
                 date=pending['date'],
                 time=pending['time'],
-                capacity=party_size
+                capacity=party_size,
+                children=children,
             )
 
             await self._add_reservation_with_flex(phone_number, contact_name, reservation_item)
@@ -4266,7 +4290,30 @@ Precio: $3,500 c/u
             result = re.sub(pattern, digit, result, flags=re.IGNORECASE)
         
         return result
-    
+
+    def _parse_party_size(self, message: str) -> Optional[Tuple[int, int]]:
+        """
+        Parse adults/children counts from a free-text reply.
+          "2 adultos, 3 niños" / "2 adultos y 3 niños" -> (2, 3)
+          "4 adultos" (sin niños mencionados)          -> (4, 0)
+          "4" (número suelto, compatibilidad)          -> (4, 0) — se asume todo adultos
+          "3 niños" (niños sin adultos, ambiguo)       -> None — hay que pedir aclaración, no adivinar
+          nada parseable                               -> None
+        """
+        text = self._convert_written_numbers_to_digits(message).lower()
+        adults_match = re.search(r'(\d+)\s*adult', text)
+        children_match = re.search(r'(\d+)\s*ni[ñn][oa]', text)
+        if adults_match:
+            adults = int(adults_match.group(1))
+            children = int(children_match.group(1)) if children_match else 0
+            return (adults, children)
+        if children_match:
+            return None
+        numbers = re.findall(r'\d+', text)
+        if numbers:
+            return (int(numbers[0]), 0)
+        return None
+
     async def _try_parse_reservation_from_message(self, message: str, phone_number: str, conversation: dict = None):
         """Try to parse reservation from message (date, time, capacity)"""
         try:
@@ -4448,16 +4495,29 @@ Precio: $3,500 c/u
                             # Return None to reject this reservation - will be caught and user notified
                             continue
                         
-                        logger.info(f"Parsed reservation: date={date_str}, time={time_str}, capacity={capacity}, hours_ahead={hours_ahead:.1f}")
-                        
+                        # Segundo paso liviano (no toca los 11 patrones de arriba, que
+                        # siguen anclados a "N personas"): si el mismo mensaje también
+                        # menciona niños explícitamente (ej. "...para 2 adultos y 3
+                        # niños"), aplica el descuento correspondiente. Best-effort —
+                        # frases raras que no matcheen "adultos"/"niños" siguen
+                        # cobrando la tarifa llena sin el descuento, como hoy.
+                        children_in_message = 0
+                        parsed_ac = self._parse_party_size(message_lower)
+                        if parsed_ac and parsed_ac[1] > 0 and 2 <= (parsed_ac[0] + parsed_ac[1]) <= 7:
+                            children_in_message = parsed_ac[1]
+                            capacity = parsed_ac[0] + parsed_ac[1]
+
+                        logger.info(f"Parsed reservation: date={date_str}, time={time_str}, capacity={capacity}, children={children_in_message}, hours_ahead={hours_ahead:.1f}")
+
                         # Verify the slot is available (optional check)
                         # For now, we'll trust the user and add it
-                        
+
                         # Create reservation item
                         reservation_item = self.cart_manager.create_reservation_item(
                             date=date_str,
                             time=time_str,
-                            capacity=capacity
+                            capacity=capacity,
+                            children=children_in_message
                         )
                         
                         logger.info(f"Created reservation item: {reservation_item}")

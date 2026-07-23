@@ -32,6 +32,7 @@ _CART_LABELS = {
         "flex_subtotal": "(Se aplica al subtotal)",
         "flex_percent": "(10% del costo de pasajeros)",
         "total": "💰 *Total: ${total:,}*",
+        "child_discount": "Descuento niños",
     },
     "en": {
         "title": "🛒 *Your HotBoat Cart*",
@@ -49,6 +50,7 @@ _CART_LABELS = {
         "flex_subtotal": "(Applied to subtotal)",
         "flex_percent": "(10% of passenger cost)",
         "total": "💰 *Total: ${total:,}*",
+        "child_discount": "Child discount",
     },
     "pt": {
         "title": "🛒 *Seu Carrinho HotBoat*",
@@ -66,6 +68,7 @@ _CART_LABELS = {
         "flex_subtotal": "(Aplicado ao subtotal)",
         "flex_percent": "(10% do custo dos passageiros)",
         "total": "💰 *Total: ${total:,}*",
+        "child_discount": "Desconto crianças",
     },
 }
 
@@ -77,12 +80,13 @@ class CartItem:
     name: str
     price: int  # Price in CLP
     quantity: int = 1
+    discount: int = 0  # Flat CLP discount off price*quantity (e.g. child discount on a reservation)
     metadata: Dict[str, Any] = None  # Additional info (date, time, capacity, etc.)
-    
+
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
-    
+
     def to_dict(self) -> Dict:
         """Convert to dictionary for storage"""
         return {
@@ -90,9 +94,10 @@ class CartItem:
             "name": self.name,
             "price": self.price,
             "quantity": self.quantity,
+            "discount": self.discount,
             "metadata": self.metadata
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict) -> 'CartItem':
         """Create from dictionary"""
@@ -101,6 +106,7 @@ class CartItem:
             name=data.get("name"),
             price=data.get("price", 0),
             quantity=data.get("quantity", 1),
+            discount=data.get("discount", 0),  # .get with default — old carts saved before this field existed won't have it
             metadata=data.get("metadata", {})
         )
 
@@ -255,6 +261,8 @@ class CartManager:
         6: 36990,
         7: 33990,
     }
+    # Flat CLP discount per child (0-12) — mirrors app/booking/db.py CHILD_DISCOUNT_PER_CHILD
+    CHILD_DISCOUNT_PER_CHILD = 10000
     
     def __init__(self):
         pass
@@ -367,13 +375,13 @@ class CartManager:
         
         for item in items:
             if item.item_type == "reservation":
-                # Reservation price is per person
-                total += item.price * item.quantity
+                # Reservation price is per person, minus the flat child discount (if any)
+                total += item.price * item.quantity - item.discount
             elif item.item_type == "extra":
                 if item.name == "Reserva FLEX (+10%)":
-                    # FLEX is calculated as 10% of ONLY the reservation cost (passengers)
-                    # NOT including other extras
-                    reservation_total = sum(i.price * i.quantity for i in items if i.item_type == "reservation")
+                    # FLEX is calculated as 10% of ONLY the reservation cost (passengers,
+                    # already net of the child discount) — NOT including other extras
+                    reservation_total = sum(i.price * i.quantity - i.discount for i in items if i.item_type == "reservation")
                     total += int(reservation_total * 0.1)
                 else:
                     total += item.price * item.quantity
@@ -426,11 +434,13 @@ class CartManager:
         for i, item in enumerate(items):
             if item.item_type == "reservation":
                 reservation = item
-                price = item.price * item.quantity
+                price = item.price * item.quantity - item.discount
                 message += f"{lb['reservation']}\n"
                 message += f"   {lb['date']}: {item.metadata.get('date', 'N/A')}\n"
                 message += f"   {lb['time']}: {item.metadata.get('time', 'N/A')}\n"
                 message += f"   {lb['people']}: {item.quantity}\n"
+                if item.discount > 0:
+                    message += f"   {lb['child_discount']}: -${item.discount:,}\n"
                 message += f"   {lb['price']}: ${price:,}\n\n"
                 total += price
             elif item.item_type == "experience":
@@ -484,7 +494,7 @@ class CartManager:
                     total += price
 
         if any(item.name == "Reserva FLEX (+10%)" for item in items):
-            reservation_cost = sum(i.price * i.quantity for i in items if i.item_type == "reservation")
+            reservation_cost = sum(i.price * i.quantity - i.discount for i in items if i.item_type == "reservation")
             flex_amount = int(reservation_cost * 0.1)
             total += flex_amount
             message = message.replace(
@@ -525,20 +535,30 @@ class CartManager:
         date: str,
         time: str,
         capacity: int,
-        service_name: str = "HotBoat Trip"
+        service_name: str = "HotBoat Trip",
+        children: int = 0
     ) -> CartItem:
-        """Create a reservation cart item"""
+        """Create a reservation cart item. `capacity` is the total headcount
+        (adults+children) — it picks the price tier same as before. `children`
+        (0-12 años) is separate: they count toward `capacity`/the tier, but get
+        a flat CHILD_DISCOUNT_PER_CHILD taken off the total (see calculate_total/
+        format_cart_message, which read `discount` off the returned CartItem)."""
         price_per_person = self.PRICES_PER_PERSON.get(capacity, 76990)
-        
+        discount = min(children * self.CHILD_DISCOUNT_PER_CHILD, price_per_person * capacity)
+        adults = max(0, capacity - children)
+
         return CartItem(
             item_type="reservation",
             name=f"{service_name} - {capacity} personas",
             price=price_per_person,
             quantity=capacity,
+            discount=discount,
             metadata={
                 "date": date,
                 "time": time,
                 "capacity": capacity,
+                "adults": adults,
+                "children": children,
                 "service_name": service_name
             }
         )

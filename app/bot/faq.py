@@ -108,7 +108,7 @@ class FAQHandler:
 • $33.990 x persona
 • Total: *$237.930*
 
-_*niños pagan desde los 6 años_
+👶 _Niños de 0 a 12 años: $10.000 de descuento por cada niño sobre el total_
 
 Aquí puedes reservar tu horario directo 👇
 https://whatsapp.hotboat.cl/booking""",

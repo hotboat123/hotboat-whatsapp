@@ -18,7 +18,9 @@ class CreateBookingRequest(BaseModel):
     customer_language: Optional[str] = "es"  # es / en / pt
     booking_date: str
     booking_time: str
-    num_people: int
+    num_people: int  # combined total — server ignores this and recomputes num_adultos+num_ninos
+    num_adultos: int = 1
+    num_ninos: int = 0  # 0-12 años — cuentan para el tramo de precio, luego reciben descuento
     extras: List[ExtraItem] = []
     has_flex: bool = False
     notes: Optional[str] = None

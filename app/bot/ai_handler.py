@@ -63,7 +63,7 @@ PRECIOS POR PERSONA (según número de personas):
 - 5 personas: $42,990 por persona (Total: $214,950)
 - 6 personas: $36,990 por persona (Total: $221,940)
 - 7 personas: $33,990 por persona (Total: $237,930)
-*Niños pagan desde los 6 años
+Niños de 0 a 12 años: $10.000 de descuento por cada niño sobre el total (los niños SÍ cuentan en el número de personas para elegir la tarifa)
 
 PERSONALIDAD:
 - Marinero rudo pero simpático ⚓  
