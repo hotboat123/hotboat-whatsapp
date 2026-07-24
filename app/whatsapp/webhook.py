@@ -448,6 +448,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     contact_name=contact_name,
                     message_id=message_id,
                     quoted_text=quoted_text,
+                    lead_bot_variant=lead.get("bot_variant") if lead else None,
                 )
             except Exception as e:
                 logger.error(f"Error in conversation_manager.process_message: {e}")
@@ -863,7 +864,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     from_number=from_number,
                     message_text=text_body,
                     contact_name=contact_name,
-                    message_id=message_id
+                    message_id=message_id,
+                    lead_bot_variant=lead.get("bot_variant") if lead else None,
                 )
             except Exception as e:
                 logger.error(f"Error in conversation_manager.process_message for image: {e}")
@@ -1104,7 +1106,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     from_number=from_number,
                     message_text="[El usuario envió un audio]",
                     contact_name=contact_name,
-                    message_id=message_id
+                    message_id=message_id,
+                    lead_bot_variant=lead.get("bot_variant") if lead else None,
                 )
             except Exception as e:
                 logger.error(f"Error in conversation_manager.process_message for audio: {e}")

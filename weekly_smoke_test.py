@@ -116,6 +116,9 @@ def cleanup(conn):
             cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (SWITCH_TEST_PHONE,))
             cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (SWITCH_TEST_PHONE,))
             cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (SWITCH_TEST_PHONE,))
+            cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (STALE_CACHE_TEST_PHONE,))
+            cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (STALE_CACHE_TEST_PHONE,))
+            cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (STALE_CACHE_TEST_PHONE,))
             conn.commit()
     except Exception as e:
         print(f"⚠️ cleanup warning: {e}")
@@ -590,6 +593,109 @@ def test_manual_variant_switch(conn):
         conn.commit()
 
 
+STALE_CACHE_TEST_PHONE = "56900007771"
+STALE_CACHE_VARIANT_KEY = "_smoketest_stalecache"
+STALE_CACHE_OVERRIDE_MARKER = "SMOKETEST_STALECACHE_MARKER_DO_NOT_SHIP"
+
+
+def test_lead_bot_variant_always_fresh(conn):
+    """
+    Regression test for a real production bug (2026-07-24): with multiple
+    Railway replicas, ConversationManager.conversations is a per-process
+    in-memory dict, so a conversation already warm on the replica that
+    happens to handle a customer's next message never saw an admin's
+    PUT /leads/{phone}/bot-variant call on a *different* replica — Railway
+    logs showed 'bot_variant': 'control' even after the admin picked "IA 1"
+    for that lead. Fixed by having webhook.py pass the lead's bot_variant
+    (already fetched fresh via get_or_create_lead() on every incoming
+    message, at zero extra DB cost) straight into process_message(), which
+    now always trusts it over whatever's cached — see
+    app/bot/conversation.py's lead_bot_variant parameter.
+
+    This test proves the fix works even in the worst case: a SINGLE
+    ConversationManager instance (one replica) with the conversation
+    already fully cached in memory, where bot_variant changes in the DB
+    directly (no persisted-state deletion, no in-memory patch at all) —
+    the kind of change any code path could make, not just the admin
+    endpoint.
+    """
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (STALE_CACHE_TEST_PHONE,))
+        cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (STALE_CACHE_VARIANT_KEY,))
+        cur.execute(
+            "INSERT INTO bot_ab_variants (variant_key, label, is_active) VALUES (%s, %s, FALSE)",
+            (STALE_CACHE_VARIANT_KEY, "Smoke Test Stale Cache (inactive)"),
+        )
+        conn.commit()
+
+    r = requests.put(
+        f"{API_BASE}/api/admin/bot/ab-overrides",
+        json={"variant_key": STALE_CACHE_VARIANT_KEY, "message_key": "main_menu", "content_es": STALE_CACHE_OVERRIDE_MARKER},
+        timeout=20,
+    )
+    check("Stale cache fix — override upsert API accepts the override", r.status_code == 200, f"HTTP {r.status_code}")
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from app.bot.conversation import ConversationManager
+        from app.bot.variant_overrides import invalidate_cache
+        from app.db.leads import get_or_create_lead
+    except Exception as e:
+        check("Stale cache fix — import ConversationManager", False, str(e))
+        return
+
+    async def _run():
+        invalidate_cache()
+        cm = ConversationManager()  # one instance = one "replica"
+
+        lead = await get_or_create_lead(STALE_CACHE_TEST_PHONE, "Smoke Test Stale Cache")
+        # This message fully warms cm.conversations[phone] in memory, with
+        # whatever variant this brand-new lead was auto-assigned (not
+        # STALE_CACHE_VARIANT_KEY, which is is_active=FALSE).
+        await cm.process_message(
+            from_number=STALE_CACHE_TEST_PHONE, message_text="Hola", contact_name="Smoke Test Stale Cache",
+            message_id=f"smoketest-stalecache-1-{date.today().isoformat()}",
+            lead_bot_variant=lead.get("bot_variant"),
+        )
+
+        # Change bot_variant directly in the DB — no bot_conversation_state
+        # deletion, no touching cm.conversations at all. Only a fresh
+        # get_or_create_lead() read (exactly what webhook.py does on every
+        # incoming message) should be able to surface this.
+        with conn.cursor() as cur2:
+            cur2.execute(
+                "UPDATE whatsapp_leads SET bot_variant=%s WHERE phone_number=%s",
+                (STALE_CACHE_VARIANT_KEY, STALE_CACHE_TEST_PHONE),
+            )
+            conn.commit()
+        invalidate_cache()
+        lead2 = await get_or_create_lead(STALE_CACHE_TEST_PHONE, "Smoke Test Stale Cache")
+
+        return await cm.process_message(
+            from_number=STALE_CACHE_TEST_PHONE, message_text="Hola de nuevo", contact_name="Smoke Test Stale Cache",
+            message_id=f"smoketest-stalecache-2-{date.today().isoformat()}",
+            lead_bot_variant=lead2.get("bot_variant"),
+        )
+
+    try:
+        resp = asyncio.run(_run())
+    except Exception as e:
+        check("Stale cache fix — fresh DB variant wins over a fully stale in-memory cache", False, str(e))
+        traceback.print_exc()
+        return
+
+    resp_text = resp if isinstance(resp, str) else json.dumps(resp, ensure_ascii=False)
+    check(
+        "Stale cache fix — fresh DB variant wins over a fully stale in-memory cache",
+        STALE_CACHE_OVERRIDE_MARKER in resp_text,
+        resp_text[:150].replace("\n", " "),
+    )
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (STALE_CACHE_VARIANT_KEY,))
+        conn.commit()
+
+
 def main():
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -600,6 +706,7 @@ def main():
         test_ai_fallback_safety_net(conn)
         test_ab_weighted_assignment()
         test_manual_variant_switch(conn)
+        test_lead_bot_variant_always_fresh(conn)
     except Exception as e:
         check("Unexpected error", False, str(e))
         traceback.print_exc()

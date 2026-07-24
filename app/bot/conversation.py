@@ -32,6 +32,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Distinguishes "caller didn't pass lead_bot_variant" from "caller explicitly
+# passed None" (a real lead with no variant assigned) in process_message().
+_VARIANT_UNSPECIFIED = object()
+
 # Número del Capitán Tomás para notificaciones
 CAPITAN_TOMAS_PHONE = "56974950762"  # Tu número personal
 
@@ -415,16 +419,29 @@ class ConversationManager:
         contact_name: str,
         message_id: str,
         quoted_text: Optional[str] = None,
+        lead_bot_variant=_VARIANT_UNSPECIFIED,
     ) -> Union[Optional[str], Dict]:
         """
         Process incoming message and generate response
-        
+
         Args:
             from_number: Sender's phone number
             message_text: Message text
             contact_name: Sender's name
             message_id: WhatsApp message ID
-        
+            lead_bot_variant: the lead's bot_variant as read from
+                whatsapp_leads *just now* by the caller (webhook.py already
+                calls get_or_create_lead() once per incoming message before
+                this, so passing it through here is free). Overrides
+                whatever variant is sitting in this conversation's cached
+                metadata — persisted state or an in-memory entry can be
+                arbitrarily stale (e.g. across replicas, or right after an
+                admin manually pins a variant via PUT /leads/{phone}/
+                bot-variant), so the DB is the only value trusted for this.
+                Leave unset (default) for callers with no fresh lead row
+                handy, e.g. tests calling this directly — falls back to
+                whatever's already cached.
+
         Returns:
             Response text or None
         """
@@ -437,10 +454,13 @@ class ConversationManager:
                 return None
             if message_id:
                 processed_ids.add(message_id)
-            
+
             logger.info(f"Processing message from {contact_name}: {message_text}")
             logger.info(f"Current metadata state: {conversation.get('metadata', {})}")
             metadata = conversation.setdefault("metadata", {})
+
+            if lead_bot_variant is not _VARIANT_UNSPECIFIED:
+                metadata["bot_variant"] = lead_bot_variant
 
             # A/B test: make this lead's assigned variant (if any) available
             # to every get_text()/get_bot_response() call for the rest of
