@@ -1138,7 +1138,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 return None
 
             from app.bot.ai_handler import AIHandler
-            handler = AIHandler(model=model)
+            from app.bot.variant_overrides import get_current_system_prompt
+            handler = AIHandler(model=model, custom_prompt=get_current_system_prompt())
             history = conversation.get("messages", [])[-10:]
             ai_text = await handler.generate_response(message_text, history, contact_name)
             if ai_text and not ai_text.startswith("🥬 ¡Ahoy, grumete! ⚓"):  # that prefix marks AIHandler's own error fallback

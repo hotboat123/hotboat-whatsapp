@@ -112,6 +112,13 @@ def _ensure_tables():
                     # being intercepted, e.g. to reach the live-AI fallback.
                     # NULL/empty = nothing disabled, current behavior.
                     "disabled_triggers TEXT[]",
+                    # Per-variant override for the editable part of the AI's
+                    # system prompt (character, tone, what to emphasize) —
+                    # see app/bot/ai_handler.py:build_system_prompt(). The
+                    # safety-critical rules (no fake booking confirmations,
+                    # can't add to cart) are a fixed footer ALWAYS appended,
+                    # never overridable here. NULL = use the default prompt.
+                    "system_prompt TEXT",
                 ]:
                     try:
                         cur.execute(f"ALTER TABLE bot_ab_variants ADD COLUMN IF NOT EXISTS {col_def}")
@@ -358,6 +365,7 @@ class VariantUpdate(BaseModel):
     ai_provider: Optional[str] = None
     ai_model: Optional[str] = None
     disabled_triggers: Optional[List[str]] = None
+    system_prompt: Optional[str] = None
 
 
 class OverrideUpsert(BaseModel):
@@ -383,6 +391,16 @@ FAQ_TRIGGER_KEYS = [
 ]
 
 
+def _default_ai_prompt() -> str:
+    """The default editable AI system-prompt body, shown in the admin UI as
+    the starting point/placeholder for a variant's custom prompt."""
+    try:
+        from app.bot.ai_handler import _default_editable_prompt
+        return _default_editable_prompt()
+    except Exception:
+        return ""
+
+
 def _all_faq_trigger_keys() -> List[str]:
     """FAQ_TRIGGER_KEYS plus any custom response_key an operator added
     directly to bot_responses (e.g. via a new bot_keywords entry)."""
@@ -406,7 +424,7 @@ async def list_ab_variants():
                 cur.execute("""
                     SELECT v.id, v.variant_key, v.label, v.is_active, v.created_at,
                            COUNT(o.id) AS override_count, v.weight, v.ai_provider, v.ai_model,
-                           v.disabled_triggers
+                           v.disabled_triggers, v.system_prompt
                     FROM bot_ab_variants v
                     LEFT JOIN bot_message_overrides o ON o.variant_key = v.variant_key
                     GROUP BY v.id
@@ -422,6 +440,7 @@ async def list_ab_variants():
                     "override_count": r[5], "weight": r[6],
                     "ai_provider": r[7], "ai_model": r[8],
                     "disabled_triggers": list(r[9]) if r[9] else [],
+                    "system_prompt": r[10],
                     # Informational only — the actual split is deterministic
                     # (see _pick_active_variant), this just previews the
                     # target ratio implied by the current weights.
@@ -431,6 +450,7 @@ async def list_ab_variants():
             ],
             "suggested_keys": AB_SUGGESTED_KEYS,
             "faq_trigger_keys": _all_faq_trigger_keys(),
+            "default_system_prompt": _default_ai_prompt(),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -473,6 +493,8 @@ async def update_ab_variant(variant_id: int, data: VariantUpdate):
                 if data.disabled_triggers is not None:
                     cleaned = [k.strip() for k in data.disabled_triggers if k and k.strip()]
                     cur.execute("UPDATE bot_ab_variants SET disabled_triggers = %s WHERE id = %s", (cleaned or None, variant_id))
+                if data.system_prompt is not None:
+                    cur.execute("UPDATE bot_ab_variants SET system_prompt = %s WHERE id = %s", (data.system_prompt.strip() or None, variant_id))
                 conn.commit()
         from app.bot.variant_overrides import invalidate_cache
         invalidate_cache()

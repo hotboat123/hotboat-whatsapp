@@ -42,6 +42,11 @@ Covers:
      "precio" trigger must NOT get the canned pricing FAQ reply for a
      message like "cuales son los precios"; it must fall through the
      priority chain instead (normally reaching the live-AI fallback).
+  9. Per-variant custom AI system prompt (bot_ab_variants.system_prompt,
+     app/bot/ai_handler.py:build_system_prompt) — a variant's custom prompt
+     must be used instead of the default, but the fixed anti-hallucination
+     safety footer must always be appended regardless, and a variant with
+     no custom prompt must fall back to the full default.
 
 Does NOT cover the marketing repo (hotboat-email-marketing-spec) — the
 segment-sync and abandoned-cart/birthday-automation checks need a logged-in
@@ -777,6 +782,67 @@ def test_disabled_faq_trigger(conn):
         conn.commit()
 
 
+CUSTOM_PROMPT_VARIANT_KEY = "_smoketest_prompt"
+CUSTOM_PROMPT_MARKER = "SMOKETEST_PROMPT_MARKER_DO_NOT_SHIP"
+
+
+def test_custom_ai_system_prompt(conn):
+    """
+    Per-variant custom AI system prompt (2026-07-24, bot_ab_variants.
+    system_prompt) — an operator can override the editable part of the
+    prompt the live-AI fallback uses for a specific variant (e.g. IA 1),
+    without touching the fixed safety footer (app/bot/ai_handler.py:
+    SAFETY_FOOTER — anti-hallucination rules like never claiming a fake
+    booking confirmation). Pure logic test, no real Groq call: checks that
+    build_system_prompt() (1) uses the variant's custom text when set,
+    (2) always appends the safety footer regardless, and (3) falls back to
+    the default prompt when the variant has none set / blank.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from app.bot.ai_handler import build_system_prompt, SAFETY_FOOTER, _default_editable_prompt
+        from app.bot.variant_overrides import set_current_variant, get_current_system_prompt, invalidate_cache
+    except Exception as e:
+        check("Custom AI prompt — import ai_handler/variant_overrides", False, str(e))
+        return
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (CUSTOM_PROMPT_VARIANT_KEY,))
+        cur.execute(
+            "INSERT INTO bot_ab_variants (variant_key, label, is_active, system_prompt) VALUES (%s, %s, FALSE, %s)",
+            (CUSTOM_PROMPT_VARIANT_KEY, "Smoke Test Prompt (inactive)", CUSTOM_PROMPT_MARKER),
+        )
+        conn.commit()
+
+    invalidate_cache()
+    set_current_variant(CUSTOM_PROMPT_VARIANT_KEY)
+    resolved = get_current_system_prompt()
+    check(
+        "Custom AI prompt — variant's custom prompt is resolved via the contextvar",
+        resolved == CUSTOM_PROMPT_MARKER,
+        repr(resolved),
+    )
+
+    custom_full = build_system_prompt(CUSTOM_PROMPT_MARKER)
+    check(
+        "Custom AI prompt — custom prompt still gets the safety footer appended",
+        custom_full.startswith(CUSTOM_PROMPT_MARKER) and SAFETY_FOOTER in custom_full,
+        custom_full[:120].replace("\n", " "),
+    )
+
+    default_full = build_system_prompt(None)
+    check(
+        "Custom AI prompt — no custom prompt falls back to the default business-info prompt",
+        "INFORMACIÓN DEL NEGOCIO" in default_full and SAFETY_FOOTER in default_full,
+    )
+
+    set_current_variant(None)
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (CUSTOM_PROMPT_VARIANT_KEY,))
+        conn.commit()
+
+
 def main():
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -789,6 +855,7 @@ def main():
         test_manual_variant_switch(conn)
         test_lead_bot_variant_always_fresh(conn)
         test_disabled_faq_trigger(conn)
+        test_custom_ai_system_prompt(conn)
     except Exception as e:
         check("Unexpected error", False, str(e))
         traceback.print_exc()

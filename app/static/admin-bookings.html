@@ -13768,6 +13768,7 @@ async function rebuildWelcomeMenu(){
 let _abVariants = [];
 let _abSuggestedKeys = [];
 let _abFaqTriggerKeys = [];
+let _abDefaultSystemPrompt = '';
 let _abOpenVariant = null; // variant_key currently expanded
 
 function toggleNewVariantForm(){
@@ -13824,6 +13825,7 @@ async function loadAbVariants(){
     _abVariants = d.variants || [];
     _abSuggestedKeys = d.suggested_keys || [];
     _abFaqTriggerKeys = d.faq_trigger_keys || [];
+    _abDefaultSystemPrompt = d.default_system_prompt || '';
     el.innerHTML = '';
     if(!_abVariants.length){ el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Sin variantes — crea una para empezar un test.</span>'; return; }
     _abVariants.forEach(v => {
@@ -13992,8 +13994,22 @@ async function loadVariantOverrides(variantKey, safeKey){
           <button onclick="saveVariantOverride(${o.id},'${variantKey}','${safeKey}')" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.28rem .7rem;font-size:.78rem;cursor:pointer;font-weight:600">Guardar</button>
         </div>
       </div>`).join('');
+    const v = _abVariants.find(x => x.variant_key === variantKey);
+    const isCustomPrompt = !!(v && v.system_prompt);
+    const promptValue = (v && v.system_prompt) || _abDefaultSystemPrompt;
+    const promptBlock = `
+      <div style="display:flex;flex-direction:column;gap:.3rem;border-top:1px solid var(--border);padding-top:.5rem">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <span style="font-size:.75rem;color:#38bdf8;font-weight:600">🧠 Prompt del modelo IA${isCustomPrompt?'':' (usando el prompt por defecto)'}</span>
+        </div>
+        <textarea id="prompt-${safeKey}" rows="10" style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.5rem .7rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none">${escHtml(promptValue)}</textarea>
+        <div style="display:flex;justify-content:flex-end;gap:.4rem">
+          ${isCustomPrompt?`<button onclick="resetVariantPrompt(${v.id},'${variantKey}','${safeKey}')" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.28rem .7rem;font-size:.78rem;cursor:pointer">Restaurar por defecto</button>`:''}
+          <button onclick="saveVariantPrompt(${v?v.id:'null'},'${variantKey}','${safeKey}')" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.28rem .7rem;font-size:.78rem;cursor:pointer;font-weight:600">Guardar prompt</button>
+        </div>
+      </div>`;
     const options = _abSuggestedKeys.map(k=>`<option value="${k}">${k}</option>`).join('');
-    wrap.innerHTML = rows + `
+    wrap.innerHTML = promptBlock + rows + `
       <div style="display:flex;flex-direction:column;gap:.3rem;border-top:1px solid var(--border);padding-top:.5rem">
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
           <select id="nov-key-${safeKey}" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.8rem;outline:none">
@@ -14009,6 +14025,34 @@ async function loadVariantOverrides(variantKey, safeKey){
   } catch(e){
     wrap.innerHTML = `<span style="color:var(--red);font-size:.8rem">Error: ${e.message}</span>`;
   }
+}
+
+async function saveVariantPrompt(id, variantKey, safeKey){
+  if(!id){ showToast('❌ No se encontró la variante', true); return; }
+  const ta = document.getElementById(`prompt-${safeKey}`);
+  const system_prompt = ta?.value || '';
+  if(!system_prompt.trim()){ showToast('❌ El prompt no puede quedar vacío', true); return; }
+  try {
+    const r = await fetch(`/api/admin/bot/ab-variants/${id}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({system_prompt})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Prompt guardado para esta variante');
+    loadAbVariants();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function resetVariantPrompt(id, variantKey, safeKey){
+  try {
+    const r = await fetch(`/api/admin/bot/ab-variants/${id}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({system_prompt: ''})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Prompt restaurado al valor por defecto');
+    loadAbVariants();
+  } catch(e){ showToast('❌ '+e.message, true); }
 }
 
 async function saveVariantOverride(id, variantKey, safeKey){
