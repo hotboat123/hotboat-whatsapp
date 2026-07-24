@@ -9997,6 +9997,18 @@ function generarRecibo(){
   // Totales (incluye flex si aplica)
   const precioBase   = +r.ingreso_reserva||0;
   const flexAmount   = (r.has_flex && r.flex_amount) ? +r.flex_amount : 0;
+
+  // Desglose adultos/niños del precio de la experiencia — precioBase ya
+  // viene neto del descuento de niños (price_breakdown() en db.py: tarifa
+  // del tramo total × personas, menos $10.000 por niño), así que aquí se
+  // reconstruye el bruto para mostrar la fórmula real (precio por persona
+  // del tramo × personas − descuento niños) en vez de una división plana
+  // del total entre personas, que no es el precio que realmente se cobró.
+  const numNinosTrip = +r.num_ninos || 0;
+  const numPersonasTrip = +r.num_personas || 0;
+  const childDiscountTrip = (r.num_adultos != null && numNinosTrip > 0) ? numNinosTrip * CHILD_DISCOUNT_PER_CHILD : 0;
+  const tripSubtotalBruto = precioBase + childDiscountTrip;
+  const tripUnitPrice = numPersonasTrip > 0 ? Math.round(tripSubtotalBruto / numPersonasTrip) : 0;
   const totalExtras  = extrasRows.reduce((s,e)=>s+(+e.total||0),0);
   const totalDesc    = descRows.reduce((s,d)=>s+(+d.amount||0),0) + (couponDiscount?.amount||0);
   const totalFinal   = precioBase + totalExtras + flexAmount - totalDesc;
@@ -10099,10 +10111,15 @@ function generarRecibo(){
     <tbody>
       <tr>
         <td style="padding:7px 9px">HotBoat Trip — experiencia náutica</td>
-        <td style="padding:7px 9px;text-align:center">${r.num_personas||1} persona(s)</td>
-        <td style="padding:7px 9px;text-align:right">${r.num_personas>0?money(Math.round(precioBase/(r.num_personas||1))):'—'}</td>
-        <td style="padding:7px 9px;text-align:right;font-weight:600">${money(precioBase)}</td>
+        <td style="padding:7px 9px;text-align:center">${numPersonasTrip||1} persona(s)</td>
+        <td style="padding:7px 9px;text-align:right">${numPersonasTrip>0?money(tripUnitPrice):'—'}</td>
+        <td style="padding:7px 9px;text-align:right;font-weight:600">${money(tripSubtotalBruto)}</td>
       </tr>
+      ${childDiscountTrip>0?`
+      <tr style="color:#e55">
+        <td colspan="3" style="padding:7px 9px">Descuento niños (${numNinosTrip} × ${money(CHILD_DISCOUNT_PER_CHILD)})</td>
+        <td style="padding:7px 9px;text-align:right;font-weight:600">− ${money(childDiscountTrip)}</td>
+      </tr>`:''}
       ${extrasHtml}
       ${descHtml}
       <tr>
@@ -10197,10 +10214,15 @@ function generarRecibo(){
       <tbody>
         <tr>
           <td style="padding:.45rem .6rem">HotBoat Trip — experiencia náutica</td>
-          <td style="padding:.45rem .6rem;text-align:center">${r.num_personas||1} persona(s)</td>
-          <td style="padding:.45rem .6rem;text-align:right">${r.num_personas>0?money(Math.round(precioBase/(r.num_personas||1))):'—'}</td>
-          <td style="padding:.45rem .6rem;text-align:right;font-weight:600">${money(precioBase)}</td>
+          <td style="padding:.45rem .6rem;text-align:center">${numPersonasTrip||1} persona(s)</td>
+          <td style="padding:.45rem .6rem;text-align:right">${numPersonasTrip>0?money(tripUnitPrice):'—'}</td>
+          <td style="padding:.45rem .6rem;text-align:right;font-weight:600">${money(tripSubtotalBruto)}</td>
         </tr>
+        ${childDiscountTrip>0?`
+        <tr style="color:#e55">
+          <td colspan="3" style="padding:.45rem .6rem">Descuento niños (${numNinosTrip} × ${money(CHILD_DISCOUNT_PER_CHILD)})</td>
+          <td style="padding:.45rem .6rem;text-align:right;font-weight:600">− ${money(childDiscountTrip)}</td>
+        </tr>`:''}
         ${extrasHtml}
         ${descHtml}
         <tr class="total-row">
