@@ -270,6 +270,57 @@ async def update_lead_status(phone_number: str, lead_status: str, notes: str = N
         return False
 
 
+async def set_bot_variant_for_lead(phone_number: str, variant_key: Optional[str]) -> bool:
+    """
+    Manually pin a specific lead's conversation to an A/B variant (or clear
+    it back to the plain rule-based bot with variant_key=None) — an admin
+    override from the chat UI, independent of the random/weighted
+    assignment new leads get in get_or_create_lead()/_pick_active_variant().
+    Deliberately does NOT check bot_ab_variants.is_active here: an admin
+    picking a specific variant for one conversation is an explicit choice,
+    not a new random assignment, so even a paused/inactive variant (e.g.
+    one still being drafted) is a valid manual pick.
+
+    Also clears bot_conversation_state for this phone: ConversationManager
+    restores a lead's *persisted* conversation state on every message
+    before it would ever re-read whatsapp_leads.bot_variant fresh (see
+    get_conversation()'s docstring), so without this the admin's change
+    would silently not take effect on an already-ongoing conversation
+    until that persisted state naturally expired. This does mean any
+    in-flight step (e.g. "waiting for a date") resets — an admin switching
+    which bot answers someone is a deliberate handoff, a clean restart for
+    it is the expected behavior, not a bug.
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                _ensure_variant_col(cur)
+                cur.execute("""
+                    UPDATE whatsapp_leads
+                    SET bot_variant = %s, updated_at = NOW()
+                    WHERE phone_number = %s
+                """, (variant_key, phone_number))
+                if cur.rowcount == 0:
+                    # No lead row yet for this phone (e.g. picked before their
+                    # first-ever message) — the admin UI only offers this for
+                    # conversations already on screen, so this shouldn't
+                    # happen in practice, but silently "succeeding" here would
+                    # let get_or_create_lead()'s normal random assignment
+                    # overwrite the pick as soon as the lead is created.
+                    conn.rollback()
+                    logger.warning(f"set_bot_variant_for_lead: no lead found for {phone_number}")
+                    return False
+                try:
+                    cur.execute("DELETE FROM bot_conversation_state WHERE phone_number = %s", (phone_number,))
+                except Exception:
+                    pass  # table may not exist yet on a fresh environment
+                conn.commit()
+                return True
+    except Exception as e:
+        logger.error(f"Error setting bot variant for lead {phone_number}: {e}")
+        return False
+
+
 async def toggle_bot_for_lead(phone_number: str, bot_enabled: bool) -> bool:
     """
     Enable or disable automatic bot responses for a specific lead

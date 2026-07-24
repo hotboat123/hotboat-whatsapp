@@ -1444,6 +1444,47 @@ async def toggle_bot_for_lead_endpoint(phone_number: str, update: BotToggleUpdat
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class BotVariantUpdate(BaseModel):
+    variant_key: Optional[str] = None  # None/"" = plain rule-based bot, no A/B variant
+
+
+@app.put("/leads/{phone_number}/bot-variant")
+async def set_bot_variant_for_lead_endpoint(phone_number: str, update: BotVariantUpdate):
+    """Manually pin which configured 'bot' (plain Popeye, a message-override
+    variant, one with a live-AI model attached, etc.) answers this specific
+    conversation — an admin override from the chat UI, independent of the
+    random assignment new leads get."""
+    try:
+        from app.db.leads import set_bot_variant_for_lead
+
+        variant_key = (update.variant_key or "").strip() or None
+        success = await set_bot_variant_for_lead(phone_number=phone_number, variant_key=variant_key)
+
+        if success:
+            # set_bot_variant_for_lead() already deletes the persisted
+            # bot_conversation_state row, but that alone only guarantees a
+            # fresh re-read on a replica where this phone ISN'T already
+            # sitting in conversation_manager.conversations (in-memory,
+            # per-process). This admin action is meant to take effect on the
+            # very next message, so patch THIS process's copy directly too —
+            # closes the gap for the (by far most common) case where the
+            # same replica that serves the admin panel also serves this
+            # customer's WhatsApp messages. A different replica handling the
+            # next message will still fall through correctly because the
+            # persisted state was deleted.
+            cached = conversation_manager.conversations.get(phone_number)
+            if cached:
+                cached.setdefault("metadata", {})["bot_variant"] = variant_key
+
+            return {"status": "updated", "phone_number": phone_number, "bot_variant": variant_key}
+        raise HTTPException(status_code=400, detail="Failed to set bot variant for lead")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting bot variant for lead: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.put("/api/conversations/{phone_number}/mark-read")
 async def mark_conversation_read(phone_number: str):
     """Mark a conversation as read (reset unread counter)"""

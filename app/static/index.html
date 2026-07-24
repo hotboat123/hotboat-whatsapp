@@ -209,15 +209,21 @@
                             </div>
                             <div class="bot-toggle-section">
                                 <label class="bot-toggle-label">
-                                    <input 
-                                        type="checkbox" 
-                                        id="botToggleCheckbox" 
-                                        checked 
+                                    <input
+                                        type="checkbox"
+                                        id="botToggleCheckbox"
+                                        checked
                                         onchange="toggleBotFromInput(this.checked)"
                                         class="bot-toggle-input"
                                     >
                                     <span class="bot-toggle-text" id="botToggleText">🤖 Bot Activo</span>
                                 </label>
+                                <select id="botVariantSelect" class="bot-toggle-input" style="margin-left:.5rem"
+                                        title="Qué bot le responde a esta persona específicamente"
+                                        onchange="setBotVariantFromInput(this.value)">
+                                    <option value="">🐦 Popeye normal</option>
+                                    <!-- populated dynamically by loadBotVariantOptions() -->
+                                </select>
                             </div>
                             <button type="submit" class="btn-primary" id="sendButton">
                                 Send 📤

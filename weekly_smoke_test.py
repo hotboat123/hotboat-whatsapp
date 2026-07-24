@@ -29,6 +29,14 @@ Covers:
      a variant with a deliberately bogus AI model must never crash the bot
      or surface an error; it must silently fall through to the normal
      main-menu text. Does not require a real GROQ_API_KEY to be meaningful.
+  7. Manual per-conversation variant override (PUT /leads/{phone}/bot-variant,
+     app/db/leads.py:set_bot_variant_for_lead) — an admin picking which bot
+     answers one specific WhatsApp conversation from the chat UI must take
+     effect on the very next message, even on a warm process that already
+     has that conversation cached in memory (ConversationManager.conversations
+     is a per-process, in-memory dict — see the endpoint's comment in
+     app/main.py). Also checks that pinning a variant to a phone with no
+     lead row yet fails loudly instead of silently no-op'ing.
 
 Does NOT cover the marketing repo (hotboat-email-marketing-spec) — the
 segment-sync and abandoned-cart/birthday-automation checks need a logged-in
@@ -105,6 +113,9 @@ def cleanup(conn):
             cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (AI_TEST_PHONE,))
             cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (AI_TEST_PHONE,))
             cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (AI_VARIANT_KEY,))
+            cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (SWITCH_TEST_PHONE,))
+            cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (SWITCH_TEST_PHONE,))
+            cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (SWITCH_TEST_PHONE,))
             conn.commit()
     except Exception as e:
         print(f"⚠️ cleanup warning: {e}")
@@ -454,6 +465,131 @@ def test_ab_weighted_assignment():
     )
 
 
+SWITCH_TEST_PHONE = "56900007772"
+SWITCH_VARIANT_KEY = "_smoketest_switch"
+SWITCH_OVERRIDE_MARKER = "SMOKETEST_SWITCH_MARKER_DO_NOT_SHIP"
+
+
+def test_manual_variant_switch(conn):
+    """
+    Manual per-conversation variant override (PUT /leads/{phone}/bot-variant),
+    added 2026-07-23. An admin picking which bot answers a specific ongoing
+    WhatsApp conversation must take effect on the very next message — even
+    when that conversation is already cached in a *different* process's
+    in-memory ConversationManager.conversations dict, since
+    set_bot_variant_for_lead() only guarantees a fresh DB read by deleting
+    the persisted bot_conversation_state row. Simulates two different
+    processes (two separate ConversationManager() instances) handling the
+    "before" and "after" messages, the same way two Railway replicas would.
+    """
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (SWITCH_VARIANT_KEY,))
+        cur.execute(
+            "INSERT INTO bot_ab_variants (variant_key, label, is_active) VALUES (%s, %s, FALSE)",
+            (SWITCH_VARIANT_KEY, "Smoke Test Switch (inactive)"),
+        )
+        conn.commit()
+
+    r = requests.put(
+        f"{API_BASE}/api/admin/bot/ab-overrides",
+        json={"variant_key": SWITCH_VARIANT_KEY, "message_key": "main_menu", "content_es": SWITCH_OVERRIDE_MARKER},
+        timeout=20,
+    )
+    check("Manual switch — override upsert API accepts the override", r.status_code == 200, f"HTTP {r.status_code}")
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (SWITCH_TEST_PHONE,))
+        conn.commit()
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from app.bot.conversation import ConversationManager
+        from app.bot.variant_overrides import invalidate_cache
+    except Exception as e:
+        check("Manual switch — import ConversationManager", False, str(e))
+        return
+
+    async def _first_message():
+        # A brand-new ConversationManager, standing in for "process A"
+        # handling this customer's first-ever message — creates the lead
+        # with no variant assigned (auto-assignment finds no active
+        # variant, since SWITCH_VARIANT_KEY is is_active=FALSE).
+        invalidate_cache()
+        cm = ConversationManager()
+        return await cm.process_message(
+            from_number=SWITCH_TEST_PHONE, message_text="Hola", contact_name="Smoke Test Switch",
+            message_id=f"smoketest-switch-1-{date.today().isoformat()}",
+        )
+
+    try:
+        resp1 = asyncio.run(_first_message())
+    except Exception as e:
+        check("Manual switch — baseline first message", False, str(e))
+        traceback.print_exc()
+        return
+
+    resp1_text = resp1 if isinstance(resp1, str) else json.dumps(resp1, ensure_ascii=False)
+    check(
+        "Manual switch — baseline message has no override before switching",
+        SWITCH_OVERRIDE_MARKER not in resp1_text,
+        resp1_text[:150].replace("\n", " "),
+    )
+
+    r2 = requests.put(
+        f"{API_BASE}/leads/{SWITCH_TEST_PHONE}/bot-variant",
+        json={"variant_key": SWITCH_VARIANT_KEY},
+        timeout=20,
+    )
+    check(
+        "Manual switch — bot-variant endpoint accepts the pin",
+        r2.status_code == 200 and r2.json().get("bot_variant") == SWITCH_VARIANT_KEY,
+        f"HTTP {r2.status_code} {r2.text[:150]}",
+    )
+
+    async def _second_message():
+        # A second, independent ConversationManager — standing in for
+        # "process B" (a different replica) handling the next message. It
+        # never saw process A's in-memory cache (a separate Python object
+        # entirely), so a pass here proves the DB-level pin + persisted-
+        # state deletion is enough on its own, without relying on the
+        # same-process in-memory patch in app/main.py's endpoint.
+        invalidate_cache()
+        cm2 = ConversationManager()
+        return await cm2.process_message(
+            from_number=SWITCH_TEST_PHONE, message_text="Hola de nuevo", contact_name="Smoke Test Switch",
+            message_id=f"smoketest-switch-2-{date.today().isoformat()}",
+        )
+
+    try:
+        resp2 = asyncio.run(_second_message())
+    except Exception as e:
+        check("Manual switch — message after switching shows the new variant", False, str(e))
+        traceback.print_exc()
+        return
+
+    resp2_text = resp2 if isinstance(resp2, str) else json.dumps(resp2, ensure_ascii=False)
+    check(
+        "Manual switch — message after switching shows the new variant",
+        SWITCH_OVERRIDE_MARKER in resp2_text,
+        resp2_text[:150].replace("\n", " "),
+    )
+
+    r3 = requests.put(
+        f"{API_BASE}/leads/56900000000000/bot-variant",
+        json={"variant_key": SWITCH_VARIANT_KEY},
+        timeout=20,
+    )
+    check(
+        "Manual switch — pinning a variant on a nonexistent lead fails loudly (no silent no-op)",
+        r3.status_code != 200,
+        f"HTTP {r3.status_code} {r3.text[:150]}",
+    )
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (SWITCH_VARIANT_KEY,))
+        conn.commit()
+
+
 def main():
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -463,6 +599,7 @@ def main():
         test_ab_experiment(conn)
         test_ai_fallback_safety_net(conn)
         test_ab_weighted_assignment()
+        test_manual_variant_switch(conn)
     except Exception as e:
         check("Unexpected error", False, str(e))
         traceback.print_exc()

@@ -201,6 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupResponsiveLayout();
     initPWA();
     loadQuickReplyButtons();
+    loadBotVariantOptions();
     _initParentMessages();
 });
 
@@ -658,7 +659,8 @@ async function selectConversation(phoneNumber) {
         // Update bot toggle state from lead info
         const botEnabled = data.lead?.bot_enabled !== false;
         updateBotToggleUI(botEnabled);
-        
+        updateBotVariantUI(data.lead?.bot_variant || null);
+
         // Update priority UI
         updatePriorityUI(currentConversation.priority);
 
@@ -1287,13 +1289,74 @@ async function toggleBotFromInput(enabled) {
 function updateBotToggleUI(enabled) {
     const checkbox = document.getElementById('botToggleCheckbox');
     const text = document.getElementById('botToggleText');
-    
+
     if (checkbox) {
         checkbox.checked = enabled;
     }
-    
+
     if (text) {
         text.textContent = enabled ? '🤖 Bot Activo' : '🤐 Bot Inactivo';
+    }
+}
+
+// ── Which "bot" answers this specific conversation (A/B variant override) ──
+
+// Populate the dropdown once with every configured variant (plain Popeye is
+// always option 1, added directly in the HTML). Re-run after creating an
+// override elsewhere requires just a page refresh — this list rarely changes
+// mid-session, so it's loaded once at startup rather than per-conversation.
+async function loadBotVariantOptions() {
+    const select = document.getElementById('botVariantSelect');
+    if (!select) return;
+    try {
+        const response = await fetch(`${API_BASE}/api/admin/bot/ab-variants`);
+        if (!response.ok) throw new Error('Failed to load variants');
+        const data = await response.json();
+        const variants = data.variants || [];
+        // Keep the "Popeye normal" option, drop any stale variant options
+        // from a previous load, then add the current list.
+        select.innerHTML = '<option value="">🐦 Popeye normal</option>';
+        variants.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.variant_key;
+            const aiTag = v.ai_model ? ` (IA: ${v.ai_model})` : '';
+            const activeTag = v.is_active ? '' : ' [pausada]';
+            opt.textContent = `${v.label}${aiTag}${activeTag}`;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('Error loading bot variant options:', e);
+    }
+}
+
+// Reflect the currently open conversation's assigned variant in the dropdown
+// (called from selectConversation's lead-info handling, mirrors updateBotToggleUI).
+function updateBotVariantUI(variantKey) {
+    const select = document.getElementById('botVariantSelect');
+    if (select) {
+        select.value = variantKey || '';
+    }
+}
+
+async function setBotVariantFromInput(variantKey) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'warning');
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE}/leads/${currentConversation.phone_number}/bot-variant`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ variant_key: variantKey || null })
+        });
+        if (!response.ok) throw new Error('Failed to set bot variant');
+
+        const select = document.getElementById('botVariantSelect');
+        const label = select && select.selectedOptions[0] ? select.selectedOptions[0].textContent : 'Popeye normal';
+        showToast(`🤖 Ahora le responde: ${label}`, 'success');
+    } catch (e) {
+        console.error('Error setting bot variant:', e);
+        showToast('❌ No se pudo cambiar el bot para esta conversación', 'error');
     }
 }
 
