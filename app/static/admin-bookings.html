@@ -4506,7 +4506,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <span style="font-weight:600;font-size:.95rem">🧪 Test A/B de Popeye</span>
             <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Cada cliente nuevo se asigna al azar a una variante activa. Define textos alternativos para los momentos que quieras — lo que no reescribas queda igual al texto de siempre.</span>
             <button onclick="toggleNewVariantForm()" style="margin-left:auto;background:rgba(16,185,129,.15);border:1px solid #10b981;color:#10b981;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">+ Nueva variante</button>
-            <button onclick="loadAbVariants()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
+            <button onclick="loadAbVariants();loadAbResults()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
           </div>
           <div id="new-variant-form" style="display:none;padding:.9rem 1.2rem;border-bottom:1px solid var(--border);background:rgba(16,185,129,.05)">
             <div style="font-size:.82rem;font-weight:600;color:#10b981;margin-bottom:.6rem">Nueva variante</div>
@@ -4526,6 +4526,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             </div>
           </div>
           <div id="ab-variants-list" style="padding:.8rem 1.2rem;display:flex;flex-direction:column;gap:.9rem"></div>
+          <div style="padding:.9rem 1.2rem;border-top:1px solid var(--border)">
+            <div style="font-size:.82rem;font-weight:600;color:var(--muted);margin-bottom:.6rem">📊 Resultados</div>
+            <div id="ab-results-list" style="display:flex;flex-direction:column;gap:.5rem"></div>
+          </div>
         </div>
 
       </div>
@@ -4839,7 +4843,7 @@ function showSection(name){
   if(name==='cal-extras') loadCalExtras();
   if(name==='financial') initFinancialSection();
   if(name==='simulator') requestAnimationFrame(()=>{ simCalc(); });
-  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); loadAbVariants(); }
+  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); loadAbVariants(); loadAbResults(); }
   if(name==='logs') initLogsSection();
   else clearInterval(_logAutoRefresh);
 }
@@ -13815,6 +13819,36 @@ async function loadAbVariants(){
       el.appendChild(div);
       if(isOpen) loadVariantOverrides(v.variant_key, safeKey);
     });
+  } catch(e){
+    el.innerHTML = `<span style="color:var(--red);font-size:.83rem">Error: ${e.message}</span>`;
+  }
+}
+
+async function loadAbResults(){
+  const el = document.getElementById('ab-results-list');
+  if(!el) return;
+  el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Cargando…</span>';
+  try {
+    const r = await fetch('/api/admin/bot/ab-results');
+    const d = await r.json();
+    const results = d.results || [];
+    if(!results.length){ el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Sin variantes todavía.</span>'; return; }
+    const bestRate = Math.max(...results.map(v => v.leads > 0 ? v.conversion_rate : -1));
+    el.innerHTML = results.map(v => {
+      const isBest = v.leads > 0 && v.conversion_rate === bestRate && bestRate > 0;
+      return `
+        <div style="display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;background:var(--card);
+                    border:1px solid ${isBest?'#10b981':'var(--border)'};border-radius:9px;padding:.55rem .8rem">
+          <span style="font-weight:600;font-size:.83rem">${escHtml(v.label)}</span>
+          <code style="font-size:.7rem;color:var(--muted)">${escHtml(v.variant_key)}</code>
+          ${isBest?'<span style="font-size:.72rem;color:#10b981;font-weight:600">🏆 mejor</span>':''}
+          <span style="margin-left:auto;font-size:.8rem;color:var(--muted)">
+            ${v.leads} lead${v.leads===1?'':'s'} ·
+            ${v.converted_leads} reservó (${v.conversion_rate}%) ·
+            ${v.confirmed_leads} confirmada${v.confirmed_leads===1?'':'s'} (${v.confirmed_rate}%)
+          </span>
+        </div>`;
+    }).join('');
   } catch(e){
     el.innerHTML = `<span style="color:var(--red);font-size:.83rem">Error: ${e.message}</span>`;
   }

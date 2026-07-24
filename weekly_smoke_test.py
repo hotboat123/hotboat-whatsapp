@@ -16,6 +16,12 @@ Covers:
      shipped and was fixed on 2026-07-23; this test exists to catch it if
      it ever comes back). Calls ConversationManager.process_message()
      directly — no real WhatsApp/Meta send is triggered by this call.
+  4. A/B welcome-message test (app/bot/variant_overrides.py) — a lead
+     force-assigned to a throwaway, is_active=FALSE variant must see that
+     variant's override text instead of the default message, and the
+     /api/admin/bot/ab-results endpoint must count it. is_active=FALSE means
+     this test variant is never eligible for real customers' random
+     assignment — see test_ab_experiment()'s docstring.
 
 Does NOT cover the marketing repo (hotboat-email-marketing-spec) — the
 segment-sync and abandoned-cart/birthday-automation checks need a logged-in
@@ -57,6 +63,9 @@ API_BASE = os.getenv("SMOKE_TEST_API_BASE", "https://kia-ai.hotboatchile.com")
 TEST_PHONE = "+56900001234"          # booking/firma test row
 TEST_EMAIL = "tomasdamjanic+smoketest@gmail.com"
 BOT_TEST_PHONE = "+56900009999"      # separate number for the bot-logic test
+AB_TEST_PHONE = "56900009998"        # separate number for the A/B variant test (no + — matches whatsapp_leads.phone_number format)
+AB_VARIANT_KEY = "_smoketest"        # leading underscore keeps it visually distinct from real variants in the admin UI
+AB_OVERRIDE_MARKER = "SMOKETEST_MARKER_DO_NOT_SHIP"
 BOOKING_DATE = (date.today() + timedelta(days=120)).isoformat()  # far enough out to always be bookable
 
 PRICES = {2: 76990, 3: 59990, 4: 48990, 5: 42990, 6: 36990, 7: 33990}
@@ -81,6 +90,10 @@ def cleanup(conn):
             )
             cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (BOT_TEST_PHONE,))
             cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (BOT_TEST_PHONE,))
+            cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (AB_TEST_PHONE,))
+            cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (AB_TEST_PHONE,))
+            cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (AB_TEST_PHONE,))
+            cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (AB_VARIANT_KEY,))  # cascades to bot_message_overrides
             conn.commit()
     except Exception as e:
         print(f"⚠️ cleanup warning: {e}")
@@ -209,12 +222,101 @@ def test_bot_ninos_regression():
     )
 
 
+def test_ab_experiment(conn):
+    """
+    A/B welcome-message test (app/bot/variant_overrides.py), reviewed and
+    verified 2026-07-23. Uses an is_active=FALSE throwaway variant, created
+    by direct INSERT rather than the create-variant API, so it can never be
+    randomly assigned to a real customer's get_or_create_lead() call — this
+    test forces AB_TEST_PHONE onto it directly instead of relying on the
+    random picker. Covers: (1) a lead force-assigned to a variant with an
+    override sees that override's text, (2) POST/DELETE the override via the
+    real admin API, (3) GET /ab-results reflects the forced lead.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO bot_ab_variants (variant_key, label, is_active) VALUES (%s, %s, FALSE)",
+            (AB_VARIANT_KEY, "Smoke Test (inactive)"),
+        )
+        conn.commit()
+
+    r = requests.put(
+        f"{API_BASE}/api/admin/bot/ab-overrides",
+        json={"variant_key": AB_VARIANT_KEY, "message_key": "main_menu", "content_es": AB_OVERRIDE_MARKER},
+        timeout=20,
+    )
+    check("A/B override upsert API accepts the override", r.status_code == 200, f"HTTP {r.status_code}")
+    # The upsert above invalidates the *server's* in-process override cache
+    # (app/bot/variant_overrides.py) over HTTP — irrelevant here, since this
+    # script calls ConversationManager directly and has its own separate
+    # in-process cache (already warmed by test_bot_ninos_regression()'s
+    # earlier process_message() call). Invalidate it too, or the 60s TTL
+    # would hide the override we just wrote.
+    try:
+        from app.bot.variant_overrides import invalidate_cache
+        invalidate_cache()
+    except Exception:
+        pass
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (AB_TEST_PHONE,))
+        cur.execute(
+            "INSERT INTO whatsapp_leads (phone_number, customer_name, lead_status, last_interaction_at, created_at, updated_at, bot_variant) "
+            "VALUES (%s, %s, 'unknown', NOW(), NOW(), NOW(), %s)",
+            (AB_TEST_PHONE, "Smoke Test AB", AB_VARIANT_KEY),
+        )
+        conn.commit()
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from app.bot.conversation import ConversationManager
+    except Exception as e:
+        check("A/B test — import ConversationManager", False, str(e))
+        return
+
+    async def _run():
+        cm = ConversationManager()
+        return await cm.process_message(
+            from_number=AB_TEST_PHONE,
+            message_text="Hola",
+            contact_name="Smoke Test AB",
+            message_id=f"smoketest-ab-{date.today().isoformat()}",
+        )
+
+    try:
+        resp = asyncio.run(_run())
+    except Exception as e:
+        check("A/B: lead assigned to variant sees its override", False, str(e))
+        traceback.print_exc()
+        return
+
+    resp_text = resp if isinstance(resp, str) else json.dumps(resp, ensure_ascii=False)
+    check(
+        "A/B: lead assigned to variant sees its override",
+        AB_OVERRIDE_MARKER in resp_text,
+        resp_text[:150].replace("\n", " "),
+    )
+
+    r2 = requests.get(f"{API_BASE}/api/admin/bot/ab-results", timeout=20)
+    ok2 = r2.status_code == 200
+    check("A/B results endpoint reachable", ok2, f"HTTP {r2.status_code}")
+    if ok2:
+        results = r2.json().get("results", [])
+        row = next((v for v in results if v.get("variant_key") == AB_VARIANT_KEY), None)
+        check(
+            "A/B results endpoint counts the forced test lead",
+            row is not None and row.get("leads", 0) >= 1,
+            str(row),
+        )
+
+
 def main():
     conn = psycopg2.connect(DATABASE_URL)
     try:
         booking_ref = test_pricing_and_booking(conn)
         test_signature(booking_ref, conn)
         test_bot_ninos_regression()
+        test_ab_experiment(conn)
     except Exception as e:
         check("Unexpected error", False, str(e))
         traceback.print_exc()

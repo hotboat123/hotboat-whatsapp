@@ -480,6 +480,71 @@ async def delete_ab_override(override_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@bot_config_router.get("/ab-results")
+async def get_ab_results():
+    """Per-variant conversion results: how many leads assigned to each
+    variant actually went on to book, and how many of those bookings got
+    confirmed. Matching is done in Python (not SQL) because phone numbers
+    are stored inconsistently between whatsapp_leads.phone_number (almost
+    always digits-only) and all_appointments.telefono (a mix of "+56..."
+    and bare digits) — normalize both sides to digits-only before comparing."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT phone_number, bot_variant FROM whatsapp_leads WHERE bot_variant IS NOT NULL")
+                leads = cur.fetchall()
+                cur.execute("SELECT telefono, status FROM all_appointments WHERE telefono IS NOT NULL AND telefono != ''")
+                bookings = cur.fetchall()
+                cur.execute("SELECT variant_key, label, is_active FROM bot_ab_variants ORDER BY created_at")
+                variants_meta = cur.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    def norm(phone: str) -> str:
+        return (phone or "").lstrip("+").strip()
+
+    bookings_by_phone: dict[str, list] = {}
+    for telefono, status in bookings:
+        key = norm(telefono)
+        if key:
+            bookings_by_phone.setdefault(key, []).append(status)
+
+    stats: dict[str, dict] = {}
+    for phone, variant in leads:
+        s = stats.setdefault(variant, {
+            "leads": 0, "converted_leads": 0, "confirmed_leads": 0,
+            "total_bookings": 0, "confirmed_bookings": 0,
+        })
+        s["leads"] += 1
+        matched = bookings_by_phone.get(norm(phone), [])
+        if matched:
+            s["converted_leads"] += 1
+            s["total_bookings"] += len(matched)
+            confirmed_count = sum(1 for st in matched if st == "confirmed")
+            s["confirmed_bookings"] += confirmed_count
+            if confirmed_count > 0:
+                s["confirmed_leads"] += 1
+
+    empty = {"leads": 0, "converted_leads": 0, "confirmed_leads": 0, "total_bookings": 0, "confirmed_bookings": 0}
+    results = []
+    for variant_key, label, is_active in variants_meta:
+        s = stats.get(variant_key, empty)
+        leads_n = s["leads"]
+        results.append({
+            "variant_key": variant_key,
+            "label": label,
+            "is_active": is_active,
+            "leads": leads_n,
+            "converted_leads": s["converted_leads"],
+            "confirmed_leads": s["confirmed_leads"],
+            "total_bookings": s["total_bookings"],
+            "confirmed_bookings": s["confirmed_bookings"],
+            "conversion_rate": round(s["converted_leads"] / leads_n * 100, 1) if leads_n else 0.0,
+            "confirmed_rate": round(s["confirmed_leads"] / leads_n * 100, 1) if leads_n else 0.0,
+        })
+    return {"results": results}
+
+
 # ── Keywords ──────────────────────────────────────────────────────────────────
 
 @bot_config_router.get("/keywords")
