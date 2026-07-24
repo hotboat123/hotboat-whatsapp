@@ -37,6 +37,11 @@ Covers:
      is a per-process, in-memory dict — see the endpoint's comment in
      app/main.py). Also checks that pinning a variant to a phone with no
      lead row yet fails loudly instead of silently no-op'ing.
+  8. Per-variant disabled FAQ triggers (bot_ab_variants.disabled_triggers,
+     app/bot/faq.py's disabled_keys param) — a variant that disables the
+     "precio" trigger must NOT get the canned pricing FAQ reply for a
+     message like "cuales son los precios"; it must fall through the
+     priority chain instead (normally reaching the live-AI fallback).
 
 Does NOT cover the marketing repo (hotboat-email-marketing-spec) — the
 segment-sync and abandoned-cart/birthday-automation checks need a logged-in
@@ -119,6 +124,9 @@ def cleanup(conn):
             cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (STALE_CACHE_TEST_PHONE,))
             cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (STALE_CACHE_TEST_PHONE,))
             cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (STALE_CACHE_TEST_PHONE,))
+            cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (DISABLED_TRIGGER_TEST_PHONE,))
+            cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (DISABLED_TRIGGER_TEST_PHONE,))
+            cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (DISABLED_TRIGGER_TEST_PHONE,))
             conn.commit()
     except Exception as e:
         print(f"⚠️ cleanup warning: {e}")
@@ -696,6 +704,79 @@ def test_lead_bot_variant_always_fresh(conn):
         conn.commit()
 
 
+DISABLED_TRIGGER_TEST_PHONE = "56900007769"
+DISABLED_TRIGGER_VARIANT_KEY = "_smoketest_disabledtrigger"
+
+
+def test_disabled_faq_trigger(conn):
+    """
+    Per-variant disabled FAQ triggers (2026-07-24): an operator can opt a
+    canned FAQ topic (e.g. "precio") out of a specific variant, so a
+    matching free-text question skips the automatic reply and falls through
+    the bot's priority chain instead — normally reaching the live-AI
+    fallback. Added after the "IA 1" variant kept answering with the
+    canned price list instead of the AI even with a model configured;
+    the FAQ match at PRIORITY 0.9 in conversation.py fires before the AI
+    fallback ever gets a chance, so it needs its own opt-out per variant.
+    """
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (DISABLED_TRIGGER_TEST_PHONE,))
+        cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (DISABLED_TRIGGER_VARIANT_KEY,))
+        cur.execute(
+            "INSERT INTO bot_ab_variants (variant_key, label, is_active, disabled_triggers) VALUES (%s, %s, FALSE, %s)",
+            (DISABLED_TRIGGER_VARIANT_KEY, "Smoke Test Disabled Trigger (inactive)", ["precio"]),
+        )
+        conn.commit()
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from app.bot.conversation import ConversationManager
+        from app.bot.variant_overrides import invalidate_cache
+        from app.db.leads import get_or_create_lead, set_bot_variant_for_lead
+    except Exception as e:
+        check("Disabled FAQ trigger — import ConversationManager", False, str(e))
+        return
+
+    async def _run():
+        invalidate_cache()
+        cm = ConversationManager()
+        lead = await get_or_create_lead(DISABLED_TRIGGER_TEST_PHONE, "Smoke Test Disabled Trigger")
+        await cm.process_message(
+            from_number=DISABLED_TRIGGER_TEST_PHONE, message_text="Hola", contact_name="Smoke Test Disabled Trigger",
+            message_id=f"smoketest-disabledtrigger-warmup-{date.today().isoformat()}",
+            lead_bot_variant=lead.get("bot_variant"),
+        )
+
+        await set_bot_variant_for_lead(DISABLED_TRIGGER_TEST_PHONE, DISABLED_TRIGGER_VARIANT_KEY)
+        invalidate_cache()
+        lead2 = await get_or_create_lead(DISABLED_TRIGGER_TEST_PHONE, "Smoke Test Disabled Trigger")
+
+        return await cm.process_message(
+            from_number=DISABLED_TRIGGER_TEST_PHONE, message_text="cuales son los precios",
+            contact_name="Smoke Test Disabled Trigger",
+            message_id=f"smoketest-disabledtrigger-1-{date.today().isoformat()}",
+            lead_bot_variant=lead2.get("bot_variant"),
+        )
+
+    try:
+        resp = asyncio.run(_run())
+    except Exception as e:
+        check("Disabled FAQ trigger — 'precio' question skips the canned reply", False, str(e))
+        traceback.print_exc()
+        return
+
+    resp_text = resp if isinstance(resp, str) else json.dumps(resp, ensure_ascii=False)
+    check(
+        "Disabled FAQ trigger — 'precio' question skips the canned reply",
+        "Precios HotBoat" not in resp_text,
+        resp_text[:150].replace("\n", " "),
+    )
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (DISABLED_TRIGGER_VARIANT_KEY,))
+        conn.commit()
+
+
 def main():
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -707,6 +788,7 @@ def main():
         test_ab_weighted_assignment()
         test_manual_variant_switch(conn)
         test_lead_bot_variant_always_fresh(conn)
+        test_disabled_faq_trigger(conn)
     except Exception as e:
         check("Unexpected error", False, str(e))
         traceback.print_exc()

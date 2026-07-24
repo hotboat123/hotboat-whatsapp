@@ -13767,6 +13767,7 @@ async function rebuildWelcomeMenu(){
 // ── A/B test (Popeye variants) ──────────────────────────────────────────────
 let _abVariants = [];
 let _abSuggestedKeys = [];
+let _abFaqTriggerKeys = [];
 let _abOpenVariant = null; // variant_key currently expanded
 
 function toggleNewVariantForm(){
@@ -13807,6 +13808,13 @@ async function updateVariantField(id, field, value){
   } catch(e){ showToast('❌ '+e.message, true); }
 }
 
+async function toggleDisabledTrigger(id, key, disabled){
+  const v = _abVariants.find(x => x.id === id);
+  const current = new Set((v && v.disabled_triggers) || []);
+  if(disabled) current.add(key); else current.delete(key);
+  await updateVariantField(id, 'disabled_triggers', Array.from(current));
+}
+
 async function loadAbVariants(){
   const el = document.getElementById('ab-variants-list');
   el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Cargando…</span>';
@@ -13815,6 +13823,7 @@ async function loadAbVariants(){
     const d = await r.json();
     _abVariants = d.variants || [];
     _abSuggestedKeys = d.suggested_keys || [];
+    _abFaqTriggerKeys = d.faq_trigger_keys || [];
     el.innerHTML = '';
     if(!_abVariants.length){ el.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Sin variantes — crea una para empezar un test.</span>'; return; }
     _abVariants.forEach(v => {
@@ -13847,6 +13856,17 @@ async function loadAbVariants(){
           <input placeholder="modelo (ej: llama-3.3-70b-versatile)" value="${escHtml(v.ai_model||'')}"
             onchange="updateVariantField(${v.id},'ai_model',this.value.trim())"
             style="width:220px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .4rem;font-size:.72rem">
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.3rem .1rem 0;border-top:1px dashed var(--border);margin-top:.1rem;padding-top:.5rem">
+          <span style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em" title="Si el cliente escribe algo que coincide con uno de estos temas, se salta la respuesta automática y sigue la cadena del bot (normalmente termina en la IA, si esta variante tiene un modelo configurado)">🚫 Temas que NO deben responderse automático</span>
+          ${_abFaqTriggerKeys.map(key => `
+            <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;user-select:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.15rem .45rem" title="${escHtml(key)}">
+              <input type="checkbox" ${(v.disabled_triggers||[]).includes(key)?'checked':''}
+                onchange="toggleDisabledTrigger(${v.id},'${key.replace(/'/g,"\\'")}',this.checked)"
+                style="width:12px;height:12px;cursor:pointer;accent-color:var(--red)">
+              <span style="font-size:.72rem;color:var(--text)">${escHtml(key)}</span>
+            </label>
+          `).join('')}
         </div>
         <div id="ab-overrides-${safeKey}" style="display:${isOpen?'flex':'none'};flex-direction:column;gap:.5rem"></div>
       `;

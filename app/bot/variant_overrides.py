@@ -17,7 +17,7 @@ so concurrent messages for different leads never leak into each other.
 import logging
 import time
 import contextvars
-from typing import Optional, Tuple
+from typing import Optional, Tuple, FrozenSet
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,11 @@ _cache_loaded_at: float = 0.0
 # final "nothing else matched" fallback — see get_current_ai_model().
 _ai_model_cache: dict[str, tuple[str, str]] = {}
 _ai_model_cache_loaded_at: float = 0.0
+
+# Separate cache for which FAQ trigger keys (app/bot/faq.py response_keys) a
+# variant skips — see get_disabled_triggers().
+_disabled_triggers_cache: dict[str, FrozenSet[str]] = {}
+_disabled_triggers_cache_loaded_at: float = 0.0
 
 
 def set_current_variant(variant_key: Optional[str]) -> None:
@@ -65,12 +70,14 @@ def _reload_cache() -> None:
 
 
 def invalidate_cache() -> None:
-    """Force the next get_override()/get_current_ai_model() call to reload
-    from DB. Called by the admin save/delete endpoints so edits are visible
-    on the very next message instead of waiting out the TTL."""
-    global _cache_loaded_at, _ai_model_cache_loaded_at
+    """Force the next get_override()/get_current_ai_model()/
+    get_disabled_triggers() call to reload from DB. Called by the admin save/
+    delete endpoints so edits are visible on the very next message instead of
+    waiting out the TTL."""
+    global _cache_loaded_at, _ai_model_cache_loaded_at, _disabled_triggers_cache_loaded_at
     _cache_loaded_at = 0.0
     _ai_model_cache_loaded_at = 0.0
+    _disabled_triggers_cache_loaded_at = 0.0
 
 
 def _reload_ai_model_cache() -> None:
@@ -105,6 +112,40 @@ def get_current_ai_model() -> Optional[Tuple[str, str]]:
     if time.monotonic() - _ai_model_cache_loaded_at > _CACHE_TTL_SECONDS:
         _reload_ai_model_cache()
     return _ai_model_cache.get(variant_key)
+
+
+def _reload_disabled_triggers_cache() -> None:
+    global _disabled_triggers_cache, _disabled_triggers_cache_loaded_at
+    from app.db.connection import get_connection
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT variant_key, disabled_triggers FROM bot_ab_variants "
+                    "WHERE disabled_triggers IS NOT NULL AND array_length(disabled_triggers, 1) > 0"
+                )
+                rows = cur.fetchall()
+        _disabled_triggers_cache = {r[0]: frozenset(r[1]) for r in rows}
+        _disabled_triggers_cache_loaded_at = time.monotonic()
+    except Exception as e:
+        logger.warning(f"Failed to load bot_ab_variants disabled_triggers cache: {e}")
+        _disabled_triggers_cache = {}
+        _disabled_triggers_cache_loaded_at = time.monotonic()
+
+
+def get_disabled_triggers() -> FrozenSet[str]:
+    """FAQ trigger response_keys (app/bot/faq.py) the current lead's variant
+    skips, so a matching free-text question falls through the bot's priority
+    chain instead of being answered by the canned FAQ text — e.g. to let it
+    reach the live-AI fallback instead. Empty set (the normal case) means
+    "don't skip anything," unchanged behavior."""
+    variant_key = _current_variant.get()
+    if not variant_key:
+        return frozenset()
+    if time.monotonic() - _disabled_triggers_cache_loaded_at > _CACHE_TTL_SECONDS:
+        _reload_disabled_triggers_cache()
+    return _disabled_triggers_cache.get(variant_key, frozenset())
 
 
 def get_override(message_key: str) -> Optional[str]:

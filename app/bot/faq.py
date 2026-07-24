@@ -466,6 +466,7 @@ Quer adicionar algo especial ao seu HotBoat?
         *,
         phone: Optional[str] = None,
         customer_name: Optional[str] = None,
+        disabled_keys: Optional[set] = None,
     ) -> Optional[str]:
         """
         Get FAQ response if message matches a question
@@ -476,6 +477,13 @@ Quer adicionar algo especial ao seu HotBoat?
             phone: Sender's WhatsApp number — used to mint a per-client
                 tracked link when the pricing answer is triggered.
             customer_name: Sender's contact name, tied to the tracked link.
+            disabled_keys: response_keys to skip entirely for this call (an
+                A/B variant opting a topic out of the canned answer — see
+                app/bot/variant_overrides.py:get_disabled_triggers()). A
+                message matching ONLY a disabled key returns None, same as
+                no match at all, so the caller's priority chain keeps going
+                (e.g. reaches the live-AI fallback). A message matching
+                several keys still gets the non-disabled ones' answers.
 
         Returns:
             FAQ response or None
@@ -483,6 +491,7 @@ Quer adicionar algo especial ao seu HotBoat?
         lang = language or self.language
         message_lower = message.lower().strip()
         message_norm = _strip_accents(message_lower)
+        disabled = disabled_keys or set()
 
         collected: list = []
         seen_keys: set = set()
@@ -491,6 +500,8 @@ Quer adicionar algo especial ao seu HotBoat?
         db_hits = _lookup_all_db_keywords(message_lower, lang)
         for resp_key, content in db_hits:
             seen_keys.add(resp_key)
+            if resp_key in disabled:
+                continue
             if resp_key == "precio":
                 collected.append(self._build_dynamic_price_response(phone, customer_name) or content)
             else:
@@ -531,6 +542,8 @@ Quer adicionar algo especial ao seu HotBoat?
             if actual_keyword in seen_keys:
                 continue
             seen_keys.add(actual_keyword)
+            if actual_keyword in disabled:
+                continue
 
             # Build response text
             if actual_keyword in faq_to_translation:

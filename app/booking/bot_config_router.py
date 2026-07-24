@@ -2,7 +2,7 @@
 Bot configuration router — CRUD for chatbot messages and keywords.
 """
 import logging
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -105,6 +105,13 @@ def _ensure_tables():
                     # whatever the bot does today" for that variant.
                     "ai_provider  TEXT",
                     "ai_model     TEXT",
+                    # FAQ response_keys (FAQHandler's canned-keyword matches,
+                    # e.g. 'precio', 'caracteristicas' — see app/bot/faq.py)
+                    # to skip for this variant, so a matching free-text
+                    # question falls through the priority chain instead of
+                    # being intercepted, e.g. to reach the live-AI fallback.
+                    # NULL/empty = nothing disabled, current behavior.
+                    "disabled_triggers TEXT[]",
                 ]:
                     try:
                         cur.execute(f"ALTER TABLE bot_ab_variants ADD COLUMN IF NOT EXISTS {col_def}")
@@ -350,6 +357,7 @@ class VariantUpdate(BaseModel):
     weight: Optional[int] = None
     ai_provider: Optional[str] = None
     ai_model: Optional[str] = None
+    disabled_triggers: Optional[List[str]] = None
 
 
 class OverrideUpsert(BaseModel):
@@ -366,6 +374,28 @@ AB_SUGGESTED_KEYS = [
     "location", "extras_menu", "weather", "what_to_bring", "cancellation",
 ]
 
+# FAQHandler's canned-keyword response_keys (app/bot/faq.py) — a DIFFERENT
+# namespace from AB_SUGGESTED_KEYS above (those are get_text()/get_bot_response()
+# override keys). These are what a variant's disabled_triggers list refers to.
+FAQ_TRIGGER_KEYS = [
+    "precio", "caracteristicas", "ubicación", "extras", "traer",
+    "clima", "contacto", "cancelar", "llamar a tomas",
+]
+
+
+def _all_faq_trigger_keys() -> List[str]:
+    """FAQ_TRIGGER_KEYS plus any custom response_key an operator added
+    directly to bot_responses (e.g. via a new bot_keywords entry)."""
+    keys = set(FAQ_TRIGGER_KEYS)
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT DISTINCT response_key FROM bot_responses")
+                keys.update(r[0] for r in cur.fetchall() if r[0])
+    except Exception:
+        pass
+    return sorted(keys)
+
 
 @bot_config_router.get("/ab-variants")
 async def list_ab_variants():
@@ -375,7 +405,8 @@ async def list_ab_variants():
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT v.id, v.variant_key, v.label, v.is_active, v.created_at,
-                           COUNT(o.id) AS override_count, v.weight, v.ai_provider, v.ai_model
+                           COUNT(o.id) AS override_count, v.weight, v.ai_provider, v.ai_model,
+                           v.disabled_triggers
                     FROM bot_ab_variants v
                     LEFT JOIN bot_message_overrides o ON o.variant_key = v.variant_key
                     GROUP BY v.id
@@ -390,6 +421,7 @@ async def list_ab_variants():
                     "is_active": r[3], "created_at": r[4].isoformat() if r[4] else None,
                     "override_count": r[5], "weight": r[6],
                     "ai_provider": r[7], "ai_model": r[8],
+                    "disabled_triggers": list(r[9]) if r[9] else [],
                     # Informational only — the actual split is deterministic
                     # (see _pick_active_variant), this just previews the
                     # target ratio implied by the current weights.
@@ -398,6 +430,7 @@ async def list_ab_variants():
                 for r in rows
             ],
             "suggested_keys": AB_SUGGESTED_KEYS,
+            "faq_trigger_keys": _all_faq_trigger_keys(),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -437,6 +470,9 @@ async def update_ab_variant(variant_id: int, data: VariantUpdate):
                     cur.execute("UPDATE bot_ab_variants SET ai_provider = %s WHERE id = %s", (data.ai_provider or None, variant_id))
                 if data.ai_model is not None:
                     cur.execute("UPDATE bot_ab_variants SET ai_model = %s WHERE id = %s", (data.ai_model or None, variant_id))
+                if data.disabled_triggers is not None:
+                    cleaned = [k.strip() for k in data.disabled_triggers if k and k.strip()]
+                    cur.execute("UPDATE bot_ab_variants SET disabled_triggers = %s WHERE id = %s", (cleaned or None, variant_id))
                 conn.commit()
         from app.bot.variant_overrides import invalidate_cache
         invalidate_cache()

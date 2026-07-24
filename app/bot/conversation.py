@@ -465,7 +465,7 @@ class ConversationManager:
             # A/B test: make this lead's assigned variant (if any) available
             # to every get_text()/get_bot_response() call for the rest of
             # this message via a contextvar — see app/bot/variant_overrides.py.
-            from app.bot.variant_overrides import set_current_variant
+            from app.bot.variant_overrides import set_current_variant, get_disabled_triggers
             set_current_variant(metadata.get("bot_variant"))
 
             # Check if it's the first message - send welcome message
@@ -642,9 +642,13 @@ class ConversationManager:
             # PRIORITY 0.9: FAQ keywords always win, even inside active booking flows.
             # Placed before all awaiting_* states so that e.g. "Precios" sent during
             # time-slot selection gets the pricing answer instead of "No reconocí el horario".
+            # disabled_keys lets a variant opt specific topics (e.g. "precio") out of
+            # this canned match entirely, so they fall through to later priorities —
+            # normally the live-AI fallback at the very end of this chain — instead.
             elif faq_hit := self.faq_handler.get_response(
                 message_text, metadata.get("language", "es"),
                 phone=from_number, customer_name=contact_name,
+                disabled_keys=get_disabled_triggers(),
             ):
                 logger.info("FAQ keyword matched — answering regardless of active flow")
                 response = faq_hit
