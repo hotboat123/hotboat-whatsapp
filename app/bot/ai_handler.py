@@ -9,6 +9,8 @@ from openai import OpenAI
 
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 try:
     from app.bot.mcp_handler import MCPHandler
     MCP_AVAILABLE = True
@@ -16,20 +18,21 @@ except ImportError:
     MCP_AVAILABLE = False
     logger.warning("MCP handler not available - running without MCP support")
 
-logger = logging.getLogger(__name__)
 settings = get_settings()
+
+DEFAULT_MODEL = "llama-3.3-70b-versatile"  # Groq model name (updated from deprecated llama-3.1-70b-versatile)
 
 
 class AIHandler:
     """Handle AI responses using OpenAI SDK with Groq backend and MCP support"""
-    
-    def __init__(self):
+
+    def __init__(self, model: Optional[str] = None):
         # Use OpenAI SDK but point to Groq's OpenAI-compatible API
         self.client = OpenAI(
             api_key=settings.groq_api_key,
             base_url="https://api.groq.com/openai/v1"  # Groq's OpenAI-compatible endpoint
         )
-        self.model = "llama-3.3-70b-versatile"  # Groq model name (updated from deprecated llama-3.1-70b-versatile)
+        self.model = model or DEFAULT_MODEL
         
         if MCP_AVAILABLE:
             self.mcp_handler = MCPHandler()

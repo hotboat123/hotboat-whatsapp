@@ -819,6 +819,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
 ¿Qué fecha y horario te gustaría? 🚤"""
             
             # Final fallback: return main menu to keep flow deterministic
+            # — UNLESS the current lead's A/B variant opted into a live AI
+            # model (see _try_ai_fallback), in which case try that first.
             else:
                 logger.info("No handler matched, returning main menu message")
                 # Reset transient states to avoid being stuck in partial flows
@@ -834,7 +836,8 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                     conversation["metadata"].pop("pending_ice_cream_quantity", None)
                     conversation["metadata"].pop("awaiting_date_time_selection", None)
                 language = conversation.get("metadata", {}).get("language", "es")
-                response = self._get_main_menu_message(language)
+                ai_response = await self._try_ai_fallback(message_text, conversation, contact_name, language)
+                response = ai_response or self._get_main_menu_message(language)
             
             
             # Add response to history
@@ -1084,6 +1087,43 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         
         return False
     
+    async def _try_ai_fallback(
+        self, message_text: str, conversation: dict, contact_name: str, language: str
+    ) -> Optional[str]:
+        """
+        Last resort before showing the main menu again: if the current
+        lead's A/B variant opted into a live AI model (bot_ab_variants.
+        ai_provider/ai_model — see app/bot/variant_overrides.py), generate
+        a real conversational reply with it instead of just re-showing the
+        menu. Returns None (falls through to the menu, as before) whenever
+        no variant/model is set, the language isn't Spanish (the system
+        prompt in ai_handler.py is Spanish-only), or the AI call fails for
+        any reason — this must never be able to break the bot's core
+        deterministic flow, only enrich its final fallback.
+        """
+        if language != "es":
+            return None
+        try:
+            from app.bot.variant_overrides import get_current_ai_model
+            picked = get_current_ai_model()
+            if not picked:
+                return None
+            provider, model = picked
+            if provider != "groq":
+                logger.warning(f"AI fallback: unsupported provider '{provider}' for this variant, skipping")
+                return None
+
+            from app.bot.ai_handler import AIHandler
+            handler = AIHandler(model=model)
+            history = conversation.get("messages", [])[-10:]
+            ai_text = await handler.generate_response(message_text, history, contact_name)
+            if ai_text and not ai_text.startswith("🥬 ¡Ahoy, grumete! ⚓"):  # that prefix marks AIHandler's own error fallback
+                return ai_text
+            return None
+        except Exception as e:
+            logger.warning(f"AI fallback failed, using main menu instead: {e}")
+            return None
+
     def _get_main_menu_message(self, language: str = "es") -> str:
         """Return the welcome menu. Tries DB-driven menu first, falls back to static."""
         _LANG_HINT = "\n\n_🌍 ¿Hablas otro idioma? Escribe *\"inglés\"* o *\"português\"*_"

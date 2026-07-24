@@ -25,6 +25,10 @@ Covers:
   5. A/B weighted assignment (app/db/leads.py:_pick_active_variant) — a
      3:1 weight split must converge to exactly 9:3 over 12 deterministic
      picks. Pure logic test against a fake cursor, touches no real DB rows.
+  6. Live-AI-fallback safety net (ConversationManager._try_ai_fallback) —
+     a variant with a deliberately bogus AI model must never crash the bot
+     or surface an error; it must silently fall through to the normal
+     main-menu text. Does not require a real GROQ_API_KEY to be meaningful.
 
 Does NOT cover the marketing repo (hotboat-email-marketing-spec) — the
 segment-sync and abandoned-cart/birthday-automation checks need a logged-in
@@ -97,6 +101,10 @@ def cleanup(conn):
             cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (AB_TEST_PHONE,))
             cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (AB_TEST_PHONE,))
             cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (AB_VARIANT_KEY,))  # cascades to bot_message_overrides
+            cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (AI_TEST_PHONE,))
+            cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (AI_TEST_PHONE,))
+            cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (AI_TEST_PHONE,))
+            cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (AI_VARIANT_KEY,))
             conn.commit()
     except Exception as e:
         print(f"⚠️ cleanup warning: {e}")
@@ -313,6 +321,79 @@ def test_ab_experiment(conn):
         )
 
 
+AI_TEST_PHONE = "56900007776"
+AI_VARIANT_KEY = "_smoketest_ai"
+
+
+def test_ai_fallback_safety_net(conn):
+    """
+    Live-AI fallback (ConversationManager._try_ai_fallback, added
+    2026-07-23): when a variant sets ai_provider/ai_model, an unmatched
+    message tries a real Groq call before falling back to the main menu.
+    This test deliberately uses a bogus model name so the Groq call fails
+    regardless of whether a real GROQ_API_KEY is configured in this
+    environment — the point isn't to test Groq's API, it's to lock in that
+    an AI failure can NEVER surface as an error or crash the bot; it must
+    silently fall through to the exact same main-menu text a variant with
+    no AI model at all would show.
+    """
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (AI_TEST_PHONE,))
+        cur.execute("DELETE FROM bot_ab_variants WHERE variant_key=%s", (AI_VARIANT_KEY,))
+        cur.execute(
+            "INSERT INTO bot_ab_variants (variant_key, label, is_active, ai_provider, ai_model) "
+            "VALUES (%s, %s, FALSE, 'groq', 'this-model-does-not-exist')",
+            (AI_VARIANT_KEY, "Smoke Test AI (inactive)"),
+        )
+        cur.execute(
+            "INSERT INTO whatsapp_leads (phone_number, customer_name, lead_status, last_interaction_at, created_at, updated_at, bot_variant) "
+            "VALUES (%s, %s, 'unknown', NOW(), NOW(), NOW(), %s)",
+            (AI_TEST_PHONE, "Smoke Test AI", AI_VARIANT_KEY),
+        )
+        conn.commit()
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from app.bot.conversation import ConversationManager
+        from app.bot.variant_overrides import invalidate_cache
+        invalidate_cache()
+    except Exception as e:
+        check("AI fallback safety net — import ConversationManager", False, str(e))
+        return
+
+    async def _run():
+        cm = ConversationManager()
+        await cm.process_message(
+            from_number=AI_TEST_PHONE, message_text="Hola", contact_name="Smoke Test AI",
+            message_id=f"smoketest-ai-warmup-{date.today().isoformat()}",
+        )
+        # Something that shouldn't match any deterministic handler, forcing
+        # the flow into the final "nothing matched" fallback where the AI
+        # attempt (and this test) actually happens.
+        return await cm.process_message(
+            from_number=AI_TEST_PHONE, message_text="Oye, cuéntame un chiste corto sobre el mar",
+            contact_name="Smoke Test AI", message_id=f"smoketest-ai-{date.today().isoformat()}",
+        )
+
+    try:
+        resp = asyncio.run(_run())
+    except Exception as e:
+        check("AI fallback failure does not crash the bot", False, str(e))
+        traceback.print_exc()
+        return
+
+    resp_text = resp if isinstance(resp, str) else json.dumps(resp, ensure_ascii=False)
+    check(
+        "AI fallback failure does not crash the bot",
+        True,  # reaching this line at all (no exception above) is the check
+    )
+    check(
+        "AI fallback failure falls through to the normal main menu",
+        "¿Qué número eliges?" in resp_text,
+        resp_text[:150].replace("\n", " "),
+    )
+
+
 def test_ab_weighted_assignment():
     """
     Deterministic weighted variant assignment (app/db/leads.py:
@@ -380,6 +461,7 @@ def main():
         test_signature(booking_ref, conn)
         test_bot_ninos_regression()
         test_ab_experiment(conn)
+        test_ai_fallback_safety_net(conn)
         test_ab_weighted_assignment()
     except Exception as e:
         check("Unexpected error", False, str(e))

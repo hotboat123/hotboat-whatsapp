@@ -438,6 +438,8 @@ async def update_ab_variant(variant_id: int, data: VariantUpdate):
                 if data.ai_model is not None:
                     cur.execute("UPDATE bot_ab_variants SET ai_model = %s WHERE id = %s", (data.ai_model or None, variant_id))
                 conn.commit()
+        from app.bot.variant_overrides import invalidate_cache
+        invalidate_cache()
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

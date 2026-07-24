@@ -17,7 +17,7 @@ so concurrent messages for different leads never leak into each other.
 import logging
 import time
 import contextvars
-from typing import Optional
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,11 @@ _current_variant: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar
 _CACHE_TTL_SECONDS = 60
 _cache: dict[tuple[str, str], str] = {}
 _cache_loaded_at: float = 0.0
+
+# Separate cache for the (ai_provider, ai_model) a variant opts into for the
+# final "nothing else matched" fallback — see get_current_ai_model().
+_ai_model_cache: dict[str, tuple[str, str]] = {}
+_ai_model_cache_loaded_at: float = 0.0
 
 
 def set_current_variant(variant_key: Optional[str]) -> None:
@@ -60,11 +65,46 @@ def _reload_cache() -> None:
 
 
 def invalidate_cache() -> None:
-    """Force the next get_override() call to reload from DB. Called by the
-    admin save/delete endpoints so edits are visible on the very next
-    message instead of waiting out the TTL."""
-    global _cache_loaded_at
+    """Force the next get_override()/get_current_ai_model() call to reload
+    from DB. Called by the admin save/delete endpoints so edits are visible
+    on the very next message instead of waiting out the TTL."""
+    global _cache_loaded_at, _ai_model_cache_loaded_at
     _cache_loaded_at = 0.0
+    _ai_model_cache_loaded_at = 0.0
+
+
+def _reload_ai_model_cache() -> None:
+    global _ai_model_cache, _ai_model_cache_loaded_at
+    from app.db.connection import get_connection
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT variant_key, ai_provider, ai_model FROM bot_ab_variants "
+                    "WHERE ai_model IS NOT NULL AND ai_model != ''"
+                )
+                rows = cur.fetchall()
+        _ai_model_cache = {r[0]: (r[1] or "groq", r[2]) for r in rows}
+        _ai_model_cache_loaded_at = time.monotonic()
+    except Exception as e:
+        logger.warning(f"Failed to load bot_ab_variants AI-model cache: {e}")
+        _ai_model_cache = {}
+        _ai_model_cache_loaded_at = time.monotonic()
+
+
+def get_current_ai_model() -> Optional[Tuple[str, str]]:
+    """Return (provider, model) the current lead's variant opted into for
+    the live-AI fallback, or None if this variant doesn't set one (the
+    normal case — most variants only override message text). Only
+    consumed by ConversationManager's final "nothing else matched"
+    fallback; never overrides any of the bot's deterministic logic."""
+    variant_key = _current_variant.get()
+    if not variant_key:
+        return None
+    if time.monotonic() - _ai_model_cache_loaded_at > _CACHE_TTL_SECONDS:
+        _reload_ai_model_cache()
+    return _ai_model_cache.get(variant_key)
 
 
 def get_override(message_key: str) -> Optional[str]:
