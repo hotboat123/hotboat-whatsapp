@@ -1168,7 +1168,36 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             if from_number and any(kw in message_lower for kw in self._AI_LINK_WORTHY_KEYWORDS):
                 try:
                     from app.booking.link_tracking_router import create_tracked_link_for_phone
-                    tracked = create_tracked_link_for_phone(from_number, contact_name or "")
+
+                    # Pre-fill date/time/people when the customer already has a
+                    # reservation-type cart item (e.g. they completed the
+                    # structured date/time flow earlier, then came back with a
+                    # free-text question the AI ended up answering) — same
+                    # ?date=&time=&people= params booking-soft.html already
+                    # reads from links the deterministic flows send. cart
+                    # metadata stores the date as a human string ("30 de julio
+                    # 2026"), so it's re-parsed with the same parser the bot
+                    # itself uses on incoming messages, rather than guessing at
+                    # a format. Any failure here just falls back to a plain
+                    # personalized link — never blocks the AI's reply.
+                    dest = "/booking"
+                    try:
+                        cart_items = await self.cart_manager.get_cart(from_number)
+                        reservation_item = next(
+                            (it for it in reversed(cart_items) if it.item_type == "reservation"), None
+                        )
+                        if reservation_item:
+                            item_meta = reservation_item.metadata or {}
+                            cart_date, cart_time, capacity = item_meta.get("date"), item_meta.get("time"), item_meta.get("capacity")
+                            if cart_date and cart_time and capacity:
+                                parsed_date = self._parse_reservation_date(str(cart_date).lower())
+                                if parsed_date:
+                                    date_iso = parsed_date["date_obj"].strftime("%Y-%m-%d")
+                                    dest = f"/booking?date={date_iso}&time={cart_time}&people={capacity}"
+                    except Exception as e:
+                        logger.warning(f"AI fallback: could not read cart for link pre-fill ({from_number}): {e}")
+
+                    tracked = create_tracked_link_for_phone(from_number, contact_name or "", dest=dest)
                     link_url = tracked.get("url")
                     if link_url:
                         ai_text = f"{ai_text}\n\n⚡ Reserva directo aquí 👉 {link_url}"
