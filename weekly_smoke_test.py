@@ -47,6 +47,10 @@ Covers:
      must be used instead of the default, but the fixed anti-hallucination
      safety footer must always be appended regardless, and a variant with
      no custom prompt must fall back to the full default.
+  10. Tracked booking link on AI replies (ConversationManager.
+      _try_ai_fallback) — a price/reservation question answered by the live
+      AI must get a real per-client tracked link appended; an unrelated
+      question must not. Mocks the AI call, no real GROQ_API_KEY needed.
 
 Does NOT cover the marketing repo (hotboat-email-marketing-spec) — the
 segment-sync and abandoned-cart/birthday-automation checks need a logged-in
@@ -132,6 +136,7 @@ def cleanup(conn):
             cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (DISABLED_TRIGGER_TEST_PHONE,))
             cur.execute("DELETE FROM whatsapp_conversations WHERE phone_number=%s", (DISABLED_TRIGGER_TEST_PHONE,))
             cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (DISABLED_TRIGGER_TEST_PHONE,))
+            cur.execute("DELETE FROM tracked_quote_links WHERE phone=%s", (AI_LINK_TEST_PHONE,))
             conn.commit()
     except Exception as e:
         print(f"⚠️ cleanup warning: {e}")
@@ -843,6 +848,70 @@ def test_custom_ai_system_prompt(conn):
         conn.commit()
 
 
+AI_LINK_TEST_PHONE = "56900007768"
+
+
+def test_ai_fallback_tracked_link(conn):
+    """
+    Tracked booking link on AI replies (2026-07-24) — explicitly requested:
+    when a customer asks about price/reservation and the live-AI fallback
+    answers, a real per-client tracked link (same mechanism the deterministic
+    price/date flows already use, app/booking/link_tracking_router) must be
+    appended so the admin can see if they actually clicked through. Mocks
+    AIHandler.generate_response so this doesn't need a real GROQ_API_KEY —
+    the thing under test is the link-appending logic in
+    ConversationManager._try_ai_fallback, not Groq itself.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from unittest.mock import patch, AsyncMock
+        from app.bot.conversation import ConversationManager
+        from app.bot.variant_overrides import invalidate_cache
+    except Exception as e:
+        check("AI fallback tracked link — import ConversationManager", False, str(e))
+        return
+
+    async def _run():
+        invalidate_cache()
+        cm = ConversationManager()
+        conversation = {"messages": []}
+        canned = "Ahoy grumete, el precio depende de cuántos vayan!"
+        with patch("app.bot.ai_handler.AIHandler.generate_response", new=AsyncMock(return_value=canned)), \
+             patch("app.bot.variant_overrides.get_current_ai_model", return_value=("groq", "llama-3.3-70b-versatile")), \
+             patch("app.bot.variant_overrides.get_current_system_prompt", return_value=None):
+            price_resp = await cm._try_ai_fallback(
+                "cuanto vale para 5 personas", conversation, "Smoke Test AI Link", "es",
+                from_number=AI_LINK_TEST_PHONE,
+            )
+            unrelated_resp = await cm._try_ai_fallback(
+                "me encanta el paisaje de la laguna", conversation, "Smoke Test AI Link", "es",
+                from_number=AI_LINK_TEST_PHONE,
+            )
+        return price_resp, unrelated_resp
+
+    try:
+        price_resp, unrelated_resp = asyncio.run(_run())
+    except Exception as e:
+        check("AI fallback tracked link — price question gets a real tracked link appended", False, str(e))
+        traceback.print_exc()
+        return
+
+    check(
+        "AI fallback tracked link — price question gets a real tracked link appended",
+        bool(price_resp) and "https://whatsapp.hotboat.cl/ir/" in price_resp,
+        (price_resp or "")[:200].replace("\n", " "),
+    )
+    check(
+        "AI fallback tracked link — unrelated question does not get a link appended",
+        bool(unrelated_resp) and "https://whatsapp.hotboat.cl/ir/" not in unrelated_resp,
+        (unrelated_resp or "")[:200].replace("\n", " "),
+    )
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM tracked_quote_links WHERE phone=%s", (AI_LINK_TEST_PHONE,))
+        conn.commit()
+
+
 def main():
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -856,6 +925,7 @@ def main():
         test_lead_bot_variant_always_fresh(conn)
         test_disabled_faq_trigger(conn)
         test_custom_ai_system_prompt(conn)
+        test_ai_fallback_tracked_link(conn)
     except Exception as e:
         check("Unexpected error", False, str(e))
         traceback.print_exc()

@@ -860,7 +860,7 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                     conversation["metadata"].pop("pending_ice_cream_quantity", None)
                     conversation["metadata"].pop("awaiting_date_time_selection", None)
                 language = conversation.get("metadata", {}).get("language", "es")
-                ai_response = await self._try_ai_fallback(message_text, conversation, contact_name, language)
+                ai_response = await self._try_ai_fallback(message_text, conversation, contact_name, language, from_number)
                 response = ai_response or self._get_main_menu_message(language)
             
             
@@ -1111,8 +1111,20 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         
         return False
     
+    # Broad on purpose: this only decides whether to tack the tracked booking
+    # link onto an AI reply, so a false positive just adds a harmless extra
+    # line — missing a real price/reservation question is the costlier
+    # mistake. Mirrors the phrasing variety already called out in the AI
+    # prompt's "LECCIONES DE CONVERSACIONES REALES" section.
+    _AI_LINK_WORTHY_KEYWORDS = (
+        "precio", "precios", "cuanto", "cuánto", "vale", "sale", "cuesta",
+        "valor", "valores", "reservar", "reserva", "reservas", "cotizar",
+        "cotiza", "cotización", "cotizacion", "agendar",
+    )
+
     async def _try_ai_fallback(
-        self, message_text: str, conversation: dict, contact_name: str, language: str
+        self, message_text: str, conversation: dict, contact_name: str, language: str,
+        from_number: Optional[str] = None,
     ) -> Optional[str]:
         """
         Last resort before showing the main menu again: if the current
@@ -1124,6 +1136,13 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         prompt in ai_handler.py is Spanish-only), or the AI call fails for
         any reason — this must never be able to break the bot's core
         deterministic flow, only enrich its final fallback.
+
+        When the customer's message looks like a price/reservation question,
+        a real per-client tracked link (same app/booking/link_tracking_router
+        mechanism the deterministic price/date flows already use) is
+        appended after the AI's own reply — the AI can talk about booking,
+        but it can't generate a real trackable URL itself, so this is done
+        deterministically rather than trusting the model to produce one.
         """
         if language != "es":
             return None
@@ -1142,9 +1161,21 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             handler = AIHandler(model=model, custom_prompt=get_current_system_prompt())
             history = conversation.get("messages", [])[-10:]
             ai_text = await handler.generate_response(message_text, history, contact_name)
-            if ai_text and not ai_text.startswith("🥬 ¡Ahoy, grumete! ⚓"):  # that prefix marks AIHandler's own error fallback
-                return ai_text
-            return None
+            if not ai_text or ai_text.startswith("🥬 ¡Ahoy, grumete! ⚓"):  # that prefix marks AIHandler's own error fallback
+                return None
+
+            message_lower = message_text.lower()
+            if from_number and any(kw in message_lower for kw in self._AI_LINK_WORTHY_KEYWORDS):
+                try:
+                    from app.booking.link_tracking_router import create_tracked_link_for_phone
+                    tracked = create_tracked_link_for_phone(from_number, contact_name or "")
+                    link_url = tracked.get("url")
+                    if link_url:
+                        ai_text = f"{ai_text}\n\n⚡ Reserva directo aquí 👉 {link_url}"
+                except Exception as e:
+                    logger.warning(f"AI fallback: tracked link creation failed for {from_number}: {e}")
+
+            return ai_text
         except Exception as e:
             logger.warning(f"AI fallback failed, using main menu instead: {e}")
             return None
