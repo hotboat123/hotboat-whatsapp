@@ -171,7 +171,7 @@ async def _create_transbank_payment(booking_ref: str, amount: float, session_id:
     (e.g. a combined HotBoat paseo's ref) when this charge also needs to
     confirm a second booking on payment — see transbank_return() above."""
     from app.payment.transbank import create_transaction
-    base = os.getenv("PUBLIC_BASE_URL", os.getenv("APP_URL", "https://hotboat-whatsapp-staging-tom.up.railway.app"))
+    base = os.getenv("PUBLIC_BASE_URL", os.getenv("APP_URL", "https://whatsapp.hotboat.cl"))
     try:
         tx = create_transaction(
             buy_order=booking_ref,
@@ -710,7 +710,7 @@ async def _create_mp_preference(booking_ref: str, req: CreateBookingRequest, tot
     token = os.getenv("MERCADOPAGO_ACCESS_TOKEN", "")
     if not token:
         return None
-    base = os.getenv("PUBLIC_BASE_URL", "https://hotboat-app.up.railway.app")
+    base = os.getenv("PUBLIC_BASE_URL", "https://whatsapp.hotboat.cl")
     payload = {
         "items": [{"id": booking_ref, "quantity": 1, "currency_id": "CLP", "unit_price": total,
                    "title": f"HotBoat – Depósito 50% | {req.booking_date} {req.booking_time} {req.num_people}p"}],
@@ -871,7 +871,7 @@ async def arma_pack_pay(request: ArmaPackPayRequest):
     else:
         try:
             import httpx
-            base = os.getenv("PUBLIC_BASE_URL", "https://hotboat-app.up.railway.app")
+            base = os.getenv("PUBLIC_BASE_URL", "https://whatsapp.hotboat.cl")
             # MercadoPago requires integer prices for CLP
             unit_price = int(request.deposit_amount)
             payload = {

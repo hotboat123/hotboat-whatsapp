@@ -3911,11 +3911,19 @@ async function init(){
   // to keep their all-true/empty defaults on the payment-return pages, so
   // "Volver al inicio" from there showed every menu button (packs, arma
   // pack...) regardless of what's actually toggled off in admin.
+  //
+  // Starting the fetch here isn't enough on its own, though: checkReturnFromPayment()
+  // below renders the thank-you page and returns almost immediately (one
+  // lightweight booking fetch), so a customer clicking "Volver al inicio"
+  // right away could still hit renderMenu() before this resolves — same
+  // stale-defaults bug, just a race instead of a hard skip. Always await it
+  // before the thank-you/failure page renders, not just on the normal path.
   const _dynLoad = Promise.all([loadPricesAndAvail(), loadDynamicContent()]);
+  const _isPaymentReturn = await checkReturnFromPayment();
+  await _dynLoad;
 
-  if(!(await checkReturnFromPayment())){
+  if(!_isPaymentReturn){
     mc.innerHTML = `<div class="card" style="text-align:center"><p>${t('loading')}</p></div>`;
-    await _dynLoad;
 
     // Auto-select date+time from URL params (e.g. links sent by WhatsApp bot,
     // or the abandoned-cart follow-up email, which additionally passes
