@@ -22,6 +22,9 @@ Covers:
      /api/admin/bot/ab-results endpoint must count it. is_active=FALSE means
      this test variant is never eligible for real customers' random
      assignment — see test_ab_experiment()'s docstring.
+  5. A/B weighted assignment (app/db/leads.py:_pick_active_variant) — a
+     3:1 weight split must converge to exactly 9:3 over 12 deterministic
+     picks. Pure logic test against a fake cursor, touches no real DB rows.
 
 Does NOT cover the marketing repo (hotboat-email-marketing-spec) — the
 segment-sync and abandoned-cart/birthday-automation checks need a logged-in
@@ -310,6 +313,66 @@ def test_ab_experiment(conn):
         )
 
 
+def test_ab_weighted_assignment():
+    """
+    Deterministic weighted variant assignment (app/db/leads.py:
+    _pick_active_variant), added 2026-07-23. Uses a fake cursor that answers
+    the two SELECTs it issues from in-memory data — no real bot_ab_variants
+    row is ever created, so this can't affect real customers' random
+    assignment even for the instant it would take to create/delete an
+    is_active=TRUE test variant in the shared production DB.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from app.db.leads import _pick_active_variant
+    except Exception as e:
+        check("A/B weighted assignment — import _pick_active_variant", False, str(e))
+        return
+
+    class _FakeCursor:
+        """Mimics the two queries _pick_active_variant issues: variants
+        (key, weight), then assignment counts so far, both from a dict this
+        test mutates locally — never touches the real DB."""
+        def __init__(self, variants, counts):
+            self.variants = variants  # [(key, weight), ...]
+            self.counts = counts      # {key: count}
+            self._last = None
+
+        def execute(self, sql, params=None):
+            if "FROM bot_ab_variants" in sql:
+                self._last = list(self.variants)
+            elif "FROM whatsapp_leads" in sql:
+                self._last = [(k, c) for k, c in self.counts.items() if c > 0]
+            else:
+                self._last = []
+
+        def fetchall(self):
+            return self._last
+
+    variants = [("a", 3), ("b", 1)]
+    counts = {"a": 0, "b": 0}
+    cur = _FakeCursor(variants, counts)
+    sequence = []
+    for _ in range(12):
+        picked = _pick_active_variant(cur)
+        sequence.append(picked)
+        counts[picked] = counts.get(picked, 0) + 1
+
+    check(
+        "A/B weighted assignment (3:1) converges to the exact ratio over 12 picks",
+        counts == {"a": 9, "b": 3},
+        f"sequence={sequence} counts={counts}",
+    )
+
+    # No active variants at all -> None, not a crash (the "usually no
+    # experiment running" case _pick_active_variant's docstring describes).
+    empty_cur = _FakeCursor([], {})
+    check(
+        "A/B weighted assignment returns None when no variant is active",
+        _pick_active_variant(empty_cur) is None,
+    )
+
+
 def main():
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -317,6 +380,7 @@ def main():
         test_signature(booking_ref, conn)
         test_bot_ninos_regression()
         test_ab_experiment(conn)
+        test_ab_weighted_assignment()
     except Exception as e:
         check("Unexpected error", False, str(e))
         traceback.print_exc()

@@ -90,6 +90,26 @@ def _ensure_tables():
                         created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
+                for col_def in [
+                    # Relative share among active variants — deterministic
+                    # weighted assignment picks whichever active variant is
+                    # furthest behind its target share (see
+                    # app/db/leads.py:_pick_active_variant), not a coin flip.
+                    # Values are relative to each other, not required to sum
+                    # to 100 (e.g. 70/30 or 7/3 behave identically).
+                    "weight       INT NOT NULL DEFAULT 1",
+                    # AI-model plumbing for a future dimension of the test —
+                    # NOT wired into any live response path yet (Popeye's
+                    # conversation logic is currently 100% rule-based; see
+                    # app/bot/ai_handler.py's docstring). Nullable = "use
+                    # whatever the bot does today" for that variant.
+                    "ai_provider  TEXT",
+                    "ai_model     TEXT",
+                ]:
+                    try:
+                        cur.execute(f"ALTER TABLE bot_ab_variants ADD COLUMN IF NOT EXISTS {col_def}")
+                    except Exception:
+                        pass
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS bot_message_overrides (
                         id           SERIAL PRIMARY KEY,
@@ -321,11 +341,15 @@ async def build_menu_preview(lang: str = "es"):
 class VariantCreate(BaseModel):
     variant_key: str
     label: str
+    weight: int = 1
 
 
 class VariantUpdate(BaseModel):
     label: Optional[str] = None
     is_active: Optional[bool] = None
+    weight: Optional[int] = None
+    ai_provider: Optional[str] = None
+    ai_model: Optional[str] = None
 
 
 class OverrideUpsert(BaseModel):
@@ -351,19 +375,25 @@ async def list_ab_variants():
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT v.id, v.variant_key, v.label, v.is_active, v.created_at,
-                           COUNT(o.id) AS override_count
+                           COUNT(o.id) AS override_count, v.weight, v.ai_provider, v.ai_model
                     FROM bot_ab_variants v
                     LEFT JOIN bot_message_overrides o ON o.variant_key = v.variant_key
                     GROUP BY v.id
                     ORDER BY v.created_at
                 """)
                 rows = cur.fetchall()
+        active_weight_total = sum(r[6] or 1 for r in rows if r[3]) or 1
         return {
             "variants": [
                 {
                     "id": r[0], "variant_key": r[1], "label": r[2],
                     "is_active": r[3], "created_at": r[4].isoformat() if r[4] else None,
-                    "override_count": r[5],
+                    "override_count": r[5], "weight": r[6],
+                    "ai_provider": r[7], "ai_model": r[8],
+                    # Informational only — the actual split is deterministic
+                    # (see _pick_active_variant), this just previews the
+                    # target ratio implied by the current weights.
+                    "target_share_pct": round((r[6] or 1) / active_weight_total * 100, 1) if r[3] else None,
                 }
                 for r in rows
             ],
@@ -382,8 +412,8 @@ async def create_ab_variant(data: VariantCreate):
         with _get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO bot_ab_variants (variant_key, label) VALUES (%s, %s) RETURNING id",
-                    (key, data.label or key),
+                    "INSERT INTO bot_ab_variants (variant_key, label, weight) VALUES (%s, %s, %s) RETURNING id",
+                    (key, data.label or key, max(1, data.weight or 1)),
                 )
                 new_id = cur.fetchone()[0]
                 conn.commit()
@@ -401,6 +431,12 @@ async def update_ab_variant(variant_id: int, data: VariantUpdate):
                     cur.execute("UPDATE bot_ab_variants SET label = %s WHERE id = %s", (data.label, variant_id))
                 if data.is_active is not None:
                     cur.execute("UPDATE bot_ab_variants SET is_active = %s WHERE id = %s", (data.is_active, variant_id))
+                if data.weight is not None:
+                    cur.execute("UPDATE bot_ab_variants SET weight = %s WHERE id = %s", (max(1, data.weight), variant_id))
+                if data.ai_provider is not None:
+                    cur.execute("UPDATE bot_ab_variants SET ai_provider = %s WHERE id = %s", (data.ai_provider or None, variant_id))
+                if data.ai_model is not None:
+                    cur.execute("UPDATE bot_ab_variants SET ai_model = %s WHERE id = %s", (data.ai_model or None, variant_id))
                 conn.commit()
         return {"ok": True}
     except Exception as e:
@@ -422,6 +458,48 @@ async def delete_ab_variant(variant_id: int):
         return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@bot_config_router.get("/ab-overrides-compare")
+async def compare_ab_overrides():
+    """Side-by-side view: for every message_key that at least one variant
+    overrides, show what each variant actually sends — including the ones
+    that DON'T override it (falls back to the live default text via the
+    same get_text/get_bot_response lookup the bot itself uses), so you can
+    read exactly what's different between variants without hopping between
+    each one's collapsed section."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT variant_key, label FROM bot_ab_variants ORDER BY created_at")
+                variants = cur.fetchall()
+                cur.execute("SELECT variant_key, message_key, content_es FROM bot_message_overrides")
+                overrides = cur.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    override_map: dict[str, dict[str, str]] = {}
+    for variant_key, message_key, content_es in overrides:
+        override_map.setdefault(message_key, {})[variant_key] = content_es
+
+    from app.bot.translations import get_text as _get_text
+
+    rows = []
+    for message_key in sorted(override_map.keys()):
+        per_variant = []
+        for variant_key, label in variants:
+            text = override_map[message_key].get(variant_key)
+            is_override = text is not None
+            if not is_override:
+                # Same fallback the bot itself would use for this key —
+                # get_bot_response() first (DB-driven), then get_text() —
+                # mirrored here without threading a fake "current variant"
+                # context, since we want the TRUE unmodified default.
+                text = get_bot_response(message_key, "es") or _get_text(message_key, "es")
+            per_variant.append({"variant_key": variant_key, "label": label, "content_es": text, "is_override": is_override})
+        rows.append({"message_key": message_key, "variants": per_variant})
+
+    return {"rows": rows, "variant_count": len(variants)}
 
 
 @bot_config_router.get("/ab-overrides")

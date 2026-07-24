@@ -4504,13 +4504,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
           <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
             <span style="font-weight:600;font-size:.95rem">🧪 Test A/B de Popeye</span>
-            <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Cada cliente nuevo se asigna al azar a una variante activa. Define textos alternativos para los momentos que quieras — lo que no reescribas queda igual al texto de siempre.</span>
-            <button onclick="toggleNewVariantForm()" style="margin-left:auto;background:rgba(16,185,129,.15);border:1px solid #10b981;color:#10b981;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">+ Nueva variante</button>
+            <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Cada cliente nuevo se asigna a una variante activa según su peso (reparto determinístico, no una moneda al aire). Define textos alternativos para los momentos que quieras — lo que no reescribas queda igual al texto de siempre.</span>
+            <button onclick="toggleAbCompare()" style="margin-left:auto;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">⇄ Comparar variantes</button>
+            <button onclick="toggleNewVariantForm()" style="background:rgba(16,185,129,.15);border:1px solid #10b981;color:#10b981;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">+ Nueva variante</button>
             <button onclick="loadAbVariants();loadAbResults()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
           </div>
           <div id="new-variant-form" style="display:none;padding:.9rem 1.2rem;border-bottom:1px solid var(--border);background:rgba(16,185,129,.05)">
             <div style="font-size:.82rem;font-weight:600;color:#10b981;margin-bottom:.6rem">Nueva variante</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;margin-bottom:.6rem">
               <div>
                 <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem">Clave (sin espacios) *</label>
                 <input id="nv-key" type="text" placeholder="ej: urgencia" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none">
@@ -4519,12 +4520,17 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem">Nombre visible</label>
                 <input id="nv-label" type="text" placeholder="ej: Urgencia / cupos limitados" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none">
               </div>
+              <div>
+                <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem" title="Peso relativo — ej. Control=7 y Urgencia=3 reparte 70/30">Peso</label>
+                <input id="nv-weight" type="number" min="1" value="1" style="width:70px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none">
+              </div>
             </div>
             <div style="display:flex;gap:.5rem;justify-content:flex-end">
               <button onclick="toggleNewVariantForm()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer">Cancelar</button>
               <button onclick="createAbVariant()" style="background:#10b981;color:#fff;border:none;border-radius:7px;padding:.35rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600">Crear variante</button>
             </div>
           </div>
+          <div id="ab-compare-panel" style="display:none;padding:.9rem 1.2rem;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02);overflow-x:auto"></div>
           <div id="ab-variants-list" style="padding:.8rem 1.2rem;display:flex;flex-direction:column;gap:.9rem"></div>
           <div style="padding:.9rem 1.2rem;border-top:1px solid var(--border)">
             <div style="font-size:.82rem;font-weight:600;color:var(--muted);margin-bottom:.6rem">📊 Resultados</div>
@@ -13773,17 +13779,30 @@ function toggleNewVariantForm(){
 async function createAbVariant(){
   const variant_key = (document.getElementById('nv-key').value || '').trim().toLowerCase().replace(/\s+/g,'_');
   const label = (document.getElementById('nv-label').value || '').trim();
+  const weight = Math.max(1, parseInt(document.getElementById('nv-weight').value, 10) || 1);
   if(!variant_key){ showToast('❌ La clave es obligatoria', true); return; }
   try {
     const r = await fetch('/api/admin/bot/ab-variants', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({variant_key, label: label || variant_key})
+      body: JSON.stringify({variant_key, label: label || variant_key, weight})
     });
     if(!r.ok) throw new Error(await r.text());
     showToast('✅ Variante creada: ' + variant_key);
     document.getElementById('nv-key').value = '';
     document.getElementById('nv-label').value = '';
+    document.getElementById('nv-weight').value = '1';
     document.getElementById('new-variant-form').style.display = 'none';
+    loadAbVariants();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function updateVariantField(id, field, value){
+  try {
+    const r = await fetch(`/api/admin/bot/ab-variants/${id}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({[field]: value})
+    });
+    if(!r.ok) throw new Error(await r.text());
     loadAbVariants();
   } catch(e){ showToast('❌ '+e.message, true); }
 }
@@ -13808,11 +13827,26 @@ async function loadAbVariants(){
           <span style="font-weight:600;font-size:.85rem;cursor:pointer" onclick="toggleVariantOverrides('${v.variant_key}','${safeKey}')">${isOpen?'▾':'▸'} ${escHtml(v.label)}</span>
           <code style="font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.06);padding:.1rem .4rem;border-radius:4px">${escHtml(v.variant_key)}</code>
           <span style="font-size:.72rem;color:var(--muted)">${v.override_count} texto${v.override_count===1?'':'s'} alternativo${v.override_count===1?'':'s'}</span>
+          <label style="display:flex;align-items:center;gap:.3rem" title="Peso relativo para el reparto determinístico">
+            <span style="font-size:.72rem;color:var(--muted)">Peso</span>
+            <input type="number" min="1" value="${v.weight||1}" onchange="updateVariantField(${v.id},'weight',Math.max(1,parseInt(this.value,10)||1))"
+              style="width:48px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.15rem .3rem;font-size:.75rem">
+          </label>
+          ${v.is_active && v.target_share_pct!=null?`<span style="font-size:.72rem;color:var(--gold)">≈${v.target_share_pct}% de los nuevos</span>`:''}
           <label style="display:flex;align-items:center;gap:.28rem;cursor:pointer;user-select:none;margin-left:auto" title="Recibe clientes nuevos">
             <input type="checkbox" ${v.is_active?'checked':''} onchange="toggleVariantActive(${v.id}, this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:var(--gold)">
             <span style="font-size:.75rem;color:var(--muted)">Activa</span>
           </label>
           <button onclick="deleteAbVariant(${v.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem" title="Eliminar variante">✕</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.3rem .1rem 0;border-top:1px dashed var(--border);margin-top:.1rem;padding-top:.5rem">
+          <span style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">🧪 Modelo IA (aún no aplicado al bot en vivo)</span>
+          <input placeholder="proveedor (ej: groq)" value="${escHtml(v.ai_provider||'')}"
+            onchange="updateVariantField(${v.id},'ai_provider',this.value.trim())"
+            style="width:110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .4rem;font-size:.72rem">
+          <input placeholder="modelo (ej: llama-3.3-70b-versatile)" value="${escHtml(v.ai_model||'')}"
+            onchange="updateVariantField(${v.id},'ai_model',this.value.trim())"
+            style="width:220px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .4rem;font-size:.72rem">
         </div>
         <div id="ab-overrides-${safeKey}" style="display:${isOpen?'flex':'none'};flex-direction:column;gap:.5rem"></div>
       `;
@@ -13851,6 +13885,45 @@ async function loadAbResults(){
     }).join('');
   } catch(e){
     el.innerHTML = `<span style="color:var(--red);font-size:.83rem">Error: ${e.message}</span>`;
+  }
+}
+
+let _abCompareOpen = false;
+async function toggleAbCompare(){
+  _abCompareOpen = !_abCompareOpen;
+  const panel = document.getElementById('ab-compare-panel');
+  panel.style.display = _abCompareOpen ? 'block' : 'none';
+  if(_abCompareOpen) await loadAbCompare();
+}
+
+async function loadAbCompare(){
+  const panel = document.getElementById('ab-compare-panel');
+  panel.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Cargando…</span>';
+  try {
+    const r = await fetch('/api/admin/bot/ab-overrides-compare');
+    const d = await r.json();
+    const rows = d.rows || [];
+    if(!rows.length){ panel.innerHTML = '<span style="color:var(--muted);font-size:.83rem">Ninguna variante tiene textos alternativos todavía.</span>'; return; }
+    const cols = rows[0].variants.map(v => v.label);
+    let html = `<table style="border-collapse:collapse;width:100%;font-size:.8rem">
+      <thead><tr>
+        <th style="text-align:left;padding:.4rem .6rem;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap">Momento</th>
+        ${cols.map(c=>`<th style="text-align:left;padding:.4rem .6rem;color:var(--text);border-bottom:1px solid var(--border);min-width:220px">${escHtml(c)}</th>`).join('')}
+      </tr></thead><tbody>`;
+    rows.forEach(row => {
+      html += `<tr>
+        <td style="padding:.5rem .6rem;color:var(--muted);vertical-align:top;white-space:nowrap"><code>${escHtml(row.message_key)}</code></td>
+        ${row.variants.map(v => `
+          <td style="padding:.5rem .6rem;vertical-align:top;white-space:pre-wrap;line-height:1.4;
+                     ${v.is_override?'color:var(--text)':'color:var(--muted);font-style:italic'}"
+              title="${v.is_override?'Texto alternativo de esta variante':'Sin texto alternativo — usa el mensaje de siempre'}">${escHtml(v.content_es)}</td>
+        `).join('')}
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    panel.innerHTML = html;
+  } catch(e){
+    panel.innerHTML = `<span style="color:var(--red);font-size:.83rem">Error: ${e.message}</span>`;
   }
 }
 

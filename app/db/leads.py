@@ -57,16 +57,40 @@ def _ensure_variant_col(cur) -> None:
 
 
 def _pick_active_variant(cur) -> Optional[str]:
-    """Randomly pick one currently-active A/B variant for a brand-new lead,
-    or None if no experiment is running (bot_ab_variants table missing or
-    empty is a normal, expected state — most of the time there's no test
-    active)."""
+    """Deterministically pick one currently-active A/B variant for a
+    brand-new lead, or None if no experiment is running (bot_ab_variants
+    table missing or empty is a normal, expected state — most of the time
+    there's no test active).
+
+    Not a coin flip: each variant has a relative `weight` (default 1, so
+    with no weights set this behaves like a plain even split). We pick
+    whichever active variant is furthest behind its target share —
+    count_assigned / weight, lowest wins — so e.g. a 70/30 weight split
+    tracks close to 70/30 from the very first few leads, instead of a
+    50/50 random pick that could drift for a while on a small sample."""
     try:
-        cur.execute("SELECT variant_key FROM bot_ab_variants WHERE is_active = TRUE")
-        keys = [r[0] for r in cur.fetchall()]
+        cur.execute("SELECT variant_key, weight FROM bot_ab_variants WHERE is_active = TRUE")
+        variants = cur.fetchall()
     except Exception:
         return None
-    return random.choice(keys) if keys else None
+    if not variants:
+        return None
+    if len(variants) == 1:
+        return variants[0][0]
+
+    try:
+        cur.execute("SELECT bot_variant, COUNT(*) FROM whatsapp_leads WHERE bot_variant IS NOT NULL GROUP BY bot_variant")
+        counts = dict(cur.fetchall())
+    except Exception:
+        counts = {}
+
+    best_key, best_score = None, None
+    for variant_key, weight in variants:
+        w = weight or 1
+        score = counts.get(variant_key, 0) / w
+        if best_score is None or score < best_score:
+            best_score, best_key = score, variant_key
+    return best_key
 
 
 def save_lead_language(phone_number: str, language: str) -> None:
