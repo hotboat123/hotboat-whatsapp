@@ -315,23 +315,6 @@ def _do_auto_sync():
 
         logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), {status_updated} estados")
 
-        # Clean up stale pending_payment web bookings (older than 120 min)
-        try:
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        DELETE FROM all_appointments
-                        WHERE source = 'hotboat_web'
-                          AND status = 'pending_payment'
-                          AND created_at < NOW() - INTERVAL '120 minutes'
-                    """)
-                    deleted = cur.rowcount
-                    conn.commit()
-            if deleted:
-                logger.info(f"🗑️ Auto-cleanup: {deleted} pending_payment booking(s) > 120 min eliminados")
-        except Exception as ce:
-            logger.warning(f"Cleanup pending_payment error: {ce}")
-
     except Exception as e:
         logger.error(f"❌ Auto-sync error: {e}")
 
@@ -342,6 +325,51 @@ async def _run_auto_sync():
     while True:
         await asyncio.to_thread(_do_auto_sync)
         await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
+
+
+# ── Pending-payment cleanup ─────────────────────────────────────────────────
+# Runs on its own schedule (previously tucked inside _do_auto_sync, after the
+# reservas_con_extras sync — so when that legacy Sheets sync started throwing
+# on a table that no longer exists, this never ran either and unpaid web
+# bookings piled up indefinitely). Marks the booking 'cancelled' instead of
+# deleting it, so the lead/contact info isn't lost — 'cancelled' is already
+# in AVAILABILITY_CONFIG.exclude_statuses, so the slot frees up immediately.
+#
+# Set to 10 (not 5) on purpose: hotboat-email-marketing-spec's "abandoned
+# cart" automation (automation_engine.py::_check_abandoned_booking) polls
+# every 1 min for rows still WHERE status='pending_payment' starting at
+# delay_minutes=5 old, to send the first recovery email — reusing 5 here
+# would race it and could skip that email for some leads. 10 min gives that
+# poll a real window (5-10 min old) to catch the row before we flip it away
+# from 'pending_payment'.
+PENDING_PAYMENT_STALE_MINUTES = 10
+
+def _do_pending_payment_cleanup():
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE all_appointments
+                    SET status = 'cancelled', updated_at = NOW()
+                    WHERE source = 'hotboat_web'
+                      AND status = 'pending_payment'
+                      AND created_at < NOW() - (INTERVAL '1 minute' * %s)
+                """, (PENDING_PAYMENT_STALE_MINUTES,))
+                updated = cur.rowcount
+                conn.commit()
+        if updated:
+            logger.info(f"🗑️ Pending-payment cleanup: {updated} reserva(s) sin pagar marcadas como canceladas (> {PENDING_PAYMENT_STALE_MINUTES} min)")
+    except Exception as e:
+        logger.error(f"Pending-payment cleanup error: {e}")
+
+
+async def _run_pending_payment_cleanup_scheduler():
+    """Sweep every 2 min so a booking is cancelled within ~10-12 min of creation."""
+    await asyncio.sleep(30)  # short delay after startup
+    while True:
+        await asyncio.to_thread(_do_pending_payment_cleanup)
+        await asyncio.sleep(120)
 
 
 async def _run_email_sweeps_scheduler():
@@ -895,6 +923,7 @@ async def lifespan(app: FastAPI):
     if try_acquire_scheduler_lock():
         scheduler_tasks = [
             asyncio.create_task(_run_auto_sync()),
+            asyncio.create_task(_run_pending_payment_cleanup_scheduler()),
             asyncio.create_task(_run_email_sweeps_scheduler()),
             asyncio.create_task(_run_daily_summary_scheduler()),
             asyncio.create_task(_run_signature_summary_scheduler()),
@@ -905,8 +934,8 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(run_followup_nudge_scheduler()),
         ]
         logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
+        logger.info(f"🗑️ Pending-payment cleanup iniciado (cada 2 min, cancela > {PENDING_PAYMENT_STALE_MINUTES} min sin pagar)")
         logger.info("📧 Email sweeps scheduler iniciado (followup, cada 30 min)")
-        logger.info("📧 Pending-payment email sweep iniciado (cada 3 min, delay 5 min)")
         logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
         logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
         logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
