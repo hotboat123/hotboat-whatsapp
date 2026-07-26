@@ -1666,7 +1666,8 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
             # Disponibilidad y horarios
             response_text = conv_manager._ask_for_reservation_date(conversation, language)
         elif menu_option == 2:
-            # Precios por persona — mensaje dinamico (con link de seguimiento) primero
+            # Precios por persona — usa lo configurado en "Configuración de
+            # Respuestas" (bot_responses); "Precios Dinámicos" ya no interviene.
             response_text = faq_handler.get_response(
                 "precio", language, phone=phone_number, customer_name=customer_name
             ) or _get_bot_response_content("precio", language)
