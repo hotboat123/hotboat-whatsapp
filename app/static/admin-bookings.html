@@ -5491,7 +5491,16 @@ async function openModal(id){
       <div class="form-row">
         <div class="form-group"><label>Estado</label>
           <select id="e-status">
-            ${['confirmed','pending','cancelled','solicitud','paid','aprobado','pendiente','cancelada'].map(s=>`<option value="${s}"${r.status===s?' selected':''}>${s}</option>`).join('')}
+            ${(() => {
+              // pending_payment es el estado real de una reserva web sin pagar
+              // (falta en esta lista histórica) — y por si aparece cualquier
+              // otro valor no listado, siempre incluimos el status actual de
+              // la reserva para que el <select> nunca caiga por defecto en la
+              // primera opción y pise el estado real al guardar sin querer.
+              const known = ['confirmed','pending','pending_payment','cancelled','solicitud','paid','aprobado','pendiente','cancelada'];
+              const opts = r.status && !known.includes(r.status) ? [r.status, ...known] : known;
+              return opts.map(s=>`<option value="${s}"${r.status===s?' selected':''}>${s}</option>`).join('');
+            })()}
           </select>
         </div>
       </div>
