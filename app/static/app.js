@@ -993,12 +993,28 @@ function renderCurrentChat(options = {}) {
         ` : '';
 
         messagesContainer.innerHTML = `${loadMoreHtml}${messagesHtml}`;
-        
+
         if (preserveScroll && previousScrollHeight !== null && previousScrollTop !== null) {
             const newScrollHeight = messagesContainer.scrollHeight;
             messagesContainer.scrollTop = newScrollHeight - previousScrollHeight + previousScrollTop;
         } else if (scrollToBottom) {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            // Images inside the just-inserted HTML haven't loaded yet at this
+            // point, so scrollHeight above is measured before they grow the
+            // container — the newest messages after an image (e.g. a payment
+            // screenshot) can end up rendered but scrolled out of view,
+            // looking like the conversation is missing its tail. Re-scroll
+            // once each image finishes loading (skip if the admin has since
+            // scrolled up to read older messages).
+            messagesContainer.querySelectorAll('img').forEach(img => {
+                if (img.complete) return;
+                img.addEventListener('load', () => {
+                    const nearBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < 300;
+                    if (nearBottom) {
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                    }
+                }, { once: true });
+            });
         }
     }
 
