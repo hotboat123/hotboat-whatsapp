@@ -919,9 +919,23 @@ async def lifespan(app: FastAPI):
     # message would go out once per process. Only the process that wins the
     # advisory lock runs them; the rest just serve requests.
     from app.db.connection import try_acquire_scheduler_lock
-    scheduler_tasks = []
-    if try_acquire_scheduler_lock():
-        scheduler_tasks = [
+    scheduler_tasks: list = []
+
+    async def _acquire_lock_and_start_schedulers():
+        # Retry instead of a single attempt: during a rolling deploy the new
+        # process can start while the outgoing container's connection (and
+        # its lock) hasn't closed yet. A one-shot check that loses that race
+        # used to mean this process ran with zero schedulers — pending-payment
+        # cleanup, daily summaries, follow-up nudges, all of it — for its
+        # entire lifetime, until the next deploy happened to win the race.
+        warned = False
+        while not try_acquire_scheduler_lock():
+            if not warned:
+                logger.info("⏭️ Otro worker/réplica tiene el lock de schedulers — reintentando cada 30s hasta obtenerlo")
+                warned = True
+            await asyncio.sleep(30)
+
+        scheduler_tasks.extend([
             asyncio.create_task(_run_auto_sync()),
             asyncio.create_task(_run_pending_payment_cleanup_scheduler()),
             asyncio.create_task(_run_email_sweeps_scheduler()),
@@ -932,7 +946,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_stock_consume_scheduler()),
             asyncio.create_task(_run_visitor_session_closer_scheduler()),
             asyncio.create_task(run_followup_nudge_scheduler()),
-        ]
+        ])
         logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
         logger.info(f"🗑️ Pending-payment cleanup iniciado (cada 2 min, cancela > {PENDING_PAYMENT_STALE_MINUTES} min sin pagar)")
         logger.info("📧 Email sweeps scheduler iniciado (followup, cada 30 min)")
@@ -942,9 +956,16 @@ async def lifespan(app: FastAPI):
         logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
         logger.info("💬 Follow-up nudge scheduler iniciado (cada 15s, envía a los 2 min sin respuesta)")
         logger.info("🌐 Visitor session closer iniciado (cada 2 min, cierra sesiones tras 5 min de inactividad)")
-    else:
-        logger.info("⏭️ Schedulers ya corren en otro worker/réplica — este proceso solo atiende requests")
+
+    lock_task = asyncio.create_task(_acquire_lock_and_start_schedulers())
+
     yield
+
+    lock_task.cancel()
+    try:
+        await lock_task
+    except asyncio.CancelledError:
+        pass
     for task in scheduler_tasks:
         task.cancel()
         try:
