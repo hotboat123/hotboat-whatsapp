@@ -63,14 +63,21 @@ class Settings(BaseSettings):
     notification_emails: str = ""  # Comma-separated list of emails to notify
     # Direct URL of the logo image used in booking emails (must be publicly accessible)
     email_logo_url: str = ""
-    
-    # SMTP Email Configuration (alternative to Resend)
-    email_host: str = ""
-    email_port: str = ""
-    email_username: str = ""
-    email_password: str = ""
-    email_use_tls: str = ""
-    email_use_ssl: str = ""
+
+    # Which provider app/email/send_email.py uses: "resend" or "ses". Global
+    # flag, not per-trigger — see app/email/send_email.py for why.
+    email_provider: str = "resend"
+    # AWS SES (sesv2) — alternate provider, gradual cutover from Resend
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "us-east-2"
+    # Required for SES to publish Bounce/Complaint/Delivery events to SNS —
+    # without a configuration set attached to the send, no events fire at all.
+    ses_configuration_set: str = ""
+    # Non-negotiable staging safety valve: when set, ALL outgoing mail (any
+    # provider) is redirected to this single address instead of the real
+    # recipient/bcc. Must never be set in production.
+    email_override_to: str = ""
 
     # Web Push (PWA notifications) — generate with: openssl ecparam -name prime256v1 -genkey
     vapid_private_key: str = ""
