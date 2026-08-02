@@ -755,18 +755,19 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
     </div><!-- /section-coupons -->
 
-    <!-- EMAILS RESERVAS (Resend / Booknetic-style multi-trigger) -->
+    <!-- EMAILS RESERVAS (Booknetic-style multi-trigger, Resend or SES) -->
     <div id="section-emails" class="section">
 
       <!-- Header + env info -->
       <div class="chart-wrap" style="margin-bottom:1.2rem">
-        <div class="chart-title">✉️ Workflows de email (Resend)</div>
+        <div class="chart-title">✉️ Workflows de email</div>
         <p style="color:var(--muted);font-size:.83rem;line-height:1.65;margin-bottom:.6rem">
           Configura qué correos se envían automáticamente al cliente según lo que ocurre
-          en la reserva. El remitente y el BCC se definen en el servidor:
+          en la reserva. El remitente, el BCC y el proveedor activo (Resend o SES) se
+          definen en el servidor:
           <code style="font-size:.75rem">RESEND_FROM_CONFIRMATIONS</code> ·
           <code style="font-size:.75rem">RESEND_BCC_BOOKING</code> ·
-          <code style="font-size:.75rem">RESEND_API_KEY</code>.
+          <code style="font-size:.75rem">EMAIL_PROVIDER</code>.
         </p>
         <p id="email-env-hint" style="font-size:.78rem;color:var(--muted);margin:0"></p>
       </div>
@@ -6718,8 +6719,10 @@ async function loadEmailWorkflows(){
     const hint = document.getElementById('email-env-hint');
     if(hint){
       let t = 'Remitente: <strong>' + (d.from_hint || '<em>configura RESEND_FROM_CONFIRMATIONS o EMAIL_FROM</em>') + '</strong>';
+      t += ' &nbsp;·&nbsp; Proveedor: <strong>' + (d.email_provider || 'resend') + '</strong>';
       if(d.bcc_configured) t += ' &nbsp;·&nbsp; BCC activo ✓';
-      if(!d.has_resend_key) t += ' &nbsp;<span style="color:var(--red)">⚠ Falta RESEND_API_KEY</span>';
+      const providerReady = d.email_provider === 'ses' ? d.has_ses_key : d.has_resend_key;
+      if(!providerReady) t += ' &nbsp;<span style="color:var(--red)">⚠ Falta configurar credenciales del proveedor activo</span>';
       hint.innerHTML = t;
     }
     // variable chips

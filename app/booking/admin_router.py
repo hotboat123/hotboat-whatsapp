@@ -1372,7 +1372,10 @@ async def get_email_workflows_endpoint(x_admin_key: str = Header("")):
         "trigger_meta": TRIGGER_META,
         "from_hint": (getattr(s, "resend_from_confirmations", "") or getattr(s, "email_from", "") or "").strip(),
         "bcc_configured": bool((getattr(s, "resend_bcc_booking", "") or "").strip()),
+        "email_provider": (getattr(s, "email_provider", "") or "resend").strip().lower(),
         "has_resend_key": bool((getattr(s, "resend_api_key", "") or "").strip()),
+        "has_ses_key": bool((getattr(s, "aws_access_key_id", "") or "").strip()
+                             and (getattr(s, "aws_secret_access_key", "") or "").strip()),
     }
 
 
@@ -1544,46 +1547,35 @@ class ReciboSendBody(BaseModel):
 
 @admin_router.post("/api/admin/recibo/send")
 async def send_recibo_email(body: ReciboSendBody, x_admin_key: str = Header("")):
-    """Send the receipt HTML to the client's email via Resend."""
+    """Send the receipt HTML to the client's email."""
     _check_auth(x_admin_key)
     to_addr = body.to.strip()
     if not to_addr or "@" not in to_addr:
         raise HTTPException(status_code=400, detail="Email del cliente no válido")
 
     from app.config import get_settings
-    from app.email.resend_booking import send_booking_html
+    from app.email.send_email import send_email
 
     settings = get_settings()
-    api_key = (getattr(settings, "resend_api_key", "") or "").strip()
-    if not api_key:
-        raise HTTPException(status_code=500, detail="RESEND_API_KEY no configurado")
-
     from_addr = (
         getattr(settings, "resend_from_confirmations", "")
         or getattr(settings, "email_from", "")
         or "noreply@reservas.hotboat.cl"
     ).strip()
 
-    try:
-        await asyncio.to_thread(
-            send_booking_html,
-            to=to_addr,
-            subject=body.subject,
-            html=body.html,
-            from_address=from_addr,
-            api_key=api_key,
-        )
-        logger.info("Recibo enviado a %s — %s", to_addr, body.subject)
-        return {"ok": True, "to": to_addr}
-    except Exception as e:
-        error_detail = str(e)
-        try:
-            if hasattr(e, "body"):
-                error_detail += f" | {e.body}"
-        except Exception:
-            pass
-        logger.error("send_recibo_email failed to=%s: %s", to_addr, error_detail)
-        raise HTTPException(status_code=500, detail=error_detail)
+    result = await asyncio.to_thread(
+        send_email,
+        to=to_addr,
+        subject=body.subject,
+        html=body.html,
+        from_address=from_addr,
+        trigger="recibo_manual",
+    )
+    if not result["sent"]:
+        logger.error("send_recibo_email failed to=%s: %s", to_addr, result["reason"])
+        raise HTTPException(status_code=500, detail=result["reason"])
+    logger.info("Recibo enviado a %s — %s", to_addr, body.subject)
+    return {"ok": True, "to": to_addr}
 
 
 @admin_router.post("/api/admin/daily-summary/send")
@@ -1619,7 +1611,10 @@ async def get_email_booking_legacy(x_admin_key: str = Header("")):
         "config": get_email_booking_config(),
         "from_hint": (getattr(s, "resend_from_confirmations", "") or getattr(s, "email_from", "") or "").strip(),
         "bcc_configured": bool((getattr(s, "resend_bcc_booking", "") or "").strip()),
+        "email_provider": (getattr(s, "email_provider", "") or "resend").strip().lower(),
         "has_resend_key": bool((getattr(s, "resend_api_key", "") or "").strip()),
+        "has_ses_key": bool((getattr(s, "aws_access_key_id", "") or "").strip()
+                             and (getattr(s, "aws_secret_access_key", "") or "").strip()),
     }
 
 
@@ -2447,8 +2442,8 @@ async def send_followup_email_manual(rid: int, x_admin_key: str = Header("")):
             raise HTTPException(status_code=404, detail="Reserva no encontrada")
         if reason == "no_customer_email":
             raise HTTPException(status_code=400, detail="La reserva no tiene email del cliente")
-        if reason == "no_resend_key":
-            raise HTTPException(status_code=503, detail="Resend no configurado (API key)")
+        if reason == "email_disabled" or "not configured" in reason:
+            raise HTTPException(status_code=503, detail=f"Envío de mail no configurado: {reason}")
         raise HTTPException(status_code=400, detail=reason[:500])
     except HTTPException:
         raise
@@ -3858,7 +3853,8 @@ async def test_notif_email(
     import asyncio
     from datetime import date, timedelta
     from app.booking.booking_email import send_yesterday_summary_email, send_weekly_summary_email, _NOTIF_TO, _build_booking_card_html, _fmt_clp_local, _get_from_addr
-    from app.booking.booking_email import send_booking_html, get_settings
+    from app.config import get_settings
+    from app.email.send_email import send_email
     from app.db.connection import get_connection
 
     out: dict = {}
@@ -3871,9 +3867,6 @@ async def test_notif_email(
 
     # Build and send daily summary for target date
     s = get_settings()
-    api_key = (getattr(s, "resend_api_key", "") or "").strip()
-    if not api_key:
-        return {"error": "no_resend_key"}
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -3946,11 +3939,12 @@ async def test_notif_email(
 
     subject = f"🚤 [TEST] {weekday_es} {target_str} — {len(bookings)} reserva{'s' if len(bookings)!=1 else ''}"
     from_addr = _get_from_addr(s)
-    try:
-        result = send_booking_html(to=_NOTIF_TO, subject=subject, html=html, from_address=from_addr, api_key=api_key)
-        out["daily"] = {"sent": True, "count": len(bookings), "date": str(target), "resend_id": result.get("id") if isinstance(result, dict) else str(result)}
-    except Exception as e:
-        out["daily"] = {"sent": False, "error": str(e)}
+    result = send_email(to=_NOTIF_TO, subject=subject, html=html, from_address=from_addr,
+                         trigger="daily_summary_test")
+    if result["sent"]:
+        out["daily"] = {"sent": True, "count": len(bookings), "date": str(target), "message_id": result["message_id"]}
+    else:
+        out["daily"] = {"sent": False, "error": result["reason"]}
 
     if weekly:
         result_weekly = await asyncio.to_thread(send_weekly_summary_email)

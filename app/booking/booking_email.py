@@ -10,7 +10,7 @@ from app.booking.db import (
     mark_followup_sent_after_manual_send,
 )
 from app.booking.operator_settings import get_email_workflow, TRIGGER_META
-from app.email.resend_booking import send_booking_html
+from app.email.send_email import send_email
 
 logger = logging.getLogger(__name__)
 
@@ -1020,13 +1020,8 @@ def _get_bcc(settings) -> Optional[List[str]]:
 
 def _render_and_send(trigger: str, to_addr: str, ctx: Dict[str, str],
                      subject_prefix: str = "") -> Dict[str, Any]:
-    """Render subject+HTML for trigger and send via Resend. Returns {sent, reason}."""
-    out: Dict[str, Any] = {"sent": False, "reason": ""}
+    """Render subject+HTML for trigger and send via app.email.send_email. Returns {sent, reason}."""
     settings = get_settings()
-    api_key = (getattr(settings, "resend_api_key", "") or "").strip()
-    if not api_key:
-        out["reason"] = "no_resend_key"
-        return out
 
     cfg = get_email_workflow(trigger)
     raw_subject = (cfg.get("subject") or "").strip()
@@ -1046,35 +1041,16 @@ def _render_and_send(trigger: str, to_addr: str, ctx: Dict[str, str],
     is_admin_trigger = (TRIGGER_META.get(trigger) or {}).get("recipient") == "admin"
     reply_to_addr = None if is_admin_trigger else (_get_admin_email(settings) or None)
     logger.info("Sending email trigger=%s to=%s from=%s reply_to=%s", trigger, to_addr, from_addr, reply_to_addr)
-    try:
-        send_booking_html(
-            to=to_addr,
-            subject=subject,
-            html=html,
-            from_address=from_addr,
-            api_key=api_key,
-            bcc=_get_bcc(settings),
-            reply_to=reply_to_addr,
-        )
-        out["sent"] = True
-        out["reason"] = "ok"
-    except Exception as e:
-        # Log the full Resend error so it appears in Railway logs
-        error_detail = str(e)
-        try:
-            # ResendError usually has a response body with more info
-            if hasattr(e, "response"):
-                error_detail += f" | response: {e.response}"
-            if hasattr(e, "body"):
-                error_detail += f" | body: {e.body}"
-        except Exception:
-            pass
-        logger.error(
-            "Email send FAILED trigger=%s to=%s from=%s | %s",
-            trigger, to_addr, from_addr, error_detail,
-        )
-        out["reason"] = error_detail
-    return out
+    result = send_email(
+        to=to_addr,
+        subject=subject,
+        html=html,
+        from_address=from_addr,
+        bcc=_get_bcc(settings),
+        reply_to=reply_to_addr,
+        trigger=trigger,
+    )
+    return {"sent": result["sent"], "reason": result["reason"]}
 
 
 def _can_send(trigger: str) -> bool:
@@ -1227,13 +1203,9 @@ def send_test_email_for_trigger(trigger: str, to_addr: str) -> Dict[str, Any]:
 def send_manual_followup_email(rid: int) -> Dict[str, Any]:
     """
     Send booking_followup (TripAdvisor / survey) for one all_appointments row from the admin UI.
-    Does not require workflow enabled (same templates/subject as auto sweep); needs Resend API key.
+    Does not require workflow enabled (same templates/subject as auto sweep); needs the active provider configured.
     """
     out: Dict[str, Any] = {"sent": False, "reason": ""}
-    settings = get_settings()
-    if not (getattr(settings, "resend_api_key", "") or "").strip():
-        out["reason"] = "no_resend_key"
-        return out
 
     from app.db.connection import get_connection
 
@@ -1318,11 +1290,6 @@ def run_followup_email_sweep() -> dict:
     cfg = get_email_workflow("booking_followup")
     if not cfg.get("enabled"):
         out["reason"] = "disabled"
-        return out
-
-    settings = get_settings()
-    if not (getattr(settings, "resend_api_key", "") or "").strip():
-        out["reason"] = "no_resend_key"
         return out
 
     hours_after = int(cfg.get("hours_after") or cfg.get("days_after") or 2)
@@ -1604,9 +1571,6 @@ def send_confirmation_admin_force(booking_id: int, dry_run: bool = False) -> Dic
                 conn.commit()
 
     s = get_settings()
-    api_key = (getattr(s, "resend_api_key", "") or "").strip()
-    if not api_key and not dry_run:
-        return {"sent": False, "reason": "no_resend_key"}
 
     cfg = get_email_workflow("booking_confirmed")
     raw_subject = (cfg.get("subject") or "").strip()
@@ -1689,21 +1653,19 @@ def send_confirmation_admin_force(booking_id: int, dry_run: bool = False) -> Dic
     if dry_run:
         out["reason"] = "preview"
         return out
-    try:
-        send_booking_html(
-            to=to_addr,
-            subject=subject,
-            html=html,
-            from_address=from_addr,
-            api_key=api_key,
-            bcc=_get_bcc(s),
-            reply_to=reply_to_addr,
-        )
-        out["sent"] = True
-        out["reason"] = "ok"
-    except Exception as e:
-        out["reason"] = str(e)
-        logger.error("send_confirmation_admin_force failed booking_id=%s to=%s: %s", booking_id, to_addr, e)
+    result = send_email(
+        to=to_addr,
+        subject=subject,
+        html=html,
+        from_address=from_addr,
+        bcc=_get_bcc(s),
+        reply_to=reply_to_addr,
+        trigger="booking_confirmed",
+    )
+    out["sent"] = result["sent"]
+    out["reason"] = result["reason"]
+    if not result["sent"]:
+        logger.error("send_confirmation_admin_force failed booking_id=%s to=%s: %s", booking_id, to_addr, out["reason"])
     return out
 
 
@@ -1961,10 +1923,6 @@ def send_daily_summary_email() -> Dict[str, Any]:
     out: Dict[str, Any] = {"sent": False, "reason": "", "count": 0}
 
     settings = get_settings()
-    api_key = (getattr(settings, "resend_api_key", "") or "").strip()
-    if not api_key:
-        out["reason"] = "no_resend_key"
-        return out
 
     to_addr = _get_admin_email(settings) or ""
     if not to_addr:
@@ -2004,22 +1962,17 @@ def send_daily_summary_email() -> Dict[str, Any]:
     subject = f"📅 HotBoat hoy {today_str} — {n_label}"
 
     from_addr = _get_from_addr(settings)
-    try:
-        result = send_booking_html(
-            to=to_addr,
-            subject=subject,
-            html=html,
-            from_address=from_addr,
-            api_key=api_key,
-        )
-        out["sent"] = True
-        out["resend_id"] = result.get("id") if isinstance(result, dict) else str(result)
+    result = send_email(
+        to=to_addr, subject=subject, html=html, from_address=from_addr,
+        trigger="daily_summary",
+    )
+    out["sent"] = result["sent"]
+    if result["sent"]:
+        out["message_id"] = result["message_id"]
         logger.info("daily_summary: sent to %s (%s bookings)", to_addr, len(bookings))
-    except Exception as send_err:
-        out["reason"] = f"send_error: {send_err}"
-        logger.error("daily_summary: send error: %s", send_err)
-
-    return out
+    else:
+        out["reason"] = f"send_error: {result['reason']}"
+        logger.error("daily_summary: send error: %s", result["reason"])
 
     return out
 
@@ -2208,10 +2161,6 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
 
     out: Dict[str, Any] = {"sent": False, "reason": "", "count": 0}
     s = get_settings()
-    api_key = (getattr(s, "resend_api_key", "") or "").strip()
-    if not api_key:
-        out["reason"] = "no_resend_key"
-        return out
 
     yesterday = date.today() - timedelta(days=1)
     yesterday_str = yesterday.strftime("%d/%m/%Y")
@@ -2305,20 +2254,17 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
         subject = f"🚨 " + subject[2:] + f" · {n_alerts} con datos faltantes"
 
     from_addr = _get_from_addr(s)
-    try:
-        result = send_booking_html(
-            to=_NOTIF_TO,
-            subject=subject,
-            html=html,
-            from_address=from_addr,
-            api_key=api_key,
-        )
-        out["sent"] = True
-        out["resend_id"] = result.get("id") if isinstance(result, dict) else str(result)
+    result = send_email(
+        to=_NOTIF_TO, subject=subject, html=html, from_address=from_addr,
+        trigger="yesterday_summary",
+    )
+    out["sent"] = result["sent"]
+    if result["sent"]:
+        out["message_id"] = result["message_id"]
         logger.info("yesterday_summary: sent %s bookings, %s alerts", len(bookings), n_alerts)
-    except Exception as e:
-        out["reason"] = str(e)
-        logger.error("yesterday_summary send error: %s", e)
+    else:
+        out["reason"] = result["reason"]
+        logger.error("yesterday_summary send error: %s", out["reason"])
     return out
 
 
@@ -2329,10 +2275,6 @@ def send_weekly_summary_email() -> Dict[str, Any]:
 
     out: Dict[str, Any] = {"sent": False, "reason": "", "count": 0}
     s = get_settings()
-    api_key = (getattr(s, "resend_api_key", "") or "").strip()
-    if not api_key:
-        out["reason"] = "no_resend_key"
-        return out
 
     today = date.today()
     week_end   = today - timedelta(days=1)   # yesterday = last Sunday
@@ -2409,18 +2351,15 @@ def send_weekly_summary_email() -> Dict[str, Any]:
     subject = f"📆 Semana {week_start_str}–{week_end_str} — {len(bookings)} reserva{'s' if len(bookings)!=1 else ''}"
 
     from_addr = _get_from_addr(s)
-    try:
-        result = send_booking_html(
-            to=_NOTIF_TO,
-            subject=subject,
-            html=html,
-            from_address=from_addr,
-            api_key=api_key,
-        )
-        out["sent"] = True
-        out["resend_id"] = result.get("id") if isinstance(result, dict) else str(result)
+    result = send_email(
+        to=_NOTIF_TO, subject=subject, html=html, from_address=from_addr,
+        trigger="weekly_summary",
+    )
+    out["sent"] = result["sent"]
+    if result["sent"]:
+        out["message_id"] = result["message_id"]
         logger.info("weekly_summary: sent %s bookings for week %s–%s", len(bookings), week_start_str, week_end_str)
-    except Exception as e:
-        out["reason"] = str(e)
-        logger.error("weekly_summary send error: %s", e)
+    else:
+        out["reason"] = result["reason"]
+        logger.error("weekly_summary send error: %s", out["reason"])
     return out

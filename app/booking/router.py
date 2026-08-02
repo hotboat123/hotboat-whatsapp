@@ -1342,14 +1342,9 @@ def _email_aloj_booking(
 ):
     """Send email notification to admin for accommodation booking events."""
     from app.config import get_settings
-    from app.email.resend_booking import send_booking_html
+    from app.email.send_email import send_email
 
     settings = get_settings()
-    resend_key = (getattr(settings, "resend_api_key", "") or "").strip()
-    if not resend_key:
-        logger.warning("_email_aloj_booking: no RESEND key, skipping")
-        return
-
     from_addr = (getattr(settings, "resend_from_confirmations", "") or
                  getattr(settings, "email_from", "onboarding@resend.dev")).strip()
     notif_emails = (getattr(settings, "notification_emails", "") or "").strip()
@@ -1401,13 +1396,12 @@ def _email_aloj_booking(
 
     try:
         for recipient in recipients:
-            send_booking_html(
-                to=recipient,
-                subject=subject,
-                html=html,
-                from_address=from_addr,
-                api_key=resend_key,
+            result = send_email(
+                to=recipient, subject=subject, html=html, from_address=from_addr,
+                trigger="aloj_booking",
             )
+            if not result["sent"]:
+                logger.warning("_email_aloj_booking send error %s to %s: %s", aloj_ref, recipient, result["reason"])
         logger.info("_email_aloj_booking sent for %s (confirmed=%s) to %s", aloj_ref, confirmed, recipients)
     except Exception as e:
         logger.warning("_email_aloj_booking send error %s: %s", aloj_ref, e)
@@ -1458,7 +1452,7 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
     """Send email with WhatsApp links to admin for accommodation inquiries."""
     import urllib.parse
     from app.config import get_settings
-    from app.email.resend_booking import send_booking_html
+    from app.email.send_email import send_email
     from app.db.connection import get_connection
 
     # Parse accommodation ID/slug from service_type ("alojamiento:ID_OR_SLUG")
@@ -1568,7 +1562,6 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
 
     try:
         settings = get_settings()
-        resend_key = (getattr(settings, "resend_api_key", "") or "").strip()
         from_addr  = (getattr(settings, "resend_from_confirmations", "") or
                       getattr(settings, "email_from", "onboarding@resend.dev")).strip()
         notif_emails = (getattr(settings, "notification_emails", "") or "").strip()
@@ -1576,18 +1569,16 @@ def _email_accommodation_solicitud(req: SolicitudRequest, ref: str):
         if not recipients:
             recipients = ["hotboatnotification@gmail.com"]
 
-        if not resend_key:
-            logger.warning("_email_accommodation_solicitud: RESEND_API_KEY not set, skipping email")
-            return
-
         for recipient in recipients:
-            send_booking_html(
+            result = send_email(
                 to=recipient,
                 subject=f"🏠 Nueva solicitud: {aloj_name} · {req.dates_preference or 'fechas a definir'}",
                 html=html,
                 from_address=from_addr,
-                api_key=resend_key,
+                trigger="accommodation_solicitud",
             )
+            if not result["sent"]:
+                logger.warning("_email_accommodation_solicitud send error to %s: %s", recipient, result["reason"])
         logger.info(f"Accommodation solicitud email sent for {ref} to {recipients}")
     except Exception as e:
         logger.warning(f"_email_accommodation_solicitud send error: {e}")
@@ -2714,10 +2705,9 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
     try:
         from app.config import get_settings
         from app.booking.booking_email import _get_admin_email, _get_from_addr
-        from app.email.resend_booking import send_booking_html
+        from app.email.send_email import send_email
 
         cfg = get_settings()
-        api_key   = (getattr(cfg, "resend_api_key", "") or "").strip()
         to_addr   = _get_admin_email(cfg)
         from_addr = _get_from_addr(cfg)
         lang         = (session.get("lang") or "es").upper()
@@ -2732,8 +2722,8 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
         parametro_url = (session.get("parametro_url") or "").strip()
         from_fbclid  = bool(session.get("fbclid"))
 
-        if not api_key or not to_addr:
-            logger.warning("visitor_session_summary: email not configured; skipping send")
+        if not to_addr:
+            logger.warning("visitor_session_summary: no admin email configured; skipping send")
         else:
             # Platform: referrer first, falling back to utm_source/medium —
             # ad in-app browsers (TikTok, Instagram) often strip the referrer
@@ -2861,11 +2851,14 @@ def _send_visitor_email(session: dict, classification: str, cls_desc: str, event
   </table>
 </div>"""
 
-            send_booking_html(to=to_addr, subject=subject, html=html,
-                              from_address=from_addr, api_key=api_key)
-            sent_ok = True
-            logger.info("visitor_session_summary sent: sid=%s events=%d cls=%s",
-                        session.get("session_id", "?"), len(events), classification)
+            result = send_email(to=to_addr, subject=subject, html=html,
+                                from_address=from_addr, trigger="visitor_session_summary")
+            sent_ok = result["sent"]
+            if sent_ok:
+                logger.info("visitor_session_summary sent: sid=%s events=%d cls=%s",
+                            session.get("session_id", "?"), len(events), classification)
+            else:
+                logger.warning("visitor_session_summary send failed: %s", result["reason"])
     except Exception as e:
         logger.warning("_send_session_summary error: %s", e)
     return sent_ok

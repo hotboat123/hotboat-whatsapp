@@ -549,22 +549,21 @@ def _send_accommodation_email(
 
     try:
         from app.config import get_settings
+        from app.email.send_email import send_email
         settings = get_settings()
-        resend_key  = (getattr(settings, "resend_api_key", "") or "").strip()
         from_addr   = (getattr(settings, "resend_from_confirmations", "") or "onboarding@resend.dev").strip()
         admin_email = os.getenv("ADMIN_EMAIL", "hotboatchile@gmail.com")
-        if not resend_key:
-            logger.warning("_send_accommodation_email: no RESEND_API_KEY, skipping email")
-            return
-        from app.email.resend_booking import send_booking_html
-        send_booking_html(
+        result = send_email(
             to=admin_email,
             subject=f"🏠 Nueva solicitud: {item_name} ({fechas})",
             html=html,
             from_address=from_addr,
-            api_key=resend_key,
+            trigger="accommodation_availability_content",
         )
-        logger.info(f"Accommodation availability email sent for booking #{booking_id}")
+        if result["sent"]:
+            logger.info(f"Accommodation availability email sent for booking #{booking_id}")
+        else:
+            logger.warning(f"_send_accommodation_email send failed: {result['reason']}")
     except Exception as e:
         logger.warning(f"_send_accommodation_email send failed: {e}")
 

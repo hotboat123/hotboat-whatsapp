@@ -10,7 +10,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
+from app.config import get_settings
 from app.db.connection import get_connection
+from app.email.send_email import send_email
 
 logger = logging.getLogger(__name__)
 stock_router = APIRouter()
@@ -115,8 +117,7 @@ def _check_low_stock(conn):
 
 def _send_low_stock_alert(alerts: list):
     try:
-        import resend, os
-        resend.api_key = os.getenv("RESEND_API_KEY", "")
+        settings = get_settings()
         rows = "".join(f"""
             <tr>
               <td style="padding:8px 10px;border-bottom:1px solid #1e2d45;color:#f1f5f9">{a['name']}</td>
@@ -143,13 +144,19 @@ def _send_low_stock_alert(alerts: list):
     HotBoat Chile · alerta automática de stock
   </div>
 </div></body></html>"""
-        resend.Emails.send({
-            "from": os.getenv("RESEND_FROM_CONFIRMATIONS", os.getenv("EMAIL_FROM", "reservas@reservas.hotboat.cl")),
-            "to": [ADMIN_NOTIFICATION_EMAIL],
-            "subject": f"⚠️ Stock bajo mínimo — {len(alerts)} producto(s)",
-            "html": html,
-        })
-        logger.info("low_stock_alert sent for %d products", len(alerts))
+        from_addr = (settings.resend_from_confirmations or settings.email_from
+                     or "reservas@reservas.hotboat.cl")
+        result = send_email(
+            to=ADMIN_NOTIFICATION_EMAIL,
+            subject=f"⚠️ Stock bajo mínimo — {len(alerts)} producto(s)",
+            html=html,
+            from_address=from_addr,
+            trigger="low_stock_alert",
+        )
+        if result["sent"]:
+            logger.info("low_stock_alert sent for %d products", len(alerts))
+        else:
+            logger.error("low_stock_alert failed: %s", result["reason"])
     except Exception as e:
         logger.error("low_stock_alert failed: %s", e)
 
@@ -1073,8 +1080,7 @@ def check_and_alert_tabla_ingredients() -> dict:
 
 def _send_tabla_shortfall_alert(shortfalls: list, booking_count: int, today: str):
     try:
-        import resend, os
-        resend.api_key = os.getenv("RESEND_API_KEY", "")
+        settings = get_settings()
         rows_html = "".join(f"""
             <tr>
               <td style="padding:8px 10px;border-bottom:1px solid #1e2d45;color:#f1f5f9">{s['ingredient']}</td>
@@ -1105,13 +1111,19 @@ def _send_tabla_shortfall_alert(shortfalls: list, booking_count: int, today: str
     HotBoat Chile · alerta automática de stock
   </div>
 </div></body></html>"""
-        resend.Emails.send({
-            "from": os.getenv("RESEND_FROM_CONFIRMATIONS", os.getenv("EMAIL_FROM", "reservas@reservas.hotboat.cl")),
-            "to":   [ADMIN_NOTIFICATION_EMAIL],
-            "subject": f"🥗 Faltan ingredientes para tablas de hoy ({today})",
-            "html": html,
-        })
-        logger.info("Tabla shortfall alert sent: %d shortfalls for %s", len(shortfalls), today)
+        from_addr = (settings.resend_from_confirmations or settings.email_from
+                     or "reservas@reservas.hotboat.cl")
+        result = send_email(
+            to=ADMIN_NOTIFICATION_EMAIL,
+            subject=f"🥗 Faltan ingredientes para tablas de hoy ({today})",
+            html=html,
+            from_address=from_addr,
+            trigger="tabla_shortfall_alert",
+        )
+        if result["sent"]:
+            logger.info("Tabla shortfall alert sent: %d shortfalls for %s", len(shortfalls), today)
+        else:
+            logger.error("Tabla shortfall alert failed: %s", result["reason"])
     except Exception as e:
         logger.error("Tabla shortfall alert failed: %s", e)
 

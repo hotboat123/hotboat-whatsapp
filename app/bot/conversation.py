@@ -21,14 +21,8 @@ from app.bot.translations import (
 )
 from app.config import get_settings
 from app.db.leads import get_or_create_lead, get_conversation_history, save_lead_language
+from app.email.send_email import send_email
 from app.whatsapp.client import WhatsAppClient
-
-try:
-    import resend
-    RESEND_AVAILABLE = True
-except ImportError:
-    RESEND_AVAILABLE = False
-    logging.warning("Resend not installed - email notifications will be disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -3007,44 +3001,23 @@ Por favor, elige un horario con al menos 4 horas de anticipación 🚤"""
         return summary
     
     async def _send_notification_email(self, subject: str, body: str, priority: str = "high") -> None:
-        """Send email notification using Resend API (works on Railway/PaaS)."""
-        if not getattr(self.settings, "email_enabled", False):
-            logger.info("Email notifications disabled (EMAIL_ENABLED=false); skipping send.")
-            return
-        
-        if not RESEND_AVAILABLE:
-            logger.warning("Resend library not installed; cannot send email notification.")
-            return
-        
+        """Send email notification via app.email.send_email."""
         if not self.notification_email_recipients:
             logger.warning("No notification emails configured (NOTIFICATION_EMAILS env variable). Skipping email send.")
             return
-        
-        resend_key = getattr(self.settings, "resend_api_key", "")
-        if not resend_key:
-            logger.warning("RESEND_API_KEY not configured; cannot send email notification.")
-            return
-        
-        try:
-            # Configure Resend API key
-            resend.api_key = resend_key
-            
-            # Convert body to HTML (preserve line breaks)
-            html_body = f"<pre style='font-family: monospace; white-space: pre-wrap;'>{body}</pre>"
-            
-            # Send email via Resend API
-            result = resend.Emails.send({
-                "from": self.email_sender,
-                "to": self.notification_email_recipients,
-                "subject": subject,
-                "html": html_body,
-            })
-            
-            logger.info(f"Email notification sent via Resend: {subject} (ID: {result.get('id', 'N/A')})")
-        except Exception as e:
-            logger.error(f"Error sending email notification via Resend: {e}")
-            import traceback
-            traceback.print_exc()
+
+        html_body = f"<pre style='font-family: monospace; white-space: pre-wrap;'>{body}</pre>"
+        result = send_email(
+            to=self.notification_email_recipients,
+            subject=subject,
+            html=html_body,
+            from_address=self.email_sender,
+            trigger="wa_bot_notification",
+        )
+        if result["sent"]:
+            logger.info(f"Email notification sent via {result['provider']}: {subject} (ID: {result['message_id']})")
+        else:
+            logger.error(f"Error sending email notification: {result['reason']}")
     
     async def _send_accommodation_availability_email(
         self,
@@ -3131,32 +3104,22 @@ Cliente: {customer_name} ({customer_phone})"""
 </div>
 """
             
-            # Use the same method as other working emails
-            if not RESEND_AVAILABLE:
-                logger.warning("Resend library not installed; cannot send accommodation email.")
-                return
-            
             if not self.notification_email_recipients:
                 logger.warning("No notification emails configured. Skipping accommodation email.")
                 return
-            
-            resend_key = getattr(self.settings, "resend_api_key", "")
-            if not resend_key:
-                logger.warning("RESEND_API_KEY not configured; cannot send accommodation email.")
+
+            result = send_email(
+                to=self.notification_email_recipients,
+                subject=subject,
+                html=html_body,
+                from_address=self.email_sender,
+                trigger="accommodation_availability",
+            )
+            if not result["sent"]:
+                logger.error(f"❌ Error sending accommodation availability email: {result['reason']}")
                 return
-            
-            # Configure Resend API key
-            resend.api_key = resend_key
-            
-            # Send email via Resend API using same format as working emails
-            result = resend.Emails.send({
-                "from": self.email_sender,
-                "to": self.notification_email_recipients,
-                "subject": subject,
-                "html": html_body,
-            })
-            
-            logger.info(f"✅ Accommodation availability email sent: {accommodation_name} (ID: {result.get('id', 'N/A')})")
+
+            logger.info(f"✅ Accommodation availability email sent: {accommodation_name} (ID: {result['message_id']})")
             logger.info(f"   📧 Sent to: {self.notification_email_recipients}")
             logger.info(f"   📞 Contact: {contact['name']} - {contact['whatsapp']}")
             

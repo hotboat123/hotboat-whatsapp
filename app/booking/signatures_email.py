@@ -9,27 +9,24 @@ ADMIN_NOTIFICATION_EMAIL = "hotboatnotification@gmail.com"
 
 def _send(to: str, subject: str, html: str) -> None:
     from app.config import get_settings
-    from app.email.resend_booking import send_booking_html
+    from app.email.send_email import send_email
 
     settings = get_settings()
-    api_key = (getattr(settings, "resend_api_key", "") or "").strip()
-    if not api_key:
-        logger.warning("signatures_email: RESEND_API_KEY not configured, skipping email")
-        return
-
     from_addr = (
         getattr(settings, "resend_from_confirmations", "")
         or getattr(settings, "email_from", "")
         or "noreply@reservas.hotboat.cl"
     ).strip()
 
-    send_booking_html(
+    result = send_email(
         to=to,
         subject=subject,
         html=html,
         from_address=from_addr,
-        api_key=api_key,
+        trigger="signature",
     )
+    if not result["sent"]:
+        logger.warning("signatures_email: send failed: %s", result["reason"])
 
 
 def _fmt_date(d: Optional[str]) -> str:
