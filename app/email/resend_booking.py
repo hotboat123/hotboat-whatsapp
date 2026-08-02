@@ -1,12 +1,12 @@
 """Send transactional HTML email via Resend (booking confirmations)."""
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
 
 def send_booking_html(
-    to: str,
+    to: Union[str, List[str]],
     subject: str,
     html: str,
     from_address: str,
@@ -26,7 +26,7 @@ def send_booking_html(
     resend.api_key = api_key
     payload = {
         "from": from_address,
-        "to": [to],
+        "to": to if isinstance(to, list) else [to],
         "subject": subject,
         "html": html,
     }
