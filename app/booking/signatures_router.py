@@ -15,9 +15,11 @@ FIRMA_HTML_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "stat
 def _firma_html() -> str:
     from app.config import get_settings
     from app.meta_pixel import apply_meta_pixel_placeholder
+    from app.gtm import apply_gtm_placeholders
 
     with open(FIRMA_HTML_PATH, "r", encoding="utf-8") as f:
-        return apply_meta_pixel_placeholder(f.read(), get_settings().meta_pixel_id)
+        content = apply_meta_pixel_placeholder(f.read(), get_settings().meta_pixel_id)
+        return apply_gtm_placeholders(content, get_settings().gtm_container_id)
 
 
 class SignaturePayload(BaseModel):

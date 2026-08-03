@@ -15,6 +15,7 @@ _AVAIL_CACHE_TTL = 30  # seconds
 
 from app.booking.models import CreateBookingRequest
 from app.meta_pixel import apply_meta_pixel_placeholder
+from app.gtm import apply_gtm_placeholders
 from app.config import get_settings
 from app.booking.db import (
     create_booking, update_booking_payment,
@@ -36,6 +37,7 @@ def _booking_html() -> HTMLResponse:
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             content = apply_meta_pixel_placeholder(f.read(), get_settings().meta_pixel_id)
+            content = apply_gtm_placeholders(content, get_settings().gtm_container_id)
     else:
         content = "<h1>Booking page not found</h1>"
     # no-store: la pagina lee config (precios, toggles de menu, disponibilidad)

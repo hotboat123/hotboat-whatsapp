@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     business_website: str = "https://hotboatchile.com/es/"
     # Meta Pixel (optional). Injected on /pagar for PageView + InitiateCheckout.
     meta_pixel_id: str = ""
+    # Google Tag Manager (optional). Same pages as meta_pixel_id.
+    gtm_container_id: str = ""
     # Meta Marketing API token for ad name lookup (optional — falls back to whatsapp_api_token)
     meta_marketing_token: str = ""
     # Facebook Page ID linked to the WhatsApp Business Account (required for Conversions API)

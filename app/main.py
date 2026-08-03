@@ -24,6 +24,7 @@ from app.booking.reserva_router import reserva_router
 from app.booking.link_tracking_router import link_tracking_router
 from app.email.ses_webhook import ses_webhook_router
 from app.meta_pixel import apply_meta_pixel_placeholder, is_meta_pixel_enabled
+from app.gtm import apply_gtm_placeholders
 from app.config import get_settings
 from app.booking.operator_settings import get_setting as _get_operator_setting
 from app.whatsapp.webhook import handle_webhook, verify_webhook
@@ -1037,6 +1038,7 @@ def _serve_chat_html() -> HTMLResponse:
     index_path = os.path.join(static_dir, "index.html")
     with open(index_path, "r", encoding="utf-8") as f:
         body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
+        body = apply_gtm_placeholders(body, settings.gtm_container_id)
     return HTMLResponse(content=body)
 
 def _serve_login_html(next_url: str = "/") -> HTMLResponse:
@@ -1127,6 +1129,7 @@ async def pago_page():
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             content = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
+            content = apply_gtm_placeholders(content, settings.gtm_container_id)
         return HTMLResponse(content=content)
     return HTMLResponse("<h1>Página no encontrada</h1>", status_code=404)
 
