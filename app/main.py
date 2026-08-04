@@ -49,6 +49,7 @@ from typing import List, Optional, Dict
 # Chilean timezone
 CHILE_TZ = ZoneInfo("America/Santiago")
 import os
+import re
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -1033,12 +1034,23 @@ app.include_router(link_tracking_router)
 app.include_router(ses_webhook_router)
 
 
+# index.html pins app.js/styles.css/mobile-fix.css to hardcoded ?v=... cache
+# -busting strings that someone has to remember to bump by hand on every
+# change — confirmed stale (mobile-fix.css hadn't moved since January) and
+# the reason a browser tab that cached an old build never picks up a new
+# deploy without a hard refresh. Replaced with one value computed at process
+# start, so every deploy (new process) invalidates all three automatically —
+# no more manual bumping, and no more "why doesn't my change show up".
+_ASSET_VERSION = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+
+
 def _serve_chat_html() -> HTMLResponse:
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     index_path = os.path.join(static_dir, "index.html")
     with open(index_path, "r", encoding="utf-8") as f:
         body = apply_meta_pixel_placeholder(f.read(), settings.meta_pixel_id)
         body = apply_gtm_placeholders(body, settings.gtm_container_id)
+    body = re.sub(r'\?v=[^"]*', f"?v={_ASSET_VERSION}", body)
     return HTMLResponse(content=body)
 
 def _serve_login_html(next_url: str = "/") -> HTMLResponse:
