@@ -743,6 +743,11 @@ async function loadOlderMessages() {
         loadButton.disabled = true;
         loadButton.textContent = 'Cargando...';
     }
+    const loadHeaderButton = document.getElementById('currentChatLoadOlderBtn');
+    if (loadHeaderButton) {
+        loadHeaderButton.disabled = true;
+        loadHeaderButton.textContent = '📜 Cargando...';
+    }
 
     try {
         const beforeCursor = currentConversation.nextCursor;
@@ -781,6 +786,11 @@ async function loadOlderMessages() {
             button.disabled = false;
             button.textContent = 'Ver mensajes anteriores';
         }
+        const headerButton = document.getElementById('currentChatLoadOlderBtn');
+        if (headerButton) {
+            headerButton.disabled = false;
+            headerButton.textContent = '📜 Cargar mensajes anteriores';
+        }
     }
 }
 
@@ -801,6 +811,8 @@ function renderCurrentChat(options = {}) {
     if (!currentConversation) {
         chatName.textContent = 'Select a conversation';
         chatPhone.textContent = '';
+        const loadOlderHeaderBtn = document.getElementById('currentChatLoadOlderBtn');
+        if (loadOlderHeaderBtn) loadOlderHeaderBtn.style.display = 'none';
         messagesContainer.innerHTML = `
             <div class="welcome-message">
                 <h2>👋 Welcome to Kia-Ai</h2>
@@ -865,6 +877,17 @@ function renderCurrentChat(options = {}) {
         } else {
             webActivityEl.style.display = 'none';
         }
+    }
+
+    // Botón fijo en el header (a diferencia del que va arriba de los mensajes,
+    // este no depende de hacer scroll para notarlo — el chat abre scrolleado
+    // al fondo, así que ese otro queda fuera de vista hasta que el admin
+    // sube, y el auto-load al acercarse al tope lo reemplaza por "Cargando…"
+    // casi antes de que se alcance a ver. Mismo loadOlderMessages() al hacer
+    // click; su estado de carga se sincroniza ahí mismo.
+    const loadOlderHeaderBtn = document.getElementById('currentChatLoadOlderBtn');
+    if (loadOlderHeaderBtn) {
+        loadOlderHeaderBtn.style.display = currentConversation.hasMore ? 'inline-block' : 'none';
     }
     messageInputArea.style.display = 'block';
     
