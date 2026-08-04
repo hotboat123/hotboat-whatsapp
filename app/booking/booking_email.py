@@ -1754,6 +1754,68 @@ def _extras_summary_html(extras_json: Any) -> str:
     return f"<ul style='margin:4px 0 0 16px;padding:0;font-size:12px;color:#64748b'>{li}</ul>"
 
 
+# Clasificación de flujo por reserva — mismo criterio que PHONE_FLUJO_LATERAL
+# en hotboat-email-marketing-spec (backend/app/services/web_traffic_analytics.py),
+# portado acá porque este repo ya tiene acceso directo a estas tablas (no
+# necesita el motor cruzado que usa el otro repo). Se evalúa por RESERVA, no
+# solo por teléfono: solo cuenta un mensaje de WhatsApp si pasó ANTES de
+# created_at de esta reserva puntual — un mensaje de seguimiento posterior
+# (ej. recordatorio del día siguiente) no debe convertir una venta 100% web
+# en "flujo 3".
+_FLUJO_LABEL = {
+    "flujo_1": ("Flujo 1 · WhatsApp", "#34d399"),
+    "flujo_2": ("Flujo 2 · Solo web", "#94a3b8"),
+    "flujo_3": ("Flujo 3 · Web → WhatsApp", "#60a5fa"),
+}
+
+
+def _compute_flujo(cur, telefono: Optional[str], created_at) -> str:
+    if not telefono or not created_at:
+        return "flujo_2"
+    phone_norm = re.sub(r"[^0-9]", "", telefono)
+    if not phone_norm:
+        return "flujo_2"
+    try:
+        cur.execute("""
+            SELECT
+                CASE
+                    WHEN fm.first_msg_before IS NULL THEN 'flujo_2'
+                    WHEN fo.first_organic_before IS NOT NULL THEN 'flujo_3'
+                    ELSE 'flujo_1'
+                END AS flujo
+            FROM (
+                SELECT MIN(wc.created_at) AS first_msg_before
+                FROM whatsapp_conversations wc
+                WHERE wc.phone_number = %s AND wc.created_at < %s
+            ) fm
+            LEFT JOIN LATERAL (
+                SELECT MIN(bve.recorded_at) AS first_organic_before
+                FROM booking_visitor_identity bvi
+                JOIN booking_visitor_events bve
+                  ON bve.session_id = bvi.session_id
+                     OR (bvi.visitor_id IS NOT NULL AND bve.visitor_id = bvi.visitor_id)
+                WHERE regexp_replace(bvi.phone, '[^0-9]', '', 'g') = %s
+                  AND bve.link_token IS NULL
+                  AND bve.recorded_at < fm.first_msg_before
+            ) fo ON fm.first_msg_before IS NOT NULL
+        """, (phone_norm, created_at, phone_norm))
+        row = cur.fetchone()
+        return row[0] if row else "flujo_2"
+    except Exception:
+        logger.exception("_compute_flujo failed for %s", phone_norm)
+        return "flujo_2"
+
+
+def _flujo_badge_html(flujo: Optional[str]) -> str:
+    if not flujo:
+        return ""
+    label, color = _FLUJO_LABEL.get(flujo, (flujo, "#94a3b8"))
+    return (
+        f'<span style="background:{color}22;color:{color};border:1px solid {color}55;'
+        f'border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap;">{label}</span>'
+    )
+
+
 def _build_daily_summary_html(today_str: str, bookings: List[dict], settings) -> str:
     business = getattr(settings, "business_name", "Hot Boat")
     n = len(bookings)
@@ -1854,6 +1916,7 @@ def _build_daily_summary_html(today_str: str, bookings: List[dict], settings) ->
     <td style="background:#1e3a5f;padding:10px 16px;text-align:right">
       <span style="background:{status_color};color:#0f172a;padding:3px 10px;border-radius:20px;
                    font-size:11px;font-weight:700">{status_label}</span>
+      {" " + _flujo_badge_html(b.get("flujo")) if b.get("flujo") else ""}
     </td>
   </tr>
 
@@ -1941,13 +2004,15 @@ def send_daily_summary_email() -> Dict[str, Any]:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT nombre_cliente, email, telefono, hora, num_personas,
-                           ingreso_total, status, extras_json, observaciones
+                           ingreso_total, status, extras_json, observaciones, created_at
                     FROM all_appointments
                     WHERE fecha = %s AND status IS NOT NULL
                     ORDER BY hora ASC NULLS LAST
                 """, (today_iso,))
                 cols = [d[0] for d in cur.description]
                 bookings = [dict(zip(cols, row)) for row in cur.fetchall()]
+                for b in bookings:
+                    b["flujo"] = _compute_flujo(cur, b.get("telefono"), b.get("created_at"))
     except Exception as db_err:
         out["reason"] = f"db_error: {db_err}"
         logger.error("daily_summary: DB error: %s", db_err)
@@ -2133,6 +2198,7 @@ def _build_booking_card_html(b: dict, is_weekly: bool = False) -> str:
         <span style="color:#f8fafc;font-size:15px;font-weight:700;">{date_header}{nombre}</span>
         <span style="background:{status_color}22;color:{status_color};border:1px solid {status_color}55;
                border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;">{status_label}</span>
+        {_flujo_badge_html(b.get("flujo"))}
         <span style="margin-left:auto;color:#10b981;font-size:15px;font-weight:800;">{_fmt_clp_local(total)}</span>
       </div>
       {alerts_html}
@@ -2175,7 +2241,8 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
                           ingreso_total, status, extras_json, observaciones,
                           ciudad_origen, como_supieron, quien_atendio,
                           COALESCE(pagos,'[]'::jsonb),
-                          COALESCE(flex_amount,0)
+                          COALESCE(flex_amount,0),
+                          created_at
                    FROM all_appointments
                    WHERE fecha = %s AND status NOT IN ('cancelled','rejected')
                    ORDER BY hora ASC NULLS LAST""",
@@ -2183,8 +2250,11 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
             )
             cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
                     "ingreso_total","status","extras_json","observaciones",
-                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount"]
+                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount",
+                    "created_at"]
             bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
+            for b in bookings:
+                b["flujo"] = _compute_flujo(cur, b.get("telefono"), b.get("created_at"))
 
     out["count"] = len(bookings)
     n_alerts = sum(
@@ -2287,7 +2357,8 @@ def send_weekly_summary_email() -> Dict[str, Any]:
                           ingreso_total, status, extras_json, observaciones,
                           ciudad_origen, como_supieron, quien_atendio,
                           COALESCE(pagos,'[]'::jsonb),
-                          COALESCE(flex_amount,0)
+                          COALESCE(flex_amount,0),
+                          created_at
                    FROM all_appointments
                    WHERE fecha BETWEEN %s AND %s
                      AND status NOT IN ('cancelled','rejected')
@@ -2296,8 +2367,11 @@ def send_weekly_summary_email() -> Dict[str, Any]:
             )
             cols = ["nombre_cliente","email","telefono","fecha","hora","num_personas",
                     "ingreso_total","status","extras_json","observaciones",
-                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount"]
+                    "ciudad_origen","como_supieron","quien_atendio","pagos","flex_amount",
+                    "created_at"]
             bookings = [dict(zip(cols, r)) for r in cur.fetchall()]
+            for b in bookings:
+                b["flujo"] = _compute_flujo(cur, b.get("telefono"), b.get("created_at"))
 
     out["count"] = len(bookings)
 
