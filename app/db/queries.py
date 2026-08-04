@@ -17,10 +17,6 @@ logger = logging.getLogger(__name__)
 ADMIN_PHONE = "56974950762"
 _last_error_notification = {}  # Track last notification time to avoid spam
 
-# Rolling retention cap for whatsapp_conversations — keeps the table from
-# growing unbounded per customer while still giving enough recent context.
-MAX_CONVERSATION_ROWS_PER_PHONE = 30
-
 
 async def _notify_admin_db_error(error: Exception, function_name: str) -> None:
     """
@@ -288,17 +284,16 @@ async def save_conversation(
                 """, (phone_number, customer_name, message_text, response_text, message_type, message_id, direction))
                 new_id = cur.fetchone()[0]
 
-                # Trim old rows so history doesn't grow unbounded per customer
-                cur.execute("""
-                    DELETE FROM whatsapp_conversations
-                    WHERE phone_number = %s
-                      AND id NOT IN (
-                          SELECT id FROM whatsapp_conversations
-                          WHERE phone_number = %s
-                          ORDER BY created_at DESC
-                          LIMIT %s
-                      )
-                """, (phone_number, phone_number, MAX_CONVERSATION_ROWS_PER_PHONE))
+                # Retention trim REMOVED 2026-08-04: this used to permanently
+                # DELETE every row beyond the most recent MAX_CONVERSATION_
+                # ROWS_PER_PHONE (30) on every single incoming/outgoing
+                # message. Discovered when a customer's real WhatsApp history
+                # visibly had more messages than the admin panel showed —
+                # confirmed via direct query that 144 conversations (4,163
+                # messages total) were sitting above the 30-row mark, each one
+                # one message away from having its older half silently and
+                # irreversibly destroyed. Never trim conversation history
+                # without an explicit, deliberate archival step first.
             conn.commit()
             logger.info(f"Conversation saved for {phone_number}")
             return new_id
