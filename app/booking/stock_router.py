@@ -331,11 +331,14 @@ def delete_product(pid: int, x_admin_key: str = Header("")):
 def dedup_products(x_admin_key: str = Header(""), apply: bool = False):
     """Merge duplicate stock_products that share the same name (case-insensitive).
 
-    For each group of duplicates the row with the most stock is kept (ties → lowest
-    id). References in stock_movements are re-pointed to the keeper BEFORE the
-    duplicate rows are deleted. Skips any group where a row is a live booking
-    extra (show_in_booking=TRUE) — those are never auto-merged since deleting one
-    would remove it from the customer-facing extras menu; resolve those manually.
+    For each group of duplicates, the keeper is the row with a slug (i.e. the one
+    actually wired to a bookable extra — pricing, icon, booking-flow visibility)
+    over one without; among rows tied on that, the one with the most stock wins;
+    remaining ties go to the lowest id. References in stock_movements and
+    tabla_catalog_items are re-pointed to the keeper BEFORE the duplicate rows are
+    deleted. Skips any group where more than one row is a live booking extra
+    (show_in_booking=TRUE) — those are never auto-merged since deleting one would
+    remove it from the customer-facing extras menu; resolve those manually.
 
     Defaults to a DRY RUN: pass ?apply=true to actually perform the merge.
     Always returns the plan so it can be previewed first.
@@ -358,7 +361,7 @@ def dedup_products(x_admin_key: str = Header(""), apply: bool = False):
                     """SELECT id, name, current_stock, show_in_booking
                        FROM stock_products
                        WHERE LOWER(name) = %s
-                       ORDER BY current_stock DESC NULLS LAST, id ASC""",
+                       ORDER BY (slug IS NOT NULL) DESC, current_stock DESC NULLS LAST, id ASC""",
                     (lname,),
                 )
                 rows = cur.fetchall()
