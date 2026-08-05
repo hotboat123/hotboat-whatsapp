@@ -540,12 +540,26 @@ class ConversationManager:
                     "accommodation_flow", "experience_flow", "complete_packages_flow",
                     "build_package_flow", "awaiting_packages_submenu",
                 )):
-                    logger.info("First message - sending welcome menu")
                     metadata["language_selected"] = True
                     language = metadata.get("language", "es")
                     # Signal webhook to schedule a 2-min follow-up if user doesn't reply
                     self.pending_followup_requests.add(from_number)
-                    response = self._get_main_menu_message(language)
+                    # A/B variant opted into live AI (bot_ab_variants.ai_model)
+                    # skips the canned welcome menu and lets the AI answer the
+                    # very first message directly — falls back to the normal
+                    # menu if no such variant is set or the AI call fails.
+                    ai_response = None
+                    from app.bot.variant_overrides import get_current_ai_model
+                    if get_current_ai_model():
+                        ai_response = await self._try_ai_fallback(
+                            message_text, conversation, contact_name, language, from_number
+                        )
+                    if ai_response:
+                        logger.info("First message - AI variant answered directly (menu skipped)")
+                        response = ai_response
+                    else:
+                        logger.info("First message - sending welcome menu")
+                        response = self._get_main_menu_message(language)
             elif self._is_thanks_message(message_text):
                 logger.info("Gratitude detected - sending friendly reply")
                 language = metadata.get("language", "es")
