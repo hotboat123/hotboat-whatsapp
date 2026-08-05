@@ -465,7 +465,29 @@ class ConversationManager:
             # Check if it's the first message - send welcome message
             # Check BEFORE adding the message to history
             is_first = self._is_first_message(conversation)
-            
+
+            # An active flow already set (e.g. via an admin quick reply) means
+            # we should never short-circuit this first message to the welcome
+            # menu or an AI-first reply — let it continue into that flow.
+            _first_message_flow_already_active = is_first and any(metadata.get(k) for k in (
+                "accommodation_flow", "experience_flow", "complete_packages_flow",
+                "build_package_flow", "awaiting_packages_submenu",
+            ))
+            # Per-variant toggle (bot_ab_variants.show_welcome_menu, default
+            # TRUE) — set False to let the first message flow through the
+            # normal chain (FAQ/flows/AI) instead of the canned menu.
+            from app.bot.variant_overrides import get_current_show_welcome_menu
+            _show_welcome_menu_for_lead = get_current_show_welcome_menu()
+            if is_first and not _first_message_flow_already_active:
+                inferred_language = self._infer_language_from_free_text(message_text)
+                if inferred_language in LANGUAGES:
+                    metadata["language"] = inferred_language
+                    logger.info(
+                        f"Auto language on first message for {from_number}: {inferred_language}"
+                    )
+                # Signal webhook to schedule a 2-min follow-up if user doesn't reply
+                self.pending_followup_requests.add(from_number)
+
             # Add message to history. When the user replied to a specific
             # bot message, prepend the cited text so the LLM knows which
             # exact message they are reacting to.
@@ -527,39 +549,17 @@ class ConversationManager:
                         f"Lead phrase in {inferred_language}; sending main menu ({from_number})"
                     )
                     response = self._get_main_menu_message(inferred_language)
-            elif is_first:
-                inferred_language = self._infer_language_from_free_text(message_text)
-                if inferred_language in LANGUAGES:
-                    metadata["language"] = inferred_language
-                    logger.info(
-                        f"Auto language on first message for {from_number}: {inferred_language}"
-                    )
-                # Always show welcome message on first interaction
-                # BUT skip if an active flow was already set (e.g. via quick reply from admin)
-                if not any(metadata.get(k) for k in (
-                    "accommodation_flow", "experience_flow", "complete_packages_flow",
-                    "build_package_flow", "awaiting_packages_submenu",
-                )):
-                    metadata["language_selected"] = True
-                    language = metadata.get("language", "es")
-                    # Signal webhook to schedule a 2-min follow-up if user doesn't reply
-                    self.pending_followup_requests.add(from_number)
-                    # A/B variant opted into live AI (bot_ab_variants.ai_model)
-                    # skips the canned welcome menu and lets the AI answer the
-                    # very first message directly — falls back to the normal
-                    # menu if no such variant is set or the AI call fails.
-                    ai_response = None
-                    from app.bot.variant_overrides import get_current_ai_model
-                    if get_current_ai_model():
-                        ai_response = await self._try_ai_fallback(
-                            message_text, conversation, contact_name, language, from_number
-                        )
-                    if ai_response:
-                        logger.info("First message - AI variant answered directly (menu skipped)")
-                        response = ai_response
-                    else:
-                        logger.info("First message - sending welcome menu")
-                        response = self._get_main_menu_message(language)
+            elif is_first and not _first_message_flow_already_active and _show_welcome_menu_for_lead:
+                logger.info("First message - sending welcome menu")
+                metadata["language_selected"] = True
+                language = metadata.get("language", "es")
+                response = self._get_main_menu_message(language)
+            # else (is_first and not _first_message_flow_already_active and NOT
+            # _show_welcome_menu_for_lead): this variant has the welcome menu
+            # turned off — falls through the rest of this chain (FAQ/flows/
+            # etc.), same as any other message; the final "nothing matched"
+            # else-branch further down already tries the variant's AI model
+            # before falling back to the menu as a last resort.
             elif self._is_thanks_message(message_text):
                 logger.info("Gratitude detected - sending friendly reply")
                 language = metadata.get("language", "es")

@@ -44,6 +44,12 @@ _disabled_triggers_cache_loaded_at: float = 0.0
 _system_prompt_cache: dict[str, str] = {}
 _system_prompt_cache_loaded_at: float = 0.0
 
+# Separate cache for which variants have the canned welcome menu turned off
+# on first contact — see get_current_show_welcome_menu(). Only variants with
+# show_welcome_menu=FALSE are stored (the common case is TRUE/default).
+_menu_disabled_cache: FrozenSet[str] = frozenset()
+_menu_disabled_cache_loaded_at: float = 0.0
+
 
 def set_current_variant(variant_key: Optional[str]) -> None:
     _current_variant.set(variant_key)
@@ -79,11 +85,12 @@ def invalidate_cache() -> None:
     get_disabled_triggers() call to reload from DB. Called by the admin save/
     delete endpoints so edits are visible on the very next message instead of
     waiting out the TTL."""
-    global _cache_loaded_at, _ai_model_cache_loaded_at, _disabled_triggers_cache_loaded_at, _system_prompt_cache_loaded_at
+    global _cache_loaded_at, _ai_model_cache_loaded_at, _disabled_triggers_cache_loaded_at, _system_prompt_cache_loaded_at, _menu_disabled_cache_loaded_at
     _cache_loaded_at = 0.0
     _ai_model_cache_loaded_at = 0.0
     _disabled_triggers_cache_loaded_at = 0.0
     _system_prompt_cache_loaded_at = 0.0
+    _menu_disabled_cache_loaded_at = 0.0
 
 
 def _reload_ai_model_cache() -> None:
@@ -185,6 +192,38 @@ def get_current_system_prompt() -> Optional[str]:
     if time.monotonic() - _system_prompt_cache_loaded_at > _CACHE_TTL_SECONDS:
         _reload_system_prompt_cache()
     return _system_prompt_cache.get(variant_key)
+
+
+def _reload_menu_disabled_cache() -> None:
+    global _menu_disabled_cache, _menu_disabled_cache_loaded_at
+    from app.db.connection import get_connection
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT variant_key FROM bot_ab_variants WHERE show_welcome_menu = FALSE"
+                )
+                rows = cur.fetchall()
+        _menu_disabled_cache = frozenset(r[0] for r in rows)
+        _menu_disabled_cache_loaded_at = time.monotonic()
+    except Exception as e:
+        logger.warning(f"Failed to load bot_ab_variants show_welcome_menu cache: {e}")
+        _menu_disabled_cache = frozenset()
+        _menu_disabled_cache_loaded_at = time.monotonic()
+
+
+def get_current_show_welcome_menu() -> bool:
+    """Whether the current lead's variant should get the canned Popeye
+    welcome menu on their first message. True (default) whenever there's no
+    active variant or the variant hasn't turned it off — matches the bot's
+    original, unconditional behavior."""
+    variant_key = _current_variant.get()
+    if not variant_key:
+        return True
+    if time.monotonic() - _menu_disabled_cache_loaded_at > _CACHE_TTL_SECONDS:
+        _reload_menu_disabled_cache()
+    return variant_key not in _menu_disabled_cache
 
 
 def get_override(message_key: str) -> Optional[str]:

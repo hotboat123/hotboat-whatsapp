@@ -119,6 +119,13 @@ def _ensure_tables():
                     # can't add to cart) are a fixed footer ALWAYS appended,
                     # never overridable here. NULL = use the default prompt.
                     "system_prompt TEXT",
+                    # Whether to send the canned Popeye welcome menu on a
+                    # lead's very first message. TRUE (default) = current
+                    # behavior, unchanged. FALSE = the first message is
+                    # processed like any other (FAQ/flows/AI fallback) instead
+                    # of being short-circuited to the menu — see
+                    # ConversationManager.process_message()'s is_first branch.
+                    "show_welcome_menu BOOLEAN NOT NULL DEFAULT TRUE",
                 ]:
                     try:
                         cur.execute(f"ALTER TABLE bot_ab_variants ADD COLUMN IF NOT EXISTS {col_def}")
@@ -366,6 +373,7 @@ class VariantUpdate(BaseModel):
     ai_model: Optional[str] = None
     disabled_triggers: Optional[List[str]] = None
     system_prompt: Optional[str] = None
+    show_welcome_menu: Optional[bool] = None
 
 
 class OverrideUpsert(BaseModel):
@@ -424,7 +432,7 @@ async def list_ab_variants():
                 cur.execute("""
                     SELECT v.id, v.variant_key, v.label, v.is_active, v.created_at,
                            COUNT(o.id) AS override_count, v.weight, v.ai_provider, v.ai_model,
-                           v.disabled_triggers, v.system_prompt
+                           v.disabled_triggers, v.system_prompt, v.show_welcome_menu
                     FROM bot_ab_variants v
                     LEFT JOIN bot_message_overrides o ON o.variant_key = v.variant_key
                     GROUP BY v.id
@@ -441,6 +449,7 @@ async def list_ab_variants():
                     "ai_provider": r[7], "ai_model": r[8],
                     "disabled_triggers": list(r[9]) if r[9] else [],
                     "system_prompt": r[10],
+                    "show_welcome_menu": r[11] if r[11] is not None else True,
                     # Informational only — the actual split is deterministic
                     # (see _pick_active_variant), this just previews the
                     # target ratio implied by the current weights.
@@ -495,6 +504,8 @@ async def update_ab_variant(variant_id: int, data: VariantUpdate):
                     cur.execute("UPDATE bot_ab_variants SET disabled_triggers = %s WHERE id = %s", (cleaned or None, variant_id))
                 if data.system_prompt is not None:
                     cur.execute("UPDATE bot_ab_variants SET system_prompt = %s WHERE id = %s", (data.system_prompt.strip() or None, variant_id))
+                if data.show_welcome_menu is not None:
+                    cur.execute("UPDATE bot_ab_variants SET show_welcome_menu = %s WHERE id = %s", (data.show_welcome_menu, variant_id))
                 conn.commit()
         from app.bot.variant_overrides import invalidate_cache
         invalidate_cache()

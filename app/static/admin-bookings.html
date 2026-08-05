@@ -13840,7 +13840,15 @@ async function loadAbVariants(){
           <button onclick="deleteAbVariant(${v.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem" title="Eliminar variante">✕</button>
         </div>
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.3rem .1rem 0;border-top:1px dashed var(--border);margin-top:.1rem;padding-top:.5rem">
-          <span style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">🧪 Modelo IA (aún no aplicado al bot en vivo)</span>
+          <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;user-select:none" title="Si está apagado, el primer mensaje del cliente NO recibe el saludo/menú de Popeye — se procesa como cualquier otro mensaje (FAQ, flujos, y si esta variante tiene modelo IA configurado, la IA responde directo)">
+            <input type="checkbox" ${v.show_welcome_menu!==false?'checked':''}
+              onchange="updateVariantField(${v.id},'show_welcome_menu',this.checked)"
+              style="width:14px;height:14px;cursor:pointer;accent-color:var(--gold)">
+            <span style="font-size:.75rem;color:var(--text)">👋 Mostrar saludo inicial (menú de Popeye)</span>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.3rem .1rem 0;border-top:1px dashed var(--border);margin-top:.1rem;padding-top:.5rem">
+          <span style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">🧪 Modelo IA (fallback en vivo cuando nada más responde, o desde el primer mensaje si el saludo está apagado arriba)</span>
           <input placeholder="proveedor (ej: groq)" value="${escHtml(v.ai_provider||'')}"
             onchange="updateVariantField(${v.id},'ai_provider',this.value.trim())"
             style="width:110px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.2rem .4rem;font-size:.72rem">
