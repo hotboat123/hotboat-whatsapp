@@ -13759,6 +13759,7 @@ let _abSuggestedKeys = [];
 let _abFaqTriggerKeys = [];
 let _abDefaultSystemPrompt = '';
 let _abOpenVariant = null; // variant_key currently expanded
+let _abDefaultWelcomeMenu = null; // cached auto-built menu text (message_key 'main_menu'), fetched once
 
 function toggleNewVariantForm(){
   const f = document.getElementById('new-variant-form');
@@ -13980,7 +13981,9 @@ async function loadVariantOverrides(variantKey, safeKey){
     const r = await fetch(`/api/admin/bot/ab-overrides?variant_key=${encodeURIComponent(variantKey)}`);
     const d = await r.json();
     const overrides = d.overrides || [];
-    const rows = overrides.map(o => `
+    const welcomeOverride = overrides.find(o => o.message_key === 'main_menu');
+    const otherOverrides = overrides.filter(o => o.message_key !== 'main_menu');
+    const rows = otherOverrides.map(o => `
       <div style="display:flex;flex-direction:column;gap:.3rem;border-top:1px solid var(--border);padding-top:.5rem">
         <div style="display:flex;align-items:center;gap:.5rem">
           <code style="font-size:.75rem;color:#38bdf8">${escHtml(o.message_key)}</code>
@@ -13991,6 +13994,26 @@ async function loadVariantOverrides(variantKey, safeKey){
           <button onclick="saveVariantOverride(${o.id},'${variantKey}','${safeKey}')" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.28rem .7rem;font-size:.78rem;cursor:pointer;font-weight:600">Guardar</button>
         </div>
       </div>`).join('');
+    if(_abDefaultWelcomeMenu === null){
+      try {
+        const wr = await fetch('/api/admin/bot/build-menu?lang=es');
+        const wd = await wr.json();
+        _abDefaultWelcomeMenu = wd.text || '';
+      } catch { _abDefaultWelcomeMenu = ''; }
+    }
+    const welcomeValue = welcomeOverride ? welcomeOverride.content_es : _abDefaultWelcomeMenu;
+    const welcomeBlock = `
+      <div style="display:flex;flex-direction:column;gap:.3rem;border-top:1px solid var(--border);padding-top:.5rem">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <span style="font-size:.75rem;color:#38bdf8;font-weight:600">💬 Mensaje de bienvenida${welcomeOverride?'':' (usando el mensaje automático)'}</span>
+        </div>
+        <p style="margin:0;font-size:.72rem;color:var(--muted)">Texto exacto que recibe el cliente en su primer mensaje, cuando el saludo está activado arriba.</p>
+        <textarea id="welcome-${safeKey}" rows="8" style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.5rem .7rem;font-size:.78rem;font-family:inherit;resize:vertical;outline:none">${escHtml(welcomeValue)}</textarea>
+        <div style="display:flex;justify-content:flex-end;gap:.4rem">
+          ${welcomeOverride?`<button onclick="resetVariantWelcome(${welcomeOverride.id},'${variantKey}','${safeKey}')" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.28rem .7rem;font-size:.78rem;cursor:pointer">Restaurar mensaje automático</button>`:''}
+          <button onclick="saveVariantWelcome('${variantKey}','${safeKey}')" style="background:var(--gold);color:#000;border:none;border-radius:7px;padding:.28rem .7rem;font-size:.78rem;cursor:pointer;font-weight:600">Guardar</button>
+        </div>
+      </div>`;
     const v = _abVariants.find(x => x.variant_key === variantKey);
     const isCustomPrompt = !!(v && v.system_prompt);
     const promptValue = (v && v.system_prompt) || _abDefaultSystemPrompt;
@@ -14006,7 +14029,7 @@ async function loadVariantOverrides(variantKey, safeKey){
         </div>
       </div>`;
     const options = _abSuggestedKeys.map(k=>`<option value="${k}">${k}</option>`).join('');
-    wrap.innerHTML = promptBlock + rows + `
+    wrap.innerHTML = welcomeBlock + promptBlock + rows + `
       <div style="display:flex;flex-direction:column;gap:.3rem;border-top:1px solid var(--border);padding-top:.5rem">
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
           <select id="nov-key-${safeKey}" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.8rem;outline:none">
@@ -14048,6 +14071,30 @@ async function resetVariantPrompt(id, variantKey, safeKey){
     });
     if(!r.ok) throw new Error(await r.text());
     showToast('✅ Prompt restaurado al valor por defecto');
+    loadAbVariants();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function saveVariantWelcome(variantKey, safeKey){
+  const ta = document.getElementById(`welcome-${safeKey}`);
+  const content_es = ta?.value || '';
+  if(!content_es.trim()){ showToast('❌ El mensaje no puede quedar vacío', true); return; }
+  try {
+    const r = await fetch('/api/admin/bot/ab-overrides', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({variant_key: variantKey, message_key: 'main_menu', content_es})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Mensaje de bienvenida guardado para esta variante');
+    loadAbVariants();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function resetVariantWelcome(overrideId, variantKey, safeKey){
+  try {
+    const r = await fetch(`/api/admin/bot/ab-overrides/${overrideId}`, {method:'DELETE'});
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Restaurado al mensaje de bienvenida automático');
     loadAbVariants();
   } catch(e){ showToast('❌ '+e.message, true); }
 }

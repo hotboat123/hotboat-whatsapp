@@ -384,8 +384,10 @@ class OverrideUpsert(BaseModel):
 
 # Common high-traffic keys an operator would want to vary — surfaced in the
 # admin UI as a dropdown; free text is also accepted for anything else.
+# "main_menu" is deliberately excluded — it has its own dedicated welcome-
+# message editor in the admin UI instead of the generic key picker below.
 AB_SUGGESTED_KEYS = [
-    "main_menu", "date_has_availability", "time_confirmed_ask_party",
+    "date_has_availability", "time_confirmed_ask_party",
     "time_not_recognized", "time_not_available", "pricing", "features",
     "location", "extras_menu", "weather", "what_to_bring", "cancellation",
 ]
