@@ -290,15 +290,16 @@ Mientras tanto, si tienes alguna consulta urgente, puedes escribirme y trataré 
 
     def _build_extras_from_db(self, language: str = "es") -> Optional[str]:
         """Build extras menu keeping exact structure/numbering, pulling prices from DB."""
-        # Load price lookup from extras_visibility
+        # Load price lookup from the extras catalog (stock_products, slug column)
         prices = {}
         try:
             from app.db.connection import get_connection
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        SELECT extra_name_lower, COALESCE(precio_venta, 0)
-                        FROM extras_visibility
+                        SELECT slug, COALESCE(precio_venta, 0)
+                        FROM stock_products
+                        WHERE slug IS NOT NULL
                     """)
                     for key, price in cur.fetchall():
                         prices[key.lower()] = int(price)

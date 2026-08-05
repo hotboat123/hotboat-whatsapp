@@ -226,23 +226,24 @@ class CartManager:
         "flex": {"name": "Reserva FLEX (+10%)", "price": 0},
     }
 
-    # Live prices loaded from extras_visibility (refreshed on startup and periodically)
+    # Live prices loaded from the extras catalog (refreshed on startup and periodically)
     _db_prices: dict = {}  # {name_lower: price}
 
     @classmethod
     def refresh_prices_from_db(cls):
-        """Load/refresh extra prices from extras_visibility (single source of truth)."""
+        """Load/refresh extra prices from stock_products (single source of truth)."""
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        SELECT LOWER(COALESCE(name, extra_name_lower)),
+                        SELECT LOWER(COALESCE(name, slug)),
                                COALESCE(precio_venta, 0)
-                        FROM extras_visibility
-                        WHERE precio_venta IS NOT NULL AND precio_venta > 0
+                        FROM stock_products
+                        WHERE slug IS NOT NULL
+                          AND precio_venta IS NOT NULL AND precio_venta > 0
                     """)
                     cls._db_prices = {row[0]: row[1] for row in cur.fetchall()}
-            logger.info(f"CartManager: loaded {len(cls._db_prices)} extra prices from extras_visibility")
+            logger.info(f"CartManager: loaded {len(cls._db_prices)} extra prices from stock_products")
         except Exception as e:
             logger.warning(f"CartManager: could not load prices from DB: {e}")
 

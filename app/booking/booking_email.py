@@ -1419,14 +1419,15 @@ def send_confirmation_admin_force(booking_id: int, dry_run: bool = False) -> Dic
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT extra_name_lower, name, COALESCE(precio_venta,0) FROM extras_visibility WHERE COALESCE(user_hidden,FALSE)=FALSE"
+                    "SELECT slug, name, COALESCE(precio_venta,0) FROM stock_products "
+                    "WHERE slug IS NOT NULL AND COALESCE(user_hidden,FALSE)=FALSE"
                 )
-                for (name_lower, name, price) in cur.fetchall():
-                    display = name or name_lower
+                for (slug, name, price) in cur.fetchall():
+                    display = name or slug
                     catalog_by_key[_slug(display)] = {"name": display, "price": float(price)}
-                    catalog_by_key[name_lower]     = {"name": display, "price": float(price)}
+                    catalog_by_key[slug]           = {"name": display, "price": float(price)}
     except Exception as _ce:
-        logger.warning("Could not load extras_visibility for email: %s", _ce)
+        logger.warning("Could not load extras catalog for email: %s", _ce)
 
     # ── Compute real amounts ────────────────────────────────────────────────
     ingreso_reserva   = float(d.get("ingreso_reserva") or 0)
@@ -2102,7 +2103,7 @@ def _build_booking_card_html(b: dict, is_weekly: bool = False) -> str:
         from app.db.connection import get_connection as _gc
         with _gc() as _conn:
             with _conn.cursor() as _cur:
-                _cur.execute("SELECT extra_name_lower, COALESCE(name, extra_name_lower) FROM extras_visibility WHERE COALESCE(user_hidden,FALSE)=FALSE")
+                _cur.execute("SELECT slug, COALESCE(name, slug) FROM stock_products WHERE slug IS NOT NULL AND COALESCE(user_hidden,FALSE)=FALSE")
                 for _k, _n in _cur.fetchall():
                     catalog[_k.lower()] = _n
     except Exception:

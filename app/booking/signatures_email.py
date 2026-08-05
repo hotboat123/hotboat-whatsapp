@@ -196,17 +196,18 @@ def _parse_extras(raw: object) -> list:
 
     # Format 3: {key: qty_int}  or  {key: {qty, unit_price, name}}  (manual bookings)
     if isinstance(raw, dict):
-        # Load extras_visibility catalog for name/price resolution
+        # Load extras catalog for name/price resolution
         catalog = {}
         try:
             from app.db.connection import get_connection
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        SELECT extra_name_lower,
-                               COALESCE(name, extra_name_lower),
+                        SELECT slug,
+                               COALESCE(name, slug),
                                COALESCE(precio_venta, 0)
-                        FROM extras_visibility
+                        FROM stock_products
+                        WHERE slug IS NOT NULL
                     """)
                     for key, name, price in cur.fetchall():
                         catalog[key.lower()] = {"name": name, "price": price}

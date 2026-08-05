@@ -37,49 +37,36 @@ def _default_extra_icon(key: str) -> str:
 
 @content_router.get("/api/content/extras")
 def list_extras(lang: str = Query("es", description="es | en | pt")):
-    """Public endpoint: returns extras visible in the booking app (show_in_booking = TRUE)."""
+    """Public endpoint: returns extras visible in the booking app (show_in_booking = TRUE),
+    excluding anything soft-deleted, hidden, or out of stock."""
     try:
-        from app.booking.admin_router import _slugify_extra
         lang = (lang or "es").lower().strip()[:2]
         if lang not in ("es", "en", "pt"):
             lang = "es"
-        # Ensure columns exist before querying (may not exist on first deploy)
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                for col_def in [
-                    "name TEXT",
-                    "description TEXT",
-                    "name_en TEXT",
-                    "name_pt TEXT",
-                    "description_en TEXT",
-                    "description_pt TEXT",
-                ]:
-                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
-                conn.commit()
 
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT ev.extra_name_lower,
-                           COALESCE(ev.name, ev.extra_name_lower) AS name_es,
-                           COALESCE(ev.precio_venta, 0)           AS price,
-                           COALESCE(ev.icon, '')                  AS icon,
-                           COALESCE(ev.description, '')           AS description_es,
-                           COALESCE(NULLIF(TRIM(ev.name_en), ''), '') AS name_en,
-                           COALESCE(NULLIF(TRIM(ev.name_pt), ''), '') AS name_pt,
-                           COALESCE(NULLIF(TRIM(ev.description_en), ''), '') AS description_en,
-                           COALESCE(NULLIF(TRIM(ev.description_pt), ''), '') AS description_pt,
-                           COALESCE(ev.sort_order, 999)           AS sort_order
-                    FROM extras_visibility ev
-                    LEFT JOIN stock_products sp ON sp.id = ev.stock_product_id
-                    WHERE ev.show_in_booking = TRUE
-                      AND COALESCE(ev.user_hidden, FALSE) = FALSE
-                      AND (ev.stock_product_id IS NULL OR sp.current_stock > 0)
-                    ORDER BY ev.sort_order, ev.extra_name_lower
+                    SELECT slug,
+                           COALESCE(name, slug)          AS name_es,
+                           COALESCE(precio_venta, 0)     AS price,
+                           COALESCE(icon, '')             AS icon,
+                           COALESCE(description, '')      AS description_es,
+                           COALESCE(NULLIF(TRIM(name_en), ''), '') AS name_en,
+                           COALESCE(NULLIF(TRIM(name_pt), ''), '') AS name_pt,
+                           COALESCE(NULLIF(TRIM(description_en), ''), '') AS description_en,
+                           COALESCE(NULLIF(TRIM(description_pt), ''), '') AS description_pt,
+                           COALESCE(sort_order, 999)      AS sort_order
+                    FROM stock_products
+                    WHERE slug IS NOT NULL
+                      AND show_in_booking = TRUE
+                      AND COALESCE(user_hidden, FALSE) = FALSE
+                      AND (current_stock IS NULL OR current_stock > 0)
+                    ORDER BY sort_order, slug
                 """)
                 extras = []
                 for row in cur.fetchall():
-                    (name_lower, name_es, price, icon, description_es,
+                    (slug, name_es, price, icon, description_es,
                      name_en, name_pt, description_en, description_pt, sort_order) = row
                     if lang == "en":
                         name = (name_en or "").strip() or name_es
@@ -90,60 +77,17 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
                     else:
                         name = name_es
                         description = description_es
-                    key = _slugify_extra(name_es)
-                    resolved_icon = icon or _default_extra_icon(key)
+                    resolved_icon = icon or _default_extra_icon(slug)
                     extras.append({
-                        "id": name_lower,
-                        "key": key,
+                        "id": slug,
+                        "key": slug,
                         "name": name,
                         "price": price,
                         "icon": resolved_icon,
                         "description": description,
                         "sort_order": int(sort_order),
-                        "has_variants": False,   # filled below
+                        "has_variants": False,   # variant extras were never actually used
                     })
-
-                # Stock-aware filtering via the BOM (bill of materials).
-                # An extra's stock can be tracked through extras_bom in two ways:
-                #   - non-variant rows: every component is consumed (all must be in stock)
-                #   - variant rows: the customer picks ONE (at least one must be in stock)
-                # extras_bom.extra_slug may be stored as either the DB pk
-                # (extra_name_lower) or the slugified display name (key), so we
-                # gather both formats per extra.
-                if extras:
-                    all_slugs = list({s for e in extras for s in (e["key"], e["id"])})
-                    cur.execute("""
-                        SELECT b.extra_slug, b.is_variant,
-                               COALESCE(sp.current_stock, 0) AS stock
-                        FROM extras_bom b
-                        LEFT JOIN stock_products sp ON sp.id = b.product_id
-                        WHERE b.extra_slug = ANY(%s)
-                    """, (all_slugs,))
-                    bom_by_slug = {}
-                    for slug, is_var, stock in cur.fetchall():
-                        bom_by_slug.setdefault(slug, []).append((bool(is_var), float(stock)))
-
-                    visible = []
-                    for e in extras:
-                        rows = []
-                        for s in {e["key"], e["id"]}:
-                            rows.extend(bom_by_slug.get(s, []))
-                        variant_rows = [r for r in rows if r[0]]
-                        nonvariant_rows = [r for r in rows if not r[0]]
-                        in_stock_variants = [r for r in variant_rows if r[1] > 0]
-                        e["has_variants"] = bool(in_stock_variants)
-
-                        out_of_stock = False
-                        # Any required (non-variant) component depleted → can't make it
-                        if nonvariant_rows and any(r[1] <= 0 for r in nonvariant_rows):
-                            out_of_stock = True
-                        # Only stock source is variants and every one is depleted
-                        elif variant_rows and not nonvariant_rows and not in_stock_variants:
-                            out_of_stock = True
-
-                        if not out_of_stock:
-                            visible.append(e)
-                    extras = visible
 
         # already sorted by DB ORDER BY
         return {"extras": extras}
@@ -154,32 +98,11 @@ def list_extras(lang: str = Query("es", description="es | en | pt")):
 
 @content_router.get("/api/content/extras/{slug}/variants")
 def list_extra_variants(slug: str):
-    """Public: variant ingredient options for an extra, only those with current_stock > 0.
-    Accepts both the slugified key and the raw extra_name_lower as slug formats."""
-    try:
-        from app.booking.admin_router import _slugify_extra
-        alt_slug = _slugify_extra(slug)
-        slugs = list({slug, alt_slug})
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT DISTINCT ON (sp.id)
-                           b.product_id, b.variant_label, sp.current_stock, sp.name
-                    FROM extras_bom b
-                    JOIN stock_products sp ON sp.id = b.product_id
-                    WHERE b.extra_slug = ANY(%s)
-                      AND b.is_variant = TRUE
-                      AND sp.current_stock > 0
-                    ORDER BY sp.id, b.id
-                """, (slugs,))
-                variants = [
-                    {"product_id": r[0], "label": r[1] or r[3], "stock": float(r[2])}
-                    for r in cur.fetchall()
-                ]
-        return {"variants": variants}
-    except Exception as e:
-        logger.error(f"Error fetching variants for {slug}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Dead feature — variant extras (pick-one-of-several stock products under a
+    single extra) were never actually used (0 rows in the old BOM table ever had
+    is_variant=TRUE). Kept as a no-op endpoint since booking pages already treat
+    an empty list as "no variants" and call it unconditionally."""
+    return {"variants": []}
 
 
 @content_router.get("/api/content/alojamientos")

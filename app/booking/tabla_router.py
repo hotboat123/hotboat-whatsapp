@@ -54,16 +54,16 @@ DEFAULT_PRICE = 25000
 
 def _get_tabla_price() -> int:
     """Precio de la tabla = precio del extra 'tabla de picoteo' configurado en la
-    app (extras_visibility.precio_venta). Cae a DEFAULT_PRICE si no está."""
+    app (stock_products.precio_venta, vía su slug). Cae a DEFAULT_PRICE si no está."""
     try:
         from app.db.connection import get_connection
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT precio_venta FROM extras_visibility
-                       WHERE REPLACE(LOWER(extra_name_lower),' ','_') = 'tabla_de_picoteo'
+                    """SELECT precio_venta FROM stock_products
+                       WHERE slug = 'tabla_de_picoteo'
                          AND precio_venta IS NOT NULL AND precio_venta > 0
-                       ORDER BY precio_venta LIMIT 1"""
+                       LIMIT 1"""
                 )
                 row = cur.fetchone()
                 if row and row[0]:
@@ -135,6 +135,7 @@ def _ensure_catalog_table() -> None:
                   tier        INTEGER NOT NULL CHECK (tier IN (1, 2, 3)),
                   ingredient  TEXT NOT NULL,
                   sort_order  INTEGER DEFAULT 0,
+                  product_id  INTEGER REFERENCES stock_products(id),
                   UNIQUE (tabla_type, tier, ingredient)
                 );
                 CREATE INDEX IF NOT EXISTS idx_tci_type ON tabla_catalog_items(tabla_type, tier);
@@ -201,16 +202,23 @@ def _seed_catalog_defaults() -> None:
             )
             deleted = {(r[0], r[1], r[2]) for r in cur.fetchall()}
 
+            # name -> stock_products.id, to keep the product_id FK in sync
+            cur.execute("SELECT id, name FROM stock_products")
+            name_to_pid = {}
+            for pid, pname in cur.fetchall():
+                name_to_pid.setdefault((pname or "").lower(), pid)
+
             # Seed canonical names, skipping anything the admin deleted
             for t_type, tier_num, ing, sort_order in rows:
                 if (t_type, tier_num, ing.lower()) in deleted:
                     continue
                 cur.execute(
-                    """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order)
-                       VALUES (%s, %s, %s, %s)
+                    """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order, product_id)
+                       VALUES (%s, %s, %s, %s, %s)
                        ON CONFLICT (tabla_type, tier, ingredient) DO UPDATE
-                           SET sort_order = EXCLUDED.sort_order""",
-                    (t_type, tier_num, ing, sort_order),
+                           SET sort_order = EXCLUDED.sort_order,
+                               product_id = COALESCE(tabla_catalog_items.product_id, EXCLUDED.product_id)""",
+                    (t_type, tier_num, ing, sort_order, name_to_pid.get(ing.lower())),
                 )
         conn.commit()
 
@@ -287,53 +295,70 @@ def _get_catalog_from_db(filter_stock: bool = True) -> dict:
 
 
 def _seed_tabla_products() -> None:
-    """Insert tabla ingredients into extras_visibility with their purchase cost.
-    Uses ON CONFLICT DO NOTHING — never overwrites admin edits.
-    show_in_booking=False so they don't appear in the regular extras dropdown.
-    """
+    """Ensure each tabla ingredient exists as a stock_products row, hidden from
+    the regular booking extras dropdown (show_in_booking=False) but tagged with
+    a cost/icon/slug so it participates in low-stock tracking. Matches an
+    existing row by name first so it's reused instead of creating a duplicate
+    physical product; never overwrites current_stock or an admin-edited
+    icon/cost. Also seeds the master 'Tabla de picoteo' booking extra."""
     from app.db.connection import get_connection
+    from app.booking.stock_router import _ensure_tables as _ensure_stock_tables
+    from app.booking.admin_router import _slugify_extra
+
+    _ensure_stock_tables()
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Ensure required columns exist first
-            for col_def in ["costo INTEGER", "icon TEXT", "precio_venta INTEGER",
-                            "name TEXT", "description TEXT"]:
-                cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
             for name, cost, icon in _TABLA_INGREDIENTS:
-                cur.execute(
-                    """
-                    INSERT INTO extras_visibility
-                        (extra_name_lower, name, show_in_booking, costo, precio_venta, icon, sort_order, updated_at)
-                    VALUES (%s, %s, false, %s, 0, %s, 900, NOW())
-                    ON CONFLICT (extra_name_lower) DO NOTHING
-                    """,
-                    (name.lower(), name, cost, icon),
-                )
-            # Remove any duplicate tabla entries with spaces or alternate spellings
-            cur.execute("""
-                DELETE FROM extras_visibility
-                WHERE extra_name_lower != 'tabla_de_picoteo'
-                  AND REPLACE(LOWER(extra_name_lower), ' ', '_') = 'tabla_de_picoteo'
-            """)
+                cur.execute("SELECT id, slug FROM stock_products WHERE LOWER(name)=%s LIMIT 1", (name.lower(),))
+                row = cur.fetchone()
+                if row:
+                    pid, existing_slug = row
+                    cur.execute(
+                        """UPDATE stock_products
+                           SET slug = COALESCE(slug, %s),
+                               cost_per_unit = COALESCE(NULLIF(cost_per_unit, 0), %s),
+                               icon = COALESCE(NULLIF(icon, ''), %s)
+                           WHERE id = %s""",
+                        (_slugify_extra(name), cost, icon, pid),
+                    )
+                else:
+                    cur.execute(
+                        """INSERT INTO stock_products
+                               (name, category, unit, current_stock, min_stock, cost_per_unit,
+                                notes, is_active, consumption_qty, slug, show_in_booking, sort_order)
+                           VALUES (%s, 'Tablas', 'unidad', 0, 0, %s, '', TRUE, 1, %s, FALSE, 900)
+                           ON CONFLICT (slug) DO NOTHING""",
+                        (name, cost, _slugify_extra(name)),
+                    )
+
             # Seed the master "Tabla de picoteo" booking extra — always restore/update
-            cur.execute(
-                """
-                INSERT INTO extras_visibility
-                    (extra_name_lower, name, show_in_booking, costo, precio_venta, icon, sort_order, updated_at)
-                VALUES ('tabla_de_picoteo', 'Tabla de picoteo', true, 10000, 20000, '🧺', 80, NOW())
-                ON CONFLICT (extra_name_lower) DO UPDATE
-                    SET show_in_booking = TRUE,
-                        user_hidden     = FALSE,
-                        costo           = 10000,
-                        precio_venta    = 20000,
-                        name            = COALESCE(EXCLUDED.name, extras_visibility.name),
-                        icon            = COALESCE(NULLIF(extras_visibility.icon,''), EXCLUDED.icon),
-                        sort_order      = EXCLUDED.sort_order,
-                        updated_at      = NOW()
-                """,
-            )
+            cur.execute("SELECT id FROM stock_products WHERE slug='tabla_de_picoteo'")
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    """UPDATE stock_products SET
+                           show_in_booking = TRUE,
+                           user_hidden     = FALSE,
+                           cost_per_unit   = 10000,
+                           precio_venta    = 20000,
+                           icon            = COALESCE(NULLIF(icon, ''), '🧺'),
+                           sort_order      = 80,
+                           updated_at      = NOW()
+                       WHERE id = %s""",
+                    (row[0],),
+                )
+            else:
+                cur.execute(
+                    """INSERT INTO stock_products
+                           (name, category, unit, current_stock, min_stock, cost_per_unit,
+                            notes, is_active, consumption_qty, slug, show_in_booking,
+                            sort_order, precio_venta, icon)
+                       VALUES ('Tabla de picoteo', 'Extras (sin stock)', 'unidad', NULL, 0, 10000,
+                               '', TRUE, 1, 'tabla_de_picoteo', TRUE, 80, 20000, '🧺')"""
+                )
         conn.commit()
-    logger.info("Tabla ingredients seeded into extras_visibility (%d products)", len(_TABLA_INGREDIENTS))
+    logger.info("Tabla ingredients seeded into stock_products (%d products)", len(_TABLA_INGREDIENTS))
 
 
 def _tabla_html() -> str:
@@ -646,14 +671,18 @@ async def admin_add_catalog_item(request: Request):
                 " WHERE tabla_type=%s AND tier=%s AND ingredient_lower=%s",
                 (tabla_type, tier, ingredient.lower()),
             )
+            cur.execute("SELECT id FROM stock_products WHERE LOWER(name)=%s LIMIT 1", (ingredient.lower(),))
+            product_row = cur.fetchone()
             cur.execute(
-                """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order)
+                """INSERT INTO tabla_catalog_items (tabla_type, tier, ingredient, sort_order, product_id)
                    VALUES (%s, %s, %s,
                      COALESCE((SELECT MAX(sort_order)+1 FROM tabla_catalog_items
-                               WHERE tabla_type=%s AND tier=%s), 0))
+                               WHERE tabla_type=%s AND tier=%s), 0),
+                     %s)
                    ON CONFLICT (tabla_type, tier, ingredient) DO NOTHING
                    RETURNING id""",
-                (tabla_type, tier, ingredient, tabla_type, tier),
+                (tabla_type, tier, ingredient, tabla_type, tier,
+                 product_row[0] if product_row else None),
             )
             row = cur.fetchone()
         conn.commit()

@@ -579,42 +579,6 @@ def _ensure_web_push_table():
         logger.warning(f"web_push_subscriptions table setup failed: {e}")
 
 
-def _ensure_extras_visibility_table():
-    """Create extras_visibility table if it doesn't exist (survives Sheets re-sync)."""
-    try:
-        from app.db.connection import get_connection
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS extras_visibility (
-                        extra_name_lower TEXT PRIMARY KEY,
-                        show_in_booking  BOOLEAN NOT NULL DEFAULT FALSE,
-                        sort_order       INTEGER NOT NULL DEFAULT 999,
-                        description      TEXT,
-                        precio_venta     INTEGER,
-                        costo            INTEGER,
-                        icon             TEXT,
-                        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                    )
-                """)
-                for col, definition in [
-                    ("sort_order",      "INTEGER NOT NULL DEFAULT 999"),
-                    ("description",     "TEXT"),
-                    ("precio_venta",    "INTEGER"),
-                    ("costo",           "INTEGER"),
-                    ("icon",            "TEXT"),
-                    ("name",            "TEXT"),
-                    ("user_hidden",     "BOOLEAN NOT NULL DEFAULT FALSE"),
-                    ("stock_product_id","INTEGER"),
-                ]:
-                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col} {definition}")
-
-                conn.commit()
-        logger.info("✅ extras_visibility table ready")
-    except Exception as e:
-        logger.error(f"extras_visibility table init error: {e}")
-
-
 _EXTRAS_SEED = [
     # (extra_name_lower, display_name, precio_venta, costo, icon, sort_order)
     ("tabla_4_personas",  "Tabla de Picoteo Grande (4 personas)",     25000,  0, "🍇",  1),
@@ -638,26 +602,31 @@ _EXTRAS_SEED = [
 
 
 def _seed_extras_visibility():
-    """Populate extras_visibility with the canonical catalog if still empty."""
+    """Populate the extras catalog (stock_products, slug column) with the
+    canonical list if still empty — only relevant on a fresh install, since
+    production already has this data (merged in from the old extras_visibility
+    table). Seeded rows have no physical inventory (current_stock=NULL)."""
     try:
         from app.db.connection import get_connection
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM extras_visibility")
+                cur.execute("SELECT COUNT(*) FROM stock_products WHERE slug IS NOT NULL")
                 if cur.fetchone()[0] > 0:
                     return  # already seeded
                 for (key, name, price, cost, icon, sort) in _EXTRAS_SEED:
                     cur.execute("""
-                        INSERT INTO extras_visibility
-                            (extra_name_lower, name, precio_venta, costo, icon,
+                        INSERT INTO stock_products
+                            (name, category, unit, current_stock, min_stock, cost_per_unit,
+                             notes, is_active, consumption_qty, slug, precio_venta, icon,
                              sort_order, show_in_booking)
-                        VALUES (%s, %s, %s, %s, %s, %s, TRUE)
-                        ON CONFLICT DO NOTHING
-                    """, (key, name, price, cost, icon, sort))
+                        VALUES (%s, 'Extras (sin stock)', 'unidad', NULL, 0, %s,
+                                '', TRUE, 1, %s, %s, %s, %s, TRUE)
+                        ON CONFLICT (slug) DO NOTHING
+                    """, (name, cost, key, price, icon, sort))
                 conn.commit()
-        logger.info("✅ extras_visibility seeded with %d items", len(_EXTRAS_SEED))
+        logger.info("✅ extras catalog seeded with %d items", len(_EXTRAS_SEED))
     except Exception as e:
-        logger.warning("extras_visibility seed failed: %s", e)
+        logger.warning("extras catalog seed failed: %s", e)
 
 
 _CLOTHING_FLAT_SEED = [
@@ -707,37 +676,21 @@ _CLOTHING_LEGACY_SLUGS = [
 
 
 def _seed_clothing_products():
-    """Un extra independiente por cada talla/color + gorros sin talla."""
+    """Un producto/extra independiente por cada talla/color + gorros sin talla —
+    only relevant on a fresh install, since production already has this data."""
     try:
         from app.db.connection import get_connection
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # Already seeded correctly → nothing to do
-                cur.execute(
-                    "SELECT COUNT(*) FROM extras_visibility "
-                    "WHERE extra_name_lower = 'polera_blanca_s'"
-                )
+                cur.execute("SELECT COUNT(*) FROM stock_products WHERE slug = 'polera_blanca_s'")
                 if cur.fetchone()[0] > 0:
                     return
 
                 # Limpiar intentos anteriores (slug sin talla o con variantes)
                 all_old = _CLOTHING_LEGACY_SLUGS + [r[0] for r in _CLOTHING_FLAT_SEED]
                 cur.execute(
-                    "DELETE FROM extras_bom WHERE extra_slug = ANY(%s)",
-                    (all_old,),
-                )
-                cur.execute(
-                    """
-                    DELETE FROM stock_products WHERE id IN (
-                        SELECT stock_product_id FROM extras_visibility
-                        WHERE extra_name_lower = ANY(%s)
-                          AND stock_product_id IS NOT NULL
-                    )
-                    """,
-                    (all_old,),
-                )
-                cur.execute(
-                    "DELETE FROM extras_visibility WHERE extra_name_lower = ANY(%s)",
+                    "DELETE FROM stock_products WHERE slug = ANY(%s)",
                     (all_old,),
                 )
 
@@ -745,28 +698,14 @@ def _seed_clothing_products():
                     cur.execute(
                         """
                         INSERT INTO stock_products
-                            (name, category, unit, current_stock,
-                             min_stock, cost_per_unit, is_active)
-                        VALUES (%s, 'Ropa', 'unidad', %s, 0, %s, TRUE)
-                        RETURNING id
+                            (name, category, unit, current_stock, min_stock, cost_per_unit,
+                             notes, is_active, consumption_qty, slug, precio_venta, icon,
+                             sort_order, show_in_booking)
+                        VALUES (%s, 'Ropa', 'unidad', %s, 0, %s,
+                                '', TRUE, 1, %s, %s, %s, %s, FALSE)
+                        ON CONFLICT (slug) DO NOTHING
                         """,
-                        (name, stock, cost),
-                    )
-                    pid = cur.fetchone()[0]
-                    cur.execute(
-                        """
-                        INSERT INTO extras_visibility
-                            (extra_name_lower, name, precio_venta, costo, icon,
-                             sort_order, show_in_booking, stock_product_id)
-                        VALUES (%s, %s, %s, %s, %s, %s, FALSE, %s)
-                        ON CONFLICT DO NOTHING
-                        """,
-                        (slug, name, price, cost, icon, sort, pid),
-                    )
-                    cur.execute(
-                        "INSERT INTO extras_bom (extra_slug, product_id, quantity) "
-                        "VALUES (%s, %s, 1)",
-                        (slug, pid),
+                        (name, stock, cost, slug, price, icon, sort),
                     )
 
                 conn.commit()
@@ -841,7 +780,8 @@ async def lifespan(app: FastAPI):
     _ensure_followup_table()
     ensure_conversation_state_table()
     _ensure_web_push_table()
-    _ensure_extras_visibility_table()
+    from app.booking.stock_router import _ensure_tables as _ensure_stock_tables
+    _ensure_stock_tables()
     _seed_extras_visibility()
     _seed_clothing_products()
     _seed_packs_catalog()

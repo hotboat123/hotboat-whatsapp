@@ -683,10 +683,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <th style="text-align:center;color:var(--muted)">Mín.</th>
               <th style="text-align:center;color:var(--muted)">Estado</th>
               <th style="text-align:center;color:var(--muted)">Ajuste rápido</th>
-              <th style="text-align:center;color:#a78bfa" title="Ingredientes de stock">🧪</th>
             </tr>
           </thead>
-          <tbody id="ec-tbody"><tr><td colspan="17" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="ec-tbody"><tr><td colspan="16" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
 
@@ -8334,10 +8333,6 @@ function renderExtrasCat(list){
             </div>
           </td>`;
       })()}
-      <td style="text-align:center;padding:.3rem">
-        <button onclick="openBomModal('${jsArg(e.key||e.name.toLowerCase().replace(/\s+/g,'_'))}','${ename}')"
-          title="Ingredientes / stock" style="background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);border-radius:6px;padding:.25rem .5rem;font-size:.8rem;cursor:pointer">🧪</button>
-      </td>
       <td style="display:flex;gap:.3rem;align-items:center;padding:.5rem .3rem;white-space:nowrap;flex-wrap:wrap;justify-content:flex-end">
         <button type="button" class="ec-save-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .45rem"
           onclick="autoTranslateExtra('${eid}')" title="Generar inglés y portugués">✨ IA</button>
@@ -8354,7 +8349,7 @@ async function moveExtra(idx, dir){
   // Swap in local array
   [_extrasCatData[idx], _extrasCatData[newIdx]] = [_extrasCatData[newIdx], _extrasCatData[idx]];
   // Assign consecutive sort_order values
-  const payload = _extrasCatData.map((e, i) => ({ name_lower: e.name.toLowerCase(), sort_order: i + 1 }));
+  const payload = _extrasCatData.map((e, i) => ({ slug: e.id, sort_order: i + 1 }));
   renderExtrasCat(_extrasCatData);
   try{
     await api('/api/admin/precios-extras/reorder', { method:'POST', body: JSON.stringify(payload) });
@@ -10515,12 +10510,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
 // ═══════════════════════════════════════════════════════════════════════════
 let _stockProducts = [];
 let _stockCurrentProductId = null;   // for history filter
-let _bomCurrentSlug = '';
-let _bomCurrentName = '';
 
 async function loadStockSection(){
   const [pr, mr, ar] = await Promise.all([
-    api('/api/admin/stock/products'),
+    api('/api/admin/stock/products?only_inventory=true'),
     api('/api/admin/stock/movements?limit=80'),
     api('/api/admin/stock/alerts'),
   ]);
@@ -10751,75 +10744,6 @@ async function deleteStockProduct(id, name){
   await api(`/api/admin/stock/products/${id}`, {method:'DELETE'});
   await loadExtrasCat();
   showToast('Producto eliminado');
-}
-
-// ── BOM (ingredientes por extra) ─────────────────────────────────────────────
-let _bomRows = [];
-
-async function openBomModal(slug, name){
-  _bomCurrentSlug = slug;
-  _bomCurrentName = name;
-  document.getElementById('bom-modal-title').textContent = `Ingredientes: ${name}`;
-  document.getElementById('bom-modal-slug').textContent = `slug: ${slug}`;
-  // Load products if not loaded yet
-  if(!_stockProducts.length){
-    const r = await api('/api/admin/stock/products');
-    _stockProducts = r.products||[];
-  }
-  // Load current BOM
-  try{
-    const r = await api(`/api/admin/stock/bom/${encodeURIComponent(slug)}`);
-    _bomRows = (r.bom||[]).map(b=>({product_id:b.product_id, quantity:b.quantity, is_variant:b.is_variant, variant_label:b.variant_label}));
-  }catch{ _bomRows=[]; }
-  renderBomRows();
-  document.getElementById('bom-modal').style.display='';
-}
-
-function renderBomRows(){
-  const container = document.getElementById('bom-rows');
-  if(!container) return;
-  const opts = _stockProducts.map(p=>`<option value="${p.id}">${p.name} (${p.unit})</option>`).join('');
-  if(!_bomRows.length){
-    container.innerHTML='<div style="color:var(--muted);font-size:.82rem;padding:.4rem 0">Sin ingredientes aún. Haz clic en "+ Agregar producto".</div>';
-    return;
-  }
-  container.innerHTML = _bomRows.map((row,i)=>`
-    <div style="display:grid;grid-template-columns:1fr 70px auto auto;gap:.4rem;align-items:center;background:var(--input);border-radius:8px;padding:.5rem .7rem">
-      <select onchange="_bomRows[${i}].product_id=+this.value"
-        style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.3rem;font-size:.8rem">
-        <option value="">-- Producto --</option>${opts.replace(`value="${row.product_id}"`,`value="${row.product_id}" selected`)}
-      </select>
-      <input type="number" min="0.25" step="0.25" value="${row.quantity}"
-        onchange="_bomRows[${i}].quantity=+this.value"
-        style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.3rem;font-size:.8rem;text-align:center"
-        title="Cantidad por unidad del extra">
-      <label style="display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);white-space:nowrap;cursor:pointer">
-        <input type="checkbox" ${row.is_variant?'checked':''} onchange="_bomRows[${i}].is_variant=this.checked;_bomRows[${i}].variant_label=document.getElementById('vl-${i}').value"> Variante
-      </label>
-      <input id="vl-${i}" type="text" placeholder="ej: Ámbar" value="${row.variant_label||''}"
-        onchange="_bomRows[${i}].variant_label=this.value" ${row.is_variant?'':'disabled'}
-        style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.3rem;font-size:.75rem;width:70px"
-        title="Etiqueta de variante (ej: Ámbar, Stout)">
-      <button onclick="_bomRows.splice(${i},1);renderBomRows()"
-        style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.25);border-radius:6px;padding:.2rem .4rem;cursor:pointer;font-size:.8rem">✕</button>
-    </div>`).join('');
-}
-
-function addBomRow(){
-  _bomRows.push({product_id:'', quantity:1, is_variant:false, variant_label:''});
-  renderBomRows();
-}
-
-async function saveBom(){
-  const items = _bomRows.filter(r=>r.product_id).map(r=>({
-    product_id:+r.product_id, quantity:+r.quantity,
-    is_variant:!!r.is_variant, variant_label:r.variant_label||''
-  }));
-  try{
-    await api(`/api/admin/stock/bom/${encodeURIComponent(_bomCurrentSlug)}`, {method:'PUT', body:JSON.stringify({items})});
-    document.getElementById('bom-modal').style.display='none';
-    showToast(`Ingredientes guardados para "${_bomCurrentName}" ✅`);
-  }catch(e){ showToast('Error: '+e.message); }
 }
 
 // ── Consume stock for a booking ──────────────────────────────────────────────
@@ -11117,19 +11041,6 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 
-<!-- BOM (ingredientes) modal — opened from any tab -->
-<div id="bom-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
-  <div style="background:var(--card);border-radius:14px;max-width:540px;margin:auto;padding:1.5rem">
-    <div style="font-size:1rem;font-weight:700;margin-bottom:.4rem" id="bom-modal-title">Ingredientes del extra</div>
-    <div style="color:var(--muted);font-size:.78rem;margin-bottom:1rem" id="bom-modal-slug"></div>
-    <div id="bom-rows" style="display:flex;flex-direction:column;gap:.5rem"></div>
-    <button onclick="addBomRow()" style="margin-top:.7rem;width:100%;padding:.4rem;background:var(--input);border:1px dashed var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:.82rem">+ Agregar producto</button>
-    <div style="display:flex;gap:.6rem;margin-top:1rem">
-      <button class="btn-primary" onclick="saveBom()" style="flex:1">💾 Guardar ingredientes</button>
-      <button class="btn-secondary" onclick="document.getElementById('bom-modal').style.display='none'">Cancelar</button>
-    </div>
-  </div>
-</div>
 
 <!-- ═══ FINANCIAL: COMMISSIONS MODAL ═══ -->
 <div id="fin-comm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">

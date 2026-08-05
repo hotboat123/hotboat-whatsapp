@@ -1788,7 +1788,8 @@ async def sync_tables(x_admin_key: str = Header("")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── Extras catalog (extras_visibility is the single source of truth) ──────────
+# ── Extras catalog (stock_products, where slug IS NOT NULL, is now the
+#    single source of truth — extras_visibility was merged into it) ───────────
 
 import unicodedata as _unicodedata
 
@@ -1806,54 +1807,36 @@ def _parse_clp(s) -> int:
 async def get_precios_extras(x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     try:
-        # Ensure all required columns exist (safe to run every time)
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                for col_def in [
-                    "name TEXT",
-                    "description TEXT",
-                    "precio_venta INTEGER",
-                    "costo INTEGER",
-                    "icon TEXT",
-                    "name_en TEXT",
-                    "name_pt TEXT",
-                    "description_en TEXT",
-                    "description_pt TEXT",
-                    "stock_product_id INTEGER",
-                ]:
-                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
-                conn.commit()
-
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT extra_name_lower, name, show_in_booking,
+                    SELECT id, slug, name, show_in_booking,
                            COALESCE(sort_order, 999) AS sort_order,
                            COALESCE(description, '') AS description,
                            COALESCE(precio_venta, 0) AS price,
-                           COALESCE(costo, 0)        AS cost,
+                           COALESCE(cost_per_unit, 0) AS cost,
                            COALESCE(icon, '')        AS icon,
                            COALESCE(name_en, '')       AS name_en,
                            COALESCE(name_pt, '')       AS name_pt,
                            COALESCE(description_en, '') AS description_en,
                            COALESCE(description_pt, '') AS description_pt,
-                           stock_product_id
-                    FROM extras_visibility
-                    WHERE COALESCE(user_hidden, FALSE) = FALSE
-                    ORDER BY sort_order, extra_name_lower
+                           current_stock
+                    FROM stock_products
+                    WHERE slug IS NOT NULL AND COALESCE(user_hidden, FALSE) = FALSE
+                    ORDER BY sort_order, slug
                 """)
                 extras = []
-                for (name_lower, name, show_in_booking, sort_order,
+                for (pid, slug, name, show_in_booking, sort_order,
                      description, price, cost, icon,
                      name_en, name_pt, description_en, description_pt,
-                     stock_product_id) in cur.fetchall():
-                    display_name = name or name_lower
+                     current_stock) in cur.fetchall():
+                    display_name = name or slug
                     extras.append({
-                        "id": name_lower,
-                        "key": _slugify_extra(display_name),
+                        "id": slug,
+                        "key": slug,
                         "name": display_name,
-                        "price": price,
-                        "cost": cost,
+                        "price": int(price),
+                        "cost": int(cost),
                         "icon": icon,
                         "description": description,
                         "name_en": name_en or "",
@@ -1862,7 +1845,10 @@ async def get_precios_extras(x_admin_key: str = Header("")):
                         "description_pt": description_pt or "",
                         "show_in_booking": bool(show_in_booking),
                         "sort_order": int(sort_order),
-                        "stock_product_id": stock_product_id,
+                        # Non-null only when this extra has real inventory
+                        # tracking on — drives the 📦 link/unlink toggle and
+                        # stock badge in the admin UI (same contract as before).
+                        "stock_product_id": pid if current_stock is not None else None,
                     })
         return {"extras": extras}
     except Exception as e:
@@ -1872,6 +1858,11 @@ async def get_precios_extras(x_admin_key: str = Header("")):
 
 @admin_router.put("/api/admin/precios-extras/{extra_id:path}")
 async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), request: Request = None):
+    """extra_id is the extra's slug. stock_products.id is now the immutable PK,
+    so renaming just updates the slug column on the same row — no more PK-rename
+    dance. If the extra was deleted from under us (or the name changed enough to
+    need a new slug that collides), we upsert by matching either the old slug or
+    the freshly computed one."""
     _check_auth(x_admin_key)
     try:
         body = await request.json()
@@ -1887,78 +1878,49 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
         show_in_booking = bool(body.get("show_in_booking", True))
         if not name:
             raise HTTPException(status_code=400, detail="name is required")
-        new_name_lower = name.lower()
+        new_slug = _slugify_extra(name)
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # If key changed (rename), update the PK
-                if extra_id != new_name_lower:
-                    # Remove any hidden/deleted row with the target key so the PK rename doesn't conflict
-                    cur.execute(
-                        "DELETE FROM extras_visibility WHERE extra_name_lower = %s AND COALESCE(user_hidden, FALSE) = TRUE",
-                        (new_name_lower,),
-                    )
-                    # Also remove a live duplicate with the target key (merged into the renamed one)
-                    cur.execute(
-                        "DELETE FROM extras_visibility WHERE extra_name_lower = %s AND extra_name_lower != %s",
-                        (new_name_lower, extra_id),
-                    )
+                cur.execute("""
+                    UPDATE stock_products
+                    SET slug = %s, name = %s,
+                        show_in_booking = %s, description = %s,
+                        precio_venta = %s, cost_per_unit = COALESCE(NULLIF(cost_per_unit, 0), %s),
+                        icon = %s,
+                        name_en = %s, name_pt = %s,
+                        description_en = %s, description_pt = %s,
+                        updated_at = NOW()
+                    WHERE slug = %s
+                """, (new_slug, name, show_in_booking,
+                      description or None, price or None, cost or 0, icon or None,
+                      name_en or None, name_pt or None,
+                      description_en or None, description_pt or None,
+                      extra_id))
+                if cur.rowcount == 0:
+                    # No row under the old slug (e.g. stale client state) — create a
+                    # fresh service-type extra (no physical inventory) under the new slug.
                     cur.execute("""
-                        UPDATE extras_visibility
-                        SET extra_name_lower = %s, name = %s,
-                            show_in_booking = %s, description = %s,
-                            precio_venta = %s, costo = %s, icon = %s,
-                            name_en = %s, name_pt = %s,
-                            description_en = %s, description_pt = %s,
-                            updated_at = NOW()
-                        WHERE extra_name_lower = %s
-                    """, (new_name_lower, name, show_in_booking,
-                          description or None, price or None, cost or None, icon or None,
-                          name_en or None, name_pt or None,
-                          description_en or None, description_pt or None,
-                          extra_id))
-                    if cur.rowcount == 0:
-                        # Row didn't exist under old key — upsert under new key
-                        cur.execute("""
-                            INSERT INTO extras_visibility
-                                (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
-                                 name_en, name_pt, description_en, description_pt, updated_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                            ON CONFLICT (extra_name_lower) DO UPDATE
-                                SET name = EXCLUDED.name,
-                                    show_in_booking = EXCLUDED.show_in_booking,
-                                    description = EXCLUDED.description,
-                                    precio_venta = EXCLUDED.precio_venta,
-                                    costo = EXCLUDED.costo,
-                                    icon = EXCLUDED.icon,
-                                    name_en = EXCLUDED.name_en,
-                                    name_pt = EXCLUDED.name_pt,
-                                    description_en = EXCLUDED.description_en,
-                                    description_pt = EXCLUDED.description_pt,
-                                    updated_at = NOW()
-                        """, (new_name_lower, name, show_in_booking,
-                              description or None, price or None, cost or None, icon or None,
-                              name_en or None, name_pt or None,
-                              description_en or None, description_pt or None))
-                else:
-                    cur.execute("""
-                        INSERT INTO extras_visibility
-                            (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
-                             name_en, name_pt, description_en, description_pt, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                        ON CONFLICT (extra_name_lower) DO UPDATE
+                        INSERT INTO stock_products
+                            (name, category, unit, current_stock, min_stock, cost_per_unit,
+                             notes, is_active, consumption_qty, slug, show_in_booking,
+                             sort_order, description, precio_venta, icon,
+                             name_en, name_pt, description_en, description_pt)
+                        VALUES (%s, 'Extras (sin stock)', 'unidad', NULL, 0, %s,
+                                '', TRUE, 1, %s, %s, 999, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (slug) DO UPDATE
                             SET name = EXCLUDED.name,
                                 show_in_booking = EXCLUDED.show_in_booking,
                                 description = EXCLUDED.description,
                                 precio_venta = EXCLUDED.precio_venta,
-                                costo = EXCLUDED.costo,
+                                cost_per_unit = COALESCE(NULLIF(stock_products.cost_per_unit, 0), EXCLUDED.cost_per_unit),
                                 icon = EXCLUDED.icon,
                                 name_en = EXCLUDED.name_en,
                                 name_pt = EXCLUDED.name_pt,
                                 description_en = EXCLUDED.description_en,
                                 description_pt = EXCLUDED.description_pt,
                                 updated_at = NOW()
-                    """, (new_name_lower, name, show_in_booking,
-                          description or None, price or None, cost or None, icon or None,
+                    """, (name, cost or 0, new_slug, show_in_booking,
+                          description or None, price or None, icon or None,
                           name_en or None, name_pt or None,
                           description_en or None, description_pt or None))
                 conn.commit()
@@ -1972,6 +1934,9 @@ async def update_precio_extra(extra_id: str, x_admin_key: str = Header(""), requ
 
 @admin_router.post("/api/admin/precios-extras")
 async def create_precio_extra(x_admin_key: str = Header(""), request: Request = None):
+    """Creates a brand-new extra with no physical inventory (current_stock=NULL,
+    i.e. unlimited availability) — use the stock link toggle afterwards to turn
+    on real inventory tracking for it."""
     _check_auth(x_admin_key)
     try:
         body = await request.json()
@@ -1986,32 +1951,34 @@ async def create_precio_extra(x_admin_key: str = Header(""), request: Request = 
         description_en = body.get("description_en", "").strip()
         description_pt = body.get("description_pt", "").strip()
         show_in_booking = bool(body.get("show_in_booking", True))
-        name_lower = name.lower()
+        slug = _slugify_extra(name)
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO extras_visibility
-                        (extra_name_lower, name, show_in_booking, description, precio_venta, costo, icon,
-                         name_en, name_pt, description_en, description_pt,
-                         sort_order, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, '', %s, %s, %s, %s, 999, NOW())
-                    ON CONFLICT (extra_name_lower) DO UPDATE
+                    INSERT INTO stock_products
+                        (name, category, unit, current_stock, min_stock, cost_per_unit,
+                         notes, is_active, consumption_qty, slug, show_in_booking,
+                         sort_order, description, precio_venta, icon,
+                         name_en, name_pt, description_en, description_pt)
+                    VALUES (%s, 'Extras (sin stock)', 'unidad', NULL, 0, %s,
+                            '', TRUE, 1, %s, %s, 999, %s, %s, '', %s, %s, %s, %s)
+                    ON CONFLICT (slug) DO UPDATE
                         SET name = EXCLUDED.name,
                             show_in_booking = EXCLUDED.show_in_booking,
                             description = EXCLUDED.description,
                             precio_venta = EXCLUDED.precio_venta,
-                            costo = EXCLUDED.costo,
+                            cost_per_unit = COALESCE(NULLIF(stock_products.cost_per_unit, 0), EXCLUDED.cost_per_unit),
                             name_en = EXCLUDED.name_en,
                             name_pt = EXCLUDED.name_pt,
                             description_en = EXCLUDED.description_en,
                             description_pt = EXCLUDED.description_pt,
                             updated_at = NOW()
-                """, (name_lower, name, show_in_booking,
-                      description or None, price or None, cost or None,
+                """, (name, cost or 0, slug, show_in_booking,
+                      description or None, price or None,
                       name_en or None, name_pt or None,
                       description_en or None, description_pt or None))
                 conn.commit()
-        return {"ok": True, "id": name_lower, "key": _slugify_extra(name)}
+        return {"ok": True, "id": slug, "key": slug}
     except HTTPException:
         raise
     except Exception as e:
@@ -2026,7 +1993,9 @@ async def purge_hidden_extras(x_admin_key: str = Header("")):
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM extras_visibility WHERE COALESCE(user_hidden, FALSE) = TRUE")
+                cur.execute(
+                    "DELETE FROM stock_products WHERE slug IS NOT NULL AND COALESCE(user_hidden, FALSE) = TRUE"
+                )
                 deleted = cur.rowcount
                 conn.commit()
         return {"ok": True, "deleted": deleted}
@@ -2037,19 +2006,18 @@ async def purge_hidden_extras(x_admin_key: str = Header("")):
 
 @admin_router.post("/api/admin/precios-extras/reorder")
 async def reorder_extras(x_admin_key: str = Header(""), request: Request = None):
-    """Save new sort order. Body: [{name_lower, sort_order}, ...]"""
+    """Save new sort order. Body: [{slug, sort_order}, ...]"""
     _check_auth(x_admin_key)
     try:
         items = await request.json()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 for item in items:
-                    cur.execute("""
-                        INSERT INTO extras_visibility (extra_name_lower, show_in_booking, sort_order, updated_at)
-                        VALUES (%s, TRUE, %s, NOW())
-                        ON CONFLICT (extra_name_lower) DO UPDATE
-                            SET sort_order = EXCLUDED.sort_order, updated_at = NOW()
-                    """, (item["name_lower"], item["sort_order"]))
+                    slug = item.get("slug") or item.get("name_lower")
+                    cur.execute(
+                        "UPDATE stock_products SET sort_order = %s, updated_at = NOW() WHERE slug = %s",
+                        (item["sort_order"], slug),
+                    )
                 conn.commit()
         return {"ok": True}
     except Exception as e:
@@ -2066,16 +2034,11 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
                 # Soft-delete so seeded items (tabla ingredients) don't come back on restart.
                 # ON CONFLICT DO NOTHING in the seed skips rows that already exist — including
                 # hidden ones — so user_hidden=TRUE acts as a permanent "don't re-seed" flag.
+                # is_active=FALSE stops it from triggering low-stock alerts once removed.
                 cur.execute(
-                    "UPDATE extras_visibility SET user_hidden = TRUE, updated_at = NOW() WHERE extra_name_lower = %s",
-                    (extra_id,),
-                )
-                # Deactivate the linked stock product so it stops triggering
-                # low-stock alerts once the extra is removed.
-                cur.execute(
-                    """UPDATE stock_products SET is_active = FALSE, updated_at = NOW()
-                       WHERE id = (SELECT stock_product_id FROM extras_visibility
-                                   WHERE extra_name_lower = %s)""",
+                    """UPDATE stock_products
+                       SET user_hidden = TRUE, is_active = FALSE, updated_at = NOW()
+                       WHERE slug = %s""",
                     (extra_id,),
                 )
                 conn.commit()
@@ -2087,48 +2050,29 @@ async def delete_precio_extra(extra_id: str, x_admin_key: str = Header("")):
 
 @admin_router.post("/api/admin/precios-extras/{extra_id}/link-stock")
 async def link_extra_to_stock(extra_id: str, x_admin_key: str = Header("")):
-    """Create a stock_products entry for this extra and link it via extras_visibility.stock_product_id.
-    Also creates a 1-unit BOM so stock is deducted when the extra is consumed.
-    Idempotent: if already linked, returns existing stock_product_id."""
+    """Turn on real inventory tracking for this extra: current_stock goes from
+    NULL (unlimited/untracked) to 0 on its own stock_products row — the admin
+    then sets the real count from the Stock page. Idempotent: if already
+    tracked, returns created=False without changing anything."""
     _check_auth(x_admin_key)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Get the extra
                 cur.execute(
-                    "SELECT name, COALESCE(costo,0), stock_product_id FROM extras_visibility WHERE extra_name_lower=%s",
+                    "SELECT id, current_stock FROM stock_products WHERE slug=%s",
                     (extra_id,),
                 )
                 row = cur.fetchone()
                 if not row:
                     raise HTTPException(status_code=404, detail="Extra no encontrado")
-                name, cost, existing_spid = row
+                spid, current_stock = row
 
-                if existing_spid:
-                    return {"ok": True, "stock_product_id": existing_spid, "created": False}
+                if current_stock is not None:
+                    return {"ok": True, "stock_product_id": spid, "created": False}
 
-                # Create stock_products entry
                 cur.execute(
-                    """INSERT INTO stock_products (name, category, unit, current_stock, min_stock, cost_per_unit, notes, is_active)
-                       VALUES (%s, 'Tablas', 'unidad', 0, 0, %s, '', TRUE)
-                       RETURNING id""",
-                    (name, cost),
-                )
-                spid = cur.fetchone()[0]
-
-                # Create BOM: 1 unit of this stock product per extra serving
-                slug = _slugify_extra(name)
-                cur.execute(
-                    """INSERT INTO extras_bom (extra_slug, product_id, quantity, is_variant, variant_label)
-                       VALUES (%s, %s, 1, FALSE, '')
-                       ON CONFLICT DO NOTHING""",
-                    (slug, spid),
-                )
-
-                # Link back to extras_visibility
-                cur.execute(
-                    "UPDATE extras_visibility SET stock_product_id=%s WHERE extra_name_lower=%s",
-                    (spid, extra_id),
+                    "UPDATE stock_products SET current_stock=0, updated_at=NOW() WHERE id=%s",
+                    (spid,),
                 )
                 conn.commit()
         return {"ok": True, "stock_product_id": spid, "created": True}
@@ -2141,26 +2085,18 @@ async def link_extra_to_stock(extra_id: str, x_admin_key: str = Header("")):
 
 @admin_router.post("/api/admin/precios-extras/{extra_id}/unlink-stock")
 async def unlink_extra_from_stock(extra_id: str, x_admin_key: str = Header("")):
-    """Unlink an extra from its stock product (sets stock_product_id=NULL, removes BOM).
-    Does NOT delete the stock_products entry to preserve history."""
+    """Turn off inventory tracking: current_stock goes back to NULL (unlimited).
+    Movement history is kept untouched."""
     _check_auth(x_admin_key)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT name, stock_product_id FROM extras_visibility WHERE extra_name_lower=%s",
+                    "UPDATE stock_products SET current_stock=NULL, updated_at=NOW() WHERE slug=%s",
                     (extra_id,),
                 )
-                row = cur.fetchone()
-                if not row:
+                if cur.rowcount == 0:
                     raise HTTPException(status_code=404, detail="Extra no encontrado")
-                name, spid = row
-                slug = _slugify_extra(name or extra_id)
-                cur.execute("DELETE FROM extras_bom WHERE extra_slug=%s AND product_id=%s", (slug, spid))
-                cur.execute(
-                    "UPDATE extras_visibility SET stock_product_id=NULL WHERE extra_name_lower=%s",
-                    (extra_id,),
-                )
                 conn.commit()
         return {"ok": True}
     except HTTPException:
@@ -2179,20 +2115,9 @@ async def auto_translate_precio_extra(extra_id: str, x_admin_key: str = Header("
 
         with get_connection() as conn:
             with conn.cursor() as cur:
-                for col_def in [
-                    "name_en TEXT",
-                    "name_pt TEXT",
-                    "description_en TEXT",
-                    "description_pt TEXT",
-                ]:
-                    cur.execute(f"ALTER TABLE extras_visibility ADD COLUMN IF NOT EXISTS {col_def}")
-                conn.commit()
-
-        with get_connection() as conn:
-            with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT COALESCE(name, extra_name_lower), COALESCE(description, '') "
-                    "FROM extras_visibility WHERE extra_name_lower = %s",
+                    "SELECT COALESCE(name, slug), COALESCE(description, '') "
+                    "FROM stock_products WHERE slug = %s",
                     (extra_id,),
                 )
                 row = cur.fetchone()
@@ -2206,11 +2131,11 @@ async def auto_translate_precio_extra(extra_id: str, x_admin_key: str = Header("
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    UPDATE extras_visibility SET
+                    UPDATE stock_products SET
                         name_en = %s, name_pt = %s,
                         description_en = %s, description_pt = %s,
                         updated_at = NOW()
-                    WHERE extra_name_lower = %s
+                    WHERE slug = %s
                     """,
                     (
                         out["name_en"],

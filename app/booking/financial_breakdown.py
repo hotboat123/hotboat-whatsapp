@@ -72,14 +72,15 @@ def load_aloj_cost_catalog() -> Dict[str, float]:
 
 
 def load_extra_cost_catalog() -> Dict[str, float]:
-    """Normalized keys -> unit cost (extras_visibility.costo)."""
+    """Normalized keys -> unit cost (stock_products.cost_per_unit, via slug)."""
     out: Dict[str, float] = {}
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT extra_name_lower, COALESCE(name, ''), COALESCE(costo, 0)
-                    FROM extras_visibility
+                    SELECT slug, COALESCE(name, ''), COALESCE(cost_per_unit, 0)
+                    FROM stock_products
+                    WHERE slug IS NOT NULL
                 """)
                 for el, name, cost in cur.fetchall():
                     c = float(cost or 0)

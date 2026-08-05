@@ -42,18 +42,11 @@ def _ensure_tables():
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS stock_products (
                     id SERIAL PRIMARY KEY, name TEXT NOT NULL, category TEXT DEFAULT '',
-                    unit TEXT DEFAULT 'unidad', current_stock NUMERIC DEFAULT 0,
+                    unit TEXT DEFAULT 'unidad', current_stock NUMERIC,
                     min_stock NUMERIC DEFAULT 0, cost_per_unit NUMERIC DEFAULT 0,
                     notes TEXT DEFAULT '', is_active BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
                 );
-                CREATE TABLE IF NOT EXISTS extras_bom (
-                    id SERIAL PRIMARY KEY, extra_slug TEXT NOT NULL,
-                    product_id INT REFERENCES stock_products(id) ON DELETE CASCADE,
-                    quantity NUMERIC DEFAULT 1, is_variant BOOLEAN DEFAULT FALSE,
-                    variant_label TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW()
-                );
-                CREATE INDEX IF NOT EXISTS idx_bom_slug ON extras_bom(extra_slug);
                 CREATE TABLE IF NOT EXISTS stock_movements (
                     id SERIAL PRIMARY KEY,
                     product_id INT REFERENCES stock_products(id),
@@ -66,12 +59,26 @@ def _ensure_tables():
                 CREATE INDEX IF NOT EXISTS idx_movements_booking  ON stock_movements(booking_ref);
                 ALTER TABLE all_appointments
                     ADD COLUMN IF NOT EXISTS stock_consumed_at TIMESTAMPTZ;
-                -- Unidades de este producto que se descuentan por cada tabla que lo
-                -- incluye (p. ej. "Super 8" puede venir en packs de 3 por porción).
-                -- Solo aplica al consumo de ingredientes de tabla; los extras normales
-                -- ya usan extras_bom.quantity para esto.
+                -- Unidades de este producto que se descuentan por cada unidad vendida
+                -- del extra (p. ej. "Super 8" puede venir en packs de 3 por porción).
                 ALTER TABLE stock_products
                     ADD COLUMN IF NOT EXISTS consumption_qty NUMERIC DEFAULT 1;
+                -- Columnas absorbidas de la antigua extras_visibility: cada fila de
+                -- stock_products es ahora también el extra que ve el cliente.
+                -- current_stock=NULL significa "sin control de inventario" (servicio,
+                -- disponibilidad ilimitada) en vez de "cero stock".
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS slug TEXT UNIQUE;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS show_in_booking BOOLEAN NOT NULL DEFAULT FALSE;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 999;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS precio_venta INTEGER;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS description TEXT;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS icon TEXT;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS user_hidden BOOLEAN NOT NULL DEFAULT FALSE;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS name_en TEXT;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS name_pt TEXT;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS description_en TEXT;
+                ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS description_pt TEXT;
+                ALTER TABLE tabla_catalog_items ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES stock_products(id);
             """)
             conn.commit()
     _tables_ensured = True
@@ -104,11 +111,7 @@ def _check_low_stock(conn):
             SELECT sp.id, sp.name, sp.category, sp.unit, sp.current_stock, sp.min_stock
             FROM stock_products sp
             WHERE sp.is_active AND sp.current_stock <= sp.min_stock AND sp.min_stock > 0
-              AND NOT EXISTS (
-                  SELECT 1 FROM extras_visibility ev
-                  WHERE ev.stock_product_id = sp.id
-                    AND COALESCE(ev.user_hidden, FALSE) = TRUE
-              )
+              AND NOT COALESCE(sp.user_hidden, FALSE)
             ORDER BY (sp.current_stock - sp.min_stock), sp.name
         """)
         cols = [d.name for d in cur.description]
@@ -176,16 +179,21 @@ class ProductBody(BaseModel):
 
 
 @stock_router.get("/api/admin/stock/products")
-def list_products(x_admin_key: str = Header("")):
+def list_products(only_inventory: bool = False, x_admin_key: str = Header("")):
+    """Por defecto devuelve todas las filas (incluye extras tipo-servicio con
+    current_stock=NULL) — usado también para cruzar cada extra con su fila de
+    stock en el panel de Precios Extras. ?only_inventory=true filtra a solo
+    inventario físico real, para la página de Stock del admin."""
     _check_auth(x_admin_key)
     _ensure_tables()
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            where = "WHERE current_stock IS NOT NULL" if only_inventory else ""
+            cur.execute(f"""
                 SELECT id, name, category, unit, current_stock, min_stock,
                        cost_per_unit, notes, is_active, updated_at,
                        COALESCE(consumption_qty, 1) AS consumption_qty
-                FROM stock_products ORDER BY category, name
+                FROM stock_products {where} ORDER BY category, name
             """)
             cols = [d.name for d in cur.description]
             rows = [dict(zip(cols, r)) for r in cur.fetchall()]
@@ -324,10 +332,10 @@ def dedup_products(x_admin_key: str = Header(""), apply: bool = False):
     """Merge duplicate stock_products that share the same name (case-insensitive).
 
     For each group of duplicates the row with the most stock is kept (ties → lowest
-    id). All references in extras_bom, stock_movements and extras_visibility are
-    re-pointed to the keeper BEFORE the duplicate rows are deleted (extras_bom has
-    ON DELETE CASCADE, so re-pointing first prevents losing BOM links). Duplicate
-    BOM rows created by the merge are then collapsed.
+    id). References in stock_movements are re-pointed to the keeper BEFORE the
+    duplicate rows are deleted. Skips any group where a row is a live booking
+    extra (show_in_booking=TRUE) — those are never auto-merged since deleting one
+    would remove it from the customer-facing extras menu; resolve those manually.
 
     Defaults to a DRY RUN: pass ?apply=true to actually perform the merge.
     Always returns the plan so it can be previewed first.
@@ -347,17 +355,20 @@ def dedup_products(x_admin_key: str = Header(""), apply: bool = False):
 
             for lname in dup_names:
                 cur.execute(
-                    """SELECT id, name, current_stock
+                    """SELECT id, name, current_stock, show_in_booking
                        FROM stock_products
                        WHERE LOWER(name) = %s
-                       ORDER BY current_stock DESC, id ASC""",
+                       ORDER BY current_stock DESC NULLS LAST, id ASC""",
                     (lname,),
                 )
                 rows = cur.fetchall()
                 if len(rows) < 2:
                     continue
-                keeper_id, keeper_name, keeper_stock = rows[0][0], rows[0][1], float(rows[0][2])
-                dupes = [{"id": r[0], "name": r[1], "stock": float(r[2])} for r in rows[1:]]
+                if any(r[3] for r in rows):
+                    continue  # a booking extra is in this group — skip, resolve manually
+                keeper_id, keeper_name = rows[0][0], rows[0][1]
+                keeper_stock = float(rows[0][2]) if rows[0][2] is not None else None
+                dupes = [{"id": r[0], "name": r[1], "stock": (float(r[2]) if r[2] is not None else None)} for r in rows[1:]]
                 plan.append({
                     "name": keeper_name,
                     "keeper": {"id": keeper_id, "stock": keeper_stock},
@@ -368,15 +379,11 @@ def dedup_products(x_admin_key: str = Header(""), apply: bool = False):
                     dupe_ids = [d["id"] for d in dupes]
                     # Re-point all references to the keeper before deleting dupes
                     cur.execute(
-                        "UPDATE extras_bom SET product_id=%s WHERE product_id = ANY(%s)",
-                        (keeper_id, dupe_ids),
-                    )
-                    cur.execute(
                         "UPDATE stock_movements SET product_id=%s WHERE product_id = ANY(%s)",
                         (keeper_id, dupe_ids),
                     )
                     cur.execute(
-                        "UPDATE extras_visibility SET stock_product_id=%s WHERE stock_product_id = ANY(%s)",
+                        "UPDATE tabla_catalog_items SET product_id=%s WHERE product_id = ANY(%s)",
                         (keeper_id, dupe_ids),
                     )
                     cur.execute(
@@ -385,16 +392,6 @@ def dedup_products(x_admin_key: str = Header(""), apply: bool = False):
                     )
 
             if apply:
-                # Collapse duplicate BOM rows that the merge may have created
-                cur.execute("""
-                    DELETE FROM extras_bom a
-                    USING extras_bom b
-                    WHERE a.id > b.id
-                      AND a.extra_slug = b.extra_slug
-                      AND a.product_id = b.product_id
-                      AND COALESCE(a.is_variant,FALSE) = COALESCE(b.is_variant,FALSE)
-                      AND COALESCE(a.variant_label,'') = COALESCE(b.variant_label,'')
-                """)
                 conn.commit()
 
     return {
@@ -430,61 +427,14 @@ def adjust_stock(body: AdjustBody, x_admin_key: str = Header("")):
     return {"ok": True}
 
 
-# ─────────────────────────── Bill of Materials ──────────────────────────────
-
-class BomItem(BaseModel):
-    product_id: int
-    quantity: float = 1
-    is_variant: bool = False
-    variant_label: str = ""
-
-
-class BomBody(BaseModel):
-    items: List[BomItem]
-
-
-@stock_router.get("/api/admin/stock/bom/{extra_slug}")
-def get_bom(extra_slug: str, x_admin_key: str = Header("")):
-    _check_auth(x_admin_key)
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT b.id, b.extra_slug, b.product_id, b.quantity, b.is_variant, b.variant_label,
-                       p.name AS product_name, p.unit, p.current_stock
-                FROM extras_bom b
-                JOIN stock_products p ON p.id=b.product_id
-                WHERE b.extra_slug=%s
-                ORDER BY b.is_variant, b.id
-            """, (extra_slug,))
-            cols = [d.name for d in cur.description]
-            return {"bom": [dict(zip(cols, r)) for r in cur.fetchall()]}
-
-
-@stock_router.put("/api/admin/stock/bom/{extra_slug}")
-def save_bom(extra_slug: str, body: BomBody, x_admin_key: str = Header("")):
-    """Replace the entire BOM for an extra (idempotent save)."""
-    _check_auth(x_admin_key)
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM extras_bom WHERE extra_slug=%s", (extra_slug,))
-            for item in body.items:
-                cur.execute(
-                    """INSERT INTO extras_bom
-                       (extra_slug, product_id, quantity, is_variant, variant_label)
-                       VALUES (%s,%s,%s,%s,%s)""",
-                    (extra_slug, item.product_id, item.quantity,
-                     item.is_variant, item.variant_label)
-                )
-            conn.commit()
-    return {"ok": True}
-
-
 # ─────────────────────────── Booking consumption ────────────────────────────
+# Cada extra ES ahora una fila de stock_products (slug + consumption_qty),
+# así que ya no existe una "receta" multi-producto por extra (extras_bom) — el
+# consumo de un extra normal descuenta directo de su propia fila.
 
 class ConsumeItem(BaseModel):
     extra_slug: str
     quantity: int = 1
-    variant_product_id: Optional[int] = None   # for variant extras
 
 
 class ConsumeBody(BaseModel):
@@ -519,40 +469,22 @@ def consume_for_booking(body: ConsumeBody, x_admin_key: str = Header("")):
                 )
             cur.execute("DELETE FROM stock_movements WHERE booking_ref=%s", (ref,))
 
-            if not body.undo:
-                for item in body.extras:
-                    # Get BOM for this extra
-                    cur.execute("""
-                        SELECT product_id, quantity, is_variant, variant_label
-                        FROM extras_bom WHERE extra_slug=%s
-                    """, (item.extra_slug,))
-                    bom_rows = cur.fetchall()
-
-                    if not bom_rows:
-                        continue
-
-                    has_variants = any(r[2] for r in bom_rows)  # any is_variant=True
-
-                    if has_variants:
-                        # Only consume the chosen variant
-                        if item.variant_product_id:
-                            target = next(
-                                (r for r in bom_rows if r[0] == item.variant_product_id), None
-                            )
-                            if target:
-                                delta = -(target[1] * item.quantity) * direction * -1
-                                # Simplified: direction*-1 so undo=False → negative
-                                actual_delta = -(target[1] * item.quantity)
-                                _apply_movement(cur, target[0], actual_delta, "booking",
-                                                ref, item.extra_slug,
-                                                f"Reserva {ref} — variante {target[3]}")
-                    else:
-                        # Consume all products in BOM
-                        for product_id, qty, _, _ in bom_rows:
-                            actual_delta = -(qty * item.quantity)
-                            _apply_movement(cur, product_id, actual_delta, "booking",
-                                            ref, item.extra_slug,
-                                            f"Reserva {ref}")
+            for item in body.extras:
+                # Solo extras con inventario real (current_stock NOT NULL) generan
+                # movimiento — los de tipo servicio (disponibilidad ilimitada) no.
+                cur.execute(
+                    "SELECT id, COALESCE(consumption_qty, 1) FROM stock_products "
+                    "WHERE slug=%s AND current_stock IS NOT NULL",
+                    (item.extra_slug,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    continue
+                product_id, cqty = row
+                actual_delta = direction * (float(cqty) * item.quantity)
+                _apply_movement(cur, product_id, actual_delta, "booking",
+                                ref, item.extra_slug,
+                                f"Reserva {ref}" + (" (devolución)" if body.undo else ""))
 
             conn.commit()
         alerts = _check_low_stock(conn)
@@ -754,7 +686,7 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
         except (TypeError, ValueError):
             qty = 1
         if qty > 0:
-            items.append({"extra_slug": slug, "quantity": qty, "variant_product_id": None})
+            items.append({"extra_slug": slug, "quantity": qty})
 
     # Use DB-provided list first; fall back to what was embedded in extras_json
     all_tabla_ingredients = tabla_selection or extracted_tabla_ingredients or []
@@ -793,30 +725,23 @@ def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=
             )
             unmatched.append({"ingredient": ingredient_name, "suggestion": suggestion})
 
-    # BOM-based deduction for regular extras
+    # Regular extras — deduct directly from the extra's own stock_products row.
+    # Solo los que tienen inventario real (current_stock NOT NULL) generan
+    # movimiento — los de tipo servicio (disponibilidad ilimitada) no.
     for item in items:
         cur.execute(
-            "SELECT product_id, quantity, is_variant, variant_label FROM extras_bom WHERE extra_slug=%s",
+            "SELECT id, COALESCE(consumption_qty, 1) FROM stock_products "
+            "WHERE slug=%s AND current_stock IS NOT NULL",
             (item["extra_slug"],)
         )
-        bom_rows = cur.fetchall()
-        if not bom_rows:
+        row = cur.fetchone()
+        if not row:
             continue
-        has_variants = any(r[2] for r in bom_rows)
-        if has_variants:
-            if item["variant_product_id"]:
-                target = next((r for r in bom_rows if r[0] == item["variant_product_id"]), None)
-                if target:
-                    _apply_movement(cur, target[0], -(target[1] * item["quantity"]),
-                                    "booking", booking_ref, item["extra_slug"],
-                                    f"Reserva {_res_label} — {item['extra_slug']} (variante {target[3]})")
-                    movements += 1
-        else:
-            for product_id, qty, _, _ in bom_rows:
-                _apply_movement(cur, product_id, -(qty * item["quantity"]),
-                                "booking", booking_ref, item["extra_slug"],
-                                f"Reserva {_res_label} — {item['extra_slug']}")
-                movements += 1
+        product_id, cqty = row
+        _apply_movement(cur, product_id, -(float(cqty) * item["quantity"]),
+                        "booking", booking_ref, item["extra_slug"],
+                        f"Reserva {_res_label} — {item['extra_slug']}")
+        movements += 1
     return movements, unmatched
 
 
@@ -1301,20 +1226,20 @@ def debug_booking_stock(booking_ref: str, x_admin_key: str = Header("")):
                     "would_deduct": sp is not None,
                 })
 
-            # Check regular extras BOM
+            # Check regular extras against their own stock_products row
             bom_results = []
             for slug, val in ej.items():
                 if slug.startswith("tabla__"):
                     continue
                 cur.execute(
-                    "SELECT product_id, quantity FROM extras_bom WHERE extra_slug=%s",
+                    "SELECT id, COALESCE(consumption_qty, 1) FROM stock_products WHERE slug=%s",
                     (slug,)
                 )
-                bom = cur.fetchall()
+                sp_row = cur.fetchone()
                 bom_results.append({
                     "extra_slug": slug,
-                    "bom_found": len(bom) > 0,
-                    "bom_products": [{"product_id": r[0], "qty": r[1]} for r in bom],
+                    "bom_found": sp_row is not None,
+                    "bom_products": [{"product_id": sp_row[0], "qty": sp_row[1]}] if sp_row else [],
                 })
 
             already_consumed_count = 0
@@ -1336,7 +1261,7 @@ def debug_booking_stock(booking_ref: str, x_admin_key: str = Header("")):
         "tabla_ingredients_from_json": tabla_ingredients_json,
         "ingredients_used": all_ingredients,
         "ingredient_stock_check": ingredient_results,
-        "regular_extras_bom": bom_results,
+        "regular_extras_stock": bom_results,
         "verdict": (
             "OK — se descontaría el stock de los ingredientes encontrados"
             if any(r["would_deduct"] for r in ingredient_results)
