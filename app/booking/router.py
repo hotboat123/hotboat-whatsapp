@@ -1,6 +1,6 @@
 """FastAPI router for /booking and /api/booking/*"""
 import html as _html
-import logging, os, time as _time
+import logging, os, re, time as _time
 from typing import Any, Dict, Optional
 from datetime import datetime, timedelta
 from urllib.parse import quote
@@ -2674,6 +2674,9 @@ def _build_ad_label(
     return ""
 
 
+_IG_TOKEN_RE = re.compile(r"(?<![a-z0-9])ig(?![a-z0-9])")
+
+
 def _platform_label(utm_source: str, utm_medium: str, referrer: str) -> str:
     """Fallback platform label from utm_source/utm_medium when the referrer
     header is empty or unrecognized — ad-network in-app browsers (TikTok,
@@ -2687,7 +2690,12 @@ def _platform_label(utm_source: str, utm_medium: str, referrer: str) -> str:
         return "🎵 TikTok"
     if "google" in combined or "adwords" in combined or "gclid" in combined:
         return "🔍 Google"
-    if "instagram" in combined:
+    # "ig" es el utm_source corto que usan los propios links de campaña de
+    # HotBoat para Instagram (ej. utm_source=ig&utm_medium=social) — chequeo
+    # de palabra completa, no substring, para no matchear cosas como "big"
+    # o "sign". Verificado 2026-08-06: recuperaba ~64 sesiones/60 días que
+    # caían en "otro" solo porque el referrer venía vacío.
+    if "instagram" in combined or _IG_TOKEN_RE.search(combined):
         return "📸 Instagram"
     if "facebook" in combined or combined.strip() in ("fb", "meta"):
         return "👥 Facebook"
