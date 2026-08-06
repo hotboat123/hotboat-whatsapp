@@ -64,6 +64,22 @@ def _normalize_pagos_for_db(pagos: list) -> list:
     return out
 
 
+# Mismos 3 buckets que source_analytics.py::bucket_3 en hotboat-email-marketing-spec
+# (no importable de acá, repo/despliegue distinto — portado). ad_platform viene de
+# whatsapp_leads (CTWA real de Meta, ver app/db/leads.py::save_lead_ad_source) — la
+# señal más confiable, cuando existe. Si no, se cae a los utm_source/utm_medium
+# propios de la reserva (poblados solo para el flujo directo de checkout web).
+def _booking_platform_bucket(r: dict, ad_platform: Optional[str]) -> str:
+    if ad_platform in ("facebook", "instagram"):
+        return "meta"
+    combined = f"{(r.get('utm_source') or '').lower()} {(r.get('utm_medium') or '').lower()}"
+    if "google" in combined or "adwords" in combined or "gclid" in combined:
+        return "google"
+    if "instagram" in combined or "facebook" in combined or combined.strip() in ("fb", "meta"):
+        return "meta"
+    return "otro"
+
+
 from app.booking.operator_settings import (
     get_vacation_days, add_vacation_day, remove_vacation_day,
     get_setting, set_setting, is_urgency_mode,
@@ -266,6 +282,29 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
                     raise HTTPException(status_code=404, detail="Not found")
                 cols = [d[0] for d in cur.description]
                 r = dict(zip(cols, row))
+
+                # Flujo/plataforma/anuncio — se calculan ANTES de convertir
+                # created_at a string (_compute_flujo necesita el datetime
+                # real para el filtro "< created_at" contra whatsapp_conversations).
+                from app.booking.booking_email import _compute_flujo
+                r["flujo"] = _compute_flujo(cur, r.get("telefono"), r.get("created_at"))
+                ad_source = None
+                ad_platform = None
+                phone_norm = re.sub(r"[^0-9]", "", r.get("telefono") or "")
+                if phone_norm:
+                    try:
+                        cur.execute(
+                            "SELECT ad_source, ad_platform FROM whatsapp_leads WHERE phone_number = %s",
+                            (phone_norm,),
+                        )
+                        lead_row = cur.fetchone()
+                        if lead_row:
+                            ad_source, ad_platform = lead_row
+                    except Exception:
+                        logger.exception("Ad source lookup failed for reserva %s", rid)
+                r["platform"] = _booking_platform_bucket(r, ad_platform)
+                r["ad_name"] = ad_source
+
                 for k in ("fecha", "created_at", "updated_at"):
                     if r.get(k): r[k] = r[k].isoformat()
                 if r.get("hora"): r["hora"] = str(r["hora"])

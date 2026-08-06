@@ -5406,6 +5406,8 @@ async function openModal(id){
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
         ${badge(r.status)}
         <span class="chip" style="background:${sourceColor(r.source)}22;color:${sourceColor(r.source)}">${sourceLabel(r.source)}</span>
+        ${r.flujo ? `<span class="chip" style="background:${flujoColor(r.flujo)}22;color:${flujoColor(r.flujo)}">${flujoLabel(r.flujo)}</span>` : ''}
+        ${r.platform ? `<span class="chip" style="background:${platformColor(r.platform)}22;color:${platformColor(r.platform)}" title="${r.ad_name?'Anuncio: '+r.ad_name:'Origen detectado por UTM/CTWA'}">${platformLabel(r.platform)}${r.ad_name?' · '+r.ad_name:''}</span>` : ''}
         <span class="chip">ID: ${r.appointment_id||r.source_id||r.id}</span>
         <div style="display:flex;align-items:center;gap:.35rem;margin-left:.25rem">
           <span style="font-size:.72rem;color:#f0f0f8;font-weight:600;white-space:nowrap">MEDIO CONTACTO</span>
@@ -6485,6 +6487,13 @@ function extrasIcons(extrasJson){
     }).join('');
 }
 function sourceLabel(s){ return {sheets:'Historial',booknetic:'Booknetic',hotboat_web:'Web HotBoat',manual:'Manual'}[s]||s; }
+// Mismos 3 flujos/buckets que la pestaña "Fuentes" de hotboat-email-marketing-spec
+// (ver _compute_flujo/_booking_platform_bucket en admin_router.py — repo/despliegue
+// distinto, no importable, portado acá).
+function flujoLabel(f){ return {flujo_1:'Flujo 1 · WhatsApp',flujo_2:'Flujo 2 · Solo web',flujo_3:'Flujo 3 · Web → WhatsApp'}[f]||f||''; }
+function flujoColor(f){ return {flujo_1:'#34d399',flujo_2:'#94a3b8',flujo_3:'#60a5fa'}[f]||'#94a3b8'; }
+function platformLabel(p){ return {meta:'📱 Meta',google:'🔍 Google',otro:'Otro'}[p]||p||''; }
+function platformColor(p){ return {meta:'#4a9eff',google:'#f5c842',otro:'#7070a0'}[p]||'#7070a0'; }
 function pagoBadge(pagos,total){
   if(!pagos||!pagos.length) return '';
   const paid=pagos.reduce((s,p)=>s+(+p.amount||0),0);
