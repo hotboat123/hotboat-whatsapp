@@ -618,6 +618,25 @@ def _booking_paid_tabla(extras_json) -> bool:
     if isinstance(ej, dict):
         if any(str(k).startswith("tabla__") for k in ej.keys()):
             return True
+        # Flat dict format: {slug: {qty, unit_price, ...}} — happens when the
+        # tabla was added as a regular extra (e.g. via the admin's generic
+        # extras editor) instead of through the dedicated /tabla/{ref} picker
+        # flow, so the key is the plain slug ("tabla_de_picoteo") rather than
+        # "tabla__{type}". Same qty>0 + name-match check as the "extras" list
+        # branch below, just keyed on the dict key instead of an item's name.
+        for k, v in ej.items():
+            if str(k).startswith("tabla__") or not isinstance(v, dict):
+                continue
+            key_name = _norm_name(k)
+            if "tabla" not in key_name and "picoteo" not in key_name:
+                continue
+            qty = v.get("quantity") or v.get("qty") or 1
+            try:
+                qty = float(qty)
+            except (TypeError, ValueError):
+                qty = 1
+            if qty > 0:
+                return True
         items = ej.get("extras") or []
     elif isinstance(ej, list):
         items = ej
