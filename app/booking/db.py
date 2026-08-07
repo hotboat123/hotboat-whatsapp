@@ -1063,6 +1063,16 @@ def ensure_visitor_identity_tables() -> None:
                 CREATE INDEX IF NOT EXISTS idx_bvi_session_id ON booking_visitor_identity(session_id);
                 CREATE INDEX IF NOT EXISTS idx_bvi_visitor_id ON booking_visitor_identity(visitor_id);
                 CREATE INDEX IF NOT EXISTS idx_bvi_phone      ON booking_visitor_identity(phone);
+                -- Índice de expresión: PHONE_FLUJO_LATERAL (este repo y
+                -- hotboat-email-marketing-spec) siempre compara por
+                -- regexp_replace(phone, '[^0-9]', '', 'g'), nunca por la
+                -- columna cruda — idx_bvi_phone (arriba) no sirve para eso.
+                -- Agregado 2026-08-06 de forma preventiva (hoy la tabla tiene
+                -- ~50 filas, así que el índice no es lo que importa todavía;
+                -- el cuello de botella real que se encontró ese día estaba en
+                -- booking_visitor_events, ver comentario en
+                -- web_session_platform_lateral() en platform_attribution.py).
+                CREATE INDEX IF NOT EXISTS idx_bvi_phone_norm ON booking_visitor_identity(regexp_replace(phone, '[^0-9]', '', 'g'));
 
                 CREATE TABLE IF NOT EXISTS booking_visitor_summary (
                     phone               VARCHAR(32) PRIMARY KEY,
