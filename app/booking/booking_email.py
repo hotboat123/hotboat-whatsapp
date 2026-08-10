@@ -1817,6 +1817,199 @@ def _flujo_badge_html(flujo: Optional[str]) -> str:
     )
 
 
+# Mismos 3 buckets que source_analytics.py::bucket_3 en hotboat-email-marketing-spec
+# (no importable de acá, repo/despliegue distinto — portado). ad_platform viene de
+# whatsapp_leads (CTWA real de Meta, ver app/db/leads.py::save_lead_ad_source) — la
+# señal más confiable, cuando existe. Si no, se cae a los utm_source/utm_medium
+# propios de la reserva (poblados solo para el flujo directo de checkout web).
+# Movida acá desde admin_router.py 2026-08-07 para reusarla también en el
+# resumen diario de atribución (_daily_attribution_summary más abajo).
+_IG_TOKEN_RE = re.compile(r"(?<![a-z0-9])ig(?![a-z0-9])")
+
+
+def _booking_platform_bucket(r: dict, ad_platform: Optional[str]) -> str:
+    if ad_platform in ("facebook", "instagram"):
+        return "meta"
+    combined = f"{(r.get('utm_source') or '').lower()} {(r.get('utm_medium') or '').lower()}"
+    if "google" in combined or "adwords" in combined or "gclid" in combined:
+        return "google"
+    # "ig" = utm_source corto que usa HotBoat para Instagram en sus propios
+    # links de campaña — palabra completa, no substring.
+    if "instagram" in combined or _IG_TOKEN_RE.search(combined) or "facebook" in combined or combined.strip() in ("fb", "meta"):
+        return "meta"
+    return "otro"
+
+
+# Mismo CASE que SESSION_PLATFORM_BUCKET_SQL en hotboat-email-marketing-spec
+# (backend/app/services/platform_attribution.py) — portado acá, no importado
+# (repo/despliegue distinto), para el resumen diario de atribución
+# (_daily_attribution_summary). Si se cambian las palabras clave allá,
+# replicar el cambio acá — y viceversa.
+_SESSION_PLATFORM_BUCKET_SQL = r"""
+    CASE
+        WHEN referrer ~* 'instagram' THEN 'meta'
+        WHEN referrer ~* '(facebook|fb\.com)' THEN 'meta'
+        WHEN referrer ~* 'google' THEN 'google'
+        WHEN (COALESCE(utm_source,'') || ' ' || COALESCE(utm_medium,'')) ~* '(google|adwords|gclid)' THEN 'google'
+        WHEN (COALESCE(utm_source,'') || ' ' || COALESCE(utm_medium,'')) ~* '(instagram|\yig\y)' THEN 'meta'
+        WHEN (COALESCE(utm_source,'') || ' ' || COALESCE(utm_medium,'')) ~* '(facebook|\yfb\y|\ymeta\y)' THEN 'meta'
+        ELSE 'otro'
+    END
+"""
+_SESSION_PLATFORM_BUCKET_SQL_AGG = (
+    _SESSION_PLATFORM_BUCKET_SQL.replace("referrer", "MAX(referrer)")
+    .replace("utm_source", "MAX(utm_source)")
+    .replace("utm_medium", "MAX(utm_medium)")
+)
+
+# Mismo CASE que CC_PLATFORM_BUCKET_SQL en el otro repo (sin el respaldo de
+# sesión web de cc_platform_bucket_sql() — el resumen diario se mantiene
+# simple; ese respaldo solo recupera ~2% del bucket "otro", ver commit del
+# 2026-08-06 en hotboat-email-marketing-spec). La query que lo use debe
+# tener `contacts_crm cc` joineada por teléfono normalizado.
+_CC_PLATFORM_BUCKET_SQL = """
+    CASE
+        WHEN cc.platform IN ('facebook', 'instagram') THEN 'meta'
+        WHEN cc.platform = 'google' THEN 'google'
+        ELSE 'otro'
+    END
+"""
+
+
+def _daily_attribution_summary(day) -> dict:
+    """Resumen de atribución del día: sesiones web y conversaciones de
+    WhatsApp por plataforma (meta/google/otro), y reservas pagadas cruzadas
+    por flujo (1/2/3) x plataforma — versión de un solo día de
+    get_platform_comparison/get_flujo_platform_crosstab en
+    hotboat-email-marketing-spec. Portado en vez de llamado por HTTP entre
+    servicios: ambos repos comparten la misma Postgres, y esto es un cron
+    interno, no vale la pena la complejidad de autenticar una llamada entre
+    servicios solo para esto — ver la nota de "por qué duplicar en vez de
+    importar" en platform_attribution.py (repos/despliegues distintos).
+
+    Devuelve {"web": {meta,google,otro}, "whatsapp": {...}, "crosstab": {
+    (flujo, platform): n, ...}, "bookings_by_flujo": {...}, "bookings_by_platform": {...}}.
+    """
+    from app.db.connection import get_connection
+
+    empty3 = {"meta": 0, "google": 0, "otro": 0}
+    out = {
+        "web": dict(empty3), "whatsapp": dict(empty3),
+        "bookings_by_flujo": {"flujo_1": 0, "flujo_2": 0, "flujo_3": 0},
+        "bookings_by_platform": dict(empty3),
+        "crosstab": {(f, p): 0 for f in ("flujo_1", "flujo_2", "flujo_3") for p in ("meta", "google", "otro")},
+        "bookings_count": 0,
+        "personas_count": 0,
+    }
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Sesiones web del día, por plataforma — excluye sesiones que
+                # llegaron por un link que mandó el bot (mismo criterio que
+                # web_traffic_analytics.py, para no contar doble con WhatsApp).
+                cur.execute(f"""
+                    WITH session_platform AS (
+                        SELECT session_id, {_SESSION_PLATFORM_BUCKET_SQL_AGG} AS platform
+                        FROM booking_visitor_events
+                        WHERE DATE(recorded_at AT TIME ZONE 'America/Santiago') = %s
+                          AND session_id NOT IN (
+                              SELECT session_id FROM booking_visitor_events
+                              WHERE link_token IS NOT NULL
+                                AND DATE(recorded_at AT TIME ZONE 'America/Santiago') = %s
+                          )
+                        GROUP BY session_id
+                    )
+                    SELECT platform, COUNT(*) FROM session_platform GROUP BY 1
+                """, (day, day))
+                for platform, n in cur.fetchall():
+                    if platform in out["web"]:
+                        out["web"][platform] = n
+
+                # Conversaciones de WhatsApp del día, por plataforma.
+                cur.execute(f"""
+                    WITH conv AS (
+                        SELECT DISTINCT phone_number FROM whatsapp_conversations
+                        WHERE created_at >= %s AND created_at < %s + INTERVAL '1 day'
+                    )
+                    SELECT {_CC_PLATFORM_BUCKET_SQL} AS platform, COUNT(*)
+                    FROM conv c
+                    LEFT JOIN contacts_crm cc ON regexp_replace(cc.phone, '[^0-9]', '', 'g') = c.phone_number
+                    GROUP BY 1
+                """, (day, day))
+                for platform, n in cur.fetchall():
+                    if platform in out["whatsapp"]:
+                        out["whatsapp"][platform] = n
+
+                # Reservas pagadas del día — flujo x plataforma, clasificadas
+                # en Python (misma lógica que get_reserva en admin_router.py)
+                # para reusar _compute_flujo/_booking_platform_bucket tal cual.
+                cur.execute("""
+                    SELECT telefono, utm_source, utm_medium, created_at, num_personas
+                    FROM all_appointments
+                    WHERE DATE(created_at AT TIME ZONE 'America/Santiago') = %s
+                      AND ((pagos IS NOT NULL AND jsonb_array_length(pagos) > 0)
+                           OR payment_status IN ('approved', 'completed'))
+                """, (day,))
+                paid_rows = cur.fetchall()
+                out["bookings_count"] = len(paid_rows)
+                for telefono, utm_source, utm_medium, created_at, num_personas in paid_rows:
+                    out["personas_count"] += int(num_personas or 0)
+                    flujo = _compute_flujo(cur, telefono, created_at)
+                    ad_platform = None
+                    phone_norm = re.sub(r"[^0-9]", "", telefono or "")
+                    if phone_norm:
+                        cur.execute(
+                            "SELECT ad_platform FROM whatsapp_leads WHERE phone_number = %s",
+                            (phone_norm,),
+                        )
+                        row = cur.fetchone()
+                        ad_platform = row[0] if row else None
+                    platform = _booking_platform_bucket(
+                        {"utm_source": utm_source, "utm_medium": utm_medium}, ad_platform
+                    )
+                    if flujo in out["bookings_by_flujo"]:
+                        out["bookings_by_flujo"][flujo] += 1
+                    out["bookings_by_platform"][platform] += 1
+                    key = (flujo, platform)
+                    if key in out["crosstab"]:
+                        out["crosstab"][key] += 1
+    except Exception:
+        logger.exception("_daily_attribution_summary failed for %s", day)
+
+    return out
+
+
+def _daily_attribution_summary_with_trend(day) -> dict:
+    """_daily_attribution_summary(day) más comparación contra el promedio de
+    los últimos 7 días (day incluido) y contra el mismo día de la semana
+    anterior (day - 7 días). Llama _daily_attribution_summary 8 veces — con
+    el volumen diario típico de HotBoat (pocas reservas/día) esto corre
+    rápido; si el negocio crece mucho valdría la pena una sola query
+    agrupada por día en vez de 8 llamadas separadas."""
+    from datetime import timedelta
+
+    week_days = [day - timedelta(days=i) for i in range(7)]  # day, day-1, ..., day-6
+    same_weekday_last_week = day - timedelta(days=7)
+    by_day = {d: _daily_attribution_summary(d) for d in week_days + [same_weekday_last_week]}
+
+    def _avg(getter):
+        return sum(getter(by_day[d]) for d in week_days) / len(week_days)
+
+    return {
+        "day": day,
+        "today": by_day[day],
+        "same_weekday_last_week": by_day[same_weekday_last_week],
+        "week_avg": {
+            "bookings_count": _avg(lambda s: s["bookings_count"]),
+            "personas_count": _avg(lambda s: s["personas_count"]),
+            "web": {p: _avg(lambda s, p=p: s["web"][p]) for p in ("meta", "google", "otro")},
+            "whatsapp": {p: _avg(lambda s, p=p: s["whatsapp"][p]) for p in ("meta", "google", "otro")},
+            "bookings_by_flujo": {f: _avg(lambda s, f=f: s["bookings_by_flujo"][f]) for f in ("flujo_1", "flujo_2", "flujo_3")},
+        },
+    }
+
+
 def _build_daily_summary_html(today_str: str, bookings: List[dict], settings) -> str:
     business = getattr(settings, "business_name", "Hot Boat")
     n = len(bookings)
@@ -2221,6 +2414,151 @@ def _build_booking_card_html(b: dict, is_weekly: bool = False) -> str:
     </div>"""
 
 
+_PLATFORM_ROW_LABEL = {"meta": "📱 Meta", "google": "🔍 Google", "otro": "◽ Otro"}
+_FLUJO_ROW_LABEL = {"flujo_1": "Flujo 1 · WhatsApp", "flujo_2": "Flujo 2 · Solo web", "flujo_3": "Flujo 3 · Web→WhatsApp"}
+
+
+_WEEKDAY_ES = {"Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
+               "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado", "Sunday": "Domingo"}
+
+
+def _pct_delta(current, baseline) -> str:
+    """Flecha + % vs baseline (el promedio de 7 días). Umbral bajo en vez de
+    0 exacto para no mostrar "▲nuevo"/deltas ruidosos cuando el promedio es
+    casi cero (días sueltos con 0-1 reservas son la norma acá, no la
+    excepción)."""
+    if baseline <= 0.05:
+        return "" if current == 0 else "▲nuevo"
+    pct = round((current - baseline) / baseline * 100)
+    if pct == 0:
+        return "="
+    return f"{'▲' if pct > 0 else '▼'}{abs(pct)}%"
+
+
+def _delta_color(delta: str) -> str:
+    if delta.startswith("▲") and delta != "▲nuevo":
+        return "#10b981"
+    if delta.startswith("▼"):
+        return "#ef4444"
+    return "#64748b"
+
+
+def _stat_card_html(label: str, value, week_avg: float, same_wd) -> str:
+    delta = _pct_delta(value, week_avg)
+    return f"""
+    <div style="flex:1;min-width:140px;background:#1e293b;border-radius:10px;padding:12px 16px;">
+      <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">{label}</div>
+      <div style="color:#f8fafc;font-size:22px;font-weight:800;">{value}</div>
+      <div style="color:#64748b;font-size:11px;margin-top:2px;">
+        prom 7d {week_avg:.1f} <span style="color:{_delta_color(delta)};font-weight:700;">{delta}</span> · sem. pasada {same_wd}
+      </div>
+    </div>"""
+
+
+def _cell_with_trend_html(value: int, week_avg: float, same_wd: int) -> str:
+    delta = _pct_delta(value, week_avg)
+    return (
+        f'<div style="color:#f8fafc;font-size:13px;font-weight:700;">{value}</div>'
+        f'<div style="color:#64748b;font-size:9px;white-space:nowrap;">7d {week_avg:.1f} '
+        f'<span style="color:{_delta_color(delta)}">{delta}</span> · ant {same_wd}</div>'
+    )
+
+
+def _build_attribution_section_html(trend: dict) -> str:
+    """HTML de la sección "de dónde vino la gente" — sesiones web y
+    conversaciones de WhatsApp por plataforma, y el cruce flujo x plataforma
+    de las reservas pagadas ese día (created_at, NO fecha del tour — a
+    diferencia del resto de este email, que es sobre reservas CON TOUR
+    ayer), cada una comparada contra el promedio de los últimos 7 días y
+    contra el mismo día de la semana anterior. Ver
+    _daily_attribution_summary_with_trend."""
+    day = trend["day"]
+    stats = trend["today"]
+    wk = trend["week_avg"]
+    last_wk = trend["same_weekday_last_week"]
+
+    day_str = day.strftime("%d/%m/%Y")
+    weekday_es = _WEEKDAY_ES.get(day.strftime("%A"), day.strftime("%A"))
+
+    def _row(label: str, key_getter) -> str:
+        cells = "".join(
+            f'<td style="padding:6px 10px;text-align:right;">{_cell_with_trend_html(key_getter(stats, p), key_getter(wk, p), key_getter(last_wk, p))}</td>'
+            for p in ("meta", "google", "otro")
+        )
+        return f'<tr><td style="padding:6px 10px;color:#cbd5e1;font-size:13px;vertical-align:top;">{label}</td>{cells}</tr>'
+
+    traffic_rows = (
+        _row("Sesiones web", lambda s, p: s["web"][p])
+        + _row("Conversaciones WhatsApp", lambda s, p: s["whatsapp"][p])
+    )
+
+    stat_cards = (
+        _stat_card_html("Reservas hechas", stats["bookings_count"], wk["bookings_count"], last_wk["bookings_count"])
+        + _stat_card_html("Personas", stats["personas_count"], wk["personas_count"], last_wk["personas_count"])
+    )
+
+    flujo_table_rows = "".join(
+        f"""<tr>
+          <td style="padding:6px 10px;color:#cbd5e1;font-size:13px;">{_FLUJO_ROW_LABEL[f]}</td>
+          <td style="padding:6px 10px;text-align:right;">{_cell_with_trend_html(stats["bookings_by_flujo"][f], wk["bookings_by_flujo"][f], last_wk["bookings_by_flujo"][f])}</td>
+        </tr>"""
+        for f in ("flujo_1", "flujo_2", "flujo_3")
+    )
+
+    total_paid = stats["bookings_count"]
+    if total_paid:
+        crosstab_rows = "".join(f"""
+        <tr>
+          <td style="padding:6px 10px;color:#cbd5e1;font-size:13px;">{_FLUJO_ROW_LABEL[f]}</td>
+          <td style="padding:6px 10px;color:#f8fafc;font-size:13px;text-align:right;">{stats["crosstab"][(f, "meta")]}</td>
+          <td style="padding:6px 10px;color:#f8fafc;font-size:13px;text-align:right;">{stats["crosstab"][(f, "google")]}</td>
+          <td style="padding:6px 10px;color:#f8fafc;font-size:13px;text-align:right;">{stats["crosstab"][(f, "otro")]}</td>
+        </tr>""" for f in ("flujo_1", "flujo_2", "flujo_3"))
+        crosstab_block = f"""
+        <p style="margin:16px 0 6px;color:#94a3b8;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">
+          Reservas pagadas, por flujo y plataforma (sin comparación — solo la foto de hoy)
+        </p>
+        <table width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border-radius:10px;overflow:hidden;">
+          <tr style="background:#0f1729;">
+            <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;">Flujo</td>
+            <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;text-align:right;">Meta</td>
+            <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;text-align:right;">Google</td>
+            <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;text-align:right;">Otro</td>
+          </tr>
+          {crosstab_rows}
+        </table>"""
+    else:
+        crosstab_block = '<p style="margin:16px 0 0;color:#64748b;font-size:12px;">Sin reservas pagadas.</p>'
+
+    return f"""
+    <div style="margin:24px 0 0;padding-top:20px;border-top:1px solid #1e293b;">
+      <h2 style="margin:0 0 4px;color:#f8fafc;font-size:15px;font-weight:800;">📊 De dónde vino la gente — {weekday_es} {day_str}</h2>
+      <p style="margin:0 0 12px;color:#64748b;font-size:11px;">
+        Por cuándo escribieron/navegaron (no por la fecha del tour, a diferencia de arriba) — comparado contra el promedio de los últimos 7 días y el mismo día de la semana pasada. Ver la pestaña Fuentes para el detalle.
+      </p>
+      <div style="display:flex;gap:12px;margin:0 0 16px;flex-wrap:wrap;">
+        {stat_cards}
+      </div>
+      <table width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border-radius:10px;overflow:hidden;margin-bottom:16px;">
+        <tr style="background:#0f1729;">
+          <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;">Entradas</td>
+          <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;text-align:right;">Meta</td>
+          <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;text-align:right;">Google</td>
+          <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;text-align:right;">Otro</td>
+        </tr>
+        {traffic_rows}
+      </table>
+      <table width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border-radius:10px;overflow:hidden;margin-bottom:4px;">
+        <tr style="background:#0f1729;">
+          <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;">Reservas por flujo</td>
+          <td style="padding:6px 10px;color:#64748b;font-size:11px;text-transform:uppercase;text-align:right;">Cantidad</td>
+        </tr>
+        {flujo_table_rows}
+      </table>
+      {crosstab_block}
+    </div>"""
+
+
 def send_yesterday_summary_email() -> Dict[str, Any]:
     """Send yesterday's booking summary to hotboatnotification@gmail.com at 09:00."""
     from datetime import date, timedelta
@@ -2299,6 +2637,13 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
     else:
         body_content = '<p style="color:#94a3b8;text-align:center;padding:32px 0;font-size:15px;">😴 Sin reservas el día anterior</p>'
 
+    attribution_html = ""
+    try:
+        attribution_trend = _daily_attribution_summary_with_trend(yesterday)
+        attribution_html = _build_attribution_section_html(attribution_trend)
+    except Exception:
+        logger.exception("yesterday_summary: attribution section failed, sending without it")
+
     html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Resumen {yesterday_str}</title></head>
@@ -2312,6 +2657,7 @@ def send_yesterday_summary_email() -> Dict[str, Any]:
     </h1>
     <p style="margin:0 0 20px;color:#64748b;font-size:13px;">Reservas del día anterior · HotBoat</p>
     {body_content}
+    {attribution_html}
     <p style="margin:24px 0 0;color:#475569;font-size:11px;text-align:center;">
       Enviado automáticamente por HotBoat · 09:00 Santiago
     </p>

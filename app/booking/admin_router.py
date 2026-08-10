@@ -64,28 +64,6 @@ def _normalize_pagos_for_db(pagos: list) -> list:
     return out
 
 
-# Mismos 3 buckets que source_analytics.py::bucket_3 en hotboat-email-marketing-spec
-# (no importable de acá, repo/despliegue distinto — portado). ad_platform viene de
-# whatsapp_leads (CTWA real de Meta, ver app/db/leads.py::save_lead_ad_source) — la
-# señal más confiable, cuando existe. Si no, se cae a los utm_source/utm_medium
-# propios de la reserva (poblados solo para el flujo directo de checkout web).
-_IG_TOKEN_RE = re.compile(r"(?<![a-z0-9])ig(?![a-z0-9])")
-
-
-def _booking_platform_bucket(r: dict, ad_platform: Optional[str]) -> str:
-    if ad_platform in ("facebook", "instagram"):
-        return "meta"
-    combined = f"{(r.get('utm_source') or '').lower()} {(r.get('utm_medium') or '').lower()}"
-    if "google" in combined or "adwords" in combined or "gclid" in combined:
-        return "google"
-    # "ig" = utm_source corto que usa HotBoat para Instagram en sus propios
-    # links de campaña — palabra completa, no substring (ver mismo fix en
-    # _platform_label, router.py).
-    if "instagram" in combined or _IG_TOKEN_RE.search(combined) or "facebook" in combined or combined.strip() in ("fb", "meta"):
-        return "meta"
-    return "otro"
-
-
 from app.booking.operator_settings import (
     get_vacation_days, add_vacation_day, remove_vacation_day,
     get_setting, set_setting, is_urgency_mode,
@@ -292,7 +270,7 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
                 # Flujo/plataforma/anuncio — se calculan ANTES de convertir
                 # created_at a string (_compute_flujo necesita el datetime
                 # real para el filtro "< created_at" contra whatsapp_conversations).
-                from app.booking.booking_email import _compute_flujo
+                from app.booking.booking_email import _compute_flujo, _booking_platform_bucket
                 r["flujo"] = _compute_flujo(cur, r.get("telefono"), r.get("created_at"))
                 ad_source = None
                 ad_platform = None
