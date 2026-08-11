@@ -4,12 +4,46 @@ Supports MCP (Model Context Protocol) servers
 """
 import logging
 import json
+import time
 from typing import List, Dict, Optional, Any
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Cooldown between "AI quota exhausted" alerts — a rate-limit error repeats
+# on every single message until Groq's daily quota resets (minutes to ~24h
+# out, see the TPD reset countdown in the error itself), so without this an
+# operator would get one push notification per customer message instead of
+# one per incident. Found 2026-08-11: 5 messages in ~90s from one customer
+# each silently fell back to the static menu because the model's 100k
+# tokens/day quota was already exhausted — nothing alerted anyone at the
+# time, only visible afterward by grepping server logs.
+_QUOTA_ALERT_COOLDOWN_SECONDS = 30 * 60
+_last_quota_alert_at = 0.0
+
+
+async def _alert_ai_quota_exhausted(error: Exception) -> None:
+    global _last_quota_alert_at
+    now = time.monotonic()
+    if now - _last_quota_alert_at < _QUOTA_ALERT_COOLDOWN_SECONDS:
+        return
+    _last_quota_alert_at = now
+    try:
+        from app.notifications import push_notifier
+        await push_notifier.send_notification(
+            title="🚨 IA del bot sin cupo",
+            body=(
+                "El modelo de IA (Groq) dejó de responder por límite de uso — "
+                "las conversaciones con IA activada están volviendo al menú fijo "
+                f"hasta que se restablezca el cupo. {str(error)[:150]}"
+            ),
+            data={"type": "ai_quota_exhausted"},
+            priority="high",
+        )
+    except Exception:
+        logger.exception("Failed to send AI-quota-exhausted alert")
 
 try:
     from app.bot.mcp_handler import MCPHandler
@@ -283,33 +317,44 @@ class AIHandler:
             
             return response_text
             
+        except RateLimitError as e:
+            # Distinct from the generic except below so this is trivial to
+            # grep for/alert on — previously indistinguishable from any
+            # other AI failure in the logs (see module docstring above).
+            logger.error(f"🚨 AI QUOTA/RATE LIMIT reached, falling back to menu: {e}")
+            await _alert_ai_quota_exhausted(e)
+            return self._fallback_response()
         except Exception as e:
             logger.error(f"Error generating AI response: {e}")
             import traceback
             traceback.print_exc()
-            
-            # Fallback response (estilo Popeye)
-            return f"""🥬 ¡Ahoy, grumete! ⚓  
+            return self._fallback_response()
+
+    def _fallback_response(self) -> str:
+        """Static menu shown when the AI call fails for any reason (quota,
+        network, etc.) — must never be able to break the bot's core
+        deterministic flow, so this always succeeds."""
+        return f"""🥬 ¡Ahoy, grumete! ⚓
 
 
 
-Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤  
+Soy *Popeye el Marino*, cabo segundo del *HotBoat Chile* 🚤
 
-Estoy al mando para ayudarte con todas tus consultas sobre nuestras experiencias flotantes 🌊  
+Estoy al mando para ayudarte con todas tus consultas sobre nuestras experiencias flotantes 🌊
 
-Puedes preguntarme por:  
+Puedes preguntarme por:
 
-1️⃣ *Disponibilidad y horarios*  
+1️⃣ *Disponibilidad y horarios*
 
-2️⃣ *Precios por persona*  
+2️⃣ *Precios por persona*
 
-3️⃣ *Características del HotBoat*  
+3️⃣ *Características del HotBoat*
 
-4️⃣ *Extras y promociones*  
+4️⃣ *Extras y promociones*
 
-5️⃣ *Ubicación y reseñas*  
+5️⃣ *Ubicación y reseñas*
 
-Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*, o simplemente *6️⃣* 👨‍✈️🌿  
+Si prefieres hablar con el *Capitán Tomás*, escribe *Llamar a Tomás*, *Ayuda*, o simplemente *6️⃣* 👨‍✈️🌿
 
 ¿Listo para zarpar o qué número eliges, grumete?"""
 
