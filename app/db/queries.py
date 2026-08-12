@@ -357,7 +357,9 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                             COALESCE(l.unread_count, 0) as unread_count,
                             COALESCE(l.priority, 0) as priority,
                             l.ad_source,
-                            l.ad_audience
+                            l.ad_audience,
+                            COALESCE(v.label, l.bot_variant) as bot_variant_label,
+                            COALESCE(v.is_human, FALSE) as bot_variant_is_human
                         FROM (
                             SELECT DISTINCT ON (phone_number)
                                 phone_number,
@@ -370,6 +372,7 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                             ORDER BY phone_number, created_at DESC
                         ) latest
                         LEFT JOIN whatsapp_leads l ON latest.phone_number = l.phone_number
+                        LEFT JOIN bot_ab_variants v ON v.variant_key = l.bot_variant
                         ORDER BY latest.created_at DESC
                         LIMIT %s
                     """, (limit,))
@@ -415,6 +418,8 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                     priority = row[7] if len(row) > 7 else 0
                     ad_source = row[8] if len(row) > 8 else None
                     ad_audience = row[9] if len(row) > 9 else None
+                    bot_variant_label = row[10] if len(row) > 10 else None
+                    bot_variant_is_human = row[11] if len(row) > 11 else False
 
                     if direction == 'outgoing':
                         last_message = response_text or message_text
@@ -439,6 +444,8 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                         "priority": priority,
                         "ad_source": ad_source,
                         "ad_audience": ad_audience,
+                        "bot_variant_label": bot_variant_label,
+                        "bot_variant_is_human": bot_variant_is_human,
                     })
                 
                 conversations.sort(key=lambda x: x["last_message_at"] or "", reverse=True)

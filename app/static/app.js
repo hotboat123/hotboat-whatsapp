@@ -495,7 +495,9 @@ async function loadConversations(limit = null, isAutoRefresh = false) {
                     unread_count: item.unread_count || 0,
                     priority: item.priority || 0,
                     ad_source: item.ad_source || null,
-                    ad_audience: item.ad_audience || null
+                    ad_audience: item.ad_audience || null,
+                    bot_variant_label: item.bot_variant_label || null,
+                    bot_variant_is_human: item.bot_variant_is_human || false
                 });
             }
         });
@@ -583,6 +585,13 @@ function renderConversations() {
         const audienceBadge = conv.ad_audience
             ? `<span style="font-size:.43rem;background:#1a5c3a;color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:3px" title="Audiencia: ${conv.ad_audience}">👥 ${conv.ad_audience}</span>`
             : '';
+        // Quién/qué está a cargo de esta conversación (bot_ab_variants.label) —
+        // 👤 si es una variante "humano contesta" (bot_enabled ya viene en
+        // FALSE para esos leads, ver get_or_create_lead), 🤖 si es una
+        // variante automática (control/ia_1/...).
+        const variantBadge = conv.bot_variant_label
+            ? `<span style="font-size:.43rem;background:${conv.bot_variant_is_human ? '#7c3aed' : '#555'};color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:3px" title="${conv.bot_variant_is_human ? 'Responde' : 'Variante del bot'}: ${conv.bot_variant_label}">${conv.bot_variant_is_human ? '👤' : '🤖'} ${conv.bot_variant_label}</span>`
+            : '';
 
         return `
         <div class="conversation-item ${currentConversation?.phone_number === conv.phone_number ? 'active' : ''}"
@@ -594,6 +603,7 @@ function renderConversations() {
                     ${priorityBadge}
                     ${adBadge}
                     ${audienceBadge}
+                    ${variantBadge}
                 </div>
                 <div class="conversation-time">${formatTime(conv.last_message_at || conv.created_at)}</div>
             </div>
