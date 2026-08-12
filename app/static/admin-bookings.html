@@ -13835,8 +13835,11 @@ async function updateVariantSchedule(id, startVal, endVal){
   const s = (startVal === '' || startVal == null) ? null : parseInt(startVal, 10);
   const e = (endVal === '' || endVal == null) ? null : parseInt(endVal, 10);
   if((s === null) !== (e === null)){
-    showToast('❌ El horario necesita ambos campos (desde y hasta), o ninguno', true);
-    loadAbVariants();  // revierte el input a medio llenar al valor guardado
+    // Solo uno de los dos campos tiene valor todavía — no es necesariamente
+    // un error, es probablemente el usuario tabulando de "desde" a "hasta"
+    // (blur de "desde" dispara este mismo onchange con "hasta" aún vacío).
+    // No guardar ni mostrar error acá; recién se guarda cuando ambos campos
+    // tengan valor (o ambos estén vacíos, ver clear_schedule abajo).
     return;
   }
   try {
