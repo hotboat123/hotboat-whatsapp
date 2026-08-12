@@ -229,6 +229,103 @@ async def run_followup_nudge_scheduler() -> None:
         await asyncio.sleep(15)
 
 
+# ── Unanswered-message alert: notify an operator when a customer's message
+# has gone UNANSWERED_ALERT_MINUTES with no reply from anyone ────────────────
+# Unlike the follow-up nudge above (a customer-facing "still there?" message,
+# scheduled only after the bot's own menu reply), this is an OPERATOR alert —
+# it never messages the customer, just tells whoever's responsible that
+# something needs attention. Deliberately NOT scoped to bot_enabled=FALSE
+# (human-answered) leads only: an automated lead stuck silent for 2+ min is
+# itself a bug worth catching too — same class of silent failure the
+# AI-quota-exhaustion alert in ai_handler.py exists to catch (a try/except
+# deep in process_message() swallowing an error before any reply goes out
+# looks identical to "normal processing" from the outside).
+UNANSWERED_ALERT_MINUTES = 2
+
+
+def _ensure_unanswered_alerts_table() -> None:
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS unanswered_alerts (
+                        phone_number     TEXT PRIMARY KEY,
+                        last_incoming_at TIMESTAMPTZ NOT NULL,
+                        alerted_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"unanswered_alerts table setup failed: {e}")
+
+
+async def run_unanswered_alert_scheduler() -> None:
+    """Periodic job (same advisory-lock-gated pattern as the other
+    schedulers): finds conversations whose LATEST message is incoming and
+    older than UNANSWERED_ALERT_MINUTES, and sends one alert per still-
+    unanswered message — deduped via unanswered_alerts.last_incoming_at, so
+    the same silence doesn't re-alert every tick. No explicit "cancel" step
+    like the follow-up nudge needs: once someone replies, the conversation's
+    latest message stops being 'incoming' and it simply drops out of the
+    query below on the next tick. If the customer later sends a NEW message
+    that also goes unanswered, last_incoming_at no longer matches and it
+    alerts again."""
+    from app.db.connection import get_connection
+    from app.bot.variant_overrides import get_label_for_variant
+    from app.notifications import push_notifier
+    while True:
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT latest.phone_number, latest.customer_name, latest.created_at,
+                               latest.message_text, l.bot_variant
+                        FROM (
+                            SELECT DISTINCT ON (phone_number)
+                                phone_number, customer_name, created_at, message_text, direction
+                            FROM whatsapp_conversations
+                            ORDER BY phone_number, created_at DESC
+                        ) latest
+                        LEFT JOIN whatsapp_leads l ON l.phone_number = latest.phone_number
+                        LEFT JOIN unanswered_alerts ua ON ua.phone_number = latest.phone_number
+                        WHERE latest.direction = 'incoming'
+                          AND latest.created_at <= NOW() - (%s || ' minutes')::interval
+                          AND (ua.last_incoming_at IS NULL OR ua.last_incoming_at != latest.created_at)
+                    """, (UNANSWERED_ALERT_MINUTES,))
+                    stale = cur.fetchall()
+
+            for phone_number, contact_name, created_at, message_text, bot_variant in stale:
+                try:
+                    variant_label = get_label_for_variant(bot_variant)
+                    who = f"{variant_label}: " if variant_label else ""
+                    preview = (message_text or "")[:100]
+                    await push_notifier.send_notification(
+                        title=f"⚠️ Sin responder hace {UNANSWERED_ALERT_MINUTES}+ min",
+                        body=f'{who}{contact_name or phone_number} — "{preview}"',
+                        data={"type": "unanswered_alert", "phone": phone_number},
+                        priority="high",
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not send unanswered alert for {phone_number}: {e}")
+                try:
+                    with get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                INSERT INTO unanswered_alerts (phone_number, last_incoming_at, alerted_at)
+                                VALUES (%s, %s, NOW())
+                                ON CONFLICT (phone_number) DO UPDATE SET
+                                    last_incoming_at = EXCLUDED.last_incoming_at,
+                                    alerted_at = NOW()
+                            """, (phone_number, created_at))
+                        conn.commit()
+                except Exception as e:
+                    logger.warning(f"failed to record unanswered alert for {phone_number}: {e}")
+        except Exception as e:
+            logger.warning(f"unanswered_alert_scheduler error: {e}")
+        await asyncio.sleep(30)
+
+
 def _resolve_quoted_message(message: dict, conversation_manager, from_number: str) -> Optional[str]:
     """
     If the incoming message is a WhatsApp reply-to (quoted), return the text

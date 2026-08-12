@@ -492,6 +492,7 @@ async function loadConversations(limit = null, isAutoRefresh = false) {
                     last_message: lastMessage,
                     last_message_at: timestamp,
                     created_at: timestamp,
+                    direction: item.direction || 'incoming',
                     unread_count: item.unread_count || 0,
                     priority: item.priority || 0,
                     ad_source: item.ad_source || null,
@@ -592,13 +593,24 @@ function renderConversations() {
         const variantBadge = conv.bot_variant_label
             ? `<span style="font-size:.43rem;background:${conv.bot_variant_is_human ? '#7c3aed' : '#555'};color:#fff;border-radius:4px;padding:1px 6px;display:inline-block;vertical-align:middle;margin-left:3px" title="${conv.bot_variant_is_human ? 'Responde' : 'Variante del bot'}: ${conv.bot_variant_label}">${conv.bot_variant_is_human ? '👤' : '🤖'} ${conv.bot_variant_label}</span>`
             : '';
+        // El cliente preguntó algo (último mensaje = incoming) y lleva 2+ min
+        // sin respuesta de nadie (bot o humano) — mismo umbral que el
+        // scheduler de alertas (UNANSWERED_ALERT_MINUTES en webhook.py), que
+        // además manda una notificación push cuando esto pasa. Acá solo es
+        // el indicador visual; se recalcula solo en cada re-render (la lista
+        // ya se auto-refresca cada 10s).
+        const isUnanswered = conv.direction === 'incoming' && conv.last_message_at &&
+            (Date.now() - new Date(conv.last_message_at).getTime()) > 2 * 60 * 1000;
+        const attentionBadge = isUnanswered
+            ? `<span style="color:#ff3b30;font-weight:bold;margin-right:4px" title="Sin responder hace más de 2 minutos">❗</span>`
+            : '';
 
         return `
         <div class="conversation-item ${currentConversation?.phone_number === conv.phone_number ? 'active' : ''}"
              onclick="selectConversation('${conv.phone_number}')">
             <div class="conversation-header">
                 <div class="conversation-name">
-                    ${conv.customer_name || conv.phone_number}
+                    ${attentionBadge}${conv.customer_name || conv.phone_number}
                     ${unreadBadge}
                     ${priorityBadge}
                     ${adBadge}

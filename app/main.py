@@ -11,7 +11,7 @@ import httpx
 
 from app.booking.router import router as booking_router
 from app.booking.router import _run_visitor_session_closer_scheduler
-from app.whatsapp.webhook import run_followup_nudge_scheduler
+from app.whatsapp.webhook import run_followup_nudge_scheduler, run_unanswered_alert_scheduler, UNANSWERED_ALERT_MINUTES
 from app.booking.admin_router import admin_router
 from app.booking.content_router import content_router
 from app.booking.signatures_router import signatures_router
@@ -774,10 +774,11 @@ def _seed_packs_catalog():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background tasks on startup, cancel on shutdown."""
-    from app.whatsapp.webhook import _ensure_dedup_table, _ensure_followup_table
+    from app.whatsapp.webhook import _ensure_dedup_table, _ensure_followup_table, _ensure_unanswered_alerts_table
     from app.bot.conversation import ensure_conversation_state_table
     _ensure_dedup_table()
     _ensure_followup_table()
+    _ensure_unanswered_alerts_table()
     ensure_conversation_state_table()
     _ensure_web_push_table()
     from app.booking.stock_router import _ensure_tables as _ensure_stock_tables
@@ -889,6 +890,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_stock_consume_scheduler()),
             asyncio.create_task(_run_visitor_session_closer_scheduler()),
             asyncio.create_task(run_followup_nudge_scheduler()),
+            asyncio.create_task(run_unanswered_alert_scheduler()),
         ])
         logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
         logger.info(f"🗑️ Pending-payment cleanup iniciado (cada 2 min, cancela > {PENDING_PAYMENT_STALE_MINUTES} min sin pagar)")
@@ -898,6 +900,7 @@ async def lifespan(app: FastAPI):
         logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
         logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
         logger.info("💬 Follow-up nudge scheduler iniciado (cada 15s, envía a los 2 min sin respuesta)")
+        logger.info(f"⚠️ Unanswered-alert scheduler iniciado (cada 30s, alerta al operador a los {UNANSWERED_ALERT_MINUTES} min sin respuesta)")
         logger.info("🌐 Visitor session closer iniciado (cada 2 min, cierra sesiones tras 5 min de inactividad)")
 
     lock_task = asyncio.create_task(_acquire_lock_and_start_schedulers())
