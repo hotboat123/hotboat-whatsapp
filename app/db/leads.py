@@ -75,37 +75,27 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     auto-replies before an operator gets to it. See bot_ab_variants.is_human
     in app/booking/bot_config_router.py.
 
-    Each variant can also optionally have working hours
-    (schedule_start_hour/schedule_end_hour, Chile time — see
-    hour_in_schedule() in app/bot/variant_overrides.py, the same range
-    check used to gate operator notifications). Only variants currently "on
-    shift" (no schedule set, or the current hour falls inside their window)
-    are considered for a new lead. If that leaves NOTHING — a genuine
-    coverage gap, e.g. between shifts — we fall back to every active
-    variant regardless of schedule, so a lead is never left completely
-    unassigned just because nobody happens to be on shift right now."""
-    from app.bot.variant_overrides import hour_in_schedule
-
+    A variant's working hours (schedule_start_hour/schedule_end_hour) do
+    NOT affect this pick — every is_active variant always competes for
+    every new lead, by weight, same as if no one had a schedule set.
+    Schedule ONLY gates whether an operator gets paged about that lead's
+    messages later (see is_variant_in_hours() in variant_overrides.py,
+    used from webhook.py) — it was briefly wired into this function too
+    (2026-08-12), but that made Tom/Esteban's non-overlapping windows the
+    ONLY eligible candidate during their hours, locking Control out of new
+    leads almost entirely instead of getting its fair share by weight —
+    exactly backwards from "todas tienen el mismo peso, faltan asignaciones
+    control" (reported live, same day). Reverted the same day."""
     try:
-        cur.execute(
-            "SELECT variant_key, weight, is_human, schedule_start_hour, schedule_end_hour "
-            "FROM bot_ab_variants WHERE is_active = TRUE"
-        )
+        cur.execute("SELECT variant_key, weight, is_human FROM bot_ab_variants WHERE is_active = TRUE")
         variants = cur.fetchall()
     except Exception:
         return None, False
     if not variants:
         return None, False
 
-    now_hour = datetime.now(CHILE_TZ).hour
-    on_shift = [
-        v for v in variants
-        if v[3] is None or v[4] is None or hour_in_schedule(now_hour, v[3], v[4])
-    ]
-    candidates = on_shift or variants
-
-    if len(candidates) == 1:
-        return candidates[0][0], bool(candidates[0][2])
+    if len(variants) == 1:
+        return variants[0][0], bool(variants[0][2])
 
     try:
         cur.execute("SELECT bot_variant, COUNT(*) FROM whatsapp_leads WHERE bot_variant IS NOT NULL GROUP BY bot_variant")
@@ -113,9 +103,9 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     except Exception:
         counts = {}
 
-    is_human_by_key = {v[0]: bool(v[2]) for v in candidates}
+    is_human_by_key = {variant_key: bool(is_human) for variant_key, _, is_human in variants}
     best_key, best_score = None, None
-    for variant_key, weight, *_ in candidates:
+    for variant_key, weight, _ in variants:
         w = weight or 1
         score = counts.get(variant_key, 0) / w
         if best_score is None or score < best_score:

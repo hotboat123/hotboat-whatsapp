@@ -462,9 +462,7 @@ def test_ab_weighted_assignment():
         def fetchall(self):
             return self._last
 
-    # Trailing (None, None) on each tuple = no schedule (unrestricted) —
-    # schedule_start_hour, schedule_end_hour.
-    variants = [("a", 3, False, None, None), ("b", 1, False, None, None)]
+    variants = [("a", 3, False), ("b", 1, False)]
     counts = {"a": 0, "b": 0}
     cur = _FakeCursor(variants, counts)
     sequence = []
@@ -490,19 +488,23 @@ def test_ab_weighted_assignment():
     # A lone active variant flagged is_human=True must be picked AS human —
     # this is what makes get_or_create_lead() start the new lead with
     # bot_enabled=FALSE instead of the usual TRUE default.
-    human_cur = _FakeCursor([("tomas", 1, True, None, None)], {})
+    human_cur = _FakeCursor([("tomas", 1, True)], {})
     check(
         "A/B weighted assignment surfaces is_human=True for a human variant",
         _pick_active_variant(human_cur) == ("tomas", True),
     )
 
-    # Working-hours gating: "tomas" is scheduled 8-16, "esteban" 16-20 — at
-    # an hour inside tomas' window (10:00) only tomas should ever be picked,
-    # even though esteban is also is_active. Faked by monkeypatching
-    # datetime.now() would be more invasive than this test needs — instead
-    # this directly exercises hour_in_schedule() (the exact function
-    # _pick_active_variant calls) for the hours that matter, and separately
-    # confirms the empty-on-shift fallback doesn't crash.
+    # Working hours (schedule_start_hour/schedule_end_hour) must NOT affect
+    # _pick_active_variant at all — every is_active variant always competes
+    # for every new lead, purely by weight. Briefly wired in on 2026-08-12
+    # (making a shift's sole scheduled variant the ONLY eligible candidate
+    # during its hours) then reverted the same day: it silently locked
+    # "control" (no schedule) out of new leads almost entirely once "tom"
+    # and "esteban" had non-overlapping shifts covering most of the day —
+    # backwards from the equal-weight split the owner expected. Schedule
+    # still gates operator NOTIFICATIONS (see hour_in_schedule() /
+    # is_variant_in_hours() in variant_overrides.py and their own tests),
+    # just not who gets assigned.
     from app.bot.variant_overrides import hour_in_schedule
     check(
         "Working hours: 10:00 falls inside Tomás' 8-16 shift",
@@ -523,17 +525,6 @@ def test_ab_weighted_assignment():
     check(
         "Working hours: identical start/end hour is treated as unrestricted, not \"never\"",
         hour_in_schedule(3, 9, 9) is True,
-    )
-
-    # Coverage-gap fallback: if the only active variant's schedule doesn't
-    # cover the current hour, _pick_active_variant must still return it
-    # (ignoring the schedule) rather than leaving the lead unassigned.
-    gap_cur = _FakeCursor([("tomas", 1, True, 8, 16)], {})
-    picked_gap = _pick_active_variant(gap_cur)
-    check(
-        "Working hours: a coverage gap still assigns the lone active variant instead of (None, False)",
-        picked_gap[0] == "tomas" and picked_gap[1] is True,
-        f"got {picked_gap}",
     )
 
 
