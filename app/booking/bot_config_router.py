@@ -126,6 +126,15 @@ def _ensure_tables():
                     # of being short-circuited to the menu — see
                     # ConversationManager.process_message()'s is_first branch.
                     "show_welcome_menu BOOLEAN NOT NULL DEFAULT TRUE",
+                    # TRUE = ningún operador automático responde acá — un
+                    # humano (Tomás, Esteban, ...) contesta a mano. Leads
+                    # nuevos asignados a una variante is_human quedan con
+                    # bot_enabled = FALSE desde el momento en que se crean
+                    # (ver get_or_create_lead en app/db/leads.py), así se
+                    # reusa el gate que ya existe en webhook.py en vez de un
+                    # camino paralelo. FALSE (default) = variante automática,
+                    # comportamiento actual sin cambios.
+                    "is_human     BOOLEAN NOT NULL DEFAULT FALSE",
                 ]:
                     try:
                         cur.execute(f"ALTER TABLE bot_ab_variants ADD COLUMN IF NOT EXISTS {col_def}")
@@ -363,6 +372,7 @@ class VariantCreate(BaseModel):
     variant_key: str
     label: str
     weight: int = 1
+    is_human: bool = False
 
 
 class VariantUpdate(BaseModel):
@@ -374,6 +384,7 @@ class VariantUpdate(BaseModel):
     disabled_triggers: Optional[List[str]] = None
     system_prompt: Optional[str] = None
     show_welcome_menu: Optional[bool] = None
+    is_human: Optional[bool] = None
 
 
 class OverrideUpsert(BaseModel):
@@ -434,7 +445,7 @@ async def list_ab_variants():
                 cur.execute("""
                     SELECT v.id, v.variant_key, v.label, v.is_active, v.created_at,
                            COUNT(o.id) AS override_count, v.weight, v.ai_provider, v.ai_model,
-                           v.disabled_triggers, v.system_prompt, v.show_welcome_menu
+                           v.disabled_triggers, v.system_prompt, v.show_welcome_menu, v.is_human
                     FROM bot_ab_variants v
                     LEFT JOIN bot_message_overrides o ON o.variant_key = v.variant_key
                     GROUP BY v.id
@@ -452,6 +463,7 @@ async def list_ab_variants():
                     "disabled_triggers": list(r[9]) if r[9] else [],
                     "system_prompt": r[10],
                     "show_welcome_menu": r[11] if r[11] is not None else True,
+                    "is_human": bool(r[12]),
                     # Informational only — the actual split is deterministic
                     # (see _pick_active_variant), this just previews the
                     # target ratio implied by the current weights.
@@ -476,8 +488,8 @@ async def create_ab_variant(data: VariantCreate):
         with _get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO bot_ab_variants (variant_key, label, weight) VALUES (%s, %s, %s) RETURNING id",
-                    (key, data.label or key, max(1, data.weight or 1)),
+                    "INSERT INTO bot_ab_variants (variant_key, label, weight, is_human) VALUES (%s, %s, %s, %s) RETURNING id",
+                    (key, data.label or key, max(1, data.weight or 1), data.is_human),
                 )
                 new_id = cur.fetchone()[0]
                 conn.commit()
@@ -508,6 +520,8 @@ async def update_ab_variant(variant_id: int, data: VariantUpdate):
                     cur.execute("UPDATE bot_ab_variants SET system_prompt = %s WHERE id = %s", (data.system_prompt.strip() or None, variant_id))
                 if data.show_welcome_menu is not None:
                     cur.execute("UPDATE bot_ab_variants SET show_welcome_menu = %s WHERE id = %s", (data.show_welcome_menu, variant_id))
+                if data.is_human is not None:
+                    cur.execute("UPDATE bot_ab_variants SET is_human = %s WHERE id = %s", (data.is_human, variant_id))
                 conn.commit()
         from app.bot.variant_overrides import invalidate_cache
         invalidate_cache()

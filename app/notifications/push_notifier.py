@@ -132,10 +132,20 @@ class PushNotifier:
         phone_number: str,
         message_preview: str,
         ad_source: str = None,
+        variant_label: str = None,
     ) -> bool:
+        """variant_label: display label of the lead's bot_variant (e.g.
+        "Tomás", "IA 1", "Control" — see bot_ab_variants.label, looked up via
+        app/bot/variant_overrides.py::get_label_for_variant()), shown right
+        before the message text so an operator immediately knows who/what is
+        supposed to answer this lead — especially important for a "un
+        humano contesta" variant, where nothing auto-replies and it's on
+        that specific person to see this and respond by hand."""
         title = f"💬 {contact_name}"
         if ad_source:
             title = f"📢 {contact_name}  ·  {ad_source}"
+
+        body = f"{variant_label}: {message_preview[:100]}" if variant_label else message_preview[:100]
 
         data = {
             "type": "new_message",
@@ -145,8 +155,10 @@ class PushNotifier:
         }
         if ad_source:
             data["ad_source"] = ad_source
+        if variant_label:
+            data["bot_variant_label"] = variant_label
 
-        return await self.send_notification(title, message_preview[:100], data)
+        return await self.send_notification(title, body, data)
 
     async def register_subscription(self, endpoint: str, p256dh: str, auth: str) -> bool:
         try:

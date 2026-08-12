@@ -408,11 +408,13 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             # Send push notification for incoming messages (replaces email)
             try:
                 from app.notifications import push_notifier
+                from app.bot.variant_overrides import get_label_for_variant
                 await push_notifier.send_new_message_notification(
                     contact_name=contact_name,
                     phone_number=from_number,
                     message_preview=text_body,
                     ad_source=ad_source,
+                    variant_label=get_label_for_variant(lead.get("bot_variant") if lead else None),
                 )
             except Exception as push_error:
                 logger.warning(f"Could not send push notification: {push_error}")
@@ -761,10 +763,14 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             reply_text = (button_reply.get("title") or list_reply.get("title") or "Respuesta interactiva")
             try:
                 from app.notifications import push_notifier
+                from app.bot.variant_overrides import get_label_for_variant
+                from app.db.leads import get_or_create_lead
+                interactive_lead = await get_or_create_lead(from_number, contact_name)
                 await push_notifier.send_new_message_notification(
                     contact_name=contact_name,
                     phone_number=from_number,
-                    message_preview=reply_text
+                    message_preview=reply_text,
+                    variant_label=get_label_for_variant(interactive_lead.get("bot_variant") if interactive_lead else None),
                 )
             except Exception as push_error:
                 logger.warning(f"Could not send push for interactive: {push_error}")
@@ -811,19 +817,27 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 display_url = media_url
             
             text_body = caption if caption else "[Imagen sin texto]"
-            
+
+            # Fetched here (not further down like before) so the push
+            # notification below can be labeled with the lead's bot_variant
+            # too — same lead row the bot_enabled check further down reuses.
+            from app.db.leads import get_or_create_lead
+            lead = await get_or_create_lead(from_number, contact_name)
+
             # Send push notification for incoming images (like text messages)
             try:
                 from app.notifications import push_notifier
+                from app.bot.variant_overrides import get_label_for_variant
                 preview = caption[:80] if caption else "📷 Imagen"
                 await push_notifier.send_new_message_notification(
                     contact_name=contact_name,
                     phone_number=from_number,
-                    message_preview=preview
+                    message_preview=preview,
+                    variant_label=get_label_for_variant(lead.get("bot_variant") if lead else None),
                 )
             except Exception as push_error:
                 logger.warning(f"Could not send push notification for image: {push_error}")
-            
+
             # ALWAYS send email notification for incoming images (even if bot is disabled)
             try:
                 await conversation_manager._send_incoming_message_email(
@@ -834,10 +848,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 )
             except Exception as email_error:
                 logger.warning(f"Could not send email notification for image: {email_error}")
-            
+
             # Check if bot is enabled for this user
-            from app.db.leads import get_or_create_lead
-            lead = await get_or_create_lead(from_number, contact_name)
             bot_enabled = lead.get("bot_enabled", True) if lead else True
             
             if not bot_enabled:
@@ -1052,18 +1064,26 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 display_url = media_url
             
             text_body = "[Audio recibido]"
-            
+
+            # Fetched here (not further down like before) so the push
+            # notification below can be labeled with the lead's bot_variant
+            # too — same lead row the bot_enabled check further down reuses.
+            from app.db.leads import get_or_create_lead
+            lead = await get_or_create_lead(from_number, contact_name)
+
             # Send push notification for incoming audio (like text messages)
             try:
                 from app.notifications import push_notifier
+                from app.bot.variant_overrides import get_label_for_variant
                 await push_notifier.send_new_message_notification(
                     contact_name=contact_name,
                     phone_number=from_number,
-                    message_preview="🎤 Audio"
+                    message_preview="🎤 Audio",
+                    variant_label=get_label_for_variant(lead.get("bot_variant") if lead else None),
                 )
             except Exception as push_error:
                 logger.warning(f"Could not send push notification for audio: {push_error}")
-            
+
             # ALWAYS send email notification for incoming audios (even if bot is disabled)
             try:
                 await conversation_manager._send_incoming_message_email(
@@ -1074,10 +1094,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 )
             except Exception as email_error:
                 logger.warning(f"Could not send email notification for audio: {email_error}")
-            
+
             # Check if bot is enabled for this user
-            from app.db.leads import get_or_create_lead
-            lead = await get_or_create_lead(from_number, contact_name)
             bot_enabled = lead.get("bot_enabled", True) if lead else True
             
             if not bot_enabled:

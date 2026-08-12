@@ -444,10 +444,10 @@ def test_ab_weighted_assignment():
 
     class _FakeCursor:
         """Mimics the two queries _pick_active_variant issues: variants
-        (key, weight), then assignment counts so far, both from a dict this
-        test mutates locally — never touches the real DB."""
+        (key, weight, is_human), then assignment counts so far, both from a
+        dict this test mutates locally — never touches the real DB."""
         def __init__(self, variants, counts):
-            self.variants = variants  # [(key, weight), ...]
+            self.variants = variants  # [(key, weight, is_human), ...]
             self.counts = counts      # {key: count}
             self._last = None
 
@@ -462,12 +462,12 @@ def test_ab_weighted_assignment():
         def fetchall(self):
             return self._last
 
-    variants = [("a", 3), ("b", 1)]
+    variants = [("a", 3, False), ("b", 1, False)]
     counts = {"a": 0, "b": 0}
     cur = _FakeCursor(variants, counts)
     sequence = []
     for _ in range(12):
-        picked = _pick_active_variant(cur)
+        picked, picked_is_human = _pick_active_variant(cur)
         sequence.append(picked)
         counts[picked] = counts.get(picked, 0) + 1
 
@@ -477,12 +477,21 @@ def test_ab_weighted_assignment():
         f"sequence={sequence} counts={counts}",
     )
 
-    # No active variants at all -> None, not a crash (the "usually no
-    # experiment running" case _pick_active_variant's docstring describes).
+    # No active variants at all -> (None, False), not a crash (the "usually
+    # no experiment running" case _pick_active_variant's docstring describes).
     empty_cur = _FakeCursor([], {})
     check(
-        "A/B weighted assignment returns None when no variant is active",
-        _pick_active_variant(empty_cur) is None,
+        "A/B weighted assignment returns (None, False) when no variant is active",
+        _pick_active_variant(empty_cur) == (None, False),
+    )
+
+    # A lone active variant flagged is_human=True must be picked AS human —
+    # this is what makes get_or_create_lead() start the new lead with
+    # bot_enabled=FALSE instead of the usual TRUE default.
+    human_cur = _FakeCursor([("tomas", 1, True)], {})
+    check(
+        "A/B weighted assignment surfaces is_human=True for a human variant",
+        _pick_active_variant(human_cur) == ("tomas", True),
     )
 
 

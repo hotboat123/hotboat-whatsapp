@@ -56,27 +56,33 @@ def _ensure_variant_col(cur) -> None:
     _variant_col_ensured = True
 
 
-def _pick_active_variant(cur) -> Optional[str]:
+def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     """Deterministically pick one currently-active A/B variant for a
-    brand-new lead, or None if no experiment is running (bot_ab_variants
-    table missing or empty is a normal, expected state — most of the time
-    there's no test active).
+    brand-new lead, or (None, False) if no experiment is running
+    (bot_ab_variants table missing or empty is a normal, expected state —
+    most of the time there's no test active).
 
     Not a coin flip: each variant has a relative `weight` (default 1, so
     with no weights set this behaves like a plain even split). We pick
     whichever active variant is furthest behind its target share —
     count_assigned / weight, lowest wins — so e.g. a 70/30 weight split
     tracks close to 70/30 from the very first few leads, instead of a
-    50/50 random pick that could drift for a while on a small sample."""
+    50/50 random pick that could drift for a while on a small sample.
+
+    Returns (variant_key, is_human) — is_human lets the caller set
+    bot_enabled=FALSE on the new lead right away when the picked variant
+    is a "un humano contesta" variant (Tomás, Esteban, ...), so nothing
+    auto-replies before an operator gets to it. See bot_ab_variants.is_human
+    in app/booking/bot_config_router.py."""
     try:
-        cur.execute("SELECT variant_key, weight FROM bot_ab_variants WHERE is_active = TRUE")
+        cur.execute("SELECT variant_key, weight, is_human FROM bot_ab_variants WHERE is_active = TRUE")
         variants = cur.fetchall()
     except Exception:
-        return None
+        return None, False
     if not variants:
-        return None
+        return None, False
     if len(variants) == 1:
-        return variants[0][0]
+        return variants[0][0], bool(variants[0][2])
 
     try:
         cur.execute("SELECT bot_variant, COUNT(*) FROM whatsapp_leads WHERE bot_variant IS NOT NULL GROUP BY bot_variant")
@@ -84,13 +90,14 @@ def _pick_active_variant(cur) -> Optional[str]:
     except Exception:
         counts = {}
 
+    is_human_by_key = {variant_key: bool(is_human) for variant_key, _, is_human in variants}
     best_key, best_score = None, None
-    for variant_key, weight in variants:
+    for variant_key, weight, _ in variants:
         w = weight or 1
         score = counts.get(variant_key, 0) / w
         if best_score is None or score < best_score:
             best_score, best_key = score, variant_key
-    return best_key
+    return best_key, is_human_by_key.get(best_key, False)
 
 
 def save_lead_language(phone_number: str, language: str) -> None:
@@ -193,14 +200,19 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                 else:
                     # Create new lead — randomly assign an active A/B variant
                     # (if any experiment is running) so it sticks for the
-                    # whole conversation.
-                    variant_key = _pick_active_variant(cur)
+                    # whole conversation. If that variant is "un humano
+                    # contesta" (is_human), start with bot_enabled=FALSE right
+                    # away — reuses the existing per-lead bot_enabled gate
+                    # (checked in webhook.py) instead of a parallel one, so
+                    # nothing auto-replies before an operator gets to it.
+                    variant_key, variant_is_human = _pick_active_variant(cur)
+                    initial_bot_enabled = not variant_is_human
                     cur.execute("""
                         INSERT INTO whatsapp_leads
-                        (phone_number, customer_name, lead_status, last_interaction_at, created_at, updated_at, bot_variant)
-                        VALUES (%s, %s, 'unknown', NOW(), NOW(), NOW(), %s)
+                        (phone_number, customer_name, lead_status, last_interaction_at, created_at, updated_at, bot_variant, bot_enabled)
+                        VALUES (%s, %s, 'unknown', NOW(), NOW(), NOW(), %s, %s)
                         RETURNING id
-                    """, (phone_number, customer_name, variant_key))
+                    """, (phone_number, customer_name, variant_key, initial_bot_enabled))
 
                     lead_id = cur.fetchone()[0]
                     conn.commit()
@@ -215,7 +227,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "created_at": datetime.now(CHILE_TZ).isoformat(),
                         "updated_at": datetime.now(CHILE_TZ).isoformat(),
                         "last_interaction_at": datetime.now(CHILE_TZ).isoformat(),
-                        "bot_enabled": True,
+                        "bot_enabled": initial_bot_enabled,
                         "unread_count": 0,
                         "last_read_at": None,
                         "priority": 0,

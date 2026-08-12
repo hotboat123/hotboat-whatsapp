@@ -50,6 +50,14 @@ _system_prompt_cache_loaded_at: float = 0.0
 _menu_disabled_cache: FrozenSet[str] = frozenset()
 _menu_disabled_cache_loaded_at: float = 0.0
 
+# Separate cache for a variant's display label (e.g. "IA 1", "Control",
+# "Tomás") — see get_label_for_variant(). Unlike the getters above this one
+# takes an explicit variant_key instead of reading the contextvar: it's used
+# from webhook.py to label the "new message" push notification, at a point
+# before set_current_variant() has necessarily been called for that message.
+_label_cache: dict[str, str] = {}
+_label_cache_loaded_at: float = 0.0
+
 
 def set_current_variant(variant_key: Optional[str]) -> None:
     _current_variant.set(variant_key)
@@ -85,12 +93,13 @@ def invalidate_cache() -> None:
     get_disabled_triggers() call to reload from DB. Called by the admin save/
     delete endpoints so edits are visible on the very next message instead of
     waiting out the TTL."""
-    global _cache_loaded_at, _ai_model_cache_loaded_at, _disabled_triggers_cache_loaded_at, _system_prompt_cache_loaded_at, _menu_disabled_cache_loaded_at
+    global _cache_loaded_at, _ai_model_cache_loaded_at, _disabled_triggers_cache_loaded_at, _system_prompt_cache_loaded_at, _menu_disabled_cache_loaded_at, _label_cache_loaded_at
     _cache_loaded_at = 0.0
     _ai_model_cache_loaded_at = 0.0
     _disabled_triggers_cache_loaded_at = 0.0
     _system_prompt_cache_loaded_at = 0.0
     _menu_disabled_cache_loaded_at = 0.0
+    _label_cache_loaded_at = 0.0
 
 
 def _reload_ai_model_cache() -> None:
@@ -224,6 +233,36 @@ def get_current_show_welcome_menu() -> bool:
     if time.monotonic() - _menu_disabled_cache_loaded_at > _CACHE_TTL_SECONDS:
         _reload_menu_disabled_cache()
     return variant_key not in _menu_disabled_cache
+
+
+def _reload_label_cache() -> None:
+    global _label_cache, _label_cache_loaded_at
+    from app.db.connection import get_connection
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT variant_key, label FROM bot_ab_variants")
+                rows = cur.fetchall()
+        _label_cache = {r[0]: r[1] for r in rows if r[1]}
+        _label_cache_loaded_at = time.monotonic()
+    except Exception as e:
+        logger.warning(f"Failed to load bot_ab_variants label cache: {e}")
+        _label_cache = {}
+        _label_cache_loaded_at = time.monotonic()
+
+
+def get_label_for_variant(variant_key: Optional[str]) -> Optional[str]:
+    """Display label for a variant_key (e.g. "IA 1", "Control", "Tomás") —
+    used to prefix the "new message" push notification with who/what is
+    handling that lead's conversation (an automated variant or a specific
+    person for a human-only variant). None if variant_key is falsy or not
+    found — callers should just omit the prefix in that case."""
+    if not variant_key:
+        return None
+    if time.monotonic() - _label_cache_loaded_at > _CACHE_TTL_SECONDS:
+        _reload_label_cache()
+    return _label_cache.get(variant_key)
 
 
 def get_override(message_key: str) -> Optional[str]:

@@ -4525,6 +4525,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <input id="nv-weight" type="number" min="1" value="1" style="width:70px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none">
               </div>
             </div>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;user-select:none;margin-bottom:.6rem" title="Los clientes nuevos asignados a esta variante NO reciben ninguna respuesta automática — quedan esperando a que un humano les conteste a mano por WhatsApp. Úsalo para variantes con nombre de persona, ej. Tomás, Esteban.">
+              <input id="nv-is-human" type="checkbox" style="width:14px;height:14px;cursor:pointer;accent-color:#10b981">
+              <span style="font-size:.8rem;color:var(--text)">👤 Responde un humano (sin respuesta automática)</span>
+            </label>
             <div style="display:flex;gap:.5rem;justify-content:flex-end">
               <button onclick="toggleNewVariantForm()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer">Cancelar</button>
               <button onclick="createAbVariant()" style="background:#10b981;color:#fff;border:none;border-radius:7px;padding:.35rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600">Crear variante</button>
@@ -13781,17 +13785,19 @@ async function createAbVariant(){
   const variant_key = (document.getElementById('nv-key').value || '').trim().toLowerCase().replace(/\s+/g,'_');
   const label = (document.getElementById('nv-label').value || '').trim();
   const weight = Math.max(1, parseInt(document.getElementById('nv-weight').value, 10) || 1);
+  const is_human = document.getElementById('nv-is-human').checked;
   if(!variant_key){ showToast('❌ La clave es obligatoria', true); return; }
   try {
     const r = await fetch('/api/admin/bot/ab-variants', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({variant_key, label: label || variant_key, weight})
+      body: JSON.stringify({variant_key, label: label || variant_key, weight, is_human})
     });
     if(!r.ok) throw new Error(await r.text());
     showToast('✅ Variante creada: ' + variant_key);
     document.getElementById('nv-key').value = '';
     document.getElementById('nv-label').value = '';
     document.getElementById('nv-weight').value = '1';
+    document.getElementById('nv-is-human').checked = false;
     document.getElementById('new-variant-form').style.display = 'none';
     loadAbVariants();
   } catch(e){ showToast('❌ '+e.message, true); }
@@ -13834,16 +13840,20 @@ async function loadAbVariants(){
       div.style.cssText = `background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem;display:flex;flex-direction:column;gap:.5rem;${v.is_active?'':'opacity:.55'}`;
       div.innerHTML = `
         <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
-          <span style="font-weight:600;font-size:.85rem;cursor:pointer" onclick="toggleVariantOverrides('${v.variant_key}','${safeKey}')">${isOpen?'▾':'▸'} ${escHtml(v.label)}</span>
+          <span style="font-weight:600;font-size:.85rem;cursor:pointer" onclick="toggleVariantOverrides('${v.variant_key}','${safeKey}')">${isOpen?'▾':'▸'} ${v.is_human?'👤 ':''}${escHtml(v.label)}</span>
           <code style="font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.06);padding:.1rem .4rem;border-radius:4px">${escHtml(v.variant_key)}</code>
-          <span style="font-size:.72rem;color:var(--muted)">${v.override_count} texto${v.override_count===1?'':'s'} alternativo${v.override_count===1?'':'s'}</span>
+          ${v.is_human?'<span style="font-size:.72rem;color:#10b981;font-weight:600">Sin respuesta automática</span>':`<span style="font-size:.72rem;color:var(--muted)">${v.override_count} texto${v.override_count===1?'':'s'} alternativo${v.override_count===1?'':'s'}</span>`}
           <label style="display:flex;align-items:center;gap:.3rem" title="Peso relativo para el reparto determinístico">
             <span style="font-size:.72rem;color:var(--muted)">Peso</span>
             <input type="number" min="1" value="${v.weight||1}" onchange="updateVariantField(${v.id},'weight',Math.max(1,parseInt(this.value,10)||1))"
               style="width:48px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.15rem .3rem;font-size:.75rem">
           </label>
           ${v.is_active && v.target_share_pct!=null?`<span style="font-size:.72rem;color:var(--gold)">≈${v.target_share_pct}% de los nuevos</span>`:''}
-          <label style="display:flex;align-items:center;gap:.28rem;cursor:pointer;user-select:none;margin-left:auto" title="Recibe clientes nuevos">
+          <label style="display:flex;align-items:center;gap:.28rem;cursor:pointer;user-select:none;margin-left:auto" title="Los clientes nuevos asignados a esta variante quedan sin respuesta automática — esperan a que un humano les conteste a mano">
+            <input type="checkbox" ${v.is_human?'checked':''} onchange="updateVariantField(${v.id},'is_human',this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:#10b981">
+            <span style="font-size:.75rem;color:var(--muted)">👤 Humano</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:.28rem;cursor:pointer;user-select:none" title="Recibe clientes nuevos">
             <input type="checkbox" ${v.is_active?'checked':''} onchange="toggleVariantActive(${v.id}, this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:var(--gold)">
             <span style="font-size:.75rem;color:var(--muted)">Activa</span>
           </label>
