@@ -89,6 +89,50 @@ def _check_auth(key: str):
     pass  # Auth temporarily disabled — per-section enforcement is frontend-only
 
 
+# ── Password hashing (admin_users) ──────────────────────────────────────────
+# Passwords used to be stored in plaintext in the `key` field and compared
+# with `==` — anyone with DB access (or a log line that happened to capture
+# a request header) could read them directly. Hashed 2026-08-12 at the
+# owner's explicit request ("debería estar lo más seguro posible").
+import bcrypt
+
+
+def _hash_key(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_admin_key(x_admin_key: str, users: list) -> Optional[dict]:
+    """Find the admin_users entry matching x_admin_key, or None.
+
+    Checks `key_hash` (bcrypt, constant-time via bcrypt.checkpw) when
+    present. For an entry not yet migrated (still has the legacy plaintext
+    `key` field from before 2026-08-12), falls back to a direct comparison
+    — and on that first successful login, opportunistically hashes the
+    password and deletes the plaintext, persisting the change immediately.
+    This means every existing admin (Tom, Esteban, ...) keeps using the
+    exact same password they already have — nobody has to be told a new
+    one — but from their very next login onward, it's no longer sitting in
+    the database in readable form. Shared between the two login flows that
+    check admin_users: POST /api/admin/auth/login here, and
+    POST /api/admin/chat-login in main.py (the WhatsApp iframe gate)."""
+    if not x_admin_key:
+        return None
+    for u in users:
+        key_hash = u.get("key_hash")
+        if key_hash:
+            try:
+                if bcrypt.checkpw(x_admin_key.encode("utf-8"), key_hash.encode("utf-8")):
+                    return u
+            except Exception:
+                continue
+        elif u.get("key") and u["key"] == x_admin_key:
+            u["key_hash"] = _hash_key(x_admin_key)
+            u.pop("key", None)
+            _save_admin_users(users)
+            return u
+    return None
+
+
 @admin_router.post("/api/admin/auth/login")
 async def admin_login(x_admin_key: str = Header("")):
     """Return user info (name + allowed sections) for the given key.
@@ -101,7 +145,7 @@ async def admin_login(x_admin_key: str = Header("")):
     users = _get_admin_users()
     if not users:
         return {"name": "Admin", "sections": None, "is_super": True}
-    user = next((u for u in users if u.get("key") == x_admin_key), None)
+    user = verify_admin_key(x_admin_key, users)
     if not user:
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
     return {
@@ -118,8 +162,13 @@ async def list_admin_users(x_admin_key: str = Header("")):
     users = _get_admin_users()
     masked = []
     for i, u in enumerate(users):
-        k = u.get("key", "")
-        masked_key = (k[:2] + "***" + k[-2:]) if len(k) > 4 else "***"
+        # Entradas ya migradas (key_hash) no tienen ningún texto plano del
+        # que mostrar un preview parcial — eso es justamente el punto.
+        if u.get("key_hash"):
+            masked_key = "🔒 protegida"
+        else:
+            k = u.get("key", "")
+            masked_key = (k[:2] + "***" + k[-2:]) if len(k) > 4 else "***"
         masked.append({"idx": i, "name": u.get("name", ""), "key_masked": masked_key,
                        "sections": u.get("sections"), "variant_key": u.get("variant_key")})
     return {"users": masked}
@@ -141,9 +190,12 @@ async def create_admin_user(request: Request, x_admin_key: str = Header("")):
     if not name or not key:
         raise HTTPException(400, "nombre y contraseña son requeridos")
     users = _get_admin_users()
-    if any(u.get("key") == key for u in users):
+    # verify_admin_key (no solo `u.get("key")==key`) para detectar el
+    # duplicado incluso contra usuarios ya migrados a key_hash, donde no
+    # queda ningún texto plano con el que comparar directamente.
+    if verify_admin_key(key, users) is not None:
         raise HTTPException(409, "Ya existe un usuario con esa contraseña")
-    users.append({"name": name, "key": key, "sections": sections, "variant_key": variant_key})
+    users.append({"name": name, "key_hash": _hash_key(key), "sections": sections, "variant_key": variant_key})
     _save_admin_users(users)
     return {"ok": True}
 
@@ -159,9 +211,11 @@ async def update_admin_user(idx: int, request: Request, x_admin_key: str = Heade
         users[idx]["name"] = (body["name"] or "").strip()
     if body.get("key"):
         new_key = body["key"].strip()
-        if any(i != idx and u.get("key") == new_key for i, u in enumerate(users)):
+        others = [u for i, u in enumerate(users) if i != idx]
+        if verify_admin_key(new_key, others) is not None:
             raise HTTPException(409, "Ya existe un usuario con esa contraseña")
-        users[idx]["key"] = new_key
+        users[idx]["key_hash"] = _hash_key(new_key)
+        users[idx].pop("key", None)
     if "sections" in body:
         users[idx]["sections"] = body["sections"]
     if "variant_key" in body:

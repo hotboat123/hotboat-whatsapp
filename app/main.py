@@ -1073,6 +1073,7 @@ async def admin_chat_login(x_admin_key: str = Header("")):
     reply, not just "some admin" — see _make_session_token/
     _get_session_variant_key above."""
     import json as _json
+    from app.booking.admin_router import verify_admin_key
     master_key = os.environ.get("ADMIN_MASTER_KEY", "")
     matched_variant_key = ""
     if master_key and x_admin_key == master_key:
@@ -1083,7 +1084,10 @@ async def admin_chat_login(x_admin_key: str = Header("")):
         if not users:
             valid = True
         else:
-            user = next((u for u in users if u.get("key") == x_admin_key), None)
+            # verify_admin_key checks the bcrypt hash (or migrates a
+            # not-yet-hashed legacy entry in place) — same helper the
+            # booking-admin login uses, see its docstring in admin_router.py.
+            user = verify_admin_key(x_admin_key, users)
             valid = user is not None
             if user:
                 matched_variant_key = user.get("variant_key") or ""
