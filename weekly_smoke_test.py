@@ -462,19 +462,23 @@ def test_ab_weighted_assignment():
         def fetchall(self):
             return self._last
 
+    # A plain weighted random pick (2026-08-12, replaced the earlier
+    # "furthest behind their all-time count" algorithm — see
+    # _pick_active_variant's docstring for why) — no exact sequence to
+    # assert on anymore, so this checks the 3:1 weight ratio holds
+    # statistically over many picks instead of exactly over a handful.
     variants = [("a", 3, False), ("b", 1, False)]
+    cur = _FakeCursor(variants, {})
+    N = 4000
     counts = {"a": 0, "b": 0}
-    cur = _FakeCursor(variants, counts)
-    sequence = []
-    for _ in range(12):
-        picked, picked_is_human = _pick_active_variant(cur)
-        sequence.append(picked)
-        counts[picked] = counts.get(picked, 0) + 1
-
+    for _ in range(N):
+        picked, _ = _pick_active_variant(cur)
+        counts[picked] += 1
+    a_share = counts["a"] / N
     check(
-        "A/B weighted assignment (3:1) converges to the exact ratio over 12 picks",
-        counts == {"a": 9, "b": 3},
-        f"sequence={sequence} counts={counts}",
+        "A/B weighted assignment (3:1) lands close to 75% for the weight-3 variant over 4000 picks",
+        0.70 <= a_share <= 0.80,
+        f"counts={counts} a_share={a_share:.3f}",
     )
 
     # No active variants at all -> (None, False), not a crash (the "usually

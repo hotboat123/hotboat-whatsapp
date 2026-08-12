@@ -57,17 +57,22 @@ def _ensure_variant_col(cur) -> None:
 
 
 def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
-    """Deterministically pick one currently-active A/B variant for a
-    brand-new lead, or (None, False) if no experiment is running
-    (bot_ab_variants table missing or empty is a normal, expected state —
-    most of the time there's no test active).
+    """Pick one currently-active A/B variant for a brand-new lead, or
+    (None, False) if no experiment is running (bot_ab_variants table
+    missing or empty is a normal, expected state — most of the time
+    there's no test active).
 
-    Not a coin flip: each variant has a relative `weight` (default 1, so
-    with no weights set this behaves like a plain even split). We pick
-    whichever active variant is furthest behind its target share —
-    count_assigned / weight, lowest wins — so e.g. a 70/30 weight split
-    tracks close to 70/30 from the very first few leads, instead of a
-    50/50 random pick that could drift for a while on a small sample.
+    A weighted random pick — each active variant's `weight` (default 1) is
+    its relative probability, independent of any accumulated history. NOT
+    "whoever is furthest behind their all-time count/weight ratio" (that
+    was the original 2026-07-23 design, replaced 2026-08-12): with variants
+    created at very different times — e.g. "control" had ~180 leads before
+    "tom"/"esteban" (created later) had any — a catch-up algorithm makes
+    the newer variants absorb ~100% of new leads for a long time to close
+    that historical gap, which reads as "control gets nothing" even though
+    weights are equal. The owner explicitly asked for weights to mean
+    "share of new leads going forward," not "eventually equalize the
+    lifetime total," so this is a plain weighted coin flip instead.
 
     Returns (variant_key, is_human) — is_human lets the caller set
     bot_enabled=FALSE on the new lead right away when the picked variant
@@ -80,12 +85,9 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     every new lead, by weight, same as if no one had a schedule set.
     Schedule ONLY gates whether an operator gets paged about that lead's
     messages later (see is_variant_in_hours() in variant_overrides.py,
-    used from webhook.py) — it was briefly wired into this function too
-    (2026-08-12), but that made Tom/Esteban's non-overlapping windows the
-    ONLY eligible candidate during their hours, locking Control out of new
-    leads almost entirely instead of getting its fair share by weight —
-    exactly backwards from "todas tienen el mismo peso, faltan asignaciones
-    control" (reported live, same day). Reverted the same day."""
+    used from webhook.py)."""
+    import random
+
     try:
         cur.execute("SELECT variant_key, weight, is_human FROM bot_ab_variants WHERE is_active = TRUE")
         variants = cur.fetchall()
@@ -97,20 +99,9 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     if len(variants) == 1:
         return variants[0][0], bool(variants[0][2])
 
-    try:
-        cur.execute("SELECT bot_variant, COUNT(*) FROM whatsapp_leads WHERE bot_variant IS NOT NULL GROUP BY bot_variant")
-        counts = dict(cur.fetchall())
-    except Exception:
-        counts = {}
-
-    is_human_by_key = {variant_key: bool(is_human) for variant_key, _, is_human in variants}
-    best_key, best_score = None, None
-    for variant_key, weight, _ in variants:
-        w = weight or 1
-        score = counts.get(variant_key, 0) / w
-        if best_score is None or score < best_score:
-            best_score, best_key = score, variant_key
-    return best_key, is_human_by_key.get(best_key, False)
+    weights = [w or 1 for _, w, _ in variants]
+    picked = random.choices(variants, weights=weights, k=1)[0]
+    return picked[0], bool(picked[2])
 
 
 def save_lead_language(phone_number: str, language: str) -> None:
