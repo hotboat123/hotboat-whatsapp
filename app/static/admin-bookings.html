@@ -5420,6 +5420,7 @@ async function openModal(id){
         <span class="chip" style="background:${sourceColor(r.source)}22;color:${sourceColor(r.source)}">${sourceLabel(r.source)}</span>
         ${r.flujo ? `<span class="chip" style="background:${flujoColor(r.flujo)}22;color:${flujoColor(r.flujo)}">${flujoLabel(r.flujo)}</span>` : ''}
         ${r.platform ? `<span class="chip" style="background:${platformColor(r.platform)}22;color:${platformColor(r.platform)}" title="${r.ad_name?'Anuncio: '+r.ad_name:'Origen detectado por UTM/CTWA'}">${platformLabel(r.platform)}${r.ad_name?' · '+r.ad_name:''}</span>` : ''}
+        ${r.bot_variant ? `<span class="chip" style="background:${r.bot_variant_is_human?'#7c3aed':'#555'}22;color:${r.bot_variant_is_human?'#a78bfa':'#aaa'}" title="Quién mandó el último mensaje de esta conversación">${r.bot_variant_is_human?'👤':'🤖'} ${escHtml(r.bot_variant_label||r.bot_variant)}</span>` : ''}
         <span class="chip">ID: ${r.appointment_id||r.source_id||r.id}</span>
         <div style="display:flex;align-items:center;gap:.35rem;margin-left:.25rem">
           <span style="font-size:.72rem;color:#f0f0f8;font-weight:600;white-space:nowrap">MEDIO CONTACTO</span>

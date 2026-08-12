@@ -352,6 +352,54 @@ async def get_reserva(rid: int, x_admin_key: str = Header("")):
                 r["platform"] = _booking_platform_bucket(r, ad_platform)
                 r["ad_name"] = ad_source
 
+                # Bot variant (a quién está asociada esta conversación) —
+                # mismo criterio que bot_variant_join() en
+                # hotboat-email-marketing-spec/backend/app/services/
+                # platform_attribution.py: el último mensaje SALIENTE con
+                # variante estampada (quien terminó respondiendo, no a
+                # quién se le asignó inicialmente — ver
+                # whatsapp_conversations.bot_variant). Fallback a
+                # whatsapp_leads.bot_variant para conversaciones de antes
+                # de que existiera el estampado por mensaje.
+                r["bot_variant"] = None
+                r["bot_variant_label"] = None
+                r["bot_variant_is_human"] = False
+                if phone_norm:
+                    try:
+                        cur.execute("""
+                            SELECT COALESCE(
+                                (
+                                    SELECT wc2.bot_variant
+                                    FROM whatsapp_conversations wc2
+                                    WHERE wc2.phone_number = %s
+                                      AND wc2.direction = 'outgoing'
+                                      AND wc2.bot_variant IS NOT NULL
+                                    ORDER BY wc2.created_at DESC
+                                    LIMIT 1
+                                ),
+                                (
+                                    SELECT wl2.bot_variant
+                                    FROM whatsapp_leads wl2
+                                    WHERE regexp_replace(wl2.phone_number, '[^0-9]', '', 'g') = %s
+                                    ORDER BY (wl2.bot_variant IS NOT NULL) DESC, wl2.updated_at DESC NULLS LAST, wl2.id DESC
+                                    LIMIT 1
+                                )
+                            ) AS bot_variant
+                        """, (phone_norm, phone_norm))
+                        bv_row = cur.fetchone()
+                        if bv_row and bv_row[0]:
+                            r["bot_variant"] = bv_row[0]
+                            cur.execute(
+                                "SELECT label, is_human FROM bot_ab_variants WHERE variant_key = %s",
+                                (bv_row[0],),
+                            )
+                            v_row = cur.fetchone()
+                            if v_row:
+                                r["bot_variant_label"] = v_row[0]
+                                r["bot_variant_is_human"] = bool(v_row[1])
+                    except Exception:
+                        logger.exception("bot_variant lookup failed for reserva %s", rid)
+
                 for k in ("fecha", "created_at", "updated_at"):
                     if r.get(k): r[k] = r[k].isoformat()
                 if r.get("hora"): r["hora"] = str(r["hora"])
