@@ -14317,6 +14317,15 @@ async function deleteBotKeyword(id){
         </label>
         <div id="um-sections" style="display:grid;grid-template-columns:1fr 1fr;gap:.35rem .7rem;margin-top:.5rem;font-size:.82rem"></div>
       </div>
+      <div>
+        <label style="font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em" title="Cuando esta persona entra al chat de WhatsApp y responde un mensaje, el sistema sabe que fue ella (no solo 'admin') — reasigna la conversación a su variante si estaba con otra persona, y la conversión se mide a nombre de quien realmente contestó.">
+          🤖 Variante vinculada (opcional)
+        </label>
+        <select id="um-variant" style="width:100%;margin-top:.3rem;padding:.55rem .75rem;background:var(--input);border:1px solid var(--border);color:#fff;border-radius:8px;font-size:.88rem;outline:none;box-sizing:border-box">
+          <option value="">— Ninguna (identidad genérica) —</option>
+        </select>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.25rem">Vincula este login a "Tom", "Esteban", etc. para que el sistema sepa quién respondió cada mensaje.</div>
+      </div>
     </div>
     <div style="display:flex;gap:.6rem;margin-top:1.3rem">
       <button onclick="closeUserModal()" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:.65rem;font-size:.85rem;cursor:pointer">Cancelar</button>
@@ -14353,11 +14362,14 @@ async function loadAdminUsers(){
     }
     el.innerHTML = users.map(u=>{
       const secs = u.sections ? u.sections.map(s=>(_SECTION_LABELS[s]||s)).join(', ') : '🔓 Acceso completo';
+      const variantBadge = u.variant_key
+        ? `<div style="font-size:.72rem;color:#4a9eff;margin-top:.1rem">🤖 Vinculado a: ${escHtml(u.variant_key)}</div>` : '';
       return `<div style="display:flex;align-items:flex-start;gap:.7rem;padding:.6rem .75rem;background:var(--surface);border:1px solid var(--border);border-radius:10px">
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:.88rem">${escHtml(u.name)}</div>
           <div style="font-size:.72rem;color:var(--muted);margin-top:.15rem">🔑 ${u.key_masked}</div>
           <div style="font-size:.72rem;color:var(--muted);margin-top:.1rem;line-height:1.5">${escHtml(secs)}</div>
+          ${variantBadge}
         </div>
         <div style="display:flex;gap:.4rem;flex-shrink:0">
           <button onclick="openUserModal(${u.idx})" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.28rem .6rem;font-size:.78rem;cursor:pointer">✏️</button>
@@ -14383,6 +14395,21 @@ async function openUserModal(idx){
     </label>`
   ).join('');
 
+  // Variantes del bot disponibles para vincular — se recarga cada vez que se
+  // abre el modal (no cacheado) para que una variante creada hace un
+  // segundo en la pestaña Chatbot ya aparezca acá.
+  const variantSelect = document.getElementById('um-variant');
+  variantSelect.innerHTML = '<option value="">— Ninguna (identidad genérica) —</option>';
+  try {
+    const vd = await api('/api/admin/bot/ab-variants');
+    (vd.variants || []).forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.variant_key;
+      opt.textContent = (v.is_human ? '👤 ' : '🤖 ') + v.label;
+      variantSelect.appendChild(opt);
+    });
+  } catch(_){}
+
   if(_userModalIdx !== null){
     try {
       const d = await api('/api/admin/users');
@@ -14394,6 +14421,7 @@ async function openUserModal(idx){
             cb.checked = u.sections.includes(cb.value);
           });
         }
+        variantSelect.value = u.variant_key || '';
       }
     } catch(_){}
   }
@@ -14412,14 +14440,15 @@ async function saveUserModal(){
 
   const checked = [...document.querySelectorAll('input[name="um-sec"]:checked')].map(cb=>cb.value);
   const sections = checked.length ? checked : null; // null = full access
+  const variant_key = document.getElementById('um-variant').value || null;
 
   try {
     if(_userModalIdx !== null){
-      const body = {name, sections};
+      const body = {name, sections, variant_key};
       if(key) body.key = key;
       await api(`/api/admin/users/${_userModalIdx}`,{method:'PUT',body:JSON.stringify(body)});
     } else {
-      await api('/api/admin/users',{method:'POST',body:JSON.stringify({name,key,sections})});
+      await api('/api/admin/users',{method:'POST',body:JSON.stringify({name,key,sections,variant_key})});
     }
     closeUserModal();
     loadAdminUsers();

@@ -232,6 +232,30 @@ async def get_booked_slots(
         return []
 
 
+_conv_variant_col_ensured: bool = False
+
+def _ensure_conv_variant_col(cur) -> None:
+    """Add whatsapp_conversations.bot_variant if not present (runs once per
+    process). Frozen per-message record of which bot_ab_variants.variant_key
+    was actually responsible for THIS specific message — for an outgoing
+    reply from a logged-in operator (see /api/send-message in main.py), the
+    variant that operator is linked to; for an outgoing automated bot reply
+    or an incoming customer message, the lead's bot_variant at that moment.
+    Deliberately separate from whatsapp_leads.bot_variant, which is a single
+    mutable "current" value that gets overwritten on every reassignment —
+    it can't answer "who actually answered THIS message" after the fact,
+    only "who's assigned right now." Added 2026-08-12 so conversion can be
+    measured against whoever really handled a conversation (e.g. Esteban
+    taking over after Tom didn't reply), not just the initial assignment."""
+    global _conv_variant_col_ensured
+    if _conv_variant_col_ensured:
+        return
+    cur.execute(
+        "ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS bot_variant TEXT"
+    )
+    _conv_variant_col_ensured = True
+
+
 async def save_conversation(
     phone_number: str,
     customer_name: str,
@@ -239,7 +263,8 @@ async def save_conversation(
     response_text: str,
     message_type: str = "text",
     message_id: str = None,
-    direction: str = "incoming"
+    direction: str = "incoming",
+    bot_variant: str = None,
 ) -> Optional[int]:
     """
     Save conversation to database for analytics
@@ -252,6 +277,9 @@ async def save_conversation(
         message_type: Type of message
         message_id: WhatsApp message ID (to avoid duplicates)
         direction: 'incoming' or 'outgoing'
+        bot_variant: who/what this SPECIFIC message belongs to — see
+            _ensure_conv_variant_col above. None (default) when the caller
+            doesn't know/care (most existing call sites, unchanged).
 
     Returns:
         The inserted row's id (whatsapp_conversations.id), or None if the
@@ -265,6 +293,7 @@ async def save_conversation(
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                _ensure_conv_variant_col(cur)
                 # Check if message already exists (by message_id if available)
                 if message_id:
                     cur.execute("""
@@ -278,10 +307,10 @@ async def save_conversation(
 
                 cur.execute("""
                     INSERT INTO whatsapp_conversations
-                    (phone_number, customer_name, message_text, response_text, message_type, message_id, direction, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    (phone_number, customer_name, message_text, response_text, message_type, message_id, direction, bot_variant, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     RETURNING id
-                """, (phone_number, customer_name, message_text, response_text, message_type, message_id, direction))
+                """, (phone_number, customer_name, message_text, response_text, message_type, message_id, direction, bot_variant))
                 new_id = cur.fetchone()[0]
 
                 # Retention trim REMOVED 2026-08-04: this used to permanently

@@ -141,9 +141,15 @@ def _get_secret() -> str:
         _SESSION_SECRET = _secrets.token_hex(32)
     return _SESSION_SECRET
 
-def _make_session_token(username: str) -> str:
+def _make_session_token(username: str, variant_key: str = "") -> str:
     ts = str(int(_time.time()))
-    payload = f"{username}:{ts}"
+    # variant_key (optional): the bot_ab_variants row this session is
+    # linked to, if the login went through /api/admin/chat-login and the
+    # matched admin_users entry has one set — see that endpoint. Empty
+    # string (not omitted) so the payload always has a stable 3-part shape
+    # for new tokens; the plain username/password login at /api/auth/login
+    # never sets this, same as before this existed.
+    payload = f"{username}:{variant_key}:{ts}"
     sig = _hmac.new(_get_secret().encode(), payload.encode(), _hashlib.sha256).hexdigest()
     return f"{payload}:{sig}"
 
@@ -164,6 +170,27 @@ def _get_auth_cookie(request: Request) -> str | None:
 def _is_authenticated(request: Request) -> bool:
     token = _get_auth_cookie(request)
     return bool(token and _verify_session_token(token))
+
+def _get_session_variant_key(request: Request) -> str | None:
+    """Decode the operator's linked bot_ab_variants.variant_key out of an
+    already-verified kia_auth cookie, or None if there isn't one — either
+    because this session came from the plain shared /api/auth/login (no
+    variant slot in its 2-part payload) or the matched admin_users entry
+    just doesn't have variant_key set. Used by /api/send-message to know
+    who's actually sending a manual reply, so it can reassign the
+    conversation and stamp the message for real per-person conversion
+    attribution (see whatsapp_conversations.bot_variant)."""
+    token = _get_auth_cookie(request)
+    if not token or not _verify_session_token(token):
+        return None
+    try:
+        payload = token.rsplit(":", 1)[0]
+        parts = payload.split(":")
+        if len(parts) == 3 and parts[1]:
+            return parts[1]
+    except Exception:
+        pass
+    return None
 
 # ── Auto-sync background task ──────────────────────────────────────────────────
 SYNC_INTERVAL_MINUTES = 30
@@ -1038,18 +1065,31 @@ async def logout():
 
 @app.post("/api/admin/chat-login")
 async def admin_chat_login(x_admin_key: str = Header("")):
-    """Sets kia_auth cookie when called with a valid admin key (for WhatsApp iframe)."""
+    """Sets kia_auth cookie when called with a valid admin key (for WhatsApp
+    iframe). If the key matches a specific admin_users entry with a
+    variant_key linked (e.g. "tom", "esteban" — set via the admin panel's
+    user editor), that gets signed into the session token so
+    /api/send-message later knows exactly which operator is sending a
+    reply, not just "some admin" — see _make_session_token/
+    _get_session_variant_key above."""
     import json as _json
     master_key = os.environ.get("ADMIN_MASTER_KEY", "")
+    matched_variant_key = ""
     if master_key and x_admin_key == master_key:
         valid = True
     else:
         raw = _get_operator_setting("admin_users") or "[]"
         users = _json.loads(raw)
-        valid = not users or any(u.get("key") == x_admin_key for u in users)
+        if not users:
+            valid = True
+        else:
+            user = next((u for u in users if u.get("key") == x_admin_key), None)
+            valid = user is not None
+            if user:
+                matched_variant_key = user.get("variant_key") or ""
     if not valid:
         raise HTTPException(status_code=401)
-    token = _make_session_token("admin")
+    token = _make_session_token("admin", matched_variant_key)
     response = JSONResponse({"ok": True})
     response.set_cookie(key="kia_auth", value=token, max_age=60*60*24*30,
                         httponly=True, samesite="lax", secure=settings.is_production)
@@ -2413,8 +2453,51 @@ class SendMessageRequest(BaseModel):
     caption: Optional[str] = None
 
 
+def _claim_conversation_if_operator_reply(http_request: Request, lead: dict | None, phone_number: str) -> str | None:
+    """Who's actually sending this reply, per the session cookie (see
+    _get_session_variant_key + POST /api/admin/chat-login above) — None for
+    the plain shared chat login, or when the logged-in admin_users entry
+    has no variant_key linked. When it IS a human-answered variant (Tomás,
+    Esteban, ...) different from whoever the lead is currently pinned to,
+    this is exactly the "someone else took over the conversation" moment:
+    reassign the lead for real (not just cosmetically) so the next incoming
+    message routes to the right person's notifications too — mutates
+    lead["bot_variant"] in place so the caller's own save_conversation stamp
+    picks up the new value. Returns the resolved sender_variant_key (or
+    None) either way, for the caller to stamp onto its outgoing message —
+    see whatsapp_conversations.bot_variant, which conversion analytics will
+    read instead of whatsapp_leads.bot_variant's current-only value."""
+    sender_variant_key = _get_session_variant_key(http_request)
+    if sender_variant_key and lead and sender_variant_key != lead.get("bot_variant"):
+        try:
+            from app.db.connection import get_connection as _get_conn_sync
+            with _get_conn_sync() as _conn:
+                with _conn.cursor() as _cur:
+                    _cur.execute(
+                        "SELECT is_human FROM bot_ab_variants WHERE variant_key = %s",
+                        (sender_variant_key,),
+                    )
+                    _row = _cur.fetchone()
+                    if _row and _row[0]:
+                        _previous_variant = lead.get("bot_variant")
+                        _cur.execute(
+                            "UPDATE whatsapp_leads SET bot_variant = %s, bot_enabled = FALSE, updated_at = NOW() "
+                            "WHERE phone_number = %s",
+                            (sender_variant_key, phone_number),
+                        )
+                        _conn.commit()
+                        lead["bot_variant"] = sender_variant_key
+                        logger.info(
+                            f"👤 {sender_variant_key} tomó la conversación de {phone_number} "
+                            f"(antes: {_previous_variant})"
+                        )
+        except Exception as reassign_error:
+            logger.warning(f"Could not reassign {phone_number} to {sender_variant_key}: {reassign_error}")
+    return sender_variant_key
+
+
 @app.post("/api/send-message")
-async def send_custom_message(request: SendMessageRequest):
+async def send_custom_message(request: SendMessageRequest, http_request: Request):
     """Send a custom WhatsApp message through Kia-Ai"""
     try:
         # Validate inputs
@@ -2441,7 +2524,9 @@ async def send_custom_message(request: SendMessageRequest):
         except Exception as lead_error:
             logger.error(f"Error loading lead before send: {lead_error}")
             # Continue even if lead lookup fails
-        
+
+        sender_variant_key = _claim_conversation_if_operator_reply(http_request, lead, request.to)
+
         message_id = ""
         result = {}
         message_type = "text"
@@ -2501,7 +2586,8 @@ async def send_custom_message(request: SendMessageRequest):
                             customer_name=lead.get('customer_name', request.to) if lead else request.to,
                             message_text='',
                             response_text=_logged_text,
-                            message_type='text', message_id=_tid or None, direction='outgoing')
+                            message_type='text', message_id=_tid or None, direction='outgoing',
+                            bot_variant=sender_variant_key or (lead.get('bot_variant') if lead else None))
                     except Exception:
                         pass
                     return {
@@ -2541,7 +2627,8 @@ async def send_custom_message(request: SendMessageRequest):
                 response_text=(request.image_url or request.caption or request.message or ""),
                 message_type=message_type,
                 message_id=message_id or None,
-                direction='outgoing'
+                direction='outgoing',
+                bot_variant=sender_variant_key or (lead.get('bot_variant') if lead else None),
             )
         except Exception as db_error:
             logger.error(f"Error storing message in DB: {db_error}")
@@ -2571,6 +2658,7 @@ async def send_custom_message(request: SendMessageRequest):
 
 @app.post("/api/upload-and-send-image")
 async def upload_and_send_image(
+    http_request: Request,
     image: UploadFile,
     to: str = Form(...),
     caption: Optional[str] = Form(None)
@@ -2719,7 +2807,9 @@ async def upload_and_send_image(
                 lead = await get_or_create_lead(to)
             except Exception as lead_error:
                 logger.error(f"Error loading lead: {lead_error}")
-            
+
+            sender_variant_key = _claim_conversation_if_operator_reply(http_request, lead, to)
+
             # Log in database
             db_id = None
             try:
@@ -2732,7 +2822,8 @@ async def upload_and_send_image(
                     response_text=media_url,
                     message_type="image",
                     message_id=message_id or None,
-                    direction='outgoing'
+                    direction='outgoing',
+                    bot_variant=sender_variant_key or (lead.get('bot_variant') if lead else None),
                 )
             except Exception as db_error:
                 logger.error(f"Error storing message in DB: {db_error}")

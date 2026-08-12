@@ -108,6 +108,7 @@ async def admin_login(x_admin_key: str = Header("")):
         "name": user.get("name", "Admin"),
         "sections": user.get("sections"),   # None = full access
         "is_super": user.get("sections") is None,
+        "variant_key": user.get("variant_key"),   # ver POST /api/admin/chat-login en main.py
     }
 
 
@@ -120,7 +121,7 @@ async def list_admin_users(x_admin_key: str = Header("")):
         k = u.get("key", "")
         masked_key = (k[:2] + "***" + k[-2:]) if len(k) > 4 else "***"
         masked.append({"idx": i, "name": u.get("name", ""), "key_masked": masked_key,
-                       "sections": u.get("sections")})
+                       "sections": u.get("sections"), "variant_key": u.get("variant_key")})
     return {"users": masked}
 
 
@@ -131,12 +132,18 @@ async def create_admin_user(request: Request, x_admin_key: str = Header("")):
     name = (body.get("name") or "").strip()
     key  = (body.get("key")  or "").strip()
     sections = body.get("sections")   # None = full access; list = restricted
+    # variant_key (opcional): vincula este login a una fila de bot_ab_variants
+    # (ej. "tom", "esteban") — ver POST /api/admin/chat-login en main.py, que
+    # usa esto para saber quién está escribiendo cuando manda un mensaje de
+    # WhatsApp y así reasignar la conversación / medir conversión por
+    # persona real, no por a quién se le asignó originalmente.
+    variant_key = (body.get("variant_key") or "").strip() or None
     if not name or not key:
         raise HTTPException(400, "nombre y contraseña son requeridos")
     users = _get_admin_users()
     if any(u.get("key") == key for u in users):
         raise HTTPException(409, "Ya existe un usuario con esa contraseña")
-    users.append({"name": name, "key": key, "sections": sections})
+    users.append({"name": name, "key": key, "sections": sections, "variant_key": variant_key})
     _save_admin_users(users)
     return {"ok": True}
 
@@ -157,6 +164,8 @@ async def update_admin_user(idx: int, request: Request, x_admin_key: str = Heade
         users[idx]["key"] = new_key
     if "sections" in body:
         users[idx]["sections"] = body["sections"]
+    if "variant_key" in body:
+        users[idx]["variant_key"] = (body["variant_key"] or "").strip() or None
     _save_admin_users(users)
     return {"ok": True}
 

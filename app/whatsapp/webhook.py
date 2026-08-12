@@ -547,7 +547,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         response_text="",
                         message_type="text",
                         message_id=message_id,
-                        direction="incoming"
+                        direction="incoming",
+                        bot_variant=lead.get("bot_variant") if lead else None,
                     )
                     # Increment unread counter for incoming message
                     await increment_unread_count(from_number)
@@ -835,7 +836,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                             response_text=msg,
                             message_type="text",
                             message_id=message_id if i == 0 else None,
-                            direction="incoming"
+                            direction="incoming",
+                            bot_variant=lead.get("bot_variant") if lead else None,
                         )
                     except Exception as e:
                         logger.warning(f"Could not save sequence message {i}: {e}")
@@ -860,7 +862,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         response_text=text_to_save,
                         message_type=message_type,
                         message_id=message_id,
-                        direction="incoming"
+                        direction="incoming",
+                        bot_variant=lead.get("bot_variant") if lead else None,
                     )
                     # Increment unread counter for incoming message
                     await increment_unread_count(from_number)
@@ -986,7 +989,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                             response_text=display_url,
                             message_type="image",
                             message_id=message_id,
-                            direction="incoming"
+                            direction="incoming",
+                            bot_variant=lead.get("bot_variant") if lead else None,
                         )
                         # Increment unread counter for incoming image
                         await increment_unread_count(from_number)
@@ -1112,7 +1116,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                             response_text=msg,
                             message_type="image" if i == 0 else "text",
                             message_id=message_id if i == 0 else None,
-                            direction="incoming"
+                            direction="incoming",
+                            bot_variant=lead.get("bot_variant") if lead else None,
                         )
                     except Exception as e:
                         logger.warning(f"Could not save sequence message {i}: {e}")
@@ -1121,7 +1126,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             elif response:
                 await whatsapp_client.send_text_message(from_number, response)
                 response_text = response
-            
+
             if response_text is not None or manual_handover_only:
                 try:
                     text_to_save = response_text if response_text is not None else ""
@@ -1134,7 +1139,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         response_text=text_to_save,
                         message_type="image",
                         message_id=message_id,
-                        direction="incoming"
+                        direction="incoming",
+                        bot_variant=lead.get("bot_variant") if lead else None,
                     )
                     # Increment unread counter for incoming image
                     await increment_unread_count(from_number)
@@ -1235,7 +1241,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                             response_text=display_url,
                             message_type="audio",
                             message_id=message_id,
-                            direction="incoming"
+                            direction="incoming",
+                            bot_variant=lead.get("bot_variant") if lead else None,
                         )
                         # Increment unread counter for incoming audio
                         await increment_unread_count(from_number)
@@ -1358,7 +1365,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                             response_text=msg,
                             message_type="audio" if i == 0 else "text",
                             message_id=message_id if i == 0 else None,
-                            direction="incoming"
+                            direction="incoming",
+                            bot_variant=lead.get("bot_variant") if lead else None,
                         )
                     except Exception as e:
                         logger.warning(f"Could not save sequence message {i}: {e}")
@@ -1367,7 +1375,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             elif response:
                 await whatsapp_client.send_text_message(from_number, response)
                 response_text = response
-            
+
             if response_text is not None or manual_handover_only:
                 try:
                     text_to_save = response_text if response_text is not None else ""
@@ -1380,7 +1388,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                         response_text=text_to_save,
                         message_type="audio",
                         message_id=message_id,
-                        direction="incoming"
+                        direction="incoming",
+                        bot_variant=lead.get("bot_variant") if lead else None,
                     )
                     # Increment unread counter for incoming audio
                     await increment_unread_count(from_number)
