@@ -73,16 +73,39 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     bot_enabled=FALSE on the new lead right away when the picked variant
     is a "un humano contesta" variant (Tomás, Esteban, ...), so nothing
     auto-replies before an operator gets to it. See bot_ab_variants.is_human
-    in app/booking/bot_config_router.py."""
+    in app/booking/bot_config_router.py.
+
+    Each variant can also optionally have working hours
+    (schedule_start_hour/schedule_end_hour, Chile time — see
+    hour_in_schedule() in app/bot/variant_overrides.py, the same range
+    check used to gate operator notifications). Only variants currently "on
+    shift" (no schedule set, or the current hour falls inside their window)
+    are considered for a new lead. If that leaves NOTHING — a genuine
+    coverage gap, e.g. between shifts — we fall back to every active
+    variant regardless of schedule, so a lead is never left completely
+    unassigned just because nobody happens to be on shift right now."""
+    from app.bot.variant_overrides import hour_in_schedule
+
     try:
-        cur.execute("SELECT variant_key, weight, is_human FROM bot_ab_variants WHERE is_active = TRUE")
+        cur.execute(
+            "SELECT variant_key, weight, is_human, schedule_start_hour, schedule_end_hour "
+            "FROM bot_ab_variants WHERE is_active = TRUE"
+        )
         variants = cur.fetchall()
     except Exception:
         return None, False
     if not variants:
         return None, False
-    if len(variants) == 1:
-        return variants[0][0], bool(variants[0][2])
+
+    now_hour = datetime.now(CHILE_TZ).hour
+    on_shift = [
+        v for v in variants
+        if v[3] is None or v[4] is None or hour_in_schedule(now_hour, v[3], v[4])
+    ]
+    candidates = on_shift or variants
+
+    if len(candidates) == 1:
+        return candidates[0][0], bool(candidates[0][2])
 
     try:
         cur.execute("SELECT bot_variant, COUNT(*) FROM whatsapp_leads WHERE bot_variant IS NOT NULL GROUP BY bot_variant")
@@ -90,9 +113,9 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     except Exception:
         counts = {}
 
-    is_human_by_key = {variant_key: bool(is_human) for variant_key, _, is_human in variants}
+    is_human_by_key = {v[0]: bool(v[2]) for v in candidates}
     best_key, best_score = None, None
-    for variant_key, weight, _ in variants:
+    for variant_key, weight, *_ in candidates:
         w = weight or 1
         score = counts.get(variant_key, 0) / w
         if best_score is None or score < best_score:

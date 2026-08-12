@@ -4529,6 +4529,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <input id="nv-is-human" type="checkbox" style="width:14px;height:14px;cursor:pointer;accent-color:#10b981">
               <span style="font-size:.8rem;color:var(--text)">👤 Responde un humano (sin respuesta automática)</span>
             </label>
+            <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.6rem" title="Opcional — hora de Chile. Fuera de este rango: los clientes nuevos no se asignan a esta variante (salvo que sea la única activa) y no te llegan notificaciones de sus mensajes. Vacío = disponible 24/7.">
+              <span style="font-size:.8rem;color:var(--text)">🕐 Horario:</span>
+              <span style="font-size:.75rem;color:var(--muted)">desde</span>
+              <input id="nv-schedule-start" type="number" min="0" max="23" placeholder="ej: 8" style="width:55px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.8rem;outline:none">
+              <span style="font-size:.75rem;color:var(--muted)">hasta</span>
+              <input id="nv-schedule-end" type="number" min="1" max="24" placeholder="ej: 16" style="width:55px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.8rem;outline:none">
+              <span style="font-size:.7rem;color:var(--muted)">(vacío = 24/7)</span>
+            </div>
             <div style="display:flex;gap:.5rem;justify-content:flex-end">
               <button onclick="toggleNewVariantForm()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer">Cancelar</button>
               <button onclick="createAbVariant()" style="background:#10b981;color:#fff;border:none;border-radius:7px;padding:.35rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600">Crear variante</button>
@@ -13786,11 +13794,18 @@ async function createAbVariant(){
   const label = (document.getElementById('nv-label').value || '').trim();
   const weight = Math.max(1, parseInt(document.getElementById('nv-weight').value, 10) || 1);
   const is_human = document.getElementById('nv-is-human').checked;
+  const startRaw = document.getElementById('nv-schedule-start').value;
+  const endRaw = document.getElementById('nv-schedule-end').value;
+  const schedule_start_hour = startRaw === '' ? null : parseInt(startRaw, 10);
+  const schedule_end_hour = endRaw === '' ? null : parseInt(endRaw, 10);
   if(!variant_key){ showToast('❌ La clave es obligatoria', true); return; }
+  if((schedule_start_hour === null) !== (schedule_end_hour === null)){
+    showToast('❌ El horario necesita ambos campos (desde y hasta), o ninguno', true); return;
+  }
   try {
     const r = await fetch('/api/admin/bot/ab-variants', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({variant_key, label: label || variant_key, weight, is_human})
+      body: JSON.stringify({variant_key, label: label || variant_key, weight, is_human, schedule_start_hour, schedule_end_hour})
     });
     if(!r.ok) throw new Error(await r.text());
     showToast('✅ Variante creada: ' + variant_key);
@@ -13798,6 +13813,8 @@ async function createAbVariant(){
     document.getElementById('nv-label').value = '';
     document.getElementById('nv-weight').value = '1';
     document.getElementById('nv-is-human').checked = false;
+    document.getElementById('nv-schedule-start').value = '';
+    document.getElementById('nv-schedule-end').value = '';
     document.getElementById('new-variant-form').style.display = 'none';
     loadAbVariants();
   } catch(e){ showToast('❌ '+e.message, true); }
@@ -13812,6 +13829,25 @@ async function updateVariantField(id, field, value){
     if(!r.ok) throw new Error(await r.text());
     loadAbVariants();
   } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function updateVariantSchedule(id, startVal, endVal){
+  const s = (startVal === '' || startVal == null) ? null : parseInt(startVal, 10);
+  const e = (endVal === '' || endVal == null) ? null : parseInt(endVal, 10);
+  if((s === null) !== (e === null)){
+    showToast('❌ El horario necesita ambos campos (desde y hasta), o ninguno', true);
+    loadAbVariants();  // revierte el input a medio llenar al valor guardado
+    return;
+  }
+  try {
+    const body = s === null ? {clear_schedule: true} : {schedule_start_hour: s, schedule_end_hour: e};
+    const r = await fetch(`/api/admin/bot/ab-variants/${id}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error(await r.text());
+    loadAbVariants();
+  } catch(err){ showToast('❌ '+err.message, true); }
 }
 
 async function toggleDisabledTrigger(id, key, disabled){
@@ -13858,6 +13894,17 @@ async function loadAbVariants(){
             <span style="font-size:.75rem;color:var(--muted)">Activa</span>
           </label>
           <button onclick="deleteAbVariant(${v.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem" title="Eliminar variante">✕</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap" title="Hora de Chile. Fuera de este rango: los clientes nuevos no se asignan acá (salvo que sea la única variante activa) y no llegan notificaciones de sus mensajes. Vacío = disponible 24/7.">
+          <span style="font-size:.72rem;color:var(--muted)">🕐 Horario: desde</span>
+          <input id="sched-start-${v.id}" type="number" min="0" max="23" value="${v.schedule_start_hour ?? ''}" placeholder="—"
+            onchange="updateVariantSchedule(${v.id}, this.value, document.getElementById('sched-end-${v.id}').value)"
+            style="width:44px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.15rem .3rem;font-size:.75rem">
+          <span style="font-size:.72rem;color:var(--muted)">hasta</span>
+          <input id="sched-end-${v.id}" type="number" min="1" max="24" value="${v.schedule_end_hour ?? ''}" placeholder="—"
+            onchange="updateVariantSchedule(${v.id}, document.getElementById('sched-start-${v.id}').value, this.value)"
+            style="width:44px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.15rem .3rem;font-size:.75rem">
+          <span style="font-size:.7rem;color:var(--muted)">${v.schedule_start_hour!=null?'':'(vacío = 24/7)'}</span>
         </div>
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.3rem .1rem 0;border-top:1px dashed var(--border);margin-top:.1rem;padding-top:.5rem">
           <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;user-select:none" title="Si está apagado, el primer mensaje del cliente NO recibe el saludo/menú de Popeye — se procesa como cualquier otro mensaje (FAQ, flujos, y si esta variante tiene modelo IA configurado, la IA responde directo)">

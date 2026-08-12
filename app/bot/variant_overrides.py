@@ -58,6 +58,14 @@ _menu_disabled_cache_loaded_at: float = 0.0
 _label_cache: dict[str, str] = {}
 _label_cache_loaded_at: float = 0.0
 
+# Separate cache for a variant's working-hours schedule (Chile time,
+# schedule_start_hour/schedule_end_hour — both NULL = unrestricted, the
+# default) — see is_variant_in_hours(). Only variants with BOTH set are
+# stored (see the CHECK-equivalent validation in bot_config_router.py:
+# they're always written together, never just one).
+_schedule_cache: dict[str, tuple[int, int]] = {}
+_schedule_cache_loaded_at: float = 0.0
+
 
 def set_current_variant(variant_key: Optional[str]) -> None:
     _current_variant.set(variant_key)
@@ -93,13 +101,14 @@ def invalidate_cache() -> None:
     get_disabled_triggers() call to reload from DB. Called by the admin save/
     delete endpoints so edits are visible on the very next message instead of
     waiting out the TTL."""
-    global _cache_loaded_at, _ai_model_cache_loaded_at, _disabled_triggers_cache_loaded_at, _system_prompt_cache_loaded_at, _menu_disabled_cache_loaded_at, _label_cache_loaded_at
+    global _cache_loaded_at, _ai_model_cache_loaded_at, _disabled_triggers_cache_loaded_at, _system_prompt_cache_loaded_at, _menu_disabled_cache_loaded_at, _label_cache_loaded_at, _schedule_cache_loaded_at
     _cache_loaded_at = 0.0
     _ai_model_cache_loaded_at = 0.0
     _disabled_triggers_cache_loaded_at = 0.0
     _system_prompt_cache_loaded_at = 0.0
     _menu_disabled_cache_loaded_at = 0.0
     _label_cache_loaded_at = 0.0
+    _schedule_cache_loaded_at = 0.0
 
 
 def _reload_ai_model_cache() -> None:
@@ -263,6 +272,64 @@ def get_label_for_variant(variant_key: Optional[str]) -> Optional[str]:
     if time.monotonic() - _label_cache_loaded_at > _CACHE_TTL_SECONDS:
         _reload_label_cache()
     return _label_cache.get(variant_key)
+
+
+def hour_in_schedule(now_hour: int, start_hour: int, end_hour: int) -> bool:
+    """Pure range check, shared by is_variant_in_hours() below (webhook
+    notification gating) and _pick_active_variant() in app/db/leads.py
+    (new-lead routing) so both use the exact same semantics for a schedule
+    window. end_hour up to 24 means "until midnight". Handles windows that
+    wrap past midnight (start_hour > end_hour, e.g. 22 -> 6). A degenerate
+    range (start == end) is treated as unrestricted (True) rather than
+    "never" — an operator fat-fingering identical start/end shouldn't
+    silently block every lead/notification for that variant."""
+    if start_hour == end_hour:
+        return True
+    if start_hour < end_hour:
+        return start_hour <= now_hour < end_hour
+    return now_hour >= start_hour or now_hour < end_hour
+
+
+def _reload_schedule_cache() -> None:
+    global _schedule_cache, _schedule_cache_loaded_at
+    from app.db.connection import get_connection
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT variant_key, schedule_start_hour, schedule_end_hour FROM bot_ab_variants "
+                    "WHERE schedule_start_hour IS NOT NULL AND schedule_end_hour IS NOT NULL"
+                )
+                rows = cur.fetchall()
+        _schedule_cache = {r[0]: (r[1], r[2]) for r in rows}
+        _schedule_cache_loaded_at = time.monotonic()
+    except Exception as e:
+        logger.warning(f"Failed to load bot_ab_variants schedule cache: {e}")
+        _schedule_cache = {}
+        _schedule_cache_loaded_at = time.monotonic()
+
+
+def is_variant_in_hours(variant_key: Optional[str]) -> bool:
+    """True if `variant_key` has no schedule set (unrestricted — the
+    default for every variant until an operator sets one) or the current
+    hour in America/Santiago falls inside its working-hours window. Used
+    ONLY to gate outgoing operator push notifications (new-message alert,
+    unanswered-message alert — see webhook.py) — never gates whether the
+    bot itself auto-replies or whether a message gets saved; a message
+    outside a human variant's hours still just sits there with bot_enabled
+    already FALSE, same as always, it just won't page anyone about it."""
+    if not variant_key:
+        return True
+    if time.monotonic() - _schedule_cache_loaded_at > _CACHE_TTL_SECONDS:
+        _reload_schedule_cache()
+    window = _schedule_cache.get(variant_key)
+    if not window:
+        return True
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now_hour = datetime.now(ZoneInfo("America/Santiago")).hour
+    return hour_in_schedule(now_hour, window[0], window[1])
 
 
 def get_override(message_key: str) -> Optional[str]:

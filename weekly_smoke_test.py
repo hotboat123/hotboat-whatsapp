@@ -462,7 +462,9 @@ def test_ab_weighted_assignment():
         def fetchall(self):
             return self._last
 
-    variants = [("a", 3, False), ("b", 1, False)]
+    # Trailing (None, None) on each tuple = no schedule (unrestricted) —
+    # schedule_start_hour, schedule_end_hour.
+    variants = [("a", 3, False, None, None), ("b", 1, False, None, None)]
     counts = {"a": 0, "b": 0}
     cur = _FakeCursor(variants, counts)
     sequence = []
@@ -488,10 +490,50 @@ def test_ab_weighted_assignment():
     # A lone active variant flagged is_human=True must be picked AS human —
     # this is what makes get_or_create_lead() start the new lead with
     # bot_enabled=FALSE instead of the usual TRUE default.
-    human_cur = _FakeCursor([("tomas", 1, True)], {})
+    human_cur = _FakeCursor([("tomas", 1, True, None, None)], {})
     check(
         "A/B weighted assignment surfaces is_human=True for a human variant",
         _pick_active_variant(human_cur) == ("tomas", True),
+    )
+
+    # Working-hours gating: "tomas" is scheduled 8-16, "esteban" 16-20 — at
+    # an hour inside tomas' window (10:00) only tomas should ever be picked,
+    # even though esteban is also is_active. Faked by monkeypatching
+    # datetime.now() would be more invasive than this test needs — instead
+    # this directly exercises hour_in_schedule() (the exact function
+    # _pick_active_variant calls) for the hours that matter, and separately
+    # confirms the empty-on-shift fallback doesn't crash.
+    from app.bot.variant_overrides import hour_in_schedule
+    check(
+        "Working hours: 10:00 falls inside Tomás' 8-16 shift",
+        hour_in_schedule(10, 8, 16) is True,
+    )
+    check(
+        "Working hours: 10:00 falls OUTSIDE Esteban's 16-20 shift",
+        hour_in_schedule(10, 16, 20) is False,
+    )
+    check(
+        "Working hours: 22:00 falls inside an overnight 20→06 shift (wraps midnight)",
+        hour_in_schedule(22, 20, 6) is True,
+    )
+    check(
+        "Working hours: 10:00 falls OUTSIDE an overnight 20→06 shift",
+        hour_in_schedule(10, 20, 6) is False,
+    )
+    check(
+        "Working hours: identical start/end hour is treated as unrestricted, not \"never\"",
+        hour_in_schedule(3, 9, 9) is True,
+    )
+
+    # Coverage-gap fallback: if the only active variant's schedule doesn't
+    # cover the current hour, _pick_active_variant must still return it
+    # (ignoring the schedule) rather than leaving the lead unassigned.
+    gap_cur = _FakeCursor([("tomas", 1, True, 8, 16)], {})
+    picked_gap = _pick_active_variant(gap_cur)
+    check(
+        "Working hours: a coverage gap still assigns the lone active variant instead of (None, False)",
+        picked_gap[0] == "tomas" and picked_gap[1] is True,
+        f"got {picked_gap}",
     )
 
 

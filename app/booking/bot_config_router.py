@@ -135,6 +135,21 @@ def _ensure_tables():
                     # camino paralelo. FALSE (default) = variante automática,
                     # comportamiento actual sin cambios.
                     "is_human     BOOLEAN NOT NULL DEFAULT FALSE",
+                    # Horario de atención de esta variante, hora de Chile
+                    # (0-23 para schedule_start_hour, 1-24 para
+                    # schedule_end_hour — 24 = "hasta medianoche"). NULL/NULL
+                    # (default) = sin restricción, disponible 24/7, igual que
+                    # el comportamiento de siempre. Cuando ambos están
+                    # definidos: (a) get_or_create_lead solo asigna leads
+                    # nuevos a esta variante si la hora actual cae dentro del
+                    # rango (con fallback a ignorar el horario si NINGUNA
+                    # variante activa está de turno ahora mismo, para nunca
+                    # dejar un lead sin variante asignada), y (b) las
+                    # notificaciones push (mensaje nuevo / sin responder) se
+                    # silencian fuera de ese rango — ver
+                    # is_variant_in_hours() en app/bot/variant_overrides.py.
+                    "schedule_start_hour SMALLINT",
+                    "schedule_end_hour   SMALLINT",
                 ]:
                     try:
                         cur.execute(f"ALTER TABLE bot_ab_variants ADD COLUMN IF NOT EXISTS {col_def}")
@@ -373,6 +388,8 @@ class VariantCreate(BaseModel):
     label: str
     weight: int = 1
     is_human: bool = False
+    schedule_start_hour: Optional[int] = None
+    schedule_end_hour: Optional[int] = None
 
 
 class VariantUpdate(BaseModel):
@@ -385,6 +402,13 @@ class VariantUpdate(BaseModel):
     system_prompt: Optional[str] = None
     show_welcome_menu: Optional[bool] = None
     is_human: Optional[bool] = None
+    # No Optional[int]=None aquí a propósito: no hay forma de distinguir "no
+    # tocar este campo" de "bórralo (vuelve a sin restricción)" con el mismo
+    # tipo. clear_schedule=True es la señal explícita para lo segundo — ver
+    # update_ab_variant.
+    schedule_start_hour: Optional[int] = None
+    schedule_end_hour: Optional[int] = None
+    clear_schedule: Optional[bool] = None
 
 
 class OverrideUpsert(BaseModel):
@@ -445,7 +469,8 @@ async def list_ab_variants():
                 cur.execute("""
                     SELECT v.id, v.variant_key, v.label, v.is_active, v.created_at,
                            COUNT(o.id) AS override_count, v.weight, v.ai_provider, v.ai_model,
-                           v.disabled_triggers, v.system_prompt, v.show_welcome_menu, v.is_human
+                           v.disabled_triggers, v.system_prompt, v.show_welcome_menu, v.is_human,
+                           v.schedule_start_hour, v.schedule_end_hour
                     FROM bot_ab_variants v
                     LEFT JOIN bot_message_overrides o ON o.variant_key = v.variant_key
                     GROUP BY v.id
@@ -464,6 +489,8 @@ async def list_ab_variants():
                     "system_prompt": r[10],
                     "show_welcome_menu": r[11] if r[11] is not None else True,
                     "is_human": bool(r[12]),
+                    "schedule_start_hour": r[13],
+                    "schedule_end_hour": r[14],
                     # Informational only — the actual split is deterministic
                     # (see _pick_active_variant), this just previews the
                     # target ratio implied by the current weights.
@@ -484,12 +511,18 @@ async def create_ab_variant(data: VariantCreate):
     key = data.variant_key.strip()
     if not key:
         raise HTTPException(status_code=400, detail="variant_key requerido")
+    if (data.schedule_start_hour is None) != (data.schedule_end_hour is None):
+        raise HTTPException(status_code=400, detail="schedule_start_hour y schedule_end_hour van juntos, o ninguno")
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO bot_ab_variants (variant_key, label, weight, is_human) VALUES (%s, %s, %s, %s) RETURNING id",
-                    (key, data.label or key, max(1, data.weight or 1), data.is_human),
+                    "INSERT INTO bot_ab_variants (variant_key, label, weight, is_human, schedule_start_hour, schedule_end_hour) "
+                    "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                    (
+                        key, data.label or key, max(1, data.weight or 1), data.is_human,
+                        data.schedule_start_hour, data.schedule_end_hour,
+                    ),
                 )
                 new_id = cur.fetchone()[0]
                 conn.commit()
@@ -522,6 +555,16 @@ async def update_ab_variant(variant_id: int, data: VariantUpdate):
                     cur.execute("UPDATE bot_ab_variants SET show_welcome_menu = %s WHERE id = %s", (data.show_welcome_menu, variant_id))
                 if data.is_human is not None:
                     cur.execute("UPDATE bot_ab_variants SET is_human = %s WHERE id = %s", (data.is_human, variant_id))
+                if data.clear_schedule:
+                    cur.execute(
+                        "UPDATE bot_ab_variants SET schedule_start_hour = NULL, schedule_end_hour = NULL WHERE id = %s",
+                        (variant_id,),
+                    )
+                elif data.schedule_start_hour is not None and data.schedule_end_hour is not None:
+                    cur.execute(
+                        "UPDATE bot_ab_variants SET schedule_start_hour = %s, schedule_end_hour = %s WHERE id = %s",
+                        (data.schedule_start_hour, data.schedule_end_hour, variant_id),
+                    )
                 conn.commit()
         from app.bot.variant_overrides import invalidate_cache
         invalidate_cache()

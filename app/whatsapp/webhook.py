@@ -241,6 +241,12 @@ async def run_followup_nudge_scheduler() -> None:
 # deep in process_message() swallowing an error before any reply goes out
 # looks identical to "normal processing" from the outside).
 UNANSWERED_ALERT_MINUTES = 2
+# Upper bound so a first deploy (or a scheduler that was down for a while)
+# doesn't dredge up months-old abandoned conversations and fire one alert per
+# each of them all at once — found 2026-08-12 verifying this on Staging: the
+# very first run fired 117 alerts, several for conversations last touched in
+# March/April. Only genuinely recent silence is worth paging someone about.
+UNANSWERED_ALERT_MAX_AGE_HOURS = 24
 
 
 def _ensure_unanswered_alerts_table() -> None:
@@ -272,7 +278,7 @@ async def run_unanswered_alert_scheduler() -> None:
     that also goes unanswered, last_incoming_at no longer matches and it
     alerts again."""
     from app.db.connection import get_connection
-    from app.bot.variant_overrides import get_label_for_variant
+    from app.bot.variant_overrides import get_label_for_variant, is_variant_in_hours
     from app.notifications import push_notifier
     while True:
         try:
@@ -291,23 +297,30 @@ async def run_unanswered_alert_scheduler() -> None:
                         LEFT JOIN unanswered_alerts ua ON ua.phone_number = latest.phone_number
                         WHERE latest.direction = 'incoming'
                           AND latest.created_at <= NOW() - (%s || ' minutes')::interval
+                          AND latest.created_at >= NOW() - (%s || ' hours')::interval
                           AND (ua.last_incoming_at IS NULL OR ua.last_incoming_at != latest.created_at)
-                    """, (UNANSWERED_ALERT_MINUTES,))
+                    """, (UNANSWERED_ALERT_MINUTES, UNANSWERED_ALERT_MAX_AGE_HOURS))
                     stale = cur.fetchall()
 
             for phone_number, contact_name, created_at, message_text, bot_variant in stale:
-                try:
-                    variant_label = get_label_for_variant(bot_variant)
-                    who = f"{variant_label}: " if variant_label else ""
-                    preview = (message_text or "")[:100]
-                    await push_notifier.send_notification(
-                        title=f"⚠️ Sin responder hace {UNANSWERED_ALERT_MINUTES}+ min",
-                        body=f'{who}{contact_name or phone_number} — "{preview}"',
-                        data={"type": "unanswered_alert", "phone": phone_number},
-                        priority="high",
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not send unanswered alert for {phone_number}: {e}")
+                # Outside the assigned variant's working hours (if it has
+                # one), still mark it alerted below — so it doesn't get
+                # reconsidered every 30s all night — but don't actually page
+                # anyone; the ❗ badge in the conversations list already
+                # shows it regardless of hours, this only gates the push.
+                if is_variant_in_hours(bot_variant):
+                    try:
+                        variant_label = get_label_for_variant(bot_variant)
+                        who = f"{variant_label}: " if variant_label else ""
+                        preview = (message_text or "")[:100]
+                        await push_notifier.send_notification(
+                            title=f"⚠️ Sin responder hace {UNANSWERED_ALERT_MINUTES}+ min",
+                            body=f'{who}{contact_name or phone_number} — "{preview}"',
+                            data={"type": "unanswered_alert", "phone": phone_number},
+                            priority="high",
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not send unanswered alert for {phone_number}: {e}")
                 try:
                     with get_connection() as conn:
                         with conn.cursor() as cur:
@@ -502,17 +515,23 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 except Exception as ref_err:
                     logger.warning(f"Could not save ad referral: {ref_err}")
 
-            # Send push notification for incoming messages (replaces email)
+            # Send push notification for incoming messages (replaces email) —
+            # skipped outside the assigned variant's working hours, if it has
+            # one set (see is_variant_in_hours). The message is still saved
+            # and the bot_enabled gate below still runs unchanged either way
+            # — this only silences the page to an operator.
             try:
                 from app.notifications import push_notifier
-                from app.bot.variant_overrides import get_label_for_variant
-                await push_notifier.send_new_message_notification(
-                    contact_name=contact_name,
-                    phone_number=from_number,
-                    message_preview=text_body,
-                    ad_source=ad_source,
-                    variant_label=get_label_for_variant(lead.get("bot_variant") if lead else None),
-                )
+                from app.bot.variant_overrides import get_label_for_variant, is_variant_in_hours
+                _lead_variant = lead.get("bot_variant") if lead else None
+                if is_variant_in_hours(_lead_variant):
+                    await push_notifier.send_new_message_notification(
+                        contact_name=contact_name,
+                        phone_number=from_number,
+                        message_preview=text_body,
+                        ad_source=ad_source,
+                        variant_label=get_label_for_variant(_lead_variant),
+                    )
             except Exception as push_error:
                 logger.warning(f"Could not send push notification: {push_error}")
             bot_enabled = lead.get("bot_enabled", True) if lead else True
@@ -856,19 +875,23 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             
             logger.info(f"🔘 Interactive message: button={button_reply}, list={list_reply}")
             
-            # Send push for interactive (button/list) responses
+            # Send push for interactive (button/list) responses — skipped
+            # outside the assigned variant's working hours (see
+            # is_variant_in_hours in the text-message handler above).
             reply_text = (button_reply.get("title") or list_reply.get("title") or "Respuesta interactiva")
             try:
                 from app.notifications import push_notifier
-                from app.bot.variant_overrides import get_label_for_variant
+                from app.bot.variant_overrides import get_label_for_variant, is_variant_in_hours
                 from app.db.leads import get_or_create_lead
                 interactive_lead = await get_or_create_lead(from_number, contact_name)
-                await push_notifier.send_new_message_notification(
-                    contact_name=contact_name,
-                    phone_number=from_number,
-                    message_preview=reply_text,
-                    variant_label=get_label_for_variant(interactive_lead.get("bot_variant") if interactive_lead else None),
-                )
+                _interactive_variant = interactive_lead.get("bot_variant") if interactive_lead else None
+                if is_variant_in_hours(_interactive_variant):
+                    await push_notifier.send_new_message_notification(
+                        contact_name=contact_name,
+                        phone_number=from_number,
+                        message_preview=reply_text,
+                        variant_label=get_label_for_variant(_interactive_variant),
+                    )
             except Exception as push_error:
                 logger.warning(f"Could not send push for interactive: {push_error}")
             
@@ -922,16 +945,19 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             lead = await get_or_create_lead(from_number, contact_name)
 
             # Send push notification for incoming images (like text messages)
+            # — skipped outside the assigned variant's working hours.
             try:
                 from app.notifications import push_notifier
-                from app.bot.variant_overrides import get_label_for_variant
-                preview = caption[:80] if caption else "📷 Imagen"
-                await push_notifier.send_new_message_notification(
-                    contact_name=contact_name,
-                    phone_number=from_number,
-                    message_preview=preview,
-                    variant_label=get_label_for_variant(lead.get("bot_variant") if lead else None),
-                )
+                from app.bot.variant_overrides import get_label_for_variant, is_variant_in_hours
+                _image_variant = lead.get("bot_variant") if lead else None
+                if is_variant_in_hours(_image_variant):
+                    preview = caption[:80] if caption else "📷 Imagen"
+                    await push_notifier.send_new_message_notification(
+                        contact_name=contact_name,
+                        phone_number=from_number,
+                        message_preview=preview,
+                        variant_label=get_label_for_variant(_image_variant),
+                    )
             except Exception as push_error:
                 logger.warning(f"Could not send push notification for image: {push_error}")
 
@@ -1169,15 +1195,18 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             lead = await get_or_create_lead(from_number, contact_name)
 
             # Send push notification for incoming audio (like text messages)
+            # — skipped outside the assigned variant's working hours.
             try:
                 from app.notifications import push_notifier
-                from app.bot.variant_overrides import get_label_for_variant
-                await push_notifier.send_new_message_notification(
-                    contact_name=contact_name,
-                    phone_number=from_number,
-                    message_preview="🎤 Audio",
-                    variant_label=get_label_for_variant(lead.get("bot_variant") if lead else None),
-                )
+                from app.bot.variant_overrides import get_label_for_variant, is_variant_in_hours
+                _audio_variant = lead.get("bot_variant") if lead else None
+                if is_variant_in_hours(_audio_variant):
+                    await push_notifier.send_new_message_notification(
+                        contact_name=contact_name,
+                        phone_number=from_number,
+                        message_preview="🎤 Audio",
+                        variant_label=get_label_for_variant(_audio_variant),
+                    )
             except Exception as push_error:
                 logger.warning(f"Could not send push notification for audio: {push_error}")
 
