@@ -467,6 +467,32 @@ async def _run_signature_summary_scheduler():
         await asyncio.sleep(60)
 
 
+async def _run_daily_meta_report_scheduler():
+    """Every morning at 09:00 Santiago: email the Meta Ads report for
+    yesterday (spend/CPC/conversion funnel) — see app/meta/daily_report.py,
+    a Python port of hotboat-intelligence-dashboard's
+    scripts/daily_meta_report.js. Recipients: settings.notification_emails."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    SEND_HOUR = 9  # 09:00 Santiago
+
+    while True:
+        now = datetime.now(CHILE_TZ)
+        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_secs = (target - now).total_seconds()
+        logger.info("📊 Daily Meta report scheduled in %.0f min (at %s Santiago)", wait_secs / 60, target.strftime("%H:%M %d/%m"))
+        await asyncio.sleep(wait_secs)
+        try:
+            from app.meta.daily_report import send_daily_meta_report
+            await asyncio.to_thread(send_daily_meta_report)
+        except Exception as _e:
+            logger.error("Daily Meta report scheduler error: %s", _e)
+        await asyncio.sleep(60)  # safety gap to avoid double-fire
+
+
 async def _run_pre_booking_notif_scheduler():
     """Every 10 min: check for bookings starting in ~60 min and notify admin."""
     POLL_SECONDS = 600  # 10 minutes
@@ -912,6 +938,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_email_sweeps_scheduler()),
             asyncio.create_task(_run_daily_summary_scheduler()),
             asyncio.create_task(_run_signature_summary_scheduler()),
+            asyncio.create_task(_run_daily_meta_report_scheduler()),
             asyncio.create_task(_run_pre_booking_notif_scheduler()),
             asyncio.create_task(_run_yesterday_weekly_scheduler()),
             asyncio.create_task(_run_stock_consume_scheduler()),
@@ -924,6 +951,7 @@ async def lifespan(app: FastAPI):
         logger.info("📧 Email sweeps scheduler iniciado (followup, cada 30 min)")
         logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
         logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
+        logger.info("📊 Daily Meta report scheduler iniciado (09:00 Santiago)")
         logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
         logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
         logger.info("💬 Follow-up nudge scheduler iniciado (cada 15s, envía a los 2 min sin respuesta)")

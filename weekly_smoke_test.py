@@ -72,6 +72,7 @@ import io
 import json
 import asyncio
 import traceback
+import uuid
 from datetime import date, timedelta
 
 import requests
@@ -1036,19 +1037,27 @@ def test_concurrent_double_message_race(conn):
 
     with conn.cursor() as cur:
         cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (CONCURRENT_DOUBLE_MSG_PHONE,))
+        cur.execute("DELETE FROM bot_conversation_state WHERE phone_number=%s", (CONCURRENT_DOUBLE_MSG_PHONE,))
         conn.commit()
+
+    # Message IDs must be unique per RUN, not just per day — process_message()
+    # dedupes by message_id against bot_conversation_state.processed_message_ids
+    # (persisted across restarts on purpose), so a static date-only suffix
+    # made this test only pass once per day: a second local run in the same
+    # day saw both IDs as already-processed and got None back for both.
+    run_tag = uuid.uuid4().hex[:8]
 
     async def _run():
         cm = ConversationManager()
         return await asyncio.gather(
             cm.process_message(
                 from_number=CONCURRENT_DOUBLE_MSG_PHONE, message_text="Hola",
-                contact_name="Smoke Test Race", message_id=f"smoketest-race-1-{date.today().isoformat()}",
+                contact_name="Smoke Test Race", message_id=f"smoketest-race-1-{run_tag}",
                 lead_bot_variant="control",
             ),
             cm.process_message(
                 from_number=CONCURRENT_DOUBLE_MSG_PHONE, message_text="Cuáles son los valores ?",
-                contact_name="Smoke Test Race", message_id=f"smoketest-race-2-{date.today().isoformat()}",
+                contact_name="Smoke Test Race", message_id=f"smoketest-race-2-{run_tag}",
                 lead_bot_variant="control",
             ),
         )
