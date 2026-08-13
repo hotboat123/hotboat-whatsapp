@@ -475,6 +475,14 @@ async def get_recent_conversations(limit: int = 50) -> List[Dict]:
                         "ad_audience": ad_audience,
                         "bot_variant_label": bot_variant_label,
                         "bot_variant_is_human": bot_variant_is_human,
+                        # direction='incoming' alone doesn't mean unanswered — the
+                        # normal auto-reply path saves message_text (customer) AND
+                        # response_text (bot reply) on the SAME row with
+                        # direction='incoming'. Only an empty response_text means
+                        # nobody has replied yet (bot_enabled=FALSE save-only path,
+                        # or a bot reply that silently failed). See the matching fix
+                        # in run_unanswered_alert_scheduler() (webhook.py) — same bug.
+                        "awaiting_response": direction == 'incoming' and not response_text,
                     })
                 
                 conversations.sort(key=lambda x: x["last_message_at"] or "", reverse=True)

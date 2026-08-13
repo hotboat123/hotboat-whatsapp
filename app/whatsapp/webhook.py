@@ -95,14 +95,41 @@ def _is_popeye_trigger(text: Optional[str]) -> bool:
     escribe Hola Popeye" escape hatch the welcome message tells a
     human-assigned lead about (see default_welcome_message() in
     app/bot/variant_overrides.py — if that wording ever changes, keep
-    this trigger in sync with it). Lets ONE message through the normal
-    bot pipeline even though bot_enabled is FALSE for this lead, WITHOUT
-    flipping bot_enabled itself — a human is still nominally responsible
-    for the conversation, this is just an on-demand answer for basics
-    (precio, características, ubicación); the very next message without
-    the trigger goes back to silent, same as before this existed."""
+    this trigger in sync with it)."""
     import re
     return bool(text and re.search(r"\bpopeye\b", text, re.IGNORECASE))
+
+
+def _popeye_session_active(lead: Optional[dict]) -> bool:
+    """True while a previously-summoned Popeye session is still open for
+    this lead (see extend_popeye_session() in app/db/leads.py). Reported
+    2026-08-13: a customer said "Hola Popeye", got the main menu, picked
+    an option (e.g. "2" for precios) — and got silence, because ONLY the
+    literal trigger message used to be let through; the very next message
+    hit the bot_enabled=FALSE wall again. Now a summon opens a rolling
+    window (extended on every message that rides it) instead of a single
+    message, so a normal menu → pick an option → get the answer exchange
+    works the same way it does for an auto-reply variant."""
+    popeye_until = (lead or {}).get("popeye_until")
+    if not popeye_until:
+        return False
+    try:
+        until = datetime.fromisoformat(popeye_until)
+    except (TypeError, ValueError):
+        return False
+    now = datetime.now(until.tzinfo) if until.tzinfo else datetime.now()
+    return until > now
+
+
+def _popeye_summon(lead: Optional[dict], text: Optional[str]) -> bool:
+    """Combines the explicit trigger phrase with an already-open session —
+    lets a message through the normal bot pipeline even though bot_enabled
+    is FALSE for this lead, WITHOUT flipping bot_enabled itself: a human is
+    still nominally responsible for the conversation, this is just an
+    on-demand answer for basics (precio, características, ubicación).
+    Callers that get True back should also call extend_popeye_session() so
+    the window keeps rolling forward."""
+    return _is_popeye_trigger(text) or _popeye_session_active(lead)
 
 
 async def _send_welcome_message_if_new(lead: Optional[dict], phone_number: str, contact_name: str) -> None:
@@ -284,6 +311,17 @@ async def run_followup_nudge_scheduler() -> None:
 # AI-quota-exhaustion alert in ai_handler.py exists to catch (a try/except
 # deep in process_message() swallowing an error before any reply goes out
 # looks identical to "normal processing" from the outside).
+#
+# IMPORTANT: "latest row has direction='incoming'" is NOT the same as
+# "unanswered" — the normal auto-reply path (webhook.py's save_conversation
+# calls after conversation_manager.process_message()) writes ONE row per
+# customer turn with direction='incoming' AND response_text already filled
+# with the bot's reply; direction only records where the row originated,
+# not whether it got a reply. Found 2026-08-13: this fired a false alert on
+# a lead the bot answered instantly, because the query checked direction
+# alone. The real "still needs a reply" signal is response_text being
+# empty (true for the bot_enabled=FALSE save-only path, and for a bot
+# reply that silently failed) — always check both.
 UNANSWERED_ALERT_MINUTES = 2
 # Upper bound so a first deploy (or a scheduler that was down for a while)
 # doesn't dredge up months-old abandoned conversations and fire one alert per
@@ -333,13 +371,15 @@ async def run_unanswered_alert_scheduler() -> None:
                                latest.message_text, l.bot_variant
                         FROM (
                             SELECT DISTINCT ON (phone_number)
-                                phone_number, customer_name, created_at, message_text, direction
+                                phone_number, customer_name, created_at, message_text,
+                                response_text, direction
                             FROM whatsapp_conversations
                             ORDER BY phone_number, created_at DESC
                         ) latest
                         LEFT JOIN whatsapp_leads l ON l.phone_number = latest.phone_number
                         LEFT JOIN unanswered_alerts ua ON ua.phone_number = latest.phone_number
                         WHERE latest.direction = 'incoming'
+                          AND (latest.response_text IS NULL OR latest.response_text = '')
                           AND latest.created_at <= NOW() - (%s || ' minutes')::interval
                           AND latest.created_at >= NOW() - (%s || ' hours')::interval
                           AND (ua.last_incoming_at IS NULL OR ua.last_incoming_at != latest.created_at)
@@ -580,7 +620,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             except Exception as push_error:
                 logger.warning(f"Could not send push notification: {push_error}")
             bot_enabled = lead.get("bot_enabled", True) if lead else True
-            popeye_summon = (not bot_enabled) and _is_popeye_trigger(text_body)
+            popeye_summon = (not bot_enabled) and _popeye_summon(lead, text_body)
 
             if not bot_enabled and not popeye_summon:
                 logger.info(f"🤐 Bot disabled for {from_number}, saving message but not responding")
@@ -602,8 +642,10 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     logger.warning(f"Could not save conversation: {e}")
                 return  # Exit early, no bot response
             if popeye_summon:
-                logger.info(f"🥬 'Popeye' summon from {from_number} on an otherwise-silent (human-assigned) lead — answering this one message")
-            
+                logger.info(f"🥬 'Popeye' summon from {from_number} on an otherwise-silent (human-assigned) lead")
+                from app.db.leads import extend_popeye_session
+                await extend_popeye_session(from_number)
+
             # Cancel any pending follow-up — user is replying
             _cancel_followup(from_number)
 
@@ -1026,7 +1068,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
 
             # Check if bot is enabled for this user
             bot_enabled = lead.get("bot_enabled", True) if lead else True
-            popeye_summon = (not bot_enabled) and _is_popeye_trigger(text_body)
+            popeye_summon = (not bot_enabled) and _popeye_summon(lead, text_body)
 
             if not bot_enabled and not popeye_summon:
                 logger.info(f"🤐 Bot disabled for {from_number}, saving image but not responding")
@@ -1048,7 +1090,9 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                     logger.warning(f"Could not save image conversation: {e}")
                 return  # Exit early, no bot response
             if popeye_summon:
-                logger.info(f"🥬 'Popeye' summon from {from_number} on an otherwise-silent (human-assigned) lead — answering this one message")
+                logger.info(f"🥬 'Popeye' summon from {from_number} on an otherwise-silent (human-assigned) lead")
+                from app.db.leads import extend_popeye_session
+                await extend_popeye_session(from_number)
 
             try:
                 response = await conversation_manager.process_message(
@@ -1282,8 +1326,14 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
 
             # Check if bot is enabled for this user
             bot_enabled = lead.get("bot_enabled", True) if lead else True
-            
-            if not bot_enabled:
+            # text_body is always the static "[Audio recibido]" placeholder
+            # (no speech-to-text in this pipeline), so this can never
+            # ORIGINATE a Popeye summon by keyword — it can only ride an
+            # already-open session from an earlier text message (see
+            # _popeye_summon/_popeye_session_active above).
+            popeye_summon = (not bot_enabled) and _popeye_summon(lead, text_body)
+
+            if not bot_enabled and not popeye_summon:
                 logger.info(f"🤐 Bot disabled for {from_number}, saving audio but not responding")
                 try:
                     if display_url:
@@ -1302,7 +1352,11 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 except Exception as e:
                     logger.warning(f"Could not save audio conversation: {e}")
                 return  # Exit early, no bot response
-            
+            if popeye_summon:
+                logger.info(f"🥬 'Popeye' session active for {from_number} on an otherwise-silent (human-assigned) lead")
+                from app.db.leads import extend_popeye_session
+                await extend_popeye_session(from_number)
+
             # Process the audio message
             try:
                 # For now, respond acknowledging the audio

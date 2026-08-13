@@ -444,10 +444,11 @@ def test_ab_weighted_assignment():
 
     class _FakeCursor:
         """Mimics the two queries _pick_active_variant issues: variants
-        (key, weight, is_human), then assignment counts so far, both from a
-        dict this test mutates locally — never touches the real DB."""
+        (key, weight, is_human, schedule_start_hour, schedule_end_hour),
+        then assignment counts so far, both from a dict this test mutates
+        locally — never touches the real DB."""
         def __init__(self, variants, counts):
-            self.variants = variants  # [(key, weight, is_human), ...]
+            self.variants = variants  # [(key, weight, is_human, start_hour, end_hour), ...]
             self.counts = counts      # {key: count}
             self._last = None
 
@@ -467,7 +468,8 @@ def test_ab_weighted_assignment():
     # _pick_active_variant's docstring for why) — no exact sequence to
     # assert on anymore, so this checks the 3:1 weight ratio holds
     # statistically over many picks instead of exactly over a handful.
-    variants = [("a", 3, False), ("b", 1, False)]
+    # No schedule set on either (None, None) -> both always eligible.
+    variants = [("a", 3, False, None, None), ("b", 1, False, None, None)]
     cur = _FakeCursor(variants, {})
     N = 4000
     counts = {"a": 0, "b": 0}
@@ -492,24 +494,59 @@ def test_ab_weighted_assignment():
     # A lone active variant flagged is_human=True must be picked AS human —
     # this is what makes get_or_create_lead() start the new lead with
     # bot_enabled=FALSE instead of the usual TRUE default.
-    human_cur = _FakeCursor([("tomas", 1, True)], {})
+    human_cur = _FakeCursor([("tomas", 1, True, None, None)], {})
     check(
         "A/B weighted assignment surfaces is_human=True for a human variant",
         _pick_active_variant(human_cur) == ("tomas", True),
     )
 
-    # Working hours (schedule_start_hour/schedule_end_hour) must NOT affect
-    # _pick_active_variant at all — every is_active variant always competes
-    # for every new lead, purely by weight. Briefly wired in on 2026-08-12
-    # (making a shift's sole scheduled variant the ONLY eligible candidate
-    # during its hours) then reverted the same day: it silently locked
-    # "control" (no schedule) out of new leads almost entirely once "tom"
-    # and "esteban" had non-overlapping shifts covering most of the day —
-    # backwards from the equal-weight split the owner expected. Schedule
-    # still gates operator NOTIFICATIONS (see hour_in_schedule() /
-    # is_variant_in_hours() in variant_overrides.py and their own tests),
-    # just not who gets assigned.
+    # Working hours (schedule_start_hour/schedule_end_hour): a HUMAN variant
+    # (is_human=TRUE) currently outside its own shift is excluded from new-
+    # lead assignment (2026-08-13, reported: a lead got assigned to Esteban
+    # while off-shift and just sat there). Non-human variants (Control,
+    # IA1, ...) are NEVER filtered by schedule, no matter whose shift is
+    # active — the opposite of the 2026-08-12 bug this replaces, where
+    # EVERY variant (including Control) was filtered and Control got
+    # starved once Tom/Esteban had non-overlapping shifts covering most of
+    # the day. Schedule still separately gates operator NOTIFICATIONS (see
+    # hour_in_schedule() / is_variant_in_hours() below and their own tests).
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
     from app.bot.variant_overrides import hour_in_schedule
+
+    now_hour = datetime.now(ZoneInfo("America/Santiago")).hour
+    off_start, off_end = (now_hour + 2) % 24, (now_hour + 3) % 24   # window that excludes now_hour
+    on_start, on_end = (now_hour - 1) % 24, (now_hour + 1) % 24     # window that includes now_hour
+
+    off_shift_cur = _FakeCursor(
+        [("control", 1, False, None, None), ("esteban", 1, True, off_start, off_end)], {}
+    )
+    off_shift_picks = {_pick_active_variant(off_shift_cur)[0] for _ in range(200)}
+    check(
+        "Schedule-aware assignment: off-shift human variant excluded, non-human always eligible",
+        off_shift_picks == {"control"},
+        f"picks={off_shift_picks}",
+    )
+
+    on_shift_cur = _FakeCursor(
+        [("control", 1, False, None, None), ("esteban", 1, True, on_start, on_end)], {}
+    )
+    on_shift_picks = {_pick_active_variant(on_shift_cur)[0] for _ in range(200)}
+    check(
+        "Schedule-aware assignment: on-shift human variant included alongside non-human",
+        on_shift_picks == {"control", "esteban"},
+        f"picks={on_shift_picks}",
+    )
+
+    all_off_shift_cur = _FakeCursor(
+        [("tom", 1, True, off_start, off_end), ("esteban", 1, True, off_start, off_end)], {}
+    )
+    all_off_shift_picks = {_pick_active_variant(all_off_shift_cur)[0] for _ in range(200)}
+    check(
+        "Schedule-aware assignment: falls back to unfiltered list rather than leaving a lead unassigned",
+        all_off_shift_picks == {"tom", "esteban"},
+        f"picks={all_off_shift_picks}",
+    )
     check(
         "Working hours: 10:00 falls inside Tomás' 8-16 shift",
         hour_in_schedule(10, 8, 16) is True,

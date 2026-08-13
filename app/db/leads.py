@@ -56,6 +56,44 @@ def _ensure_variant_col(cur) -> None:
     _variant_col_ensured = True
 
 
+_popeye_col_ensured: bool = False
+
+def _ensure_popeye_col(cur) -> None:
+    """Add popeye_until column if not present (runs once per process). See
+    extend_popeye_session() below and the popeye_summon gate in webhook.py."""
+    global _popeye_col_ensured
+    if _popeye_col_ensured:
+        return
+    cur.execute(
+        "ALTER TABLE whatsapp_leads ADD COLUMN IF NOT EXISTS popeye_until TIMESTAMPTZ"
+    )
+    _popeye_col_ensured = True
+
+
+async def extend_popeye_session(phone_number: str, minutes: int = 10) -> None:
+    """Push popeye_until forward — called every time a message rides the
+    "Hola Popeye" pass-through (see _is_popeye_trigger/popeye_summon in
+    webhook.py), whether it's the message that said the trigger phrase or a
+    later one still inside the window. A rolling window (not a fixed one
+    from the first trigger) so the conversation stays open as long as the
+    customer keeps talking to Popeye, and lapses N minutes after they go
+    quiet — same idea as bot_enabled, but temporary and never persisted as
+    a real state change (the lead's actual bot_enabled column never moves,
+    an operator still sees it as human-assigned)."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                _ensure_popeye_col(cur)
+                cur.execute(
+                    "UPDATE whatsapp_leads SET popeye_until = NOW() + (%s || ' minutes')::interval "
+                    "WHERE phone_number = %s",
+                    (minutes, phone_number),
+                )
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"extend_popeye_session failed for {phone_number}: {e}")
+
+
 def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     """Pick one currently-active A/B variant for a brand-new lead, or
     (None, False) if no experiment is running (bot_ab_variants table
@@ -80,16 +118,27 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     auto-replies before an operator gets to it. See bot_ab_variants.is_human
     in app/booking/bot_config_router.py.
 
-    A variant's working hours (schedule_start_hour/schedule_end_hour) do
-    NOT affect this pick — every is_active variant always competes for
-    every new lead, by weight, same as if no one had a schedule set.
-    Schedule ONLY gates whether an operator gets paged about that lead's
-    messages later (see is_variant_in_hours() in variant_overrides.py,
-    used from webhook.py)."""
+    A HUMAN variant (is_human=TRUE) outside its own working hours is
+    excluded from the pick — reported 2026-08-13: a lead got assigned to
+    Esteban while he was off-shift and just sat there unanswered. Non-human
+    variants (Control, IA1, ...) are NEVER filtered by schedule, no matter
+    whose shift is active — that's the opposite of the 2026-08-12 bug this
+    replaced, where EVERY variant (including Control) was filtered by
+    schedule and Control got starved whenever Tom or Esteban was on shift.
+    A variant with no schedule set (both hours NULL) is always eligible,
+    same as before. If filtering leaves zero candidates (e.g. every human
+    variant off-shift and no automated variant active), falls back to the
+    unfiltered list rather than leaving a lead unassigned."""
     import random
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app.bot.variant_overrides import hour_in_schedule
 
     try:
-        cur.execute("SELECT variant_key, weight, is_human FROM bot_ab_variants WHERE is_active = TRUE")
+        cur.execute(
+            "SELECT variant_key, weight, is_human, schedule_start_hour, schedule_end_hour "
+            "FROM bot_ab_variants WHERE is_active = TRUE"
+        )
         variants = cur.fetchall()
     except Exception:
         return None, False
@@ -99,8 +148,19 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     if len(variants) == 1:
         return variants[0][0], bool(variants[0][2])
 
-    weights = [w or 1 for _, w, _ in variants]
-    picked = random.choices(variants, weights=weights, k=1)[0]
+    now_hour = datetime.now(ZoneInfo("America/Santiago")).hour
+    eligible = [
+        v for v in variants
+        if not v[2] or v[3] is None or v[4] is None or hour_in_schedule(now_hour, v[3], v[4])
+    ]
+    if not eligible:
+        eligible = variants
+
+    if len(eligible) == 1:
+        return eligible[0][0], bool(eligible[0][2])
+
+    weights = [w or 1 for _, w, _, _, _ in eligible]
+    picked = random.choices(eligible, weights=weights, k=1)[0]
     return picked[0], bool(picked[2])
 
 
@@ -135,6 +195,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
             with conn.cursor() as cur:
                 _ensure_lang_col(cur)
                 _ensure_variant_col(cur)
+                _ensure_popeye_col(cur)
                 try:
                     cur.execute("""
                         SELECT
@@ -142,7 +203,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
                             unread_count, last_read_at, priority, ad_source,
                             ad_platform, ad_media_type, ad_creative_url, ad_ctwa_clid, ad_audience,
-                            preferred_language, bot_variant
+                            preferred_language, bot_variant, popeye_until
                         FROM whatsapp_leads
                         WHERE phone_number = %s
                     """, (phone_number,))
@@ -200,6 +261,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "ad_audience": row[18] if len(row) > 18 else None,
                         "preferred_language": row[19] if len(row) > 19 else None,
                         "bot_variant": row[20] if len(row) > 20 else None,
+                        "popeye_until": row[21].isoformat() if len(row) > 21 and row[21] else None,
                     }
                 else:
                     # Create new lead — randomly assign an active A/B variant
