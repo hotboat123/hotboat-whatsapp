@@ -1009,6 +1009,69 @@ def test_ai_fallback_tracked_link(conn):
         conn.commit()
 
 
+CONCURRENT_DOUBLE_MSG_PHONE = "56900007767"
+
+
+def test_concurrent_double_message_race(conn):
+    """
+    Regression test for a real production bug (2026-08-13): a customer sent
+    two messages about a second apart ("Hola" then "Cuáles son los
+    valores?"). Both webhook deliveries ran as concurrent asyncio tasks on
+    the same replica, and both reached get_conversation()'s empty-history
+    branch before either had written back — so BOTH independently computed
+    is_first_message()=True and both got the welcome menu; the actual
+    pricing question never reached FAQ matching. Fixed with a per-phone
+    asyncio.Lock in ConversationManager.process_message() (see its
+    docstring) that forces one customer's own messages to be handled
+    strictly in order — this test proves it by firing both messages
+    concurrently via asyncio.gather and checking the SECOND one gets the
+    real price answer, not a second copy of the welcome menu.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from app.bot.conversation import ConversationManager
+    except Exception as e:
+        check("Concurrent double-message race — import ConversationManager", False, str(e))
+        return
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM whatsapp_leads WHERE phone_number=%s", (CONCURRENT_DOUBLE_MSG_PHONE,))
+        conn.commit()
+
+    async def _run():
+        cm = ConversationManager()
+        return await asyncio.gather(
+            cm.process_message(
+                from_number=CONCURRENT_DOUBLE_MSG_PHONE, message_text="Hola",
+                contact_name="Smoke Test Race", message_id=f"smoketest-race-1-{date.today().isoformat()}",
+                lead_bot_variant="control",
+            ),
+            cm.process_message(
+                from_number=CONCURRENT_DOUBLE_MSG_PHONE, message_text="Cuáles son los valores ?",
+                contact_name="Smoke Test Race", message_id=f"smoketest-race-2-{date.today().isoformat()}",
+                lead_bot_variant="control",
+            ),
+        )
+
+    try:
+        r1, r2 = asyncio.run(_run())
+    except Exception as e:
+        check("Concurrent double-message race — both messages processed without crashing", False, str(e))
+        traceback.print_exc()
+        return
+
+    check(
+        "Concurrent double-message race — first message still gets the welcome menu",
+        bool(r1) and "grumete" in r1.lower(),
+        (r1 or "")[:150].replace("\n", " "),
+    )
+    check(
+        "Concurrent double-message race — second message gets the real answer, not a 2nd welcome menu",
+        bool(r2) and "precios hotboat" in r2.lower(),
+        (r2 or "")[:150].replace("\n", " "),
+    )
+
+
 def main():
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -1023,6 +1086,7 @@ def main():
         test_disabled_faq_trigger(conn)
         test_custom_ai_system_prompt(conn)
         test_ai_fallback_tracked_link(conn)
+        test_concurrent_double_message_race(conn)
     except Exception as e:
         check("Unexpected error", False, str(e))
         traceback.print_exc()

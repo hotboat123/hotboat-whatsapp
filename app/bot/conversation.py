@@ -116,6 +116,10 @@ class ConversationManager:
         # True" and rescheduling the nudge on every single reply — the
         # customer only avoided it by never going 2 minutes without typing.
         self.pending_followup_requests: set = set()
+        # Serializes process_message() calls per phone number — see the
+        # process_message() wrapper below for why this exists (a real race
+        # found 2026-08-13).
+        self._phone_locks: Dict[str, asyncio.Lock] = {}
     
     def _normalize_text(self, text: str) -> str:
         """
@@ -407,6 +411,36 @@ class ConversationManager:
             traceback.print_exc()
     
     async def process_message(
+        self,
+        from_number: str,
+        message_text: str,
+        contact_name: str,
+        message_id: str,
+        quoted_text: Optional[str] = None,
+        lead_bot_variant=_VARIANT_UNSPECIFIED,
+    ) -> Union[Optional[str], Dict]:
+        """Serializes _process_message_impl() calls per phone number.
+
+        Real bug found 2026-08-13: a customer sent two messages about a
+        second apart ("Hola" then "Cuáles son los valores?"). Both webhook
+        deliveries ran as concurrent asyncio tasks on the same replica, and
+        both reached get_conversation()'s "not in self.conversations" /
+        empty-history branch before either had finished writing back — so
+        BOTH independently computed is_first_message()=True and both got
+        the welcome menu; the actual pricing question never reached FAQ
+        matching (priority 0.9, which sits AFTER the is_first branch) at
+        all. A per-phone asyncio.Lock held for the whole call forces a
+        customer's own messages to be handled strictly in order — a
+        DIFFERENT phone's messages are completely unaffected, still fully
+        concurrent."""
+        lock = self._phone_locks.setdefault(from_number, asyncio.Lock())
+        async with lock:
+            return await self._process_message_impl(
+                from_number, message_text, contact_name, message_id,
+                quoted_text, lead_bot_variant,
+            )
+
+    async def _process_message_impl(
         self,
         from_number: str,
         message_text: str,
