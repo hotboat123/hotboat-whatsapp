@@ -118,16 +118,20 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     auto-replies before an operator gets to it. See bot_ab_variants.is_human
     in app/booking/bot_config_router.py.
 
-    A HUMAN variant (is_human=TRUE) outside its own working hours is
-    excluded from the pick — reported 2026-08-13: a lead got assigned to
-    Esteban while he was off-shift and just sat there unanswered. Non-human
-    variants (Control, IA1, ...) are NEVER filtered by schedule, no matter
-    whose shift is active — that's the opposite of the 2026-08-12 bug this
-    replaced, where EVERY variant (including Control) was filtered by
-    schedule and Control got starved whenever Tom or Esteban was on shift.
-    A variant with no schedule set (both hours NULL) is always eligible,
-    same as before. If filtering leaves zero candidates (e.g. every human
-    variant off-shift and no automated variant active), falls back to the
+    Any variant — human or automated (Control, IA1, ...) — currently
+    outside its own configured working hours is excluded from the pick.
+    Human variants got this first (2026-08-13: a lead got assigned to
+    Esteban while he was off-shift and just sat there unanswered); widened
+    the same day to bots too, so e.g. an experimental AI variant can be
+    scoped to specific hours the same way a person's shift is. A variant
+    with NO schedule set (both hours NULL — the default for every variant
+    until someone sets one, which is how Control/IA1/Saludo2 normally sit)
+    is always eligible regardless of this filter, so this can't repeat the
+    2026-08-12 bug where EVERY variant was filtered including ones that
+    should have been unrestricted, starving Control whenever Tom or Esteban
+    was on shift — that bug was in how the filter applied the schedule, not
+    in applying it to every variant. If filtering leaves zero candidates
+    (e.g. every active variant currently off-shift), falls back to the
     unfiltered list rather than leaving a lead unassigned."""
     import random
     from datetime import datetime
@@ -151,7 +155,7 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     now_hour = datetime.now(ZoneInfo("America/Santiago")).hour
     eligible = [
         v for v in variants
-        if not v[2] or v[3] is None or v[4] is None or hour_in_schedule(now_hour, v[3], v[4])
+        if v[3] is None or v[4] is None or hour_in_schedule(now_hour, v[3], v[4])
     ]
     if not eligible:
         eligible = variants

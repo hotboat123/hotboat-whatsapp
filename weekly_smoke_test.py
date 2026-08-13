@@ -500,16 +500,20 @@ def test_ab_weighted_assignment():
         _pick_active_variant(human_cur) == ("tomas", True),
     )
 
-    # Working hours (schedule_start_hour/schedule_end_hour): a HUMAN variant
-    # (is_human=TRUE) currently outside its own shift is excluded from new-
-    # lead assignment (2026-08-13, reported: a lead got assigned to Esteban
-    # while off-shift and just sat there). Non-human variants (Control,
-    # IA1, ...) are NEVER filtered by schedule, no matter whose shift is
-    # active — the opposite of the 2026-08-12 bug this replaces, where
-    # EVERY variant (including Control) was filtered and Control got
-    # starved once Tom/Esteban had non-overlapping shifts covering most of
-    # the day. Schedule still separately gates operator NOTIFICATIONS (see
-    # hour_in_schedule() / is_variant_in_hours() below and their own tests).
+    # Working hours (schedule_start_hour/schedule_end_hour): ANY active
+    # variant with a schedule set — human (Tom/Esteban) or automated
+    # (Control, IA1, ...) — currently outside it is excluded from new-lead
+    # assignment. Humans got this first (2026-08-13: a lead got assigned to
+    # Esteban while off-shift and just sat there); widened same day to bots
+    # too, on request, so an automated variant can also be scoped to
+    # specific hours. A variant with NO schedule set (both hours NULL — the
+    # default) is always eligible regardless — that's what keeps this from
+    # repeating the 2026-08-12 bug, where Control (which never had a
+    # schedule) got starved once Tom/Esteban had non-overlapping shifts
+    # covering most of the day; the bug was in how the filter was applied,
+    # not in filtering every variant. Schedule still separately gates
+    # operator NOTIFICATIONS (see hour_in_schedule() / is_variant_in_hours()
+    # below and their own tests).
     from datetime import datetime
     from zoneinfo import ZoneInfo
     from app.bot.variant_overrides import hour_in_schedule
@@ -523,7 +527,7 @@ def test_ab_weighted_assignment():
     )
     off_shift_picks = {_pick_active_variant(off_shift_cur)[0] for _ in range(200)}
     check(
-        "Schedule-aware assignment: off-shift human variant excluded, non-human always eligible",
+        "Schedule-aware assignment: off-shift human variant excluded, no-schedule variant always eligible",
         off_shift_picks == {"control"},
         f"picks={off_shift_picks}",
     )
@@ -533,9 +537,19 @@ def test_ab_weighted_assignment():
     )
     on_shift_picks = {_pick_active_variant(on_shift_cur)[0] for _ in range(200)}
     check(
-        "Schedule-aware assignment: on-shift human variant included alongside non-human",
+        "Schedule-aware assignment: on-shift human variant included alongside no-schedule variant",
         on_shift_picks == {"control", "esteban"},
         f"picks={on_shift_picks}",
+    )
+
+    bot_schedule_cur = _FakeCursor(
+        [("control", 1, False, None, None), ("ia_1", 1, False, off_start, off_end)], {}
+    )
+    bot_schedule_picks = {_pick_active_variant(bot_schedule_cur)[0] for _ in range(200)}
+    check(
+        "Schedule-aware assignment: off-shift BOT variant also excluded, not just humans",
+        bot_schedule_picks == {"control"},
+        f"picks={bot_schedule_picks}",
     )
 
     all_off_shift_cur = _FakeCursor(
