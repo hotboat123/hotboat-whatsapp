@@ -1723,6 +1723,21 @@ async def send_daily_summary_now(x_admin_key: str = Header("")):
     return {"ok": True, **result}
 
 
+@admin_router.post("/api/admin/meta-daily-report/send")
+async def send_meta_daily_report_now(report_date: str | None = None, x_admin_key: str = Header("")):
+    """Manually trigger the daily Meta Ads report email (same as the 09:00
+    job) — mainly for testing after a deploy. Optional report_date=YYYY-MM-DD
+    (default: yesterday, same as the scheduled job)."""
+    _check_auth(x_admin_key)
+    from datetime import date as _date
+    from app.meta.daily_report import send_daily_meta_report
+    parsed_date = _date.fromisoformat(report_date) if report_date else None
+    result = await asyncio.to_thread(send_daily_meta_report, parsed_date)
+    if not result.get("sent"):
+        raise HTTPException(status_code=500, detail=result.get("reason", "send failed"))
+    return {"ok": True, **result}
+
+
 @admin_router.post("/api/admin/email-workflows/booking_followup/run")
 async def run_followup_sweep(x_admin_key: str = Header("")):
     """Manually trigger the follow-up email sweep (same as the daily job)."""

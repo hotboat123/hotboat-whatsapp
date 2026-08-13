@@ -487,13 +487,18 @@ def generate_report(cur, report_date: Optional[date] = None) -> Dict[str, str]:
     return {"subject": subject, "html": html, "text": text}
 
 
-def send_daily_meta_report() -> None:
-    """Generates and emails the report for "yesterday". No dedup table here
-    on purpose — this is only ever called from _run_daily_meta_report_scheduler
-    in main.py, which (like every other scheduled sweep there) only runs on
-    the single replica holding the shared scheduler advisory lock, so it
-    already fires exactly once per day across however many replicas are
-    running."""
+def send_daily_meta_report(report_date: Optional[date] = None) -> Dict[str, Any]:
+    """Generates and emails the report for `report_date` (default:
+    yesterday). No dedup table here on purpose — the 09:00 scheduler call
+    (see _run_daily_meta_report_scheduler in main.py) only runs on the
+    single replica holding the shared scheduler advisory lock, same as
+    every other daily sweep there, so it already fires exactly once per day
+    regardless of replica count. A manual call (see POST /api/admin/
+    meta-daily-report/send) passes its own report_date and doesn't need
+    that guarantee.
+
+    Returns {"sent": False, "reason": "no_recipients"} if
+    notification_emails is empty, otherwise whatever send_email() returns."""
     from app.config import get_settings
     from app.email.send_email import send_email
 
@@ -501,7 +506,7 @@ def send_daily_meta_report() -> None:
     recipients = [e.strip() for e in (settings.notification_emails or "").split(",") if e.strip()]
     if not recipients:
         logger.info("[daily_meta_report] Sin notification_emails configurado, omitiendo")
-        return
+        return {"sent": False, "reason": "no_recipients"}
 
     # Same from-address fallback chain as booking_email.py's _get_from_addr()
     # — resend_from_confirmations is the actually-verified sender domain;
@@ -516,8 +521,9 @@ def send_daily_meta_report() -> None:
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT (CURRENT_DATE - INTERVAL '1 day')::date AS d")
-            report_date = cur.fetchone()[0]
+            if report_date is None:
+                cur.execute("SELECT (CURRENT_DATE - INTERVAL '1 day')::date AS d")
+                report_date = cur.fetchone()[0]
             report = generate_report(cur, report_date)
 
     result = send_email(
@@ -531,3 +537,4 @@ def send_daily_meta_report() -> None:
         logger.info(f"[daily_meta_report] Enviado a {recipients} ({report_date})")
     else:
         logger.error(f"[daily_meta_report] Envío falló: {result.get('reason')}")
+    return result
