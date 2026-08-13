@@ -85,6 +85,35 @@ body {
     50% { opacity: 0.5; }
 }
 
+/* "Me desactivo / me activo" self-service pill for a human operator
+   (Tomás, Esteban, ...) — see onMyStatusPillClick()/renderMyStatusPill()
+   in app.js. Identity is stored per-device (localStorage), not per
+   session, since this app has no real per-operator login on mobile. */
+.my-status {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    background-color: var(--bg-light);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.my-status.active {
+    color: var(--success-color);
+}
+
+.my-status.paused {
+    color: var(--warning-color);
+}
+
+.my-status.unset {
+    color: var(--text-secondary);
+}
+
 /* Main Content */
 .main-content {
     display: flex;

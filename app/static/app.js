@@ -203,7 +203,113 @@ document.addEventListener('DOMContentLoaded', () => {
     loadQuickReplyButtons();
     loadBotVariantOptions();
     _initParentMessages();
+    initMyStatusPill();
 });
+
+// ── "Me desactivo / me activo" self-service pill ────────────────────────────
+// Lets a human operator (Tomás, Esteban, ...) pause/resume their OWN
+// bot_ab_variants row from their phone — e.g. "voy a dormir entre las 2 y
+// las 4" — without hunting through the desktop admin panel's Chatbot
+// section. Reuses the same PUT /api/admin/bot/ab-variants/{id} endpoint
+// that panel already uses (is_active:true/false) — no new backend needed.
+//
+// There's no real per-operator login on this mobile page (it shares one
+// login for everyone — see /api/auth/login), so "who am I" can't come from
+// the session the way it does on the desktop admin panel's chat-login flow.
+// Instead it's remembered per-device in localStorage: whoever's phone this
+// is picks their name once, and it sticks.
+const MY_VARIANT_STORAGE_KEY = 'kiaAiMyVariantKey';
+let _myStatusHumanVariants = [];
+
+async function initMyStatusPill() {
+    const pill = document.getElementById('myStatusPill');
+    if (!pill) return;
+    try {
+        const r = await fetch(`${API_BASE}/api/admin/bot/ab-variants`);
+        if (!r.ok) throw new Error('Failed to load variants');
+        const data = await r.json();
+        _myStatusHumanVariants = (data.variants || []).filter(v => v.is_human);
+    } catch (e) {
+        console.error('Error loading my-status variants:', e);
+        return; // Leave the pill hidden — nothing useful to show
+    }
+    if (!_myStatusHumanVariants.length) return; // No human variants configured at all
+
+    let longPressTimer = null;
+    pill.addEventListener('touchstart', () => { longPressTimer = setTimeout(() => showMyIdentityPicker(), 600); });
+    pill.addEventListener('touchend', () => clearTimeout(longPressTimer));
+    pill.addEventListener('mousedown', () => { longPressTimer = setTimeout(() => showMyIdentityPicker(), 600); });
+    pill.addEventListener('mouseup', () => clearTimeout(longPressTimer));
+
+    pill.style.display = 'flex';
+    renderMyStatusPill();
+}
+
+function renderMyStatusPill() {
+    const pill = document.getElementById('myStatusPill');
+    if (!pill) return;
+    const myKey = localStorage.getItem(MY_VARIANT_STORAGE_KEY);
+    const mine = _myStatusHumanVariants.find(v => v.variant_key === myKey);
+    if (!mine) {
+        pill.className = 'my-status unset';
+        pill.title = 'Elige quién eres';
+        pill.textContent = '👤 ¿Quién eres?';
+        return;
+    }
+    pill.className = `my-status ${mine.is_active ? 'active' : 'paused'}`;
+    pill.title = 'Toca para pausar/reanudar — mantén presionado para cambiar de persona';
+    pill.textContent = mine.is_active ? `🟢 ${mine.label}: Activo` : `🌙 ${mine.label}: Descansando`;
+}
+
+function showMyIdentityPicker() {
+    const pill = document.getElementById('myStatusPill');
+    if (!pill) return;
+    const select = document.createElement('select');
+    select.style.cssText = 'font-size:.7rem;background:var(--bg-light);color:var(--text-primary);border:none;border-radius:999px;padding:.2rem .4rem';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '¿Quién eres?';
+    select.appendChild(placeholder);
+    _myStatusHumanVariants.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.variant_key;
+        opt.textContent = v.label;
+        select.appendChild(opt);
+    });
+    select.onchange = () => {
+        if (select.value) {
+            localStorage.setItem(MY_VARIANT_STORAGE_KEY, select.value);
+            renderMyStatusPill();
+        }
+    };
+    select.onblur = () => renderMyStatusPill();
+    pill.innerHTML = '';
+    pill.appendChild(select);
+    select.focus();
+}
+
+async function onMyStatusPillClick() {
+    const myKey = localStorage.getItem(MY_VARIANT_STORAGE_KEY);
+    const mine = _myStatusHumanVariants.find(v => v.variant_key === myKey);
+    if (!mine) {
+        showMyIdentityPicker();
+        return;
+    }
+    const newState = !mine.is_active;
+    try {
+        const r = await fetch(`${API_BASE}/api/admin/bot/ab-variants/${mine.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: newState }),
+        });
+        if (!r.ok) throw new Error(await r.text());
+        mine.is_active = newState;
+        showToast(newState ? `🟢 ${mine.label}: volviste a recibir clientes nuevos` : `🌙 ${mine.label}: no recibirás clientes nuevos por ahora`);
+        renderMyStatusPill();
+    } catch (e) {
+        showToast('❌ ' + e.message, 'error');
+    }
+}
 
 // ── PWA / Web Push ────────────────────────────────────────────────────────────
 
