@@ -4537,6 +4537,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <input id="nv-schedule-end" type="number" min="1" max="24" placeholder="ej: 16" style="width:55px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.3rem .5rem;font-size:.8rem;outline:none">
               <span style="font-size:.7rem;color:var(--muted)">(vacío = 24/7)</span>
             </div>
+            <div style="margin-bottom:.6rem">
+              <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem" title="Se manda UNA vez, al primer mensaje de un cliente nuevo asignado a esta variante — pensado para variantes 'Responde un humano'. Vacío = usa una plantilla genérica con el nombre visible de arriba.">💬 Mensaje de bienvenida (solo variantes humanas)</label>
+              <textarea id="nv-welcome-message" rows="3" placeholder="Vacío = plantilla genérica: &quot;En cualquier momento llega [Nombre visible] a responderte. Mientras tanto, escribe Hola Popeye para dudas básicas.&quot;"
+                style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.8rem;outline:none;resize:vertical;font-family:inherit"></textarea>
+            </div>
             <div style="display:flex;gap:.5rem;justify-content:flex-end">
               <button onclick="toggleNewVariantForm()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer">Cancelar</button>
               <button onclick="createAbVariant()" style="background:#10b981;color:#fff;border:none;border-radius:7px;padding:.35rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600">Crear variante</button>
@@ -13799,6 +13804,7 @@ async function createAbVariant(){
   const endRaw = document.getElementById('nv-schedule-end').value;
   const schedule_start_hour = startRaw === '' ? null : parseInt(startRaw, 10);
   const schedule_end_hour = endRaw === '' ? null : parseInt(endRaw, 10);
+  const welcome_message = (document.getElementById('nv-welcome-message').value || '').trim() || null;
   if(!variant_key){ showToast('❌ La clave es obligatoria', true); return; }
   if((schedule_start_hour === null) !== (schedule_end_hour === null)){
     showToast('❌ El horario necesita ambos campos (desde y hasta), o ninguno', true); return;
@@ -13806,7 +13812,7 @@ async function createAbVariant(){
   try {
     const r = await fetch('/api/admin/bot/ab-variants', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({variant_key, label: label || variant_key, weight, is_human, schedule_start_hour, schedule_end_hour})
+      body: JSON.stringify({variant_key, label: label || variant_key, weight, is_human, schedule_start_hour, schedule_end_hour, welcome_message})
     });
     if(!r.ok) throw new Error(await r.text());
     showToast('✅ Variante creada: ' + variant_key);
@@ -13816,6 +13822,7 @@ async function createAbVariant(){
     document.getElementById('nv-is-human').checked = false;
     document.getElementById('nv-schedule-start').value = '';
     document.getElementById('nv-schedule-end').value = '';
+    document.getElementById('nv-welcome-message').value = '';
     document.getElementById('new-variant-form').style.display = 'none';
     loadAbVariants();
   } catch(e){ showToast('❌ '+e.message, true); }
@@ -13910,6 +13917,13 @@ async function loadAbVariants(){
             style="width:44px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.15rem .3rem;font-size:.75rem">
           <span style="font-size:.7rem;color:var(--muted)">${v.schedule_start_hour!=null?'':'(vacío = 24/7)'}</span>
         </div>
+        ${v.is_human ? `
+        <div style="display:flex;flex-direction:column;gap:.3rem" title="Se manda UNA vez, al primer mensaje de un cliente nuevo asignado a esta variante. Vacío = usa la plantilla genérica con el nombre visible (“${escHtml(v.label)}”).">
+          <span style="font-size:.72rem;color:var(--muted)">💬 Mensaje de bienvenida</span>
+          <textarea id="welcome-${v.id}" rows="2" placeholder="${escHtml(v.welcome_message_default||'')}"
+            onchange="updateVariantField(${v.id},'welcome_message',this.value)"
+            style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.75rem;outline:none;resize:vertical;font-family:inherit">${escHtml(v.welcome_message||'')}</textarea>
+        </div>` : ''}
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.3rem .1rem 0;border-top:1px dashed var(--border);margin-top:.1rem;padding-top:.5rem">
           <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;user-select:none" title="Si está apagado, el primer mensaje del cliente NO recibe el saludo/menú de Popeye — se procesa como cualquier otro mensaje (FAQ, flujos, y si esta variante tiene modelo IA configurado, la IA responde directo)">
             <input type="checkbox" ${v.show_welcome_menu!==false?'checked':''}

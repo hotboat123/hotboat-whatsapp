@@ -90,6 +90,50 @@ def _is_duplicate_incoming(message_id: Optional[str]) -> bool:
         return False
 
 
+def _is_popeye_trigger(text: Optional[str]) -> bool:
+    """True if the customer explicitly asked for Popeye — the "solo
+    escribe Hola Popeye" escape hatch the welcome message tells a
+    human-assigned lead about (see default_welcome_message() in
+    app/bot/variant_overrides.py — if that wording ever changes, keep
+    this trigger in sync with it). Lets ONE message through the normal
+    bot pipeline even though bot_enabled is FALSE for this lead, WITHOUT
+    flipping bot_enabled itself — a human is still nominally responsible
+    for the conversation, this is just an on-demand answer for basics
+    (precio, características, ubicación); the very next message without
+    the trigger goes back to silent, same as before this existed."""
+    import re
+    return bool(text and re.search(r"\bpopeye\b", text, re.IGNORECASE))
+
+
+async def _send_welcome_message_if_new(lead: Optional[dict], phone_number: str, contact_name: str) -> None:
+    """Send the assigned human variant's one-time welcome message, if this
+    lead was JUST created with one (see get_or_create_lead in
+    app/db/leads.py — welcome_message is only ever present in its return
+    value for a brand-new lead assigned an is_human variant; any later
+    lookup of the same phone goes through the "existing lead" branch,
+    which never sets it). Called right after get_or_create_lead(), before
+    the bot_enabled gate below — so it's the very first thing a customer
+    sees when they land on a person instead of the automated bot."""
+    welcome_message = (lead or {}).get("welcome_message")
+    if not welcome_message:
+        return
+    try:
+        result = await whatsapp_client.send_text_message(phone_number, welcome_message)
+        wamid = (result or {}).get("messages", [{}])[0].get("id", "")
+        await save_conversation(
+            phone_number=phone_number,
+            customer_name=contact_name,
+            message_text="",
+            response_text=welcome_message,
+            message_type="text",
+            message_id=wamid or None,
+            direction="outgoing",
+            bot_variant=lead.get("bot_variant"),
+        )
+    except Exception as e:
+        logger.warning(f"Could not send welcome message to {phone_number}: {e}")
+
+
 def _register_outgoing(result: dict, text: str, conversation_manager=None, phone: str = "") -> None:
     """Store the outgoing wamid returned by Meta's API and patch the in-memory
     conversation history so _resolve_quoted_message can find it by ID."""
@@ -493,6 +537,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             # Ensure lead exists before saving ad referral
             from app.db.leads import get_or_create_lead
             lead = await get_or_create_lead(from_number, contact_name)
+            await _send_welcome_message_if_new(lead, from_number, contact_name)
 
             # Save ad referral now that the lead row is guaranteed to exist
             referral = message.get("referral")
@@ -535,8 +580,9 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             except Exception as push_error:
                 logger.warning(f"Could not send push notification: {push_error}")
             bot_enabled = lead.get("bot_enabled", True) if lead else True
-            
-            if not bot_enabled:
+            popeye_summon = (not bot_enabled) and _is_popeye_trigger(text_body)
+
+            if not bot_enabled and not popeye_summon:
                 logger.info(f"🤐 Bot disabled for {from_number}, saving message but not responding")
                 # Save incoming message only, no bot response
                 try:
@@ -555,6 +601,8 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 except Exception as e:
                     logger.warning(f"Could not save conversation: {e}")
                 return  # Exit early, no bot response
+            if popeye_summon:
+                logger.info(f"🥬 'Popeye' summon from {from_number} on an otherwise-silent (human-assigned) lead — answering this one message")
             
             # Cancel any pending follow-up — user is replying
             _cancel_followup(from_number)
@@ -946,6 +994,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             # too — same lead row the bot_enabled check further down reuses.
             from app.db.leads import get_or_create_lead
             lead = await get_or_create_lead(from_number, contact_name)
+            await _send_welcome_message_if_new(lead, from_number, contact_name)
 
             # Send push notification for incoming images (like text messages)
             # — skipped outside the assigned variant's working hours.
@@ -977,8 +1026,9 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
 
             # Check if bot is enabled for this user
             bot_enabled = lead.get("bot_enabled", True) if lead else True
-            
-            if not bot_enabled:
+            popeye_summon = (not bot_enabled) and _is_popeye_trigger(text_body)
+
+            if not bot_enabled and not popeye_summon:
                 logger.info(f"🤐 Bot disabled for {from_number}, saving image but not responding")
                 try:
                     if display_url:
@@ -997,7 +1047,9 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 except Exception as e:
                     logger.warning(f"Could not save image conversation: {e}")
                 return  # Exit early, no bot response
-            
+            if popeye_summon:
+                logger.info(f"🥬 'Popeye' summon from {from_number} on an otherwise-silent (human-assigned) lead — answering this one message")
+
             try:
                 response = await conversation_manager.process_message(
                     from_number=from_number,
@@ -1199,6 +1251,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             # too — same lead row the bot_enabled check further down reuses.
             from app.db.leads import get_or_create_lead
             lead = await get_or_create_lead(from_number, contact_name)
+            await _send_welcome_message_if_new(lead, from_number, contact_name)
 
             # Send push notification for incoming audio (like text messages)
             # — skipped outside the assigned variant's working hours.

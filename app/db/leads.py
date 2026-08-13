@@ -211,6 +211,37 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                     # nothing auto-replies before an operator gets to it.
                     variant_key, variant_is_human = _pick_active_variant(cur)
                     initial_bot_enabled = not variant_is_human
+
+                    # Mensaje de bienvenida (solo variantes is_human) — un
+                    # cliente nuevo asignado a Tomás/Esteban/etc no recibe
+                    # NINGUNA respuesta automática después de esto (ver
+                    # bot_enabled=FALSE arriba), así que sin este mensaje no
+                    # tendría ninguna señal de que alguien lo va a atender.
+                    # Se resuelve UNA vez acá, al crear el lead — no en
+                    # webhook.py, para que quede pegado al único momento en
+                    # que "es un lead nuevo" es verdad; toda relectura
+                    # posterior de este mismo teléfono entra por la rama
+                    # `if row:` de arriba, que no trae welcome_message.
+                    welcome_message = None
+                    if variant_is_human and variant_key:
+                        try:
+                            cur.execute(
+                                "SELECT label, welcome_message FROM bot_ab_variants WHERE variant_key = %s",
+                                (variant_key,),
+                            )
+                            v_row = cur.fetchone()
+                            if v_row:
+                                v_label, v_custom_msg = v_row
+                                from app.bot.variant_overrides import default_welcome_message
+                                welcome_message = (v_custom_msg or "").strip() or default_welcome_message(v_label or variant_key)
+                        except Exception:
+                            logger.warning(f"Could not resolve welcome_message for variant {variant_key}")
+                            # A failed query leaves the transaction aborted
+                            # until rolled back — without this, the INSERT
+                            # right below would fail too (e.g. on a DB that
+                            # hasn't run the welcome_message migration yet).
+                            conn.rollback()
+
                     cur.execute("""
                         INSERT INTO whatsapp_leads
                         (phone_number, customer_name, lead_status, last_interaction_at, created_at, updated_at, bot_variant, bot_enabled)
@@ -236,6 +267,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "last_read_at": None,
                         "priority": 0,
                         "bot_variant": variant_key,
+                        "welcome_message": welcome_message,
                     }
     
     except Exception as e:

@@ -332,6 +332,23 @@ def is_variant_in_hours(variant_key: Optional[str]) -> bool:
     return hour_in_schedule(now_hour, window[0], window[1])
 
 
+def default_welcome_message(label: str) -> str:
+    """Fallback text for bot_ab_variants.welcome_message when an is_human
+    variant (Tomás, Esteban, ...) doesn't have a custom one saved yet —
+    sent once to a brand-new lead the moment they're assigned to that
+    variant (see get_or_create_lead in app/db/leads.py). Explains that a
+    person will answer, but Popeye can still help with the basics on
+    request — see the "hola Popeye" pass-through gate in
+    app/whatsapp/webhook.py, which this message's wording depends on:
+    if that trigger phrase ever changes, update this text to match."""
+    return (
+        f"¡Hola! 👋 En cualquier momento llega *{label}* a responderte.\n\n"
+        "Mientras tanto, si quieres resolver dudas básicas (precios, "
+        "características, ubicación), puedes preguntarle a Popeye — "
+        "solo escribe *Hola Popeye* y te atenderá."
+    )
+
+
 def get_override(message_key: str) -> Optional[str]:
     """Return the current lead's variant override for this message key, or
     None if there's no active variant for this lead or no override defined

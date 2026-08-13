@@ -140,16 +140,33 @@ def _ensure_tables():
                     # schedule_end_hour — 24 = "hasta medianoche"). NULL/NULL
                     # (default) = sin restricción, disponible 24/7, igual que
                     # el comportamiento de siempre. Cuando ambos están
-                    # definidos: (a) get_or_create_lead solo asigna leads
-                    # nuevos a esta variante si la hora actual cae dentro del
-                    # rango (con fallback a ignorar el horario si NINGUNA
-                    # variante activa está de turno ahora mismo, para nunca
-                    # dejar un lead sin variante asignada), y (b) las
-                    # notificaciones push (mensaje nuevo / sin responder) se
-                    # silencian fuera de ese rango — ver
+                    # definidos, las notificaciones push (mensaje nuevo / sin
+                    # responder) se silencian fuera de ese rango — ver
                     # is_variant_in_hours() en app/bot/variant_overrides.py.
+                    # NO afecta a quién se le asigna un lead nuevo (eso es
+                    # puramente por peso, ver _pick_active_variant en
+                    # app/db/leads.py — un intento anterior de filtrar
+                    # también la asignación por horario dejaba variantes sin
+                    # horario casi sin leads nuevos mientras alguien con
+                    # horario estuviera "de turno", revertido 2026-08-12).
                     "schedule_start_hour SMALLINT",
                     "schedule_end_hour   SMALLINT",
+                    # Mensaje que recibe un cliente nuevo la primera vez que
+                    # escribe y queda asignado a esta variante — pensado para
+                    # variantes is_human (Tomás, Esteban, ...), donde nada
+                    # responde automático después: sin este mensaje el
+                    # cliente no tendría ninguna señal de que alguien lo va a
+                    # atender. NULL (default) = usa la plantilla genérica de
+                    # _default_welcome_message() de abajo con el label de la
+                    # variante interpolado, en vez de un texto fijo guardado
+                    # — así que si el operador nunca lo personaliza y más
+                    # tarde le cambia el label a la variante, el mensaje se
+                    # actualiza solo. Ver get_or_create_lead en
+                    # app/db/leads.py (dónde se resuelve) y el gate
+                    # "hola Popeye" en app/whatsapp/webhook.py (por qué el
+                    # mensaje menciona que Popeye puede ayudar con lo básico
+                    # mientras tanto).
+                    "welcome_message TEXT",
                 ]:
                     try:
                         cur.execute(f"ALTER TABLE bot_ab_variants ADD COLUMN IF NOT EXISTS {col_def}")
@@ -390,6 +407,7 @@ class VariantCreate(BaseModel):
     is_human: bool = False
     schedule_start_hour: Optional[int] = None
     schedule_end_hour: Optional[int] = None
+    welcome_message: Optional[str] = None
 
 
 class VariantUpdate(BaseModel):
@@ -409,6 +427,7 @@ class VariantUpdate(BaseModel):
     schedule_start_hour: Optional[int] = None
     schedule_end_hour: Optional[int] = None
     clear_schedule: Optional[bool] = None
+    welcome_message: Optional[str] = None
 
 
 class OverrideUpsert(BaseModel):
@@ -470,7 +489,7 @@ async def list_ab_variants():
                     SELECT v.id, v.variant_key, v.label, v.is_active, v.created_at,
                            COUNT(o.id) AS override_count, v.weight, v.ai_provider, v.ai_model,
                            v.disabled_triggers, v.system_prompt, v.show_welcome_menu, v.is_human,
-                           v.schedule_start_hour, v.schedule_end_hour
+                           v.schedule_start_hour, v.schedule_end_hour, v.welcome_message
                     FROM bot_ab_variants v
                     LEFT JOIN bot_message_overrides o ON o.variant_key = v.variant_key
                     GROUP BY v.id
@@ -478,6 +497,7 @@ async def list_ab_variants():
                 """)
                 rows = cur.fetchall()
         active_weight_total = sum(r[6] or 1 for r in rows if r[3]) or 1
+        from app.bot.variant_overrides import default_welcome_message
         return {
             "variants": [
                 {
@@ -491,6 +511,11 @@ async def list_ab_variants():
                     "is_human": bool(r[12]),
                     "schedule_start_hour": r[13],
                     "schedule_end_hour": r[14],
+                    "welcome_message": r[15],
+                    # Vacío cuando no hay texto propio guardado — el admin UI
+                    # usa esto solo como placeholder/prefill, nunca lo
+                    # confunde con un valor guardado.
+                    "welcome_message_default": default_welcome_message(r[2]),
                     # Informational only — the actual split is deterministic
                     # (see _pick_active_variant), this just previews the
                     # target ratio implied by the current weights.
@@ -517,11 +542,12 @@ async def create_ab_variant(data: VariantCreate):
         with _get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO bot_ab_variants (variant_key, label, weight, is_human, schedule_start_hour, schedule_end_hour) "
-                    "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                    "INSERT INTO bot_ab_variants (variant_key, label, weight, is_human, schedule_start_hour, schedule_end_hour, welcome_message) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
                     (
                         key, data.label or key, max(1, data.weight or 1), data.is_human,
                         data.schedule_start_hour, data.schedule_end_hour,
+                        (data.welcome_message or "").strip() or None,
                     ),
                 )
                 new_id = cur.fetchone()[0]
@@ -564,6 +590,11 @@ async def update_ab_variant(variant_id: int, data: VariantUpdate):
                     cur.execute(
                         "UPDATE bot_ab_variants SET schedule_start_hour = %s, schedule_end_hour = %s WHERE id = %s",
                         (data.schedule_start_hour, data.schedule_end_hour, variant_id),
+                    )
+                if data.welcome_message is not None:
+                    cur.execute(
+                        "UPDATE bot_ab_variants SET welcome_message = %s WHERE id = %s",
+                        (data.welcome_message.strip() or None, variant_id),
                     )
                 conn.commit()
         from app.bot.variant_overrides import invalidate_cache
