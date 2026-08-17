@@ -2874,6 +2874,11 @@ async function enviarSolicitud(){
 function goReservar(){
   _trackEvent('view_reservar');
   S.step = 'fecha';
+  // Fresh start every time someone (re)enters from the menu — otherwise a
+  // customer who tried startGiftFlow(), went back, and clicked "Reservar"
+  // again would land on the normal calendar with the old gift checkbox
+  // pre-checked from that earlier attempt.
+  S.isGift = false;
   renderCal();
 }
 
@@ -2910,11 +2915,12 @@ function renderCal(){
     <div class="cal-grid">${cells}</div>
     <div class="info-box" style="margin-top:1rem;font-size:.85rem">
       🎁 ${LANG==='en'
-        ? '<strong>A gift or not sure about the date?</strong> Pick any date for now — the gift card is valid for 1 year and the final date is arranged later. You can still add extras and complete your booking.'
+        ? '<strong>Is it a gift?</strong> You don\'t need to pick a date — buy a gift card valid for 2 years and the recipient chooses the date later.'
         : LANG==='pt'
-        ? '<strong>É um presente ou não sabe a data?</strong> Escolha qualquer data por enquanto — o gift card é válido por 1 ano e a data final é combinada depois. Você ainda pode adicionar extras e concluir a reserva.'
-        : '<strong>¿Es un regalo o no sabes la fecha?</strong> Elige cualquier fecha por ahora — la gift card tiene validez de 1 año y la fecha definitiva se coordina más tarde. Igual puedes agregar extras y completar tu reserva.'}
+        ? '<strong>É um presente?</strong> Não precisa escolher uma data — compre um gift card válido por 2 anos e quem recebe escolhe a data depois.'
+        : '<strong>¿Es un regalo?</strong> No necesitas elegir una fecha — compra una gift card con 2 años de validez y quien la recibe elige la fecha más adelante.'}
     </div>
+    <button class="btn btn-secondary" style="margin-top:.6rem" onclick="startGiftFlow()">🎁 ${LANG==='en'?'Buy a gift card instead':LANG==='pt'?'Comprar um gift card':'Comprar una gift card'}</button>
   </div>
   <button class="btn btn-secondary" onclick="renderMenu()">${t('back')}</button>`;
 }
@@ -3065,9 +3071,123 @@ function renderPeopleSelect(){
       <div class="price-big" id="pp-total-big"></div>
     </div>
   </div>
-  <button class="btn" onclick="goExtras()">${t('nextExtras')}</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderTimeSelect()">${t('back')}</button>`;
+  ${S.isGift && !S.selectedDate
+    ? `<button class="btn" onclick="renderGiftForm()">${LANG==='en'?'Next':LANG==='pt'?'Próximo':'Siguiente'}</button>
+       <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderCal()">${t('back')}</button>`
+    : `<button class="btn" onclick="goExtras()">${t('nextExtras')}</button>
+       <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderTimeSelect()">${t('back')}</button>`}`;
   update();
+}
+
+// ── Gift card: comprar sin elegir fecha (2 años de validez) ──────────────
+// Reusa S.numAdults/numChildren (vía renderPeopleSelect) y S.customerName/
+// Phone/Email/giftTo/giftMsg/giftFrom (vía renderGiftForm, mismos ids que
+// el checkbox "Es un regalo" original en renderForm) — la única diferencia
+// real es que S.selectedDate se queda en null todo el camino, lo que hace
+// que renderPeopleSelect/renderForm/submitBooking tomen la rama de regalo
+// en vez de la de reserva con fecha.
+function startGiftFlow(){
+  _trackEvent('view_gift_flow');
+  S.isGift = true;
+  S.selectedDate = null;
+  S.selectedTime = null;
+  renderPeopleSelect();
+}
+
+function renderGiftForm(){
+  mc.innerHTML = `
+  ${stepsHtml('datos')}
+  <div class="card">
+    <div class="card-title">🎁 ${LANG==='en'?'Gift card':LANG==='pt'?'Gift card':'Gift card'} — ${S.numAdults + S.numChildren} ${LANG==='en'?'people':LANG==='pt'?'pessoas':'personas'}</div>
+    <div class="summary-row"><span>${LANG==='en'?'Amount':'Monto'}</span><span><strong>$${pricingFor(S.numAdults, S.numChildren).sub.toLocaleString('es-CL')}</strong></span></div>
+    <div class="info-box" style="margin-top:.6rem;font-size:.82rem">
+      ${LANG==='en'
+        ? 'Paid in full now. Valid 2 years — the recipient picks the date later.'
+        : LANG==='pt'
+        ? 'Pago total agora. Válido por 2 anos — quem recebe escolhe a data depois.'
+        : 'Se paga el 100% ahora. Válida 2 años — quien la recibe elige la fecha más adelante.'}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
+    <div class="form-group"><label>${t('labelName')} *</label>
+      <input type="text" id="f-name" placeholder="${t('labelName')}" value="${S.customerName}">
+    </div>
+    <div class="form-group"><label>${t('labelPhone')} *</label>
+      <input type="tel" id="f-phone" placeholder="+56 9 xxxx xxxx" value="${S.customerPhone}">
+    </div>
+    <div class="form-group"><label>${t('labelEmail')} *</label>
+      <input type="email" id="f-email" placeholder="tu@email.com" value="${S.customerEmail}">
+    </div>
+    <div class="form-group"><label>${LANG==='es'?'¿Para quién es el regalo?':LANG==='pt'?'Para quem é o presente?':'Who receives the gift?'}</label>
+      <input type="text" id="f-gift-to" placeholder="${LANG==='es'?'Nombre de quien lo recibe':LANG==='pt'?'Nome de quem recebe':'Recipient name'}" value="${(S.giftTo||'').replace(/"/g,'&quot;')}" oninput="S.giftTo=this.value"></div>
+    <div class="form-group"><label>${LANG==='es'?'Dedicatoria':LANG==='pt'?'Dedicatória':'Message'}</label>
+      <textarea id="f-gift-msg" rows="2" placeholder="${LANG==='es'?'Escribe tu mensaje...':LANG==='pt'?'Escreva sua mensagem...':'Write your message...'}" oninput="S.giftMsg=this.value">${(S.giftMsg||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="form-group"><label>${LANG==='es'?'¿De parte de quién?':LANG==='pt'?'De quem?':'From whom?'}</label>
+      <input type="text" id="f-gift-from" placeholder="${LANG==='es'?'Tu nombre':LANG==='pt'?'Seu nome':'Your name'}" value="${(S.giftFrom||'').replace(/"/g,'&quot;')}" oninput="S.giftFrom=this.value"></div>
+    <div class="form-group" style="margin-top:.2rem">
+      <label class="hb-check"><input type="checkbox" id="f-terms" ${S.termsAccepted?'checked':''} onchange="S.termsAccepted=this.checked"><span>${LANG==='es'?'He leído y acepto los':LANG==='pt'?'Li e aceito os':'I have read and accept the'} <a href="${TERMS_URL}" target="_blank" rel="noopener" style="color:var(--coral);text-decoration:underline;font-weight:600">${LANG==='es'?'Términos y Condiciones':LANG==='pt'?'Termos e Condições':'Terms and Conditions'}</a></span></label>
+    </div>
+  </div>
+  <button class="btn" onclick="submitGiftCard()">${LANG==='en'?'Pay gift card':LANG==='pt'?'Pagar gift card':'Pagar gift card'} 💳</button>
+  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderPeopleSelect()">${t('back')}</button>`;
+}
+
+async function submitGiftCard(){
+  if(_isSubmittingBooking) return;
+  S.customerName = $('f-name').value.trim();
+  S.customerPhone = $('f-phone').value.trim();
+  S.customerEmail = $('f-email').value.trim();
+  S.termsAccepted = !!(document.getElementById('f-terms') && document.getElementById('f-terms').checked);
+  S.giftTo = (document.getElementById('f-gift-to')?.value||'').trim();
+  S.giftMsg = (document.getElementById('f-gift-msg')?.value||'').trim();
+  S.giftFrom = (document.getElementById('f-gift-from')?.value||'').trim();
+  if(!S.customerName || !S.customerPhone){
+    showToast('Por favor ingresa nombre y telefono');
+    return;
+  }
+  if(!S.customerEmail){
+    showToast(LANG==='es'?'El email es obligatorio para enviarte el código de la gift card':LANG==='pt'?'O email é obrigatório para enviar o código':'Email is required to send your gift card code');
+    return;
+  }
+  if(!S.termsAccepted){
+    showToast(LANG==='es'?'Debes aceptar los Términos y Condiciones':LANG==='pt'?'Você deve aceitar os Termos e Condições':'You must accept the Terms and Conditions');
+    return;
+  }
+  _isSubmittingBooking = true;
+  mc.innerHTML = `<div class="card" style="text-align:center">
+    <div style="font-size:2rem;margin:1rem">⏳</div>
+    <p>${LANG==='en'?'Creating your gift card...':LANG==='pt'?'Criando seu gift card...':'Creando tu gift card...'}</p>
+  </div>`;
+  try{
+    const testPrice = new URLSearchParams(location.search).get('test_price');
+    const payload = {
+      buyer_name: S.customerName,
+      buyer_phone: S.customerPhone,
+      buyer_email: S.customerEmail,
+      num_adultos: S.numAdults,
+      num_ninos: S.numChildren,
+      recipient_name: S.giftTo || null,
+      dedication: S.giftMsg || null,
+      sender_name: S.giftFrom || null,
+    };
+    if(testPrice) payload.test_price = parseInt(testPrice);
+    const r = await fetch('/api/gift-cards/create',{
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.detail || 'Error');
+    _trackEvent('gift_card_completed', data.code);
+    if(data.payment_url){
+      window.location.href = data.payment_url;
+      return;
+    }
+    mc.innerHTML = `<div class="card"><p style="color:red">${LANG==='en'?'Payment temporarily unavailable, please try again shortly.':'Pago temporalmente no disponible, intenta de nuevo en unos minutos.'}</p></div>`;
+  }catch(e){
+    mc.innerHTML = `<div class="card"><p style="color:red">Error: ${e.message}</p></div>`;
+  }finally{
+    _isSubmittingBooking = false;
+  }
 }
 
 function changeAdults(d){
@@ -3879,12 +3999,59 @@ function _renderThankYou(ref, b){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al inicio</button>`;
 }
 
+function _renderGiftThankYou(ref, gc){
+  if(!gc){
+    return `
+    <div class="card" style="text-align:center">
+      <div class="success-icon">🎁</div>
+      <div class="card-title">${LANG==='en'?'Gift card purchased!':LANG==='pt'?'Gift card comprado!':'¡Gift card comprada!'}</div>
+      <p style="color:var(--muted);margin:.5rem 0">${LANG==='en'?'Code':'Código'}: <strong>${ref}</strong></p>
+      <div class="info-box" style="margin-top:1rem">${LANG==='en'?'We\'ll email you the details shortly.':'Te enviaremos los detalles por email en breve.'}</div>
+    </div>
+    <button class="btn" style="margin-top:1rem" onclick="renderMenu()">${t('returnMenu')}</button>`;
+  }
+  const n = gc.num_people;
+  let expiresStr = '';
+  if(gc.expires_at){
+    const [y,m,d] = gc.expires_at.slice(0,10).split('-');
+    expiresStr = `${d}/${m}/${y}`;
+  }
+  return `
+  <div class="card" style="text-align:center">
+    <div class="success-icon">🎁</div>
+    <div class="card-title">${LANG==='en'?'Gift card purchased!':LANG==='pt'?'Gift card comprado!':'¡Gift card comprada!'}</div>
+    <div style="background:var(--bg);border:2px dashed var(--gold);border-radius:12px;padding:1.2rem;margin:1rem 0">
+      <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${LANG==='en'?'Your code':'Tu código'}</div>
+      <div style="font-size:1.5rem;font-weight:700;letter-spacing:.05em;color:var(--gold);margin-top:.25rem">${gc.code}</div>
+    </div>
+    <div style="background:var(--bg);border-radius:12px;padding:1rem;text-align:left">
+      <div style="display:flex;justify-content:space-between;padding:.25rem 0"><span>👥 ${LANG==='en'?'People':'Personas'}</span><strong>${n}</strong></div>
+      <div style="display:flex;justify-content:space-between;padding:.25rem 0"><span>💰 ${LANG==='en'?'Paid':'Pagado'}</span><strong>$${Number(gc.amount||0).toLocaleString('es-CL')}</strong></div>
+      ${expiresStr ? `<div style="display:flex;justify-content:space-between;padding:.25rem 0"><span>📅 ${LANG==='en'?'Valid until':'Válida hasta'}</span><strong>${expiresStr}</strong></div>` : ''}
+    </div>
+    <div class="info-box" style="margin-top:1rem;text-align:left">
+      ${LANG==='en'
+        ? 'We sent this code to your email. To pick a date, message HotBoat on WhatsApp or email with this code at hand.'
+        : LANG==='pt'
+        ? 'Enviamos este código para seu email. Para escolher a data, escreva para HotBoat por WhatsApp ou email com este código.'
+        : 'Te enviamos este código a tu email. Para elegir la fecha, escribe a HotBoat por WhatsApp o email con este código a mano.'}
+    </div>
+  </div>
+  <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderMenu()">${t('returnMenu')}</button>`;
+}
+
 async function checkReturnFromPayment(){
   const params = new URLSearchParams(window.location.search);
   const ref = params.get('booking_ref');
   const status = params.get('collection_status') || params.get('payment_status');
   if(ref && status==='approved'){
     mc.innerHTML = `<div class="card" style="text-align:center"><p>${t('loading')}</p></div>`;
+    if(ref.toUpperCase().startsWith('GC-')){
+      let gc = null;
+      try{ gc = await fetch(`/api/gift-cards/${encodeURIComponent(ref)}`).then(r=>r.ok?r.json():null); }catch(e){}
+      mc.innerHTML = _renderGiftThankYou(ref, gc);
+      return true;
+    }
     let b = null;
     try{ b = await fetch(`/api/booking/${encodeURIComponent(ref)}`).then(r=>r.ok?r.json():null); }catch(e){}
     mc.innerHTML = _renderThankYou(ref, b);

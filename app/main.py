@@ -22,6 +22,7 @@ from app.booking.gastos_router import gastos_router, _ensure_tables as _ensure_g
 from app.booking.tabla_router import tabla_router, _ensure_tabla_table, _seed_tabla_products, _ensure_catalog_table, _seed_catalog_defaults
 from app.booking.reserva_router import reserva_router
 from app.booking.link_tracking_router import link_tracking_router
+from app.booking.gift_cards_router import gift_cards_router
 from app.email.ses_webhook import ses_webhook_router
 from app.meta_pixel import apply_meta_pixel_placeholder, is_meta_pixel_enabled
 from app.gtm import apply_gtm_placeholders
@@ -1029,6 +1030,7 @@ app.include_router(gastos_router)
 app.include_router(tabla_router)
 app.include_router(reserva_router)
 app.include_router(link_tracking_router)
+app.include_router(gift_cards_router)
 app.include_router(ses_webhook_router)
 
 

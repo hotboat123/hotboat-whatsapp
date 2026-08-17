@@ -29,6 +29,8 @@ def confirm_payment_by_ref(buy_order: str, payment_id: str | None, status: str, 
     if not buy_order:
         return False
 
+    if _confirm_gift_card(buy_order, payment_id, status, amount):
+        return True
     if _confirm_hotboat_booking(buy_order, payment_id, status, amount):
         return True
     if _confirm_accommodation_booking(buy_order, payment_id, status):
@@ -81,6 +83,17 @@ def _record_pago(buy_order: str, payment_id: str | None, status: str, amount: fl
                 (_json.dumps(pagos), booking_id),
             )
             conn.commit()
+
+
+def _confirm_gift_card(buy_order: str, payment_id: str | None, status: str, amount: float | None = None) -> bool:
+    """Checked first: the GC- prefix (see is_gift_card_ref/generate_gift_card_code
+    in gift_cards_router.py) means this never wastes a query against the
+    other three tables for an actual gift-card purchase."""
+    from app.booking.gift_cards_router import is_gift_card_ref, confirm_gift_card_payment
+
+    if not is_gift_card_ref(buy_order):
+        return False
+    return confirm_gift_card_payment(buy_order, payment_id, status, amount)
 
 
 def _confirm_hotboat_booking(buy_order: str, payment_id: str | None, status: str, amount: float | None = None) -> bool:
