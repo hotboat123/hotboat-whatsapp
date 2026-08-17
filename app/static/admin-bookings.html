@@ -395,6 +395,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('coupons')" id="nav-coupons">
       <span class="ni">🎟️</span> Cupones
     </div>
+    <div class="nav-item" onclick="showSection('giftcards');loadGiftCards()" id="nav-giftcards">
+      <span class="ni">🎀</span> Gift Cards
+    </div>
     <div class="nav-item" onclick="showSection('emails')" id="nav-emails">
       <span class="ni">✉️</span> Emails reservas
     </div>
@@ -753,6 +756,34 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </table>
       </div>
     </div><!-- /section-coupons -->
+
+    <div id="section-giftcards" class="section">
+      <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:1.2rem">
+        <div style="flex:1">
+          <h2 style="margin:0;font-size:1.1rem">🎀 Gift Cards</h2>
+          <p style="margin:.2rem 0 0;color:var(--muted);font-size:.8rem">Compradas sin elegir fecha — el canje (elegir fecha) se coordina a mano; márcala canjeada acá cuando corresponda.</p>
+        </div>
+        <button class="btn-primary" onclick="loadGiftCards()">🔄 Actualizar</button>
+      </div>
+      <div class="chart-wrap" style="padding:0;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:.83rem">
+          <thead>
+            <tr style="background:var(--input)">
+              <th style="padding:.6rem .9rem;text-align:left;color:var(--muted);font-weight:600">Código</th>
+              <th style="padding:.6rem;text-align:left;color:var(--muted);font-weight:600">Comprador</th>
+              <th style="padding:.6rem;text-align:left;color:var(--muted);font-weight:600">Regalo para</th>
+              <th style="padding:.6rem;text-align:center;color:var(--muted);font-weight:600">Personas</th>
+              <th style="padding:.6rem;text-align:right;color:var(--muted);font-weight:600">Monto</th>
+              <th style="padding:.6rem;text-align:center;color:var(--muted);font-weight:600">Comprada</th>
+              <th style="padding:.6rem;text-align:center;color:var(--muted);font-weight:600">Vence</th>
+              <th style="padding:.6rem;text-align:center;color:var(--muted);font-weight:600">Estado</th>
+              <th style="padding:.6rem"></th>
+            </tr>
+          </thead>
+          <tbody id="giftcards-tbody"><tr><td colspan="9" style="text-align:center;padding:1.5rem;color:var(--muted)">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div><!-- /section-giftcards -->
 
     <!-- EMAILS RESERVAS (Booknetic-style multi-trigger, Resend or SES) -->
     <div id="section-emails" class="section">
@@ -4735,7 +4766,7 @@ function doLogout(){
 
 function _applyNavPermissions(){
   const allSections = ['calendar','lista','clientes','stats','extras-cat','tablas-admin',
-    'coupons','emails','alojamientos-admin','aloj-bookings','experiencias','packs-admin',
+    'coupons','giftcards','emails','alojamientos-admin','aloj-bookings','experiencias','packs-admin',
     'cal-extras','financial','simulator','sueldos','gastos','whatsapp','chatbot','payment-test','logs','settings'];
   allSections.forEach(sec=>{
     const el = document.getElementById('nav-'+sec);
@@ -10454,6 +10485,77 @@ function renderCoupons(list){
   }).join('');
 }
 
+// ── Gift Cards ──────────────────────────────────────────────────────────────
+let _giftCards = [];
+
+async function loadGiftCards(){
+  try{
+    _giftCards = await api('/api/admin/gift-cards');
+    renderGiftCards(_giftCards);
+  }catch(e){ showToast('Error cargando gift cards: '+e.message); }
+}
+
+function renderGiftCards(list){
+  const tbody = document.getElementById('giftcards-tbody');
+  if(!tbody) return;
+  if(!list.length){
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin gift cards todavía.</td></tr>';
+    return;
+  }
+  const fmtDate = (iso) => iso ? iso.substring(0,10) : '—';
+  tbody.innerHTML = list.map(g=>{
+    const statusBadge = g.status === 'redeemed'
+      ? '<span style="background:rgba(96,165,250,.12);color:#60a5fa;border-radius:12px;padding:2px 8px;font-size:.75rem;font-weight:700">✓ Canjeada</span>'
+      : g.status === 'pending_payment'
+      ? '<span style="background:rgba(100,116,139,.15);color:#64748b;border-radius:12px;padding:2px 8px;font-size:.75rem">Pendiente pago</span>'
+      : g.is_expired
+      ? '<span style="background:rgba(239,68,68,.1);color:#f87171;border-radius:12px;padding:2px 8px;font-size:.75rem;font-weight:700">⚠ Vencida</span>'
+      : '<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 8px;font-size:.75rem;font-weight:700">Activa</span>';
+    const giftTo = g.recipient_name
+      ? `${g.recipient_name}${g.dedication ? `<div style="color:var(--muted);font-size:.75rem;font-style:italic;margin-top:.1rem">"${g.dedication}"</div>` : ''}`
+      : '—';
+    const action = g.status === 'active'
+      ? `<button onclick="markGiftCardRedeemed('${g.code}')"
+          style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;color:#4ade80">✅ Marcar canjeada</button>`
+      : g.status === 'redeemed'
+      ? `<button onclick="unmarkGiftCardRedeemed('${g.code}')"
+          style="background:var(--input);border:1px solid var(--border);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;color:var(--text)">↩ Deshacer</button>`
+      : '';
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:.65rem .9rem;font-family:monospace;font-weight:700;color:var(--gold);font-size:.85rem">${g.code}</td>
+      <td style="padding:.65rem .6rem;font-size:.8rem">
+        <div>${g.buyer_name||'—'}</div>
+        <div style="color:var(--muted);font-size:.75rem">${g.buyer_phone||''}${g.buyer_email?' · '+g.buyer_email:''}</div>
+      </td>
+      <td style="padding:.65rem .6rem;font-size:.8rem">${giftTo}</td>
+      <td style="padding:.65rem .6rem;text-align:center">${g.num_people}</td>
+      <td style="padding:.65rem .6rem;text-align:right;font-weight:600">$${Number(g.amount||0).toLocaleString('es-CL')}</td>
+      <td style="padding:.65rem .6rem;text-align:center;color:var(--muted);font-size:.8rem">${fmtDate(g.purchased_at)}</td>
+      <td style="padding:.65rem .6rem;text-align:center;color:var(--muted);font-size:.8rem">${fmtDate(g.expires_at)}</td>
+      <td style="padding:.65rem .6rem;text-align:center">${statusBadge}</td>
+      <td style="padding:.5rem .6rem;text-align:center;white-space:nowrap">${action}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function markGiftCardRedeemed(code){
+  if(!confirm(`¿Marcar la gift card ${code} como canjeada?`)) return;
+  try{
+    await api(`/api/admin/gift-cards/${encodeURIComponent(code)}/redeem`, {method:'POST', body: JSON.stringify({})});
+    showToast('🎀 Gift card marcada como canjeada');
+    loadGiftCards();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function unmarkGiftCardRedeemed(code){
+  if(!confirm(`¿Deshacer el canje de ${code}? Volverá a quedar activa.`)) return;
+  try{
+    await api(`/api/admin/gift-cards/${encodeURIComponent(code)}/unredeem`, {method:'POST'});
+    showToast('↩ Canje deshecho');
+    loadGiftCards();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
 function openCouponModal(id){
   const c = id ? _coupons.find(x=>x.id===id) : null;
   document.getElementById('cm-id').value = id||'';
@@ -14355,7 +14457,7 @@ async function deleteBotKeyword(id){
 const _SECTION_LABELS = {
   'calendar':'📅 Calendario','lista':'📋 Reservas','clientes':'👥 Clientes',
   'stats':'📊 Estadísticas','extras-cat':'🏷️ Extras',
-  'tablas-admin':'🍽 Tablas','coupons':'🎟️ Cupones','emails':'✉️ Emails reservas',
+  'tablas-admin':'🍽 Tablas','coupons':'🎟️ Cupones','giftcards':'🎀 Gift Cards','emails':'✉️ Emails reservas',
   'alojamientos-admin':'🏠 Alojamientos','aloj-bookings':'📋 Reservas Aloj.',
   'experiencias':'🏔️ Experiencias','packs-admin':'🎁 Packs','cal-extras':'🗓️ Cal. Extras',
   'financial':'💰 Finanzas','simulator':'🎯 Simulador','sueldos':'👷 Sueldos',

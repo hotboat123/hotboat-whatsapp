@@ -17,7 +17,7 @@ import string
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from app.db.connection import get_connection
@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 gift_cards_router = APIRouter()
 
 GIFT_CARD_VALIDITY_YEARS = 2
+
+
+def _check_auth(key: str):
+    pass  # Same no-op as every other admin router here — see admin_router.py's _check_auth
 
 _gift_cards_table_ensured = False
 
@@ -191,6 +195,86 @@ async def get_gift_card_endpoint(code: str):
     if not gc:
         raise HTTPException(status_code=404, detail="Gift card no encontrada")
     return gc
+
+
+@gift_cards_router.get("/api/admin/gift-cards")
+async def list_gift_cards_endpoint(x_admin_key: str = Header("")):
+    """Panel admin (pestaña Gift Cards) — todas, más recientes primero. El
+    canje en sí se hace a mano hoy (el dueño lo confirma por WhatsApp/en
+    persona con el código) — esto solo da visibilidad + un botón para
+    marcarla canjeada, no un flujo de autoservicio para el destinatario."""
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_gift_cards_table(cur)
+            cur.execute("""
+                SELECT code, num_adultos, num_ninos, amount, buyer_name, buyer_phone,
+                       buyer_email, recipient_name, dedication, sender_name, status,
+                       purchased_at, expires_at, redeemed_at, redeemed_booking_ref, created_at
+                FROM gift_cards ORDER BY created_at DESC
+            """)
+            rows = cur.fetchall()
+    return [
+        {
+            "code": r[0], "num_adultos": r[1], "num_ninos": r[2], "num_people": r[1] + r[2],
+            "amount": r[3], "buyer_name": r[4], "buyer_phone": r[5], "buyer_email": r[6],
+            "recipient_name": r[7], "dedication": r[8], "sender_name": r[9], "status": r[10],
+            "purchased_at": r[11].isoformat() if r[11] else None,
+            "expires_at": r[12].isoformat() if r[12] else None,
+            "redeemed_at": r[13].isoformat() if r[13] else None,
+            "redeemed_booking_ref": r[14],
+            "created_at": r[15].isoformat() if r[15] else None,
+            "is_expired": bool(r[10] == "active" and r[12] and r[12] < datetime.now(r[12].tzinfo)),
+        }
+        for r in rows
+    ]
+
+
+class RedeemGiftCardRequest(BaseModel):
+    redeemed_booking_ref: Optional[str] = None
+
+
+@gift_cards_router.post("/api/admin/gift-cards/{code}/redeem")
+async def redeem_gift_card_endpoint(code: str, body: RedeemGiftCardRequest, x_admin_key: str = Header("")):
+    """Marca la gift card canjeada a mano — no valida fecha de vencimiento
+    acá a propósito, el dueño ya la está viendo y decidiendo caso a caso."""
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_gift_cards_table(cur)
+            cur.execute("""
+                UPDATE gift_cards
+                SET status = 'redeemed', redeemed_at = NOW(),
+                    redeemed_booking_ref = %s, updated_at = NOW()
+                WHERE code = %s AND status = 'active'
+                RETURNING id
+            """, (body.redeemed_booking_ref, code))
+            row = cur.fetchone()
+            conn.commit()
+    if not row:
+        raise HTTPException(status_code=404, detail="Gift card no encontrada o no está activa")
+    return {"ok": True}
+
+
+@gift_cards_router.post("/api/admin/gift-cards/{code}/unredeem")
+async def unredeem_gift_card_endpoint(code: str, x_admin_key: str = Header("")):
+    """Deshace un canje marcado por error."""
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_gift_cards_table(cur)
+            cur.execute("""
+                UPDATE gift_cards
+                SET status = 'active', redeemed_at = NULL,
+                    redeemed_booking_ref = NULL, updated_at = NOW()
+                WHERE code = %s AND status = 'redeemed'
+                RETURNING id
+            """, (code,))
+            row = cur.fetchone()
+            conn.commit()
+    if not row:
+        raise HTTPException(status_code=404, detail="Gift card no encontrada o no está canjeada")
+    return {"ok": True}
 
 
 def confirm_gift_card_payment(code: str, payment_id: Optional[str], status: str, amount: Optional[float] = None) -> bool:
