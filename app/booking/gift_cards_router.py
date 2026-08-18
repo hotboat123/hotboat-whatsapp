@@ -71,6 +71,11 @@ def _ensure_gift_cards_table(cur) -> None:
         )
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_gift_cards_code ON gift_cards(code)")
+    # Admin-filled after contacting the buyer — same two fields/values as
+    # all_appointments.ciudad_origen/como_supieron (see openModal in
+    # admin-bookings.html), added later so ALTER instead of the CREATE above.
+    cur.execute("ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS ciudad_origen TEXT")
+    cur.execute("ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS como_supieron TEXT")
     _gift_cards_table_ensured = True
 
 
@@ -210,7 +215,8 @@ async def list_gift_cards_endpoint(x_admin_key: str = Header("")):
             cur.execute("""
                 SELECT code, num_adultos, num_ninos, amount, buyer_name, buyer_phone,
                        buyer_email, recipient_name, dedication, sender_name, status,
-                       purchased_at, expires_at, redeemed_at, redeemed_booking_ref, created_at
+                       purchased_at, expires_at, redeemed_at, redeemed_booking_ref, created_at,
+                       ciudad_origen, como_supieron, payment_id, payment_status
                 FROM gift_cards ORDER BY created_at DESC
             """)
             rows = cur.fetchall()
@@ -224,10 +230,45 @@ async def list_gift_cards_endpoint(x_admin_key: str = Header("")):
             "redeemed_at": r[13].isoformat() if r[13] else None,
             "redeemed_booking_ref": r[14],
             "created_at": r[15].isoformat() if r[15] else None,
+            "ciudad_origen": r[16],
+            "como_supieron": r[17],
+            "payment_id": r[18],
+            "payment_status": r[19],
             "is_expired": bool(r[10] == "active" and r[12] and r[12] < datetime.now(r[12].tzinfo)),
         }
         for r in rows
     ]
+
+
+class UpdateGiftCardOriginRequest(BaseModel):
+    ciudad_origen: Optional[str] = None
+    como_supieron: Optional[str] = None
+
+
+@gift_cards_router.put("/api/admin/gift-cards/{code}/origin")
+async def update_gift_card_origin_endpoint(code: str, body: UpdateGiftCardOriginRequest, x_admin_key: str = Header("")):
+    """Guarda ciudad_origen/como_supieron — igual que en reservas, esto lo
+    llena el staff a mano después de hablar con el comprador, no se pide en
+    el formulario web de compra."""
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_gift_cards_table(cur)
+            cur.execute("""
+                UPDATE gift_cards
+                SET ciudad_origen = %s, como_supieron = %s, updated_at = NOW()
+                WHERE code = %s
+                RETURNING id
+            """, (
+                (body.ciudad_origen or "").strip() or None,
+                (body.como_supieron or "").strip() or None,
+                code,
+            ))
+            row = cur.fetchone()
+            conn.commit()
+    if not row:
+        raise HTTPException(status_code=404, detail="Gift card no encontrada")
+    return {"ok": True}
 
 
 class RedeemGiftCardRequest(BaseModel):

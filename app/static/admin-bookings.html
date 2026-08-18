@@ -10515,13 +10515,13 @@ function renderGiftCards(list){
       ? `${g.recipient_name}${g.dedication ? `<div style="color:var(--muted);font-size:.75rem;font-style:italic;margin-top:.1rem">"${g.dedication}"</div>` : ''}`
       : '—';
     const action = g.status === 'active'
-      ? `<button onclick="markGiftCardRedeemed('${g.code}')"
+      ? `<button onclick="event.stopPropagation();markGiftCardRedeemed('${g.code}')"
           style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;color:#4ade80">✅ Marcar canjeada</button>`
       : g.status === 'redeemed'
-      ? `<button onclick="unmarkGiftCardRedeemed('${g.code}')"
+      ? `<button onclick="event.stopPropagation();unmarkGiftCardRedeemed('${g.code}')"
           style="background:var(--input);border:1px solid var(--border);border-radius:6px;padding:.25rem .5rem;font-size:.78rem;cursor:pointer;color:var(--text)">↩ Deshacer</button>`
       : '';
-    return `<tr style="border-bottom:1px solid var(--border)">
+    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openGiftCardDetailModal('${g.code}')" title="Ver detalle">
       <td style="padding:.65rem .9rem;font-family:monospace;font-weight:700;color:var(--gold);font-size:.85rem">${g.code}</td>
       <td style="padding:.65rem .6rem;font-size:.8rem">
         <div>${g.buyer_name||'—'}</div>
@@ -10555,6 +10555,122 @@ async function unmarkGiftCardRedeemed(code){
     loadGiftCards();
   }catch(e){ showToast('Error: '+e.message); }
 }
+
+// ── Gift Cards: modal de detalle (click en la fila) ─────────────────────────
+const GC_CIUDADES = ['Santiago','Concepción','Temuco','Valdivia','Pucón','Otro'];
+const GC_CANALES = ['Instagram','Google','TikTok','Boca a boca','Otro'];
+
+function openGiftCardDetailModal(code){
+  const g = _giftCards.find(x=>x.code===code);
+  if(!g) return;
+  document.getElementById('gcd-code').textContent = g.code;
+  const statusBadge = g.status === 'redeemed'
+    ? '<span style="background:rgba(96,165,250,.12);color:#60a5fa;border-radius:12px;padding:2px 8px;font-size:.75rem;font-weight:700">✓ Canjeada</span>'
+    : g.status === 'pending_payment'
+    ? '<span style="background:rgba(100,116,139,.15);color:#64748b;border-radius:12px;padding:2px 8px;font-size:.75rem">Pendiente pago</span>'
+    : g.is_expired
+    ? '<span style="background:rgba(239,68,68,.1);color:#f87171;border-radius:12px;padding:2px 8px;font-size:.75rem;font-weight:700">⚠ Vencida</span>'
+    : '<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 8px;font-size:.75rem;font-weight:700">Activa</span>';
+  document.getElementById('gcd-status').innerHTML = statusBadge;
+
+  const rows = [
+    ['Comprador', `${escHtml(g.buyer_name||'—')}${g.buyer_phone?' · '+escHtml(g.buyer_phone):''}`],
+    ['Email', g.buyer_email ? escHtml(g.buyer_email) : '—'],
+    ['Fecha de compra', g.purchased_at ? fmtReservaCreada(g.purchased_at) : '—'],
+    ['Monto pagado', fmtMoney(g.amount)],
+    ['Método de pago', g.payment_id || g.payment_status ? `Transbank${g.payment_status?' · '+escHtml(g.payment_status):''}${g.payment_id?' · auth '+escHtml(g.payment_id):''}` : '—'],
+    ['Personas', `${g.num_people}`],
+    ['Vence', g.expires_at ? fmtReservaCreada(g.expires_at) : '—'],
+  ];
+  if(g.status === 'redeemed'){
+    rows.push(['Canjeada', g.redeemed_at ? fmtReservaCreada(g.redeemed_at) : '—']);
+    if(g.redeemed_booking_ref) rows.push(['Ref. reserva canje', escHtml(g.redeemed_booking_ref)]);
+  }
+  document.getElementById('gcd-info').innerHTML = rows.map(([label,val])=>`
+    <div style="display:flex;justify-content:space-between;gap:1rem;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.85rem">
+      <span style="color:var(--muted)">${label}</span>
+      <span style="text-align:right">${val}</span>
+    </div>`).join('');
+
+  const hasGift = g.recipient_name || g.dedication || g.sender_name;
+  document.getElementById('gcd-message-wrap').style.display = hasGift ? '' : 'none';
+  if(hasGift){
+    document.getElementById('gcd-message').innerHTML = `
+      ${g.recipient_name ? `<div style="margin-bottom:.3rem"><strong>Para:</strong> ${escHtml(g.recipient_name)}</div>` : ''}
+      ${g.dedication ? `<div style="font-style:italic;white-space:pre-wrap">"${escHtml(g.dedication)}"</div>` : ''}
+      ${g.sender_name ? `<div style="margin-top:.3rem"><strong>De:</strong> ${escHtml(g.sender_name)}</div>` : ''}
+    `;
+  }
+
+  // Ciudad origen (checkboxes, igual patrón que reservas)
+  const savedCiudad = (g.ciudad_origen||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const ciudadOtroVal = savedCiudad.find(s=>!GC_CIUDADES.slice(0,-1).includes(s));
+  const ciudadNormal = savedCiudad.filter(s=>GC_CIUDADES.includes(s));
+  if(ciudadOtroVal && !ciudadNormal.includes('Otro')) ciudadNormal.push('Otro');
+  document.getElementById('gcd-ciudad-checkboxes').innerHTML = GC_CIUDADES.map(c=>`
+    <label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;cursor:pointer;font-weight:400">
+      <input type="checkbox" value="${c}" ${ciudadNormal.includes(c)?'checked':''}
+        onchange="syncGcCiudadOrigenHidden()" style="accent-color:var(--gold)">
+      ${c}
+    </label>`).join('');
+  const ciudadOtroInp = document.getElementById('gcd-ciudad-otro-txt');
+  ciudadOtroInp.value = ciudadOtroVal || '';
+  ciudadOtroInp.style.display = ciudadNormal.includes('Otro') ? 'block' : 'none';
+  document.getElementById('gcd-ciudad_origen').value = g.ciudad_origen || '';
+
+  // Como supieron (select + otro, igual patrón que reservas)
+  const curCanal = g.como_supieron || '';
+  const isOtroCanal = curCanal && !GC_CANALES.slice(0,-1).includes(curCanal);
+  const selCanal = isOtroCanal ? 'Otro' : curCanal;
+  const canalSel = document.getElementById('gcd-como-supieron-sel');
+  canalSel.innerHTML = `<option value="">— seleccionar —</option>${GC_CANALES.map(c=>`<option value="${c}"${selCanal===c?' selected':''}>${c}</option>`).join('')}`;
+  const canalTxt = document.getElementById('gcd-como-supieron-txt');
+  canalTxt.value = isOtroCanal ? curCanal : '';
+  canalTxt.style.display = isOtroCanal ? 'block' : 'none';
+  document.getElementById('gcd-como_supieron').value = curCanal;
+
+  document.getElementById('gcd-code-hidden').value = g.code;
+  document.getElementById('giftcard-detail-modal').style.display = '';
+}
+
+function syncGcCiudadOrigenHidden(){
+  const checked = Array.from(document.querySelectorAll('#gcd-ciudad-checkboxes input:checked')).map(i=>i.value);
+  const otroTxt = document.getElementById('gcd-ciudad-otro-txt');
+  otroTxt.style.display = checked.includes('Otro') ? 'block' : 'none';
+  const vals = checked.filter(c=>c!=='Otro');
+  if(checked.includes('Otro') && otroTxt.value.trim()) vals.push(otroTxt.value.trim());
+  document.getElementById('gcd-ciudad_origen').value = vals.join(', ');
+}
+
+function closeGiftCardDetailModal(){
+  document.getElementById('giftcard-detail-modal').style.display = 'none';
+}
+
+async function saveGiftCardOrigin(){
+  const code = document.getElementById('gcd-code-hidden').value;
+  syncGcCiudadOrigenHidden();
+  const canalSel = document.getElementById('gcd-como-supieron-sel').value;
+  const canalTxt = document.getElementById('gcd-como-supieron-txt').value.trim();
+  const como_supieron = canalSel === 'Otro' ? canalTxt : canalSel;
+  const body = {
+    ciudad_origen: document.getElementById('gcd-ciudad_origen').value,
+    como_supieron,
+  };
+  try{
+    await api(`/api/admin/gift-cards/${encodeURIComponent(code)}/origin`, {method:'PUT', body: JSON.stringify(body)});
+    showToast('💾 Guardado');
+    await loadGiftCards();
+    closeGiftCardDetailModal();
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+document.addEventListener('change', (ev)=>{
+  if(ev.target && ev.target.id === 'gcd-como-supieron-sel'){
+    const v = ev.target.value;
+    const inp = document.getElementById('gcd-como-supieron-txt');
+    inp.style.display = v === 'Otro' ? 'block' : 'none';
+  }
+});
 
 function openCouponModal(id){
   const c = id ? _coupons.find(x=>x.id===id) : null;
@@ -11046,6 +11162,40 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <!-- ═══ COUPON MODAL ═══ -->
+<div id="giftcard-detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
+  <div style="background:var(--card);border-radius:14px;max-width:520px;margin:auto;padding:1.5rem">
+    <input type="hidden" id="gcd-code-hidden">
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem">
+      <span style="font-family:monospace;font-weight:700;color:var(--gold);font-size:1.05rem" id="gcd-code"></span>
+      <span id="gcd-status"></span>
+    </div>
+
+    <div id="gcd-info" style="margin-bottom:1rem"></div>
+
+    <div id="gcd-message-wrap" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:.8rem;margin-bottom:1rem">
+      <div style="font-size:.78rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">🎁 Mensaje del regalo</div>
+      <div id="gcd-message" style="font-size:.85rem;line-height:1.5"></div>
+    </div>
+
+    <div class="form-group-adm"><label>De dónde son <span style="color:var(--muted);font-weight:400;font-size:.75rem">(varias)</span></label>
+      <div id="gcd-ciudad-checkboxes" style="display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.4rem"></div>
+      <input id="gcd-ciudad-otro-txt" placeholder="Especificar otra ciudad..." oninput="syncGcCiudadOrigenHidden()" style="display:none;margin-top:.3rem">
+      <input type="hidden" id="gcd-ciudad_origen">
+    </div>
+
+    <div class="form-group-adm"><label>Cómo supieron</label>
+      <select id="gcd-como-supieron-sel"></select>
+      <input id="gcd-como-supieron-txt" placeholder="Especificar..." style="margin-top:.4rem;display:none">
+      <input type="hidden" id="gcd-como_supieron">
+    </div>
+
+    <div style="display:flex;gap:.6rem;margin-top:1rem">
+      <button class="btn-primary" onclick="saveGiftCardOrigin()" style="flex:1">💾 Guardar</button>
+      <button class="btn-secondary" onclick="closeGiftCardDetailModal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <div id="coupon-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;overflow-y:auto;padding:2rem 1rem">
   <div style="background:var(--card);border-radius:14px;max-width:500px;margin:auto;padding:1.5rem">
     <div style="font-size:1rem;font-weight:700;margin-bottom:1.2rem" id="cm-title">Nuevo Cupón</div>
