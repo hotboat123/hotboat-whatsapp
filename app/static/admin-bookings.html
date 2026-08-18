@@ -442,7 +442,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     </div>
   </div>
   <div class="sb-footer">
-    <small id="sync-status">Sin sincronizar</small>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)">
       <small id="sb-username" style="color:var(--muted);font-size:.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px"></small>
       <button onclick="doLogout()" title="Cerrar sesión"
@@ -460,7 +459,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;width:80px;font-size:.85rem;outline:none"
       onchange="reloadAll()">
     <button class="sync-btn" id="new-reserva-btn" onclick="openNewReservaModal()" style="background:var(--green);margin-right:.3rem">+ Nueva reserva</button>
-    <button class="sync-btn" onclick="doSync()" id="sync-btn">🔄 Sincronizar</button>
   </div>
 
   <div id="content">
@@ -4880,7 +4878,7 @@ function showSection(name){
   const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Extras','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
   document.getElementById('section-title').textContent = titles[name]||name;
   const contentEl  = document.getElementById('content');
-  const topbarBtns = ['year-sel','new-reserva-btn','sync-btn'];
+  const topbarBtns = ['year-sel','new-reserva-btn'];
   if(name==='whatsapp'){
     if(contentEl){ contentEl.style.padding='0'; contentEl.style.height='100%'; }
     topbarBtns.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
@@ -6470,21 +6468,6 @@ async function _autoConsumeStock(reservaId){
 }
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
-async function doSync(){
-  const btn=document.getElementById('sync-btn');
-  btn.classList.add('loading'); btn.textContent='Sincronizando...';
-  try{
-    const d=await api('/api/admin/sync',{method:'POST'});
-    const total = (d.inserted_booknetic||0)+(d.inserted_hotboat||0);
-    document.getElementById('sync-status').textContent=`Sync OK · +${total} nuevas · ${d.status_updated||0} estados`;
-    showToast(`Sincronizado: +${d.inserted_booknetic||0} booknetic, +${d.inserted_hotboat||0} web, ${d.status_updated||0} estados`);
-    await reloadAll();
-  }catch(e){
-    showToast('Error sync: '+e.message);
-  }finally{
-    btn.classList.remove('loading'); btn.textContent='🔄 Sincronizar';
-  }
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtMoney(n){ if(!n&&n!==0) return '-'; return '$'+Math.round(+n).toLocaleString('es-CL'); }

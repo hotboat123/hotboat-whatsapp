@@ -193,176 +193,12 @@ def _get_session_variant_key(request: Request) -> str | None:
         pass
     return None
 
-# ── Auto-sync background task ──────────────────────────────────────────────────
-SYNC_INTERVAL_MINUTES = 30
-
-def _do_auto_sync():
-    """Synchronous body of the auto-sync. Runs via asyncio.to_thread (see
-    _run_auto_sync below) instead of directly in the async task — this used
-    to do ~400+ sequential blocking DB round-trips straight on the event
-    loop, stalling every other request (webhooks, admin panel, booking page)
-    for the whole duration of each sync."""
-    from app.db.connection import get_connection
-    from app.booking.admin_router import TABLE
-    import re
-
-    try:
-        logger.info(f"🔄 Auto-sync: sincronizando all_appointments...")
-        from psycopg.types.json import Jsonb as PgJson
-
-        def normalize_phone(ph):
-            if not ph: return None
-            ph = re.sub(r"[^\d+]", "", str(ph))
-            if ph.startswith("+"): return ph
-            if len(ph) == 9: return f"+56{ph}"
-            if len(ph) == 11 and ph.startswith("56"): return f"+{ph}"
-            return ph
-
-        inserted_reservas = 0
-        updated_reservas = 0
-        status_updated = 0
-
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT MAX(fecha) FROM reservas_con_extras")
-                cutoff = cur.fetchone()[0]
-                if not cutoff:
-                    logger.warning("Auto-sync: reservas_con_extras is empty, skipping")
-                    return
-
-                # Sync reservas_con_extras → all_appointments (upsert)
-                cur.execute("""
-                    SELECT id, appointment_id, fecha, hora, nombre_cliente, email, telefono,
-                           servicio, num_personas, num_adultos, num_ninos,
-                           ingreso_reserva, ingreso_extras, ingreso_total,
-                           costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
-                           ciudad_origen, como_supieron, clima_del_dia, categoria_clientes,
-                           tipo_clientes, tiene_cruce, status, extras_json, created_at
-                    FROM reservas_con_extras
-                    ORDER BY fecha
-                """)
-                for row in cur.fetchall():
-                    (rid, appt_id, fecha, hora, nombre, email, telefono,
-                     servicio, num_p, num_adultos, num_ninos,
-                     ing_res, ing_ext, ing_total, costo_fijo, costo_var, costo_total,
-                     ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
-                     status, extras, created) = row
-                    # Check existing: sheets source_id first, then any source by appointment_id
-                    existing = None
-                    cur.execute(f"SELECT id FROM {TABLE} WHERE source='sheets' AND source_id=%s", (str(rid),))
-                    existing = cur.fetchone()
-                    if not existing and appt_id:
-                        cur.execute(f"SELECT id FROM {TABLE} WHERE appointment_id=%s LIMIT 1", (str(appt_id),))
-                        existing = cur.fetchone()
-
-                    if existing:
-                        # COALESCE(%s, col) means "new value, or keep the old one if the
-                        # source didn't send one" — but without the IS DISTINCT FROM guard
-                        # below, that UPDATE fired for all ~425 rows on every single 30-min
-                        # cycle regardless of whether anything actually changed, since the
-                        # WHERE only matched on id. Same params reused in WHERE so the row
-                        # is only touched (and counted) when something is genuinely new.
-                        update_params = (
-                            PgJson(extras) if extras else None,
-                            float(ing_ext) if ing_ext else None,
-                            float(ing_total) if ing_total else None,
-                            num_adultos, num_ninos, ciudad, como_sup, clima, categoria,
-                            tipo_cli, tiene_cruce,
-                            float(costo_var) if costo_var else None,
-                            float(costo_total) if costo_total else None,
-                        )
-                        cur.execute(f"""
-                            UPDATE {TABLE}
-                            SET extras_json=COALESCE(%s, extras_json),
-                                ingreso_extras=COALESCE(%s, ingreso_extras),
-                                ingreso_total=COALESCE(%s, ingreso_total),
-                                num_adultos=COALESCE(%s, num_adultos),
-                                num_ninos=COALESCE(%s, num_ninos),
-                                ciudad_origen=COALESCE(%s, ciudad_origen),
-                                como_supieron=COALESCE(%s, como_supieron),
-                                clima_del_dia=COALESCE(%s, clima_del_dia),
-                                categoria_clientes=COALESCE(%s, categoria_clientes),
-                                tipo_clientes=COALESCE(%s, tipo_clientes),
-                                tiene_cruce=COALESCE(%s, tiene_cruce),
-                                costo_operativo_variable=COALESCE(%s, costo_operativo_variable),
-                                costo_operativo_total=COALESCE(%s, costo_operativo_total),
-                                updated_at=NOW()
-                            WHERE id=%s
-                              AND (
-                                extras_json IS DISTINCT FROM COALESCE(%s, extras_json) OR
-                                ingreso_extras IS DISTINCT FROM COALESCE(%s, ingreso_extras) OR
-                                ingreso_total IS DISTINCT FROM COALESCE(%s, ingreso_total) OR
-                                num_adultos IS DISTINCT FROM COALESCE(%s, num_adultos) OR
-                                num_ninos IS DISTINCT FROM COALESCE(%s, num_ninos) OR
-                                ciudad_origen IS DISTINCT FROM COALESCE(%s, ciudad_origen) OR
-                                como_supieron IS DISTINCT FROM COALESCE(%s, como_supieron) OR
-                                clima_del_dia IS DISTINCT FROM COALESCE(%s, clima_del_dia) OR
-                                categoria_clientes IS DISTINCT FROM COALESCE(%s, categoria_clientes) OR
-                                tipo_clientes IS DISTINCT FROM COALESCE(%s, tipo_clientes) OR
-                                tiene_cruce IS DISTINCT FROM COALESCE(%s, tiene_cruce) OR
-                                costo_operativo_variable IS DISTINCT FROM COALESCE(%s, costo_operativo_variable) OR
-                                costo_operativo_total IS DISTINCT FROM COALESCE(%s, costo_operativo_total)
-                              )
-                        """, update_params + (existing[0],) + update_params)
-                        if cur.rowcount:
-                            updated_reservas += 1
-                    else:
-                        cur.execute(f"""
-                            INSERT INTO {TABLE}
-                            (source, source_id, appointment_id, fecha, hora,
-                             nombre_cliente, email, telefono, servicio, num_personas,
-                             num_adultos, num_ninos,
-                             ingreso_reserva, ingreso_extras, ingreso_total,
-                             costo_operativo_fijo, costo_operativo_variable, costo_operativo_total,
-                             ciudad_origen, como_supieron, clima_del_dia,
-                             categoria_clientes, tipo_clientes, tiene_cruce,
-                             status, extras_json, created_at, updated_at)
-                            VALUES ('sheets',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-                            ON CONFLICT DO NOTHING
-                        """, (str(rid), str(appt_id) if appt_id else None,
-                              fecha, hora, nombre, email,
-                              re.sub(r"[^\d+]", "", str(telefono)) if telefono else None,
-                              servicio or "HotBoat", str(num_p) if num_p else None,
-                              num_adultos, num_ninos,
-                              float(ing_res or 0), float(ing_ext or 0), float(ing_total or 0),
-                              float(costo_fijo or 0), float(costo_var or 0), float(costo_total or 0),
-                              ciudad, como_sup, clima, categoria, tipo_cli, tiene_cruce,
-                              status, PgJson(extras or {}), created))
-                        inserted_reservas += 1
-
-                # Remove duplicates (old Reservas_Con_Extras_Sheets rows replaced by reservas_con_extras)
-                cur.execute("""
-                    DELETE FROM all_appointments
-                    WHERE source = 'sheets' AND appointment_id IS NOT NULL
-                    AND id NOT IN (
-                        SELECT MAX(id) FROM all_appointments
-                        WHERE source = 'sheets' AND appointment_id IS NOT NULL
-                        GROUP BY appointment_id
-                    )
-                """)
-                dedup_deleted = cur.rowcount
-
-                conn.commit()
-
-        logger.info(f"✅ Auto-sync OK: reservas({inserted_reservas} nuevas/{updated_reservas} actualizadas/{dedup_deleted} dedup), {status_updated} estados")
-
-    except Exception as e:
-        logger.error(f"❌ Auto-sync error: {e}")
-
-
-async def _run_auto_sync():
-    """Run all_appointments sync every SYNC_INTERVAL_MINUTES minutes."""
-    await asyncio.sleep(60)  # Wait 1 min after startup before first sync
-    while True:
-        await asyncio.to_thread(_do_auto_sync)
-        await asyncio.sleep(SYNC_INTERVAL_MINUTES * 60)
-
-
 # ── Pending-payment cleanup ─────────────────────────────────────────────────
-# Runs on its own schedule (previously tucked inside _do_auto_sync, after the
-# reservas_con_extras sync — so when that legacy Sheets sync started throwing
-# on a table that no longer exists, this never ran either and unpaid web
-# bookings piled up indefinitely). Marks the booking 'cancelled' instead of
+# Runs on its own schedule (previously tucked inside a since-removed
+# reservas_con_extras→all_appointments sync job — that Google Sheets table
+# was retired for good and dropped, so the sync that depended on it, and its
+# "🔄 Sincronizar" admin button, were removed entirely rather than left
+# throwing "relation does not exist" every 30 min). Marks the booking 'cancelled' instead of
 # deleting it, so the lead/contact info isn't lost — 'cancelled' is already
 # in AVAILABILITY_CONFIG.exclude_statuses, so the slot frees up immediately.
 #
@@ -934,7 +770,6 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(30)
 
         scheduler_tasks.extend([
-            asyncio.create_task(_run_auto_sync()),
             asyncio.create_task(_run_pending_payment_cleanup_scheduler()),
             asyncio.create_task(_run_email_sweeps_scheduler()),
             asyncio.create_task(_run_daily_summary_scheduler()),
@@ -947,7 +782,6 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(run_followup_nudge_scheduler()),
             asyncio.create_task(run_unanswered_alert_scheduler()),
         ])
-        logger.info(f"🕐 Auto-sync iniciado: cada {SYNC_INTERVAL_MINUTES} minutos")
         logger.info(f"🗑️ Pending-payment cleanup iniciado (cada 2 min, cancela > {PENDING_PAYMENT_STALE_MINUTES} min sin pagar)")
         logger.info("📧 Email sweeps scheduler iniciado (followup, cada 30 min)")
         logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
