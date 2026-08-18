@@ -506,6 +506,15 @@ def get_alerts(x_admin_key: str = Header("")):
         return {"alerts": _check_low_stock(conn)}
 
 
+@stock_router.get("/api/admin/stock/tabla-pending")
+def get_tabla_pending(x_admin_key: str = Header("")):
+    """Reservas con tabla pagada sin ingredientes elegidos — ver
+    _check_missing_tabla_selection."""
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        return {"pending": _check_missing_tabla_selection(conn)}
+
+
 # ─────────────────────────── Movement history ───────────────────────────────
 
 @stock_router.delete("/api/admin/stock/movements/{movement_id}")
@@ -656,6 +665,47 @@ def _booking_paid_tabla(extras_json) -> bool:
     return False
 
 
+def _check_missing_tabla_selection(conn) -> list:
+    """Reservas con tabla de picoteo pagada pero sin ingredientes elegidos
+    todavía (nadie completó /tabla/{ref} ni el botón "Agregar Tabla" del
+    admin) — no hay nada que descontar de stock para esas reservas hasta que
+    se complete la selección. Antes esto se perdía en silencio: el job de
+    auto-consumo igual marcaba la reserva como resuelta sin descontar nada.
+
+    Filtra específicamente por la key actual 'tabla_de_picoteo' (el único
+    slug real del catálogo hoy — ver stock_products) en vez de cualquier
+    mención de "tabla"/"picoteo": reservas viejas migradas de booknetic usan
+    una key legacy distinta ('tabla_N_personas') que nunca tuvo selección de
+    ingredientes porque el picker no existía en ese sistema — no son
+    reservas accionables hoy, así que no deben aparecer en esta alerta."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT id, source_id, fecha, hora, nombre_cliente, extras_json
+            FROM all_appointments
+            WHERE status IN ('confirmed', 'CONFIRMED', 'pending', 'PENDING')
+              AND extras_json ? 'tabla_de_picoteo'
+            ORDER BY fecha
+        """)
+        rows = cur.fetchall()
+
+    pending = []
+    with conn.cursor() as cur:
+        for (row_id, source_id, fecha, hora, nombre, extras_json) in rows:
+            if not _booking_paid_tabla(extras_json):
+                continue
+            ref = source_id or f"AA-{row_id}"
+            cur.execute("SELECT 1 FROM tabla_selections WHERE booking_ref=%s", (ref,))
+            if cur.fetchone() is None:
+                pending.append({
+                    "booking_id": row_id,
+                    "booking_ref": ref,
+                    "fecha": fecha.isoformat() if fecha else None,
+                    "hora": str(hora)[:5] if hora else None,
+                    "nombre_cliente": nombre,
+                })
+    return pending
+
+
 def _consume_booking_extras(cur, booking_ref: str, extras_json, tabla_selection=None,
                             customer_name=None, booking_date=None):
     """Consume stock for one booking. Returns number of movements applied."""
@@ -791,6 +841,7 @@ def auto_consume_past_bookings() -> dict:
     skipped = []
     not_finished = []
     unmatched_ingredients = []
+    missing_tabla_selection = []
 
     def _has_finished(fecha_val, hora_val) -> bool:
         """True if booking date+time+duration is already in the past (Chile)."""
@@ -884,6 +935,18 @@ def auto_consume_past_bookings() -> dict:
                                         tabla_ingredients.extend(_json.loads(elige_3) if isinstance(elige_3, str) else elige_3)
                                     except Exception:
                                         pass
+                            else:
+                                # Tabla paid but nobody ever picked ingredients
+                                # (e.g. added via the generic extras search
+                                # instead of "Agregar Tabla") — flag it loudly
+                                # instead of silently marking this booking
+                                # resolved with nothing deducted for the tabla.
+                                logger.warning(
+                                    "⚠️ Tabla pagada sin ingredientes elegidos para reserva %s (%s) — "
+                                    "usa 'Agregar Tabla' en la reserva y luego 'Re-descontar una reserva'.",
+                                    ref, customer_name,
+                                )
+                                missing_tabla_selection.append({"booking_ref": ref, "customer_name": customer_name})
 
                         mvts, unmatched = _consume_booking_extras(cur, ref, extras_json, tabla_ingredients or None, customer_name, fecha)
                         if unmatched:
@@ -913,14 +976,17 @@ def auto_consume_past_bookings() -> dict:
             )
 
         logger.info(
-            "Stock auto-consume: %d consumed, %d skipped (no BOM), %d not finished yet, %d unmatched",
-            len(consumed), len(skipped), len(not_finished), len(unmatched_ingredients)
+            "Stock auto-consume: %d consumed, %d skipped (no BOM), %d not finished yet, "
+            "%d unmatched, %d missing tabla selection",
+            len(consumed), len(skipped), len(not_finished), len(unmatched_ingredients),
+            len(missing_tabla_selection)
         )
         return {
             "consumed": consumed,
             "skipped": skipped,
             "not_finished": not_finished,
             "unmatched_ingredients": unmatched_ingredients,
+            "missing_tabla_selection": missing_tabla_selection,
             "low_stock_alerts": alerts,
         }
 

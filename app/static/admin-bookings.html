@@ -666,6 +666,13 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div id="stock-alerts-list" style="font-size:.82rem;color:#fca5a5;line-height:1.8"></div>
       </div>
 
+      <!-- Tablas pagadas sin ingredientes elegidos — no hay nada que descontar hasta completarlas -->
+      <div id="tabla-pending-box" style="display:none;margin-bottom:.8rem;padding:.8rem 1rem;background:rgba(253,126,20,.1);border:1px solid rgba(253,126,20,.35);border-radius:10px">
+        <div style="font-weight:700;color:#fd7e14;margin-bottom:.4rem">🍽 Tablas pagadas sin ingredientes elegidos</div>
+        <div style="font-size:.78rem;color:#fdba74;margin-bottom:.5rem">Su stock no se ha descontado (ni se descontará solo) porque nadie eligió los ingredientes. Abre la reserva → "Agregar Tabla", luego usa "🔁 Re-descontar una reserva" acá arriba.</div>
+        <div id="tabla-pending-list" style="font-size:.82rem;color:#fdba74;line-height:1.8"></div>
+      </div>
+
       <div class="tbl-wrap">
         <table class="ec-table">
           <thead>
@@ -8251,11 +8258,12 @@ async function loadExtrasCat(opts){
   const scrollY = window.scrollY;
   if(!opts.silent) tbody.innerHTML='<tr><td colspan="17" class="loading-msg">Cargando...</td></tr>';
   try{
-    const [d, pr, mr, ar] = await Promise.all([
+    const [d, pr, mr, ar, tp] = await Promise.all([
       api('/api/admin/precios-extras'),
       api('/api/admin/stock/products'),
       api('/api/admin/stock/movements?limit=80'),
       api('/api/admin/stock/alerts'),
+      api('/api/admin/stock/tabla-pending'),
     ]);
     EXTRAS_CATALOG = d.extras||[];
     _extrasCatData = d.extras||[];
@@ -8271,6 +8279,7 @@ async function loadExtrasCat(opts){
       renderStockMovements(mr.movements||[]);
     }
     renderStockAlerts(ar.alerts||[]);
+    renderTablaPending(tp.pending||[]);
     if(opts.silent) window.scrollTo(0, scrollY);
   }catch(e){
     tbody.innerHTML=`<tr><td colspan="17" class="no-data">Error: ${e.message}</td></tr>`;
@@ -9053,10 +9062,20 @@ function initExtrasEditor(extrasJson){
   renderExpAddon();
 }
 
+// 'tabla_de_picoteo' must never be added via the generic extras search — it
+// requires picking specific ingredients (see openTablaModal/saveTablaConfig)
+// so stock can actually be deducted. Adding it as a plain priced extra here
+// leaves it un-fulfillable: paid but with no ingredients to discount, and
+// the auto-consume job used to silently mark it "done" with nothing deducted.
+function _isTablaCatalogKey(key){
+  return key === 'tabla_de_picoteo' || (key||'').startsWith('tabla__');
+}
+
 function populateCatalogSelect(){
   const dl = document.getElementById('extras-catalog-list');
   if(!dl) return;
-  dl.innerHTML = EXTRAS_CATALOG.map(e=>`<option value="${escHtml(e.name)} — ${fmtMoney(e.price)}">`).join('');
+  dl.innerHTML = EXTRAS_CATALOG.filter(e=>!_isTablaCatalogKey(e.key))
+    .map(e=>`<option value="${escHtml(e.name)} — ${fmtMoney(e.price)}">`).join('');
 }
 
 function _renderTablaRow(item, i){
@@ -9151,6 +9170,11 @@ function addExtraFromSelect(){
   const namePart = rawVal.includes(' — ') ? rawVal.split(' — ')[0].trim() : rawVal;
   const cat = EXTRAS_CATALOG.find(e=>e.name===namePart);
   if(!cat){ showToast('Selecciona un extra válido de la lista'); inp.value=''; return; }
+  if(_isTablaCatalogKey(cat.key)){
+    showToast('🍽 Usa el botón "Agregar Tabla" para elegir los ingredientes — si no, no se descuenta stock');
+    inp.value='';
+    return;
+  }
   const existing = _extrasItems.find(e=>e.key===cat.key);
   if(existing){
     existing.qty += 1;
@@ -10778,6 +10802,21 @@ function renderStockAlerts(alerts){
   list.innerHTML = alerts.map(a=>
     `<span style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(239,68,68,.15);border-radius:8px;padding:.2rem .6rem;margin:.15rem">
       <strong>${a.name}</strong>: ${a.current_stock} ${a.unit} (mín ${a.min_stock})
+    </span>`
+  ).join(' ');
+}
+
+function renderTablaPending(pending){
+  const box = document.getElementById('tabla-pending-box');
+  const list = document.getElementById('tabla-pending-list');
+  if(!box || !list) return;
+  if(!pending.length){ box.style.display='none'; return; }
+  box.style.display='';
+  list.innerHTML = pending.map(p=>
+    `<span style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(253,126,20,.15);border-radius:8px;padding:.2rem .6rem;margin:.15rem">
+      <strong>${escHtml(p.nombre_cliente||p.booking_ref)}</strong> · ${p.fecha||''}${p.hora?' '+p.hora:''}
+      <button onclick="showSection('lista');openModal(${p.booking_id})"
+        style="background:none;border:1px solid rgba(253,126,20,.4);color:#fd7e14;border-radius:6px;padding:.1rem .5rem;font-size:.72rem;cursor:pointer;font-weight:600">Abrir reserva</button>
     </span>`
   ).join(' ');
 }
