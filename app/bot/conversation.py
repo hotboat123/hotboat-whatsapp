@@ -432,13 +432,39 @@ class ConversationManager:
         all. A per-phone asyncio.Lock held for the whole call forces a
         customer's own messages to be handled strictly in order — a
         DIFFERENT phone's messages are completely unaffected, still fully
-        concurrent."""
+        concurrent.
+
+        Second, wider version of the SAME bug found 2026-08-18: this
+        in-process lock only serializes messages handled by one replica.
+        railway.toml runs numReplicas=4 — near-simultaneous messages for the
+        same phone routinely land on different replicas, each with its own
+        empty local lock and in-memory cache, so the asyncio.Lock above
+        provides zero protection between them; a real conversation got the
+        identical "first message" welcome menu 5 times in 14 seconds. The
+        Postgres advisory lock below is the cross-replica equivalent of this
+        asyncio.Lock: it blocks (up to a bounded timeout) until whichever
+        replica is currently handling this phone's previous message has
+        finished and persisted its state, so the next replica reads
+        up-to-date history instead of racing it. If the lock can't be
+        acquired (DB hiccup, timeout), we proceed anyway rather than drop
+        the message — this is a best-effort safety net on top of, not a
+        replacement for, correctness elsewhere."""
         lock = self._phone_locks.setdefault(from_number, asyncio.Lock())
         async with lock:
-            return await self._process_message_impl(
-                from_number, message_text, contact_name, message_id,
-                quoted_text, lead_bot_variant,
+            from app.db.connection import acquire_phone_advisory_lock, release_phone_advisory_lock
+            loop = asyncio.get_event_loop()
+            db_lock_conn = await loop.run_in_executor(
+                None, acquire_phone_advisory_lock, from_number
             )
+            try:
+                return await self._process_message_impl(
+                    from_number, message_text, contact_name, message_id,
+                    quoted_text, lead_bot_variant,
+                )
+            finally:
+                await loop.run_in_executor(
+                    None, release_phone_advisory_lock, db_lock_conn, from_number
+                )
 
     async def _process_message_impl(
         self,

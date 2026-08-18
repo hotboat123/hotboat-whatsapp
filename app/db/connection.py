@@ -78,6 +78,78 @@ def try_acquire_scheduler_lock() -> bool:
     return False
 
 
+# Namespace for the per-phone advisory lock below — deliberately a different
+# value/call-signature (two int32 keys instead of one bigint) from
+# _SCHEDULER_LOCK_KEY above, so the two lock families can never collide.
+_PHONE_LOCK_NAMESPACE = 725019283
+
+
+def acquire_phone_advisory_lock(phone_number: str, timeout_seconds: int = 10):
+    """Cross-replica mutual exclusion for processing one phone number's
+    WhatsApp message. app/bot/conversation.py's per-phone asyncio.Lock only
+    protects concurrency *within one replica's process memory* — with
+    railway.toml's numReplicas=4, two near-simultaneous messages from the
+    same customer can land on two different replicas, each with its own
+    empty in-memory conversation cache. Both then read the shared
+    bot_conversation_state row before either has written its own update, so
+    both see empty history and both send the "first message" welcome menu
+    instead of only one of them progressing the conversation (confirmed via
+    a real conversation on 2026-08-18: 5 messages in 14s all got the
+    identical first-message reply).
+
+    BLOCKS (bounded by timeout_seconds via lock_timeout) until any other
+    replica currently holding this phone's lock releases it, so the second
+    replica genuinely waits and then re-reads the now-current state instead
+    of racing it. Uses a dedicated, non-pooled connection — advisory locks
+    are session-scoped, so returning this connection to the shared pool
+    afterward would leak the lock onto whoever borrows it next. Returns the
+    connection to pass to release_phone_advisory_lock, or None if the lock
+    could not be acquired within the timeout (caller should proceed anyway
+    rather than block the message indefinitely — this is a best-effort
+    safety net, not a hard requirement for correctness).
+    """
+    conn = psycopg.connect(settings.database_url, autocommit=True)
+    try:
+        with conn.cursor() as cur:
+            # SET does not accept a bind parameter for the value — timeout_seconds
+            # is always an int from our own call sites (never user input), so
+            # inlining it here is safe.
+            cur.execute(f"SET lock_timeout = '{int(timeout_seconds)}s'")
+            cur.execute(
+                "SELECT pg_advisory_lock(%s, hashtext(%s))",
+                (_PHONE_LOCK_NAMESPACE, phone_number),
+            )
+        return conn
+    except Exception as e:
+        logger.warning(f"Could not acquire phone advisory lock for {phone_number}: {e}")
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return None
+
+
+def release_phone_advisory_lock(conn, phone_number: str) -> None:
+    """Release a lock acquired by acquire_phone_advisory_lock and close its
+    dedicated connection. Safe to call with conn=None (lock was never
+    acquired)."""
+    if conn is None:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT pg_advisory_unlock(%s, hashtext(%s))",
+                (_PHONE_LOCK_NAMESPACE, phone_number),
+            )
+    except Exception as e:
+        logger.warning(f"Error releasing phone advisory lock for {phone_number}: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 
 
 
