@@ -155,15 +155,25 @@ def build_system_prompt(custom_prompt: Optional[str] = None) -> str:
     return f"{body}\n\n{SAFETY_FOOTER}"
 
 
-class AIHandler:
-    """Handle AI responses using OpenAI SDK with Groq backend and MCP support"""
+# provider -> (api_key, base_url) for AIHandler's OpenAI-compatible client.
+# Both Groq and Gemini speak the OpenAI chat-completions shape at these
+# endpoints, so the rest of AIHandler (tool calls, RateLimitError handling,
+# etc.) needs zero changes to support a second provider — see
+# bot_ab_variants.ai_provider (app/bot/variant_overrides.py:get_current_ai_model)
+# for where a variant picks one.
+_PROVIDER_ENDPOINTS = {
+    "groq": lambda: (settings.groq_api_key, "https://api.groq.com/openai/v1"),
+    "gemini": lambda: (settings.gemini_api_key, "https://generativelanguage.googleapis.com/v1beta/openai/"),
+}
 
-    def __init__(self, model: Optional[str] = None, custom_prompt: Optional[str] = None):
-        # Use OpenAI SDK but point to Groq's OpenAI-compatible API
-        self.client = OpenAI(
-            api_key=settings.groq_api_key,
-            base_url="https://api.groq.com/openai/v1"  # Groq's OpenAI-compatible endpoint
-        )
+
+class AIHandler:
+    """Handle AI responses using an OpenAI-compatible SDK client (Groq or
+    Gemini, per provider — see _PROVIDER_ENDPOINTS) with MCP support"""
+
+    def __init__(self, model: Optional[str] = None, custom_prompt: Optional[str] = None, provider: str = "groq"):
+        api_key, base_url = _PROVIDER_ENDPOINTS.get(provider, _PROVIDER_ENDPOINTS["groq"])()
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model or DEFAULT_MODEL
 
         if MCP_AVAILABLE:

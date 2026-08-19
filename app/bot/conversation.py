@@ -1220,13 +1220,13 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             if not picked:
                 return None
             provider, model = picked
-            if provider != "groq":
+            if provider not in ("groq", "gemini"):
                 logger.warning(f"AI fallback: unsupported provider '{provider}' for this variant, skipping")
                 return None
 
             from app.bot.ai_handler import AIHandler
             from app.bot.variant_overrides import get_current_system_prompt
-            handler = AIHandler(model=model, custom_prompt=get_current_system_prompt())
+            handler = AIHandler(model=model, custom_prompt=get_current_system_prompt(), provider=provider)
             history = conversation.get("messages", [])[-10:]
             ai_text = await handler.generate_response(message_text, history, contact_name)
             if not ai_text or ai_text.startswith("🥬 ¡Ahoy, grumete! ⚓"):  # that prefix marks AIHandler's own error fallback
