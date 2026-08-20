@@ -216,7 +216,7 @@ async def list_gift_cards_endpoint(x_admin_key: str = Header("")):
                 SELECT code, num_adultos, num_ninos, amount, buyer_name, buyer_phone,
                        buyer_email, recipient_name, dedication, sender_name, status,
                        purchased_at, expires_at, redeemed_at, redeemed_booking_ref, created_at,
-                       ciudad_origen, como_supieron, payment_id, payment_status
+                       ciudad_origen, como_supieron, payment_id, payment_status, price_pp
                 FROM gift_cards ORDER BY created_at DESC
             """)
             rows = cur.fetchall()
@@ -232,12 +232,89 @@ async def list_gift_cards_endpoint(x_admin_key: str = Header("")):
             "created_at": r[15].isoformat() if r[15] else None,
             "ciudad_origen": r[16],
             "como_supieron": r[17],
+            "price_pp": r[20],
             "payment_id": r[18],
             "payment_status": r[19],
             "is_expired": bool(r[10] == "active" and r[12] and r[12] < datetime.now(r[12].tzinfo)),
         }
         for r in rows
     ]
+
+
+class AdminCreateGiftCardRequest(BaseModel):
+    buyer_name: str
+    buyer_phone: str
+    buyer_email: Optional[str] = None
+    num_adultos: int = 1
+    num_ninos: int = 0
+    recipient_name: Optional[str] = None
+    dedication: Optional[str] = None
+    sender_name: Optional[str] = None
+    amount: Optional[int] = None  # override the auto-calculated price if set
+    send_confirmation: bool = False
+
+
+@gift_cards_router.post("/api/admin/gift-cards")
+async def admin_create_gift_card_endpoint(request: AdminCreateGiftCardRequest, x_admin_key: str = Header("")):
+    """Crear una gift card a mano desde el panel — p. ej. el cliente pagó por
+    transferencia o efectivo y el staff la registra directamente, ya activa
+    (no pasa por Transbank). Mismo patrón que POST /api/admin/reservas en
+    admin_router.py: inserta ya confirmada y opcionalmente manda el mismo
+    mail de confirmación que usa el flujo de compra web."""
+    _check_auth(x_admin_key)
+    try:
+        adults, children = request.num_adultos, request.num_ninos
+        n = adults + children
+        if adults < 1:
+            raise HTTPException(status_code=400, detail="Se requiere al menos 1 adulto")
+        if children < 0:
+            raise HTTPException(status_code=400, detail="Cantidad de niños inválida")
+        if not (2 <= n <= 7):
+            raise HTTPException(status_code=400, detail="Capacidad: 2-7 personas (adultos + niños)")
+        if not request.buyer_name.strip() or not request.buyer_phone.strip():
+            raise HTTPException(status_code=400, detail="Faltan datos del comprador")
+
+        price_pp = PRICES.get(n, 76990)
+        amount = request.amount if request.amount and request.amount > 0 else price_breakdown(adults, children, price_pp)["subtotal"]
+
+        code = generate_gift_card_code()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                _ensure_gift_cards_table(cur)
+                # Manual admin entries start already paid/active — no Transbank
+                # round-trip to wait for — same GIFT_CARD_VALIDITY_YEARS math as
+                # confirm_gift_card_payment(), embedded directly for the same
+                # reason (INTERVAL doesn't take a bind param for its unit count).
+                cur.execute(f"""
+                    INSERT INTO gift_cards
+                        (code, num_adultos, num_ninos, price_pp, amount,
+                         buyer_name, buyer_phone, buyer_email,
+                         recipient_name, dedication, sender_name, status,
+                         payment_status, purchased_at, expires_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'active',
+                            'manual', NOW(), NOW() + INTERVAL '{GIFT_CARD_VALIDITY_YEARS} years')
+                """, (
+                    code, adults, children, price_pp, amount,
+                    request.buyer_name.strip(), request.buyer_phone.strip(),
+                    (request.buyer_email or "").strip() or None,
+                    (request.recipient_name or "").strip() or None,
+                    (request.dedication or "").strip() or None,
+                    (request.sender_name or "").strip() or None,
+                ))
+                conn.commit()
+
+        if request.send_confirmation and request.buyer_email:
+            try:
+                _send_gift_card_email(code)
+            except Exception as e:
+                logger.warning(f"Manual gift card confirmation email failed for {code}: {e}")
+
+        return {"code": code, "amount": amount, "status": "active"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Admin create gift card error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class UpdateGiftCardOriginRequest(BaseModel):
@@ -269,6 +346,47 @@ async def update_gift_card_origin_endpoint(code: str, body: UpdateGiftCardOrigin
     if not row:
         raise HTTPException(status_code=404, detail="Gift card no encontrada")
     return {"ok": True}
+
+
+@gift_cards_router.get("/api/admin/gift-cards/{code}/confirmation-preview")
+async def preview_gift_card_confirmation(code: str, x_admin_key: str = Header("")):
+    """Render the exact gift_card_purchased email (subject + html) without
+    sending it — same idea as the reservas confirmation preview and the
+    receipt: see it, then press send."""
+    _check_auth(x_admin_key)
+    gc = get_gift_card_by_code(code)
+    if not gc:
+        raise HTTPException(status_code=404, detail="Gift card no encontrada")
+    if not (gc.get("buyer_email") or "").strip():
+        raise HTTPException(status_code=422, detail="La gift card no tiene email del comprador")
+    result = send_gift_card_email_admin(code, dry_run=True)
+    return {
+        "ok": True,
+        "code": code,
+        "customer": result.get("customer") or gc.get("buyer_name"),
+        "to": result.get("to"),
+        "subject": result.get("subject"),
+        "html": result.get("html"),
+    }
+
+
+@gift_cards_router.post("/api/admin/gift-cards/{code}/send-confirmation")
+async def send_gift_card_confirmation(code: str, x_admin_key: str = Header("")):
+    """Send (or resend) the gift_card_purchased email for any gift card."""
+    _check_auth(x_admin_key)
+    gc = get_gift_card_by_code(code)
+    if not gc:
+        raise HTTPException(status_code=404, detail="Gift card no encontrada")
+    if not (gc.get("buyer_email") or "").strip():
+        raise HTTPException(status_code=422, detail="La gift card no tiene email del comprador")
+    result = send_gift_card_email_admin(code, dry_run=False)
+    return {
+        "ok": True,
+        "code": code,
+        "email": result.get("to"),
+        "customer": result.get("customer") or gc.get("buyer_name"),
+        "result": result,
+    }
 
 
 class RedeemGiftCardRequest(BaseModel):
@@ -356,19 +474,15 @@ def confirm_gift_card_payment(code: str, payment_id: Optional[str], status: str,
     return True
 
 
-def _send_gift_card_email(code: str) -> None:
+def _build_gift_card_email(code: str) -> Optional[dict]:
+    """Builds the subject/html for the gift-card-purchased confirmation
+    email. Shared by the real send (_send_gift_card_email) and the admin
+    preview-then-send flow (send_gift_card_email_admin) below, so the
+    preview an admin sees can never drift from what actually gets sent —
+    same idea as send_confirmation_admin_force's dry_run for reservas."""
     gc = get_gift_card_by_code(code)
     if not gc or not gc.get("buyer_email"):
-        return
-    from app.email.send_email import send_email
-    from app.config import get_settings
-
-    settings = get_settings()
-    from_address = (
-        (settings.resend_from_confirmations or "").strip()
-        or (settings.email_from or "").strip()
-        or "onboarding@resend.dev"
-    )
+        return None
     n = gc["num_people"]
     expires = gc.get("expires_at", "")[:10]
     expires_str = ""
@@ -396,10 +510,55 @@ def _send_gift_card_email(code: str) -> None:
       <p>Duración: <strong>{GIFT_CARD_VALIDITY_YEARS} años</strong> desde la compra{f", vence el <strong>{expires_str}</strong>" if expires_str else ""}.</p>
       <p style="color:#666;font-size:.9rem">Para coordinar la fecha, escribe a HotBoat por WhatsApp o email con este código a mano.</p>
     </div>"""
+    return {
+        "to": gc["buyer_email"],
+        "subject": f"🎁 Tu gift card HotBoat — {code}",
+        "html": html,
+        "customer": gc["buyer_name"],
+    }
+
+
+def _gift_card_email_from_address() -> str:
+    from app.config import get_settings
+    settings = get_settings()
+    return (
+        (settings.resend_from_confirmations or "").strip()
+        or (settings.email_from or "").strip()
+        or "onboarding@resend.dev"
+    )
+
+
+def _send_gift_card_email(code: str) -> None:
+    built = _build_gift_card_email(code)
+    if not built:
+        return
+    from app.email.send_email import send_email
     send_email(
-        to=gc["buyer_email"],
-        subject=f"🎁 Tu gift card HotBoat — {code}",
-        html=html,
-        from_address=from_address,
+        to=built["to"],
+        subject=built["subject"],
+        html=built["html"],
+        from_address=_gift_card_email_from_address(),
         trigger="gift_card_purchased",
     )
+
+
+def send_gift_card_email_admin(code: str, dry_run: bool = False) -> dict:
+    """Admin-triggered (re)send of the gift-card-purchased email, or —
+    dry_run=True — just the rendered subject/html without sending, for the
+    panel's "preview then send" flow (mirrors send_confirmation_admin_force
+    for reservas). No idempotency guard to bypass here, unlike bookings —
+    a gift card's confirmation email has no "already sent" flag."""
+    built = _build_gift_card_email(code)
+    if not built:
+        return {"sent": False, "reason": "no_email", "to": None, "subject": None, "html": None}
+    if dry_run:
+        return {"sent": False, "dry_run": True, **built}
+    from app.email.send_email import send_email
+    result = send_email(
+        to=built["to"],
+        subject=built["subject"],
+        html=built["html"],
+        from_address=_gift_card_email_from_address(),
+        trigger="gift_card_purchased",
+    )
+    return {**result, "to": built["to"], "subject": built["subject"], "html": built["html"], "customer": built["customer"]}

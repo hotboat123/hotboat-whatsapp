@@ -768,6 +768,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <h2 style="margin:0;font-size:1.1rem">🎀 Gift Cards</h2>
           <p style="margin:.2rem 0 0;color:var(--muted);font-size:.8rem">Compradas sin elegir fecha — el canje (elegir fecha) se coordina a mano; márcala canjeada acá cuando corresponda.</p>
         </div>
+        <button class="btn-primary" style="background:var(--green)" onclick="openNewGiftCardModal()">+ Nueva gift card</button>
         <button class="btn-primary" onclick="loadGiftCards()">🔄 Actualizar</button>
       </div>
       <div class="chart-wrap" style="padding:0;overflow:hidden">
@@ -6295,6 +6296,64 @@ async function previewConfirmationEmail(rid){
   };
 }
 
+async function previewGiftCardConfirmationEmail(code){
+  if(!code) return;
+  let data;
+  try{
+    data = await api(`/api/admin/gift-cards/${code}/confirmation-preview`);
+  }catch(e){
+    showToast('Error: '+e.message);
+    return;
+  }
+  const win = window.open('', '_blank');
+  if(!win){ showToast('Permite popups para ver el mail'); return; }
+  win.document.write(data.html);
+  win.document.close();
+
+  // Barra flotante con Volver/Enviar sobre el preview del mail real (mismo html que se manda)
+  const bar = win.document.createElement('div');
+  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#0d1b1a;padding:.7rem 1rem;'+
+    'display:flex;gap:.6rem;justify-content:center;align-items:center;flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.4);'+
+    'font-family:-apple-system,BlinkMacSystemFont,sans-serif';
+  bar.innerHTML = `
+    <span style="color:#94a3b8;font-size:.8rem;margin-right:auto">📧 Vista previa — esto es lo que recibirá el comprador</span>
+    <span id="_gcconf-status" style="font-size:.8rem"></span>
+    <button id="_btn-gcconf-close" style="background:#555;color:#fff;border:none;border-radius:8px;padding:.5rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer">← Volver</button>
+    <button id="_btn-gcconf-send" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:.5rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer">📧 Enviar al comprador</button>
+  `;
+  win.document.body.prepend(bar);
+  win.document.body.style.paddingTop = '54px';
+
+  win.document.getElementById('_btn-gcconf-close').onclick = function(){ win.close(); };
+  const btn = win.document.getElementById('_btn-gcconf-send');
+  const st  = win.document.getElementById('_gcconf-status');
+  btn.onclick = async function(){
+    btn.disabled = true;
+    btn.textContent = '⏳ Enviando…';
+    st.textContent = '';
+    try{
+      const resp = await fetch(`/api/admin/gift-cards/${code}/send-confirmation`, {
+        method: 'POST',
+        headers: {'x-admin-key': getKey()},
+      });
+      const respData = await resp.json().catch(function(){ return {}; });
+      if(resp.ok && respData.ok && respData.result?.sent){
+        btn.textContent = '✅ Enviado';
+        btn.style.background = '#15803d';
+        st.style.color = '#4ade80';
+        st.textContent = 'Enviado a ' + (respData.email||'');
+      } else {
+        throw new Error(respData.result?.reason || respData.detail || 'Error al enviar');
+      }
+    }catch(e){
+      btn.disabled = false;
+      btn.textContent = '📧 Enviar al comprador';
+      st.style.color = '#f87171';
+      st.textContent = '❌ ' + e.message;
+    }
+  };
+}
+
 async function sendFollowupReviewEmail(rid){
   if(!rid) return;
   try{
@@ -10679,6 +10738,363 @@ document.addEventListener('change', (ev)=>{
   }
 });
 
+// ── Gift Cards: crear manualmente desde el panel (igual que "+ Nueva reserva") ──
+function openNewGiftCardModal(){
+  document.getElementById('modal-title').textContent = 'Nueva gift card';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label>Nombre comprador *</label>
+        <input id="gcn-nombre" placeholder="Nombre completo"></div>
+      <div class="form-group"><label>Teléfono *</label>
+        <input id="gcn-telefono" placeholder="+569..."></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Email comprador</label>
+        <input id="gcn-email" placeholder="email@..."></div>
+      <div class="form-group"><label>Personas <span id="gcn-price-hint" style="font-weight:400;color:var(--muted);font-size:.78rem"></span></label>
+        <div style="display:flex;gap:.4rem">
+          <input type="number" id="gcn-adultos" min="1" value="2" placeholder="Adultos" oninput="gcNewAutoFillPrice()">
+          <input type="number" id="gcn-ninos" min="0" value="0" placeholder="Niños" oninput="gcNewAutoFillPrice()">
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Monto ($)</label>
+        <input type="number" id="gcn-amount" min="0" value="0" style="color:var(--gold);font-weight:700"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Regalo para (opcional)</label>
+        <input id="gcn-recipient" placeholder="Nombre de quien lo recibe"></div>
+      <div class="form-group"><label>De parte de (opcional)</label>
+        <input id="gcn-sender" placeholder="Tu nombre"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:.8rem"><label>Dedicatoria (opcional)</label>
+      <textarea id="gcn-dedication" rows="2" placeholder="Mensaje para quien recibe el regalo..."></textarea>
+    </div>
+    <div style="margin-bottom:.8rem">
+      <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem">
+        <input type="checkbox" id="gcn-send-email" style="width:16px;height:16px" checked>
+        Enviar email de confirmación al comprador (si tiene email)
+      </label>
+    </div>
+    <div id="gcn-err" style="color:var(--red);font-size:.8rem;display:none;margin-bottom:.5rem"></div>
+    <div class="modal-actions">
+      <button class="btn-del" onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="submitNewGiftCard()">Crear gift card</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('show');
+  gcNewAutoFillPrice();
+  setTimeout(()=>document.getElementById('gcn-nombre')?.focus(), 50);
+}
+
+function gcNewAutoFillPrice(){
+  const adultos = +document.getElementById('gcn-adultos')?.value || 0;
+  const ninos = +document.getElementById('gcn-ninos')?.value || 0;
+  const n = adultos + ninos;
+  const hint = document.getElementById('gcn-price-hint');
+  const amountEl = document.getElementById('gcn-amount');
+  if(!n || adultos < 1){ if(hint) hint.textContent = ''; return; }
+  const pricePerPerson = getPriceForPersons(n);
+  if(!pricePerPerson){
+    if(hint) hint.textContent = `sin precio configurado para ${n}p`;
+    return;
+  }
+  const subBefore = pricePerPerson * n;
+  const childDiscount = Math.min(ninos * CHILD_DISCOUNT_PER_CHILD, subBefore);
+  const total = subBefore - childDiscount;
+  if(amountEl) amountEl.value = total;
+  if(hint) hint.textContent = `→ $${pricePerPerson.toLocaleString('es-CL')}/p × ${n}p`;
+}
+
+async function submitNewGiftCard(){
+  const gv = id => document.getElementById(id)?.value || '';
+  const nombre = gv('gcn-nombre').trim();
+  const telefono = gv('gcn-telefono').trim();
+  const errEl = document.getElementById('gcn-err');
+  if(!nombre || !telefono){
+    if(errEl){ errEl.textContent='Nombre y teléfono son obligatorios'; errEl.style.display=''; }
+    return;
+  }
+  const adultos = +gv('gcn-adultos')||0;
+  const ninos = +gv('gcn-ninos')||0;
+  if(adultos < 1 || (adultos+ninos) < 2 || (adultos+ninos) > 7){
+    if(errEl){ errEl.textContent='Capacidad: 2-7 personas (mínimo 1 adulto)'; errEl.style.display=''; }
+    return;
+  }
+  const sendEmail = document.getElementById('gcn-send-email')?.checked || false;
+  try{
+    const d = await api('/api/admin/gift-cards', {method:'POST', body: JSON.stringify({
+      buyer_name: nombre, buyer_phone: telefono, buyer_email: gv('gcn-email')||null,
+      num_adultos: adultos, num_ninos: ninos,
+      recipient_name: gv('gcn-recipient')||null, sender_name: gv('gcn-sender')||null,
+      dedication: gv('gcn-dedication')||null,
+      amount: +gv('gcn-amount')||null,
+      send_confirmation: sendEmail,
+    })});
+    showToast(`🎀 Gift card creada: ${d.code}`);
+    closeModal();
+    await loadGiftCards();
+    openGiftCardDetailModal(d.code);
+  }catch(e){
+    if(errEl){ errEl.textContent='Error: '+e.message; errEl.style.display=''; }
+  }
+}
+
+// ── Gift Cards: recibo imprimible/enviable — mismo estilo visual que el
+// recibo de reservas (generarRecibo), pero mucho más simple: la gift card
+// siempre se paga 100% de una vez, así que no hay tabla de pagos parciales
+// ni saldo pendiente.
+function generarReciboGiftCard(code){
+  const g = _giftCards.find(x=>x.code===code);
+  if(!g){ showToast('No se encontró la gift card'); return; }
+
+  const money = n => n!=null&&n!=='' ? '$'+Math.round(+n).toLocaleString('es-CL') : '—';
+  const fmtDate = (iso) => {
+    if(!iso) return '—';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'});
+  };
+
+  const numAdultos = g.num_adultos||0;
+  const numNinos = g.num_ninos||0;
+  const pricePP = g.price_pp || (numAdultos+numNinos > 0 ? Math.round(g.amount/(numAdultos+numNinos)) : 0);
+  const childUnit = Math.max(0, pricePP - CHILD_DISCOUNT_PER_CHILD);
+
+  const itemsRows = `
+    ${numAdultos > 0 ? `<tr>
+      <td style="padding:.45rem .6rem">Gift Card HotBoat — Adultos</td>
+      <td style="padding:.45rem .6rem;text-align:center">${numAdultos} persona(s)</td>
+      <td style="padding:.45rem .6rem;text-align:right">${money(pricePP)}</td>
+      <td style="padding:.45rem .6rem;text-align:right;font-weight:600">${money(pricePP*numAdultos)}</td>
+    </tr>` : ''}
+    ${numNinos > 0 ? `<tr>
+      <td style="padding:.45rem .6rem">Gift Card HotBoat — Niños</td>
+      <td style="padding:.45rem .6rem;text-align:center">${numNinos} persona(s)</td>
+      <td style="padding:.45rem .6rem;text-align:right">${money(childUnit)}</td>
+      <td style="padding:.45rem .6rem;text-align:right;font-weight:600">${money(childUnit*numNinos)}</td>
+    </tr>` : ''}`;
+
+  const dedicationBlockPrint = (g.recipient_name || g.dedication) ? `
+    <div class="section-title">Mensaje del regalo</div>
+    <div style="background:#f8faf9;border:1px solid #e3e9e6;border-radius:8px;padding:.8rem 1rem;font-size:.85rem">
+      ${g.recipient_name ? `<div style="margin-bottom:.3rem"><strong>Para:</strong> ${escHtml(g.recipient_name)}</div>` : ''}
+      ${g.dedication ? `<div style="font-style:italic">"${escHtml(g.dedication)}"</div>` : ''}
+      ${g.sender_name ? `<div style="margin-top:.3rem"><strong>De:</strong> ${escHtml(g.sender_name)}</div>` : ''}
+    </div>` : '';
+  const dedicationBlockEmail = (g.recipient_name || g.dedication) ? `
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6f7d79;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e3e9e6">Mensaje del regalo</div>
+    <div style="background:#f8faf9;border:1px solid #e3e9e6;border-radius:8px;padding:14px 16px;font-size:13px">
+      ${g.recipient_name ? `<div style="margin-bottom:5px"><strong>Para:</strong> ${escHtml(g.recipient_name)}</div>` : ''}
+      ${g.dedication ? `<div style="font-style:italic">"${escHtml(g.dedication)}"</div>` : ''}
+      ${g.sender_name ? `<div style="margin-top:5px"><strong>De:</strong> ${escHtml(g.sender_name)}</div>` : ''}
+    </div>` : '';
+
+  // ── Email-safe version (all inline styles, table layout) ──────────────────
+  const _eTh = 'background:#eef3f0;padding:7px 9px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6f7d79;border:none';
+  const _eSec = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6f7d79;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e3e9e6';
+  const _eTotalTd = 'padding:8px 9px;font-weight:700;font-size:15px;background:#eef3f0';
+  const itemsRowsEmail = `
+    ${numAdultos > 0 ? `<tr>
+      <td style="padding:7px 9px">Gift Card HotBoat — Adultos</td>
+      <td style="padding:7px 9px;text-align:center">${numAdultos} persona(s)</td>
+      <td style="padding:7px 9px;text-align:right">${money(pricePP)}</td>
+      <td style="padding:7px 9px;text-align:right;font-weight:600">${money(pricePP*numAdultos)}</td>
+    </tr>` : ''}
+    ${numNinos > 0 ? `<tr>
+      <td style="padding:7px 9px">Gift Card HotBoat — Niños</td>
+      <td style="padding:7px 9px;text-align:center">${numNinos} persona(s)</td>
+      <td style="padding:7px 9px;text-align:right">${money(childUnit)}</td>
+      <td style="padding:7px 9px;text-align:right;font-weight:600">${money(childUnit*numNinos)}</td>
+    </tr>` : ''}`;
+
+  const emailHtml = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Recibo Gift Card HotBoat #${g.code}</title></head>
+<body style="margin:0;padding:0;background:#eef3f0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2a28">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#eef3f0"><tr><td align="center" style="padding:24px 8px">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #e3e9e6">
+<tr><td style="background:linear-gradient(135deg,#2f857c 0%,#246b64 100%);padding:28px;text-align:center">
+  <img src="${window.location.origin}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png" alt="HotBoat" style="height:70px;display:block;margin:0 auto 8px;object-fit:contain">
+  <div style="color:#d6e7e3;font-size:13px">Hot Boat Villarrica · Pucón</div>
+  <div style="display:inline-block;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 14px;font-size:12px;margin-top:8px;color:#f0d9a8;font-weight:700;letter-spacing:.05em">GIFT CARD #${g.code}</div>
+</td></tr>
+<tr><td style="padding:20px 28px">
+  <div style="${_eSec}">Datos del comprador</div>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="padding:4px 0;width:50%"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Comprador</span><strong>${escHtml(g.buyer_name)||'—'}</strong></td>
+      <td style="padding:4px 0;width:50%"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Teléfono</span><strong>${escHtml(g.buyer_phone)||'—'}</strong></td>
+    </tr>
+    <tr>
+      <td style="padding:4px 0"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Email</span><strong>${escHtml(g.buyer_email)||'—'}</strong></td>
+      <td style="padding:4px 0"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Personas</span><strong>${g.num_people||'—'}</strong></td>
+    </tr>
+    <tr>
+      <td style="padding:4px 0"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Fecha de compra</span><strong>${fmtDate(g.purchased_at)}</strong></td>
+      <td style="padding:4px 0"><span style="font-size:11px;color:#888;display:block;margin-bottom:2px">Vence</span><strong>${fmtDate(g.expires_at)}</strong></td>
+    </tr>
+  </table>
+  <div style="${_eSec}">Detalle</div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+    <thead><tr>
+      <th style="${_eTh}">Descripción</th>
+      <th style="${_eTh};text-align:center">Cant.</th>
+      <th style="${_eTh};text-align:right">P. Unit.</th>
+      <th style="${_eTh};text-align:right">Subtotal</th>
+    </tr></thead>
+    <tbody>
+      ${itemsRowsEmail}
+      <tr>
+        <td colspan="3" style="${_eTotalTd}">TOTAL PAGADO</td>
+        <td style="${_eTotalTd};text-align:right;color:#2c7a72;font-size:16px">${money(g.amount)}</td>
+      </tr>
+    </tbody>
+  </table>
+  ${dedicationBlockEmail}
+  <div style="margin-top:14px;padding:10px 14px;background:rgba(44,122,114,.10);border:1px solid #2c7a72;border-radius:6px;text-align:center;font-weight:700;color:#1f6359">
+    ✅ Pago completo · Código: <span style="font-family:monospace">${g.code}</span>
+  </div>
+</td></tr>
+<tr><td style="background:#eef3f0;padding:14px 28px;text-align:center;font-size:11px;color:#999;border-top:1px solid #e3e9e6">
+  Documento generado el ${new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}
+  &nbsp;·&nbsp; HotBoat Chile &nbsp;·&nbsp; hotboatchile.com
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Recibo Gift Card HotBoat – ${escHtml(g.buyer_name)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;background:#eef3f0;color:#1f2a28;font-size:14px;padding:2rem}
+  .page{max-width:680px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(31,42,40,.12)}
+  .header{background:linear-gradient(135deg,#2f857c 0%,#246b64 100%);padding:2rem;text-align:center;color:#fff}
+  .header p{color:#d6e7e3;font-size:.85rem}
+  .recibo-num{display:inline-block;background:rgba(255,255,255,.15);border-radius:20px;padding:.25rem .9rem;font-size:.8rem;margin-top:.6rem;color:#f0d9a8;font-weight:700;letter-spacing:.05em}
+  .body{padding:1.5rem 2rem}
+  .section-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6f7d79;margin-bottom:.6rem;margin-top:1.4rem;border-bottom:1px solid #e3e9e6;padding-bottom:.3rem}
+  .client-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .8rem}
+  .client-field label{font-size:.7rem;color:#888;display:block;margin-bottom:.1rem}
+  .client-field span{font-weight:600;color:#1f2a28}
+  table{width:100%;border-collapse:collapse;font-size:.88rem}
+  thead th{background:#eef3f0;padding:.5rem .6rem;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:#6f7d79}
+  thead th:last-child{text-align:right}
+  tbody tr:nth-child(even){background:#f8faf9}
+  .total-row td{padding:.55rem .6rem;font-weight:700;font-size:1rem;background:#eef3f0}
+  .total-row td:last-child{text-align:right;color:#2c7a72;font-size:1.1rem}
+  .footer{background:#eef3f0;padding:1rem 2rem;text-align:center;font-size:.75rem;color:#999;border-top:1px solid #e3e9e6}
+  .close-fab{position:fixed;top:1rem;left:1rem;z-index:999;background:rgba(20,20,40,.72);color:#fff;border:none;
+    border-radius:999px;width:2.6rem;height:2.6rem;font-size:1.1rem;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+  @media print{
+    body{background:#fff;padding:0}
+    .page{box-shadow:none;border-radius:0}
+    .no-print{display:none}
+  }
+</style>
+</head>
+<body>
+<button class="close-fab no-print" onclick="window.close()" title="Volver">←</button>
+<div class="page">
+  <div class="header">
+    <img src="${window.location.origin}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png"
+         alt="HotBoat" style="height:80px;display:block;margin:0 auto .6rem;object-fit:contain">
+    <p style="color:#d6e7e3;font-size:.85rem">Hot Boat Villarrica · Pucón</p>
+    <div class="recibo-num">GIFT CARD #${g.code}</div>
+  </div>
+  <div class="body">
+    <div class="section-title">Datos del comprador</div>
+    <div class="client-grid">
+      <div class="client-field"><label>Comprador</label><span>${escHtml(g.buyer_name)||'—'}</span></div>
+      <div class="client-field"><label>Teléfono</label><span>${escHtml(g.buyer_phone)||'—'}</span></div>
+      <div class="client-field"><label>Email</label><span>${escHtml(g.buyer_email)||'—'}</span></div>
+      <div class="client-field"><label>Personas</label><span>${g.num_people||'—'}</span></div>
+      <div class="client-field"><label>Fecha de compra</label><span>${fmtDate(g.purchased_at)}</span></div>
+      <div class="client-field"><label>Vence</label><span>${fmtDate(g.expires_at)}</span></div>
+    </div>
+    <div class="section-title">Detalle</div>
+    <table>
+      <thead><tr><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
+      <tbody>
+        ${itemsRows}
+        <tr class="total-row"><td colspan="3">TOTAL PAGADO</td><td>${money(g.amount)}</td></tr>
+      </tbody>
+    </table>
+    ${dedicationBlockPrint}
+    <div style="margin-top:1rem;padding:.7rem 1rem;background:rgba(44,122,114,.10);border:1px solid #2c7a72;border-radius:8px;text-align:center;font-weight:700;color:#1f6359">
+      ✅ Pago completo · Código: <span style="font-family:monospace">${g.code}</span>
+    </div>
+    <div class="no-print" style="margin-top:1.5rem;display:flex;gap:.7rem;justify-content:flex-end;align-items:center;flex-wrap:wrap">
+      <span id="_email-status" style="font-size:.82rem;color:#555"></span>
+      <button onclick="window.close()"
+        style="background:#555;color:#fff;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.9rem;font-weight:700;cursor:pointer">
+        ← Volver
+      </button>
+      <button id="_btn-send-email"
+        style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.4rem">
+        📧 Enviar al comprador
+      </button>
+      <button onclick="window.print()"
+        style="background:#2c7a72;color:#fff;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.9rem;font-weight:700;cursor:pointer">
+        🖨️ Imprimir / Guardar PDF
+      </button>
+    </div>
+  </div>
+  <div class="footer">
+    Documento generado el ${new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}
+    &nbsp;·&nbsp; HotBoat Chile &nbsp;·&nbsp; hotboatchile.com
+  </div>
+</div>
+</body>
+</html>`;
+
+  const win = window.open('','_blank');
+  if(!win){ showToast('Permite popups para generar el recibo'); return; }
+  win.document.write(html);
+  win.document.close();
+
+  const _to = (g.buyer_email||'').trim();
+  const _subject = ('Recibo Gift Card HotBoat #' + g.code + ' — ' + (g.buyer_name||'')).trim();
+  setTimeout(function(){
+    const btn = win.document.getElementById('_btn-send-email');
+    const st  = win.document.getElementById('_email-status');
+    if(!btn) return;
+    btn.onclick = async function(){
+      if(!_to){
+        st.style.color='#dc2626';
+        st.textContent='Sin email del comprador registrado.';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = '⏳ Enviando…';
+      st.textContent = '';
+      try {
+        const resp = await fetch('/api/admin/recibo/send', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json','x-admin-key': getKey()},
+          body: JSON.stringify({ to: _to, subject: _subject, html: emailHtml }),
+        });
+        const data = await resp.json().catch(function(){ return {}; });
+        if(resp.ok && data.ok){
+          btn.textContent = '✅ Enviado';
+          btn.style.background = '#15803d';
+          st.style.color = '#15803d';
+          st.textContent = 'Recibo enviado a ' + _to;
+        } else {
+          throw new Error(data.detail || 'Error al enviar');
+        }
+      } catch(e){
+        btn.disabled = false;
+        btn.textContent = '📧 Enviar al comprador';
+        st.style.color = '#dc2626';
+        st.textContent = '❌ ' + e.message;
+      }
+    };
+  }, 200);
+}
+
 function openCouponModal(id){
   const c = id ? _coupons.find(x=>x.id===id) : null;
   document.getElementById('cm-id').value = id||'';
@@ -11190,6 +11606,14 @@ document.addEventListener('DOMContentLoaded', () => {
     <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem">
       <span style="font-family:monospace;font-weight:700;color:var(--gold);font-size:1.05rem" id="gcd-code"></span>
       <span id="gcd-status"></span>
+      <button onclick="previewGiftCardConfirmationEmail(document.getElementById('gcd-code-hidden').value)"
+        style="margin-left:auto;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#16a34a;border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer;font-weight:600">
+        📧 Mail confirmación
+      </button>
+      <button onclick="generarReciboGiftCard(document.getElementById('gcd-code-hidden').value)"
+        style="background:rgba(74,158,255,.1);border:1px solid rgba(74,158,255,.3);color:var(--blue);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer;font-weight:600">
+        🧾 Recibo
+      </button>
     </div>
 
     <div id="gcd-info" style="margin-bottom:1rem"></div>
