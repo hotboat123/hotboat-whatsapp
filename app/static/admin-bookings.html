@@ -10658,15 +10658,9 @@ function openGiftCardDetailModal(code){
       <span style="text-align:right">${val}</span>
     </div>`).join('');
 
-  const hasGift = g.recipient_name || g.dedication || g.sender_name;
-  document.getElementById('gcd-message-wrap').style.display = hasGift ? '' : 'none';
-  if(hasGift){
-    document.getElementById('gcd-message').innerHTML = `
-      ${g.recipient_name ? `<div style="margin-bottom:.3rem"><strong>Para:</strong> ${escHtml(g.recipient_name)}</div>` : ''}
-      ${g.dedication ? `<div style="font-style:italic;white-space:pre-wrap">"${escHtml(g.dedication)}"</div>` : ''}
-      ${g.sender_name ? `<div style="margin-top:.3rem"><strong>De:</strong> ${escHtml(g.sender_name)}</div>` : ''}
-    `;
-  }
+  document.getElementById('gcd-recipient-name').value = g.recipient_name || '';
+  document.getElementById('gcd-dedication').value = g.dedication || '';
+  document.getElementById('gcd-sender-name').value = g.sender_name || '';
 
   // Ciudad origen (checkboxes, igual patrón que reservas)
   const savedCiudad = (g.ciudad_origen||'').split(',').map(s=>s.trim()).filter(Boolean);
@@ -10721,6 +10715,9 @@ async function saveGiftCardOrigin(){
   const body = {
     ciudad_origen: document.getElementById('gcd-ciudad_origen').value,
     como_supieron,
+    recipient_name: document.getElementById('gcd-recipient-name').value,
+    dedication: document.getElementById('gcd-dedication').value,
+    sender_name: document.getElementById('gcd-sender-name').value,
   };
   try{
     await api(`/api/admin/gift-cards/${encodeURIComponent(code)}/origin`, {method:'PUT', body: JSON.stringify(body)});
@@ -11619,8 +11616,13 @@ document.addEventListener('DOMContentLoaded', () => {
     <div id="gcd-info" style="margin-bottom:1rem"></div>
 
     <div id="gcd-message-wrap" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:.8rem;margin-bottom:1rem">
-      <div style="font-size:.78rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">🎁 Mensaje del regalo</div>
-      <div id="gcd-message" style="font-size:.85rem;line-height:1.5"></div>
+      <div style="font-size:.78rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">🎁 Mensaje del regalo <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(se envía en el mail de confirmación)</span></div>
+      <div class="form-group-adm" style="margin-bottom:.5rem"><label>Para (destinatario)</label>
+        <input id="gcd-recipient-name" type="text" placeholder="Nombre de quien recibe el regalo..."></div>
+      <div class="form-group-adm" style="margin-bottom:.5rem"><label>Dedicatoria</label>
+        <textarea id="gcd-dedication" rows="3" placeholder="Mensaje para quien recibe el regalo..."></textarea></div>
+      <div class="form-group-adm" style="margin-bottom:0"><label>De (remitente)</label>
+        <input id="gcd-sender-name" type="text" placeholder="Nombre de quien regala..."></div>
     </div>
 
     <div class="form-group-adm"><label>De dónde son <span style="color:var(--muted);font-weight:400;font-size:.75rem">(varias)</span></label>

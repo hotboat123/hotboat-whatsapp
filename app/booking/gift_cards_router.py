@@ -320,25 +320,34 @@ async def admin_create_gift_card_endpoint(request: AdminCreateGiftCardRequest, x
 class UpdateGiftCardOriginRequest(BaseModel):
     ciudad_origen: Optional[str] = None
     como_supieron: Optional[str] = None
+    recipient_name: Optional[str] = None
+    dedication: Optional[str] = None
+    sender_name: Optional[str] = None
 
 
 @gift_cards_router.put("/api/admin/gift-cards/{code}/origin")
 async def update_gift_card_origin_endpoint(code: str, body: UpdateGiftCardOriginRequest, x_admin_key: str = Header("")):
-    """Guarda ciudad_origen/como_supieron — igual que en reservas, esto lo
-    llena el staff a mano después de hablar con el comprador, no se pide en
-    el formulario web de compra."""
+    """Guarda ciudad_origen/como_supieron y el mensaje de regalo (para/
+    dedicatoria/de) — igual que en reservas, esto lo edita el staff a mano
+    desde el modal de detalle; el mensaje llega así también al mail de
+    confirmación (_build_gift_card_email lee estas mismas columnas)."""
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
             _ensure_gift_cards_table(cur)
             cur.execute("""
                 UPDATE gift_cards
-                SET ciudad_origen = %s, como_supieron = %s, updated_at = NOW()
+                SET ciudad_origen = %s, como_supieron = %s,
+                    recipient_name = %s, dedication = %s, sender_name = %s,
+                    updated_at = NOW()
                 WHERE code = %s
                 RETURNING id
             """, (
                 (body.ciudad_origen or "").strip() or None,
                 (body.como_supieron or "").strip() or None,
+                (body.recipient_name or "").strip() or None,
+                (body.dedication or "").strip() or None,
+                (body.sender_name or "").strip() or None,
                 code,
             ))
             row = cur.fetchone()
