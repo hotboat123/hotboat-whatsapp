@@ -24,6 +24,7 @@ def send_email(
     bcc: Optional[List[str]] = None,
     reply_to: Optional[str] = None,
     trigger: str = "unspecified",
+    attachments: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Returns {"sent": bool, "reason": str, "provider": str, "message_id": str|None}.
@@ -32,6 +33,10 @@ def send_email(
     `trigger` is a free-text label used only for logging (e.g. "booking_confirmed",
     "low_stock_alert") — it doesn't affect routing today, but keeps the door open
     for a future per-trigger provider filter without touching call sites again.
+
+    `attachments`, if given, is a list of {"filename": str, "content": str|bytes,
+    "content_type": str}. `content` as `str` is sent as-is (e.g. a text/html
+    file); bytes are used for binary attachments.
     """
     settings = get_settings()
 
@@ -59,11 +64,13 @@ def send_email(
     try:
         if provider == "ses":
             result = _send_via_ses(settings, to=to, subject=subject, html=html,
-                                    from_address=from_address, bcc=bcc, reply_to=reply_to)
+                                    from_address=from_address, bcc=bcc, reply_to=reply_to,
+                                    attachments=attachments)
             message_id = result.get("MessageId")
         else:
             result = _send_via_resend(settings, to=to, subject=subject, html=html,
-                                       from_address=from_address, bcc=bcc, reply_to=reply_to)
+                                       from_address=from_address, bcc=bcc, reply_to=reply_to,
+                                       attachments=attachments)
             message_id = result.get("id") if isinstance(result, dict) else None
         return {"sent": True, "reason": "ok", "provider": provider, "message_id": message_id}
     except Exception as e:
@@ -84,7 +91,7 @@ def send_email(
         return {"sent": False, "reason": error_detail, "provider": provider, "message_id": None}
 
 
-def _send_via_resend(settings, *, to, subject, html, from_address, bcc, reply_to):
+def _send_via_resend(settings, *, to, subject, html, from_address, bcc, reply_to, attachments):
     from app.email.resend_booking import send_booking_html
 
     api_key = (settings.resend_api_key or "").strip()
@@ -92,11 +99,11 @@ def _send_via_resend(settings, *, to, subject, html, from_address, bcc, reply_to
         raise ValueError("RESEND_API_KEY is not configured")
     return send_booking_html(
         to=to, subject=subject, html=html, from_address=from_address,
-        api_key=api_key, bcc=bcc, reply_to=reply_to,
+        api_key=api_key, bcc=bcc, reply_to=reply_to, attachments=attachments,
     )
 
 
-def _send_via_ses(settings, *, to, subject, html, from_address, bcc, reply_to):
+def _send_via_ses(settings, *, to, subject, html, from_address, bcc, reply_to, attachments):
     from app.email.ses_provider import send_booking_html_ses
 
     return send_booking_html_ses(
@@ -105,5 +112,5 @@ def _send_via_ses(settings, *, to, subject, html, from_address, bcc, reply_to):
         secret_key=settings.aws_secret_access_key,
         region=settings.aws_region,
         configuration_set=settings.ses_configuration_set,
-        bcc=bcc, reply_to=reply_to,
+        bcc=bcc, reply_to=reply_to, attachments=attachments,
     )

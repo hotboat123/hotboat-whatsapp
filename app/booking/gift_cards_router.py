@@ -15,6 +15,7 @@ import logging
 import random
 import string
 from datetime import datetime, timedelta
+from html import escape as _esc
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
@@ -357,6 +358,20 @@ async def update_gift_card_origin_endpoint(code: str, body: UpdateGiftCardOrigin
     return {"ok": True}
 
 
+@gift_cards_router.get("/api/admin/gift-cards/{code}/certificate")
+async def preview_gift_card_certificate(code: str, x_admin_key: str = Header("")):
+    """The VIP certificate that gets attached to the confirmation email —
+    exposed separately so the panel can show what the buyer will actually
+    receive as a file, same content either way (_build_gift_card_certificate_html
+    is the only place that builds it)."""
+    _check_auth(x_admin_key)
+    gc = get_gift_card_by_code(code)
+    if not gc:
+        raise HTTPException(status_code=404, detail="Gift card no encontrada")
+    html = _build_gift_card_certificate_html(code)
+    return {"ok": True, "code": code, "html": html}
+
+
 @gift_cards_router.get("/api/admin/gift-cards/{code}/confirmation-preview")
 async def preview_gift_card_confirmation(code: str, x_admin_key: str = Header("")):
     """Render the exact gift_card_purchased email (subject + html) without
@@ -527,6 +542,154 @@ def _build_gift_card_email(code: str) -> Optional[dict]:
     }
 
 
+def _build_gift_card_certificate_html(code: str) -> Optional[str]:
+    """Standalone 'VIP' gift-card certificate — the dark forest/dedication
+    card design the team already hand-builds for gifting occasions (see the
+    'Marcelo' bg-navidad-2 variant in HotBoat - Marketing/public/cards/
+    gift-card-vip.html). Rendered here per-code so it can be attached as a
+    real file to the confirmation email instead of being a one-off mockup."""
+    gc = get_gift_card_by_code(code)
+    if not gc:
+        return None
+
+    import os as _os
+    logo_url = _os.environ.get("EMAIL_LOGO_URL", "").strip()
+    bg_url = _os.environ.get("EMAIL_GIFTCARD_BG_URL", "").strip()
+    if not logo_url or not bg_url:
+        railway_domain = _os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+        if railway_domain:
+            if not logo_url:
+                logo_url = f"https://{railway_domain}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png"
+            if not bg_url:
+                bg_url = f"https://{railway_domain}/static/gift-cards/fondo-navidad-2.png"
+
+    n = gc["num_people"]
+    recipient = _esc(gc.get("recipient_name") or "")
+    sender = _esc(gc.get("sender_name") or "HotBoat")
+    dedication_paragraphs = "".join(
+        f"<p>{_esc(line)}</p>" for line in (gc.get("dedication") or "").splitlines() if line.strip()
+    )
+    expires = gc.get("expires_at", "")[:10]
+    expires_str = ""
+    if expires:
+        y, m, d = expires.split("-")
+        expires_str = f"{d}/{m}/{y}"
+
+    return f"""<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HotBoat · Gift Card VIP — {_esc(code)}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        min-height: 100vh;
+        padding: clamp(24px, 5vw, 60px);
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #03120e;
+        color: #fff;
+        display: flex;
+        justify-content: center;
+      }}
+      .card {{
+        width: 100%;
+        max-width: 380px;
+        border-radius: 30px;
+        padding: 22px 22px 26px;
+        position: relative;
+        overflow: hidden;
+        color: #fcebd2;
+        box-shadow: 0 30px 55px rgba(0, 0, 0, 0.45);
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        isolation: isolate;
+      }}
+      .card::before {{
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(120deg, rgba(20, 10, 16, 0.7), rgba(15, 35, 44, 0.75)),
+          url("{bg_url}") center / cover no-repeat, rgba(20, 56, 43, 0.9);
+        z-index: -2;
+      }}
+      .card::after {{
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.1), transparent 45%),
+          radial-gradient(circle at 80% 10%, rgba(255, 255, 255, 0.08), transparent 40%);
+        pointer-events: none;
+        z-index: -1;
+      }}
+      .card-head {{ display: flex; flex-direction: column; align-items: center; gap: 6px; }}
+      .card-logo {{ height: 64px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)); }}
+      .tagline {{ text-transform: uppercase; letter-spacing: 0.3em; font-size: 0.8rem; text-align: center; opacity: 0.85; }}
+      h2 {{
+        margin: 0;
+        font-family: "Playfair Display", "Times New Roman", serif;
+        font-size: clamp(1.6rem, 3vw, 2.1rem);
+        text-align: center;
+      }}
+      .message {{
+        border-radius: 18px;
+        background: rgba(252, 235, 210, 0.92);
+        color: #1f1a17;
+        padding: 18px;
+        line-height: 1.55;
+      }}
+      .message p {{ margin: 10px 0 0; text-align: justify; white-space: pre-wrap; }}
+      .message strong {{ font-size: 1.05rem; }}
+      .features {{ display: flex; flex-direction: column; gap: 6px; margin: 4px 0 6px; font-size: 0.92rem; }}
+      .footer {{
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 0.85rem;
+        opacity: 0.85;
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
+        padding-top: 10px;
+      }}
+    </style>
+  </head>
+  <body>
+    <article class="card">
+      <div class="card-head">
+        {f'<img class="card-logo" src="{logo_url}" alt="Logo HotBoat" />' if logo_url else ''}
+        <span class="tagline">HotBoat Gift Card VIP</span>
+      </div>
+      <h2>Experiencia HotBoat</h2>
+      <div class="message">
+        {f'<strong>Para: {recipient}</strong>' if recipient else ''}
+        {dedication_paragraphs}
+        <p><strong>De: {sender}</strong></p>
+      </div>
+      <div class="features">
+        <span>🛥️ Experiencia HotBoat — {n} persona{"s" if n != 1 else ""}</span>
+        <span>🎥 Video de dron</span>
+        <span>🖼️ Experiencia Única</span>
+        <span>🎵 Parlante incluido</span>
+      </div>
+      <div class="footer">
+        <span>Código: {_esc(code)}</span>
+        {f'<span>Válida hasta: {expires_str}</span>' if expires_str else ''}
+      </div>
+    </article>
+  </body>
+</html>
+"""
+
+
 def _gift_card_email_from_address() -> str:
     from app.config import get_settings
     settings = get_settings()
@@ -535,6 +698,17 @@ def _gift_card_email_from_address() -> str:
         or (settings.email_from or "").strip()
         or "onboarding@resend.dev"
     )
+
+
+def _gift_card_certificate_attachment(code: str) -> Optional[list]:
+    cert_html = _build_gift_card_certificate_html(code)
+    if not cert_html:
+        return None
+    return [{
+        "filename": f"HotBoat-GiftCard-{code}.html",
+        "content": cert_html,
+        "content_type": "text/html",
+    }]
 
 
 def _send_gift_card_email(code: str) -> None:
@@ -548,6 +722,7 @@ def _send_gift_card_email(code: str) -> None:
         html=built["html"],
         from_address=_gift_card_email_from_address(),
         trigger="gift_card_purchased",
+        attachments=_gift_card_certificate_attachment(code),
     )
 
 
@@ -569,5 +744,6 @@ def send_gift_card_email_admin(code: str, dry_run: bool = False) -> dict:
         html=built["html"],
         from_address=_gift_card_email_from_address(),
         trigger="gift_card_purchased",
+        attachments=_gift_card_certificate_attachment(code),
     )
     return {**result, "to": built["to"], "subject": built["subject"], "html": built["html"], "customer": built["customer"]}

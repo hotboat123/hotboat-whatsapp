@@ -6354,6 +6354,35 @@ async function previewGiftCardConfirmationEmail(code){
   };
 }
 
+async function previewGiftCardCertificate(code){
+  if(!code) return;
+  let data;
+  try{
+    data = await api(`/api/admin/gift-cards/${code}/certificate`);
+  }catch(e){
+    showToast('Error: '+e.message);
+    return;
+  }
+  const win = window.open('', '_blank');
+  if(!win){ showToast('Permite popups para ver el certificado'); return; }
+  win.document.write(data.html);
+  win.document.close();
+
+  // Barra flotante solo con Volver — el certificado se manda como adjunto
+  // automáticamente junto con el mail de confirmación, no se envía desde acá.
+  const bar = win.document.createElement('div');
+  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#0d1b1a;padding:.7rem 1rem;'+
+    'display:flex;gap:.6rem;justify-content:center;align-items:center;flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.4);'+
+    'font-family:-apple-system,BlinkMacSystemFont,sans-serif';
+  bar.innerHTML = `
+    <span style="color:#94a3b8;font-size:.8rem;margin-right:auto">🎫 Vista previa — este archivo se adjunta al mail de confirmación</span>
+    <button id="_btn-gccert-close" style="background:#555;color:#fff;border:none;border-radius:8px;padding:.5rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer">← Volver</button>
+  `;
+  win.document.body.prepend(bar);
+  win.document.body.style.paddingTop = '54px';
+  win.document.getElementById('_btn-gccert-close').onclick = function(){ win.close(); };
+}
+
 async function sendFollowupReviewEmail(rid){
   if(!rid) return;
   try{
@@ -11610,6 +11639,10 @@ document.addEventListener('DOMContentLoaded', () => {
       <button onclick="generarReciboGiftCard(document.getElementById('gcd-code-hidden').value)"
         style="background:rgba(74,158,255,.1);border:1px solid rgba(74,158,255,.3);color:var(--blue);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer;font-weight:600">
         🧾 Recibo
+      </button>
+      <button onclick="previewGiftCardCertificate(document.getElementById('gcd-code-hidden').value)"
+        style="background:rgba(227,172,83,.1);border:1px solid rgba(227,172,83,.35);color:var(--gold);border-radius:8px;padding:.3rem .7rem;font-size:.78rem;cursor:pointer;font-weight:600">
+        🎫 Certificado
       </button>
     </div>
 
