@@ -39,7 +39,8 @@ from app.db.leads import (
     get_conversation_history,
     import_conversation_batch,
     mark_conversation_as_read,
-    update_lead_priority
+    update_lead_priority,
+    update_lead_quality_rating
 )
 from app.notifications import push_notifier
 from datetime import datetime, timedelta
@@ -1446,6 +1447,35 @@ async def update_conversation_priority(phone_number: str, update: PriorityUpdate
             raise HTTPException(status_code=400, detail="Failed to update priority")
     except Exception as e:
         logger.error(f"Error updating priority: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class QualityRatingUpdate(BaseModel):
+    quality: int  # 0 = sin calificar, 1-5 = calificación manual de la conversación (5 = mejor)
+
+
+@app.put("/api/conversations/{phone_number}/quality")
+async def update_conversation_quality(phone_number: str, update: QualityRatingUpdate):
+    """Update the manual 1-5 quality rating for a conversation's bot handling"""
+    try:
+        success = await update_lead_quality_rating(
+            phone_number=phone_number,
+            quality_rating=update.quality
+        )
+
+        if success:
+            return {
+                "status": "success",
+                "phone_number": phone_number,
+                "quality": update.quality,
+                "message": f"Quality rating updated to {update.quality}"
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to update quality rating")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating quality rating: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

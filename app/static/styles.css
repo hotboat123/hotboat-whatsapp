@@ -1268,6 +1268,26 @@ audio::-webkit-media-controls-volume-slider {
     color: white;
 }
 
+/* Quality Rating Section in Message Input */
+.quality-section {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    margin-bottom: 0.4rem;
+}
+
+.quality-rating-select {
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-light);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.5rem;
+    font-weight: 600;
+}
+
 /* Priority Section in Message Input */
 .priority-translate-row {
     display: flex;

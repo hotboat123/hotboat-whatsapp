@@ -22,7 +22,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Kia-Ai">
     <meta name="mobile-web-app-capable" content="yes">
-    <link rel="stylesheet" href="/static/styles.css?v=20260308215700">
+    <link rel="stylesheet" href="/static/styles.css?v=20260821111800">
     <link rel="stylesheet" href="/static/mobile-fix.css?v=20260117g">
 </head>
 <body>
@@ -176,6 +176,17 @@
                             <div class="char-counter">
                                 <span id="charCount">0</span>/4096
                             </div>
+                            <div class="quality-section">
+                                <label class="priority-label" for="qualityRatingSelect">Calidad:</label>
+                                <select id="qualityRatingSelect" class="quality-rating-select" title="Calificación manual de qué tan bien respondió el bot en esta conversación" onchange="updateQualityRating(this.value)">
+                                    <option value="0">— Sin calificar</option>
+                                    <option value="1">1 · Muy mala</option>
+                                    <option value="2">2 · Mala</option>
+                                    <option value="3">3 · Regular</option>
+                                    <option value="4">4 · Buena</option>
+                                    <option value="5">5 · Excelente</option>
+                                </select>
+                            </div>
                             <div class="priority-translate-row">
                                 <div class="priority-section">
                                     <label class="priority-label">Prioridad:</label>
@@ -315,7 +326,7 @@
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="/static/app.js?v=20260715090000"></script>
+    <script src="/static/app.js?v=20260821111800"></script>
 </body>
 </html>
 

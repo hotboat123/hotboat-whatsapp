@@ -70,6 +70,22 @@ def _ensure_popeye_col(cur) -> None:
     _popeye_col_ensured = True
 
 
+_quality_col_ensured: bool = False
+
+def _ensure_quality_col(cur) -> None:
+    """Add quality_rating column if not present (runs once per process).
+    Manual 1-5 rating an operator assigns per conversation to track how well
+    the bot handled it — NULL means "not rated yet" (kept distinct from a
+    real low score of 1)."""
+    global _quality_col_ensured
+    if _quality_col_ensured:
+        return
+    cur.execute(
+        "ALTER TABLE whatsapp_leads ADD COLUMN IF NOT EXISTS quality_rating SMALLINT"
+    )
+    _quality_col_ensured = True
+
+
 async def extend_popeye_session(phone_number: str, minutes: int = 10) -> None:
     """Push popeye_until forward — called every time a message rides the
     "Hola Popeye" pass-through (see _is_popeye_trigger/popeye_summon in
@@ -200,6 +216,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                 _ensure_lang_col(cur)
                 _ensure_variant_col(cur)
                 _ensure_popeye_col(cur)
+                _ensure_quality_col(cur)
                 try:
                     cur.execute("""
                         SELECT
@@ -207,7 +224,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                             notes, tags, created_at, updated_at, last_interaction_at, bot_enabled,
                             unread_count, last_read_at, priority, ad_source,
                             ad_platform, ad_media_type, ad_creative_url, ad_ctwa_clid, ad_audience,
-                            preferred_language, bot_variant, popeye_until
+                            preferred_language, bot_variant, popeye_until, quality_rating
                         FROM whatsapp_leads
                         WHERE phone_number = %s
                     """, (phone_number,))
@@ -266,6 +283,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "preferred_language": row[19] if len(row) > 19 else None,
                         "bot_variant": row[20] if len(row) > 20 else None,
                         "popeye_until": row[21].isoformat() if len(row) > 21 and row[21] else None,
+                        "quality_rating": row[22] if len(row) > 22 and row[22] else 0,
                     }
                 else:
                     # Create new lead — randomly assign an active A/B variant
@@ -334,6 +352,7 @@ async def get_or_create_lead(phone_number: str, customer_name: str = None) -> Di
                         "priority": 0,
                         "bot_variant": variant_key,
                         "welcome_message": welcome_message,
+                        "quality_rating": 0,
                     }
     
     except Exception as e:
@@ -828,6 +847,43 @@ async def update_lead_priority(phone_number: str, priority: int) -> bool:
 
     except Exception as e:
         logger.error(f"Error updating priority: {e}")
+        return False
+
+
+async def update_lead_quality_rating(phone_number: str, quality_rating: int) -> bool:
+    """
+    Update the manual 1-5 quality rating an operator gives a bot conversation.
+
+    Args:
+        phone_number: Contact phone number
+        quality_rating: 0 = sin calificar (stored as NULL), 1-5 = rating (5 = best)
+
+    Returns:
+        True if successful
+    """
+    try:
+        if quality_rating not in [0, 1, 2, 3, 4, 5]:
+            logger.error(f"Invalid quality_rating value: {quality_rating}")
+            return False
+
+        db_value = quality_rating if quality_rating else None
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                _ensure_quality_col(cur)
+                cur.execute("""
+                    UPDATE whatsapp_leads
+                    SET quality_rating = %s,
+                        updated_at = NOW()
+                    WHERE phone_number = %s
+                """, (db_value, phone_number))
+
+                conn.commit()
+                logger.info(f"Updated quality_rating to {quality_rating} for {phone_number}")
+                return True
+
+    except Exception as e:
+        logger.error(f"Error updating quality_rating: {e}")
         return False
 
 

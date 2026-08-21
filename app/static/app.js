@@ -783,6 +783,7 @@ async function selectConversation(phoneNumber) {
             hasMore: Boolean(data.has_more),
             nextCursor: data.next_cursor || null,
             priority: data.lead?.priority || 0,
+            quality_rating: data.lead?.quality_rating || 0,
             ad_source: data.lead?.ad_source || null,
             ad_platform: data.lead?.ad_platform || null,
             ad_media_type: data.lead?.ad_media_type || null,
@@ -797,6 +798,7 @@ async function selectConversation(phoneNumber) {
 
         // Update priority UI
         updatePriorityUI(currentConversation.priority);
+        updateQualityUI(currentConversation.quality_rating);
 
         loadLeadInfo(phoneNumber);
 
@@ -2509,6 +2511,7 @@ window.switchSearchTab = switchSearchTab;
 window.handleSearch = handleSearch;
 window.selectConversationFromSearch = selectConversationFromSearch;
 window.updatePriority = updatePriority;
+window.updateQualityRating = updateQualityRating;
 window.sendQuickReply = sendQuickReply;
 
 // Mark conversation as read
@@ -2672,6 +2675,45 @@ function updatePriorityUI(priority) {
             if (i === priority) btn.classList.add('active');
             else btn.classList.remove('active');
         }
+    }
+}
+
+// Update manual quality rating (1-5, 0 = sin calificar) for the current conversation
+async function updateQualityRating(quality) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'warning');
+        return;
+    }
+
+    quality = parseInt(quality, 10);
+
+    try {
+        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/quality`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ quality: quality })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update quality rating');
+        }
+
+        currentConversation.quality_rating = quality;
+        showToast('Calidad actualizada', 'success');
+
+    } catch (error) {
+        console.error('Error updating quality rating:', error);
+        showToast('Error al actualizar calidad', 'error');
+    }
+}
+
+// Update quality rating select to reflect the current conversation's value
+function updateQualityUI(quality) {
+    const select = document.getElementById('qualityRatingSelect');
+    if (select) {
+        select.value = String(quality || 0);
     }
 }
 
