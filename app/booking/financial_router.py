@@ -205,6 +205,34 @@ def _get_bookings_cashflow_range(date_from: date, date_to: date) -> List[Dict]:
             return rows
 
 
+def _get_gift_cards_revenue_range(date_from: date, date_to: date) -> List[Dict]:
+    """Paid gift cards (status active/redeemed — excludes pending_payment and
+    rejected) with purchased_at in range. A gift card has no `fecha` of its
+    own (no service date until redeemed, and redemption isn't wired to a
+    real booking yet — see gift_cards_router.py), so purchased_at is used
+    as both its P&L recognition date and its cash-flow date, the same way a
+    booking's pago `date` drives cash-flow independently of its `fecha`."""
+    from app.booking.gift_cards_router import _ensure_gift_cards_table
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_gift_cards_table(cur)
+            cur.execute("""
+                SELECT code, amount, COALESCE(payment_method, 'transferencia'),
+                       purchased_at::date, buyer_name
+                FROM gift_cards
+                WHERE status IN ('active', 'redeemed')
+                  AND purchased_at IS NOT NULL
+                  AND purchased_at::date BETWEEN %s AND %s
+            """, (date_from, date_to))
+            return [
+                {
+                    "code": r[0], "amount": float(r[1] or 0), "method": r[2],
+                    "fecha": r[3].isoformat(), "buyer_name": r[4] or "",
+                }
+                for r in cur.fetchall()
+            ]
+
+
 _DATE_COL_CANDIDATES   = ("fecha", "date", "day", "dia", "cost_date", "fecha_costo", "report_date", "cost_day")
 # total_spent first: marketing_costs_daily view (Meta ads rollup)
 _AMOUNT_COL_CANDIDATES = (
@@ -368,12 +396,39 @@ def _calc_booking_pnl(
     }
 
 
+def _merge_gift_cards_into_days(
+    days: Dict[str, Dict],
+    gift_cards: List[Dict],
+    commissions: Dict,
+) -> None:
+    """Add gift-card revenue to the per-day dict in place, recognized on
+    purchased_at. No cost is added — a gift card's operational cost lands
+    on redemption, which isn't wired to a real booking yet — so this is
+    pure additive revenue, same shape as a booking's gross/commission/net."""
+    for gc in gift_cards:
+        day = gc["fecha"]
+        if day not in days:
+            days[day] = new_empty_day(day)
+        d = days[day]
+        amt = gc["amount"]
+        net = _net_amount(amt, gc["method"], commissions)
+        d["n_gift_cards"] += 1
+        d["gross"] += _fmt_int(amt)
+        d["commission_deduction"] += _fmt_int(amt - net)
+        d["net_income"] += _fmt_int(net)
+        d["gift_cards"].append({
+            "code": gc["code"], "buyer_name": gc["buyer_name"],
+            "amount": _fmt_int(amt), "method": gc["method"],
+        })
+
+
 def _build_pnl_days(
     bookings: List[Dict],
     marketing: List[Dict],
     commissions: Dict,
     d_from: date,
     d_to: date,
+    gift_cards: Optional[List[Dict]] = None,
 ) -> Dict[str, Dict]:
     """Build per-day P&L dict with income/cost breakdown and structural daily cost."""
     structure = get_financial_structure()
@@ -442,6 +497,8 @@ def _build_pnl_days(
             "cv_extra":         sp["cv_extra"],
         })
 
+    _merge_gift_cards_into_days(days, gift_cards or [], commissions)
+
     # Apply structural cost over full calendar months so partial-range filters still
     # get the complete month's fixed cost (not just the days inside the filter window).
     _struct_from = date(d_from.year, d_from.month, 1)
@@ -469,7 +526,7 @@ def _aggregate_weeks(days: Dict[str, Dict]) -> List[Dict]:
         if week_key not in weeks:
             weeks[week_key] = {
                 "week": week_key, "week_start": week_start, "week_end": week_end,
-                "n_reservas": 0, "gross": 0, "commission_deduction": 0,
+                "n_reservas": 0, "n_gift_cards": 0, "gross": 0, "commission_deduction": 0,
                 "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
                 "costo_estructural": 0,
                 "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
@@ -479,6 +536,7 @@ def _aggregate_weeks(days: Dict[str, Dict]) -> List[Dict]:
             }
         w = weeks[week_key]
         w["n_reservas"]           += d["n_reservas"]
+        w["n_gift_cards"]         += d.get("n_gift_cards", 0)
         w["gross"]                += d["gross"]
         w["commission_deduction"] += d["commission_deduction"]
         w["net_income"]           += d["net_income"]
@@ -497,7 +555,7 @@ def _aggregate_months(days: Dict[str, Dict]) -> List[Dict]:
         if month_key not in months:
             months[month_key] = {
                 "month": month_key,
-                "n_reservas": 0, "gross": 0, "commission_deduction": 0,
+                "n_reservas": 0, "n_gift_cards": 0, "gross": 0, "commission_deduction": 0,
                 "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
                 "costo_estructural": 0,
                 "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
@@ -507,6 +565,7 @@ def _aggregate_months(days: Dict[str, Dict]) -> List[Dict]:
             }
         m = months[month_key]
         m["n_reservas"]           += d["n_reservas"]
+        m["n_gift_cards"]         += d.get("n_gift_cards", 0)
         m["gross"]                += d["gross"]
         m["commission_deduction"] += d["commission_deduction"]
         m["net_income"]           += d["net_income"]
@@ -526,6 +585,7 @@ def _build_cashflow_days(
     commissions: Dict,
     d_from: date,
     d_to: date,
+    gift_cards: Optional[List[Dict]] = None,
 ) -> Dict[str, Dict]:
     """Build per-day cash flow based on actual payment dates."""
     structure = get_financial_structure()
@@ -589,6 +649,22 @@ def _build_cashflow_days(
                     "amount_neto":    _fmt_int(net),
                     "method":         method,
                 })
+
+    # Inflows: gift card purchases, on purchased_at — no matching outflow
+    # today (redemption isn't wired to a real booking's opex yet).
+    for gc in (gift_cards or []):
+        amt = gc["amount"]
+        method = gc["method"]
+        net = _net_amount(amt, method, commissions)
+        inflows_by_day[gc["fecha"]].append({
+            "booking_id":     None,
+            "gift_card_code": gc["code"],
+            "nombre_cliente": gc["buyer_name"],
+            "amount_bruto":   _fmt_int(amt),
+            "commission":     _fmt_int(amt - net),
+            "amount_neto":    _fmt_int(net),
+            "method":         method,
+        })
 
     all_days = (
         set(opex_by_day.keys())
@@ -677,6 +753,7 @@ def _build_inflows_by_method(
     commissions: Dict,
     d_from: date,
     d_to: date,
+    gift_cards: Optional[List[Dict]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Aggregate inflows by payment method for a date range using payment date.
@@ -751,6 +828,36 @@ def _build_inflows_by_method(
                 "inflow_commission": amt_comm,
                 "inflow_neto": amt_neto,
             })
+
+    for gc in (gift_cards or []):
+        pago_dt = _parse_pago_date(gc["fecha"], None)
+        if not pago_dt or not (d_from <= pago_dt <= d_to):
+            continue
+        amt = gc["amount"]
+        if amt <= 0:
+            continue
+        method = _normalize_payment_method(gc["method"])
+        net = _net_amount(amt, method, commissions)
+        commission = amt - net
+        g = grouped[method]
+        g["count"] += 1
+        amt_bruto = _fmt_int(amt)
+        amt_comm = _fmt_int(commission)
+        amt_neto = _fmt_int(net)
+        g["inflow_bruto"] += amt_bruto
+        g["inflow_commission"] += amt_comm
+        g["inflow_neto"] += amt_neto
+        g["details"].append({
+            "booking_id": None,
+            "gift_card_code": gc["code"],
+            "booking_date": None,
+            "payment_date": pago_dt.isoformat(),
+            "nombre_cliente": gc["buyer_name"],
+            "method_original": gc["method"],
+            "inflow_bruto": amt_bruto,
+            "inflow_commission": amt_comm,
+            "inflow_neto": amt_neto,
+        })
     return grouped
 
 
@@ -825,15 +932,17 @@ async def get_pnl(
         raise HTTPException(400, "Invalid date format, use YYYY-MM-DD")
 
     commissions = _get_commissions()
-    bookings  = _get_bookings_range(d_from, d_to)
-    marketing = _get_marketing_costs_range(d_from, d_to)
+    bookings   = _get_bookings_range(d_from, d_to)
+    marketing  = _get_marketing_costs_range(d_from, d_to)
+    gift_cards = _get_gift_cards_revenue_range(d_from, d_to)
 
-    days = _build_pnl_days(bookings, marketing, commissions, d_from, d_to)
+    days = _build_pnl_days(bookings, marketing, commissions, d_from, d_to, gift_cards)
     struct = get_financial_structure()
     period_days = (d_to - d_from).days + 1
 
     totals = {
         "n_reservas": sum(d["n_reservas"] for d in days.values()),
+        "n_gift_cards": sum(d.get("n_gift_cards", 0) for d in days.values()),
         "gross": sum(d["gross"] for d in days.values()),
         "commission_deduction": sum(d["commission_deduction"] for d in days.values()),
         "net_income": sum(d["net_income"] for d in days.values()),
@@ -894,10 +1003,11 @@ async def get_cashflow(
         raise HTTPException(400, "Invalid date format, use YYYY-MM-DD")
 
     commissions = _get_commissions()
-    bookings  = _get_bookings_cashflow_range(d_from, d_to)
-    marketing = _get_marketing_costs_range(d_from, d_to)
+    bookings   = _get_bookings_cashflow_range(d_from, d_to)
+    marketing  = _get_marketing_costs_range(d_from, d_to)
+    gift_cards = _get_gift_cards_revenue_range(d_from, d_to)
 
-    days = _build_cashflow_days(bookings, marketing, commissions, d_from, d_to)
+    days = _build_cashflow_days(bookings, marketing, commissions, d_from, d_to, gift_cards)
     days_list = _add_running_balance(days, opening_balance)
 
     if view == "weekly":
@@ -931,8 +1041,9 @@ async def get_inflows_by_method(
         raise HTTPException(400, "Invalid date format, use YYYY-MM-DD")
 
     commissions = _get_commissions()
-    bookings = _get_bookings_cashflow_range(d_from, d_to)
-    grouped = _build_inflows_by_method(bookings, commissions, d_from, d_to)
+    bookings   = _get_bookings_cashflow_range(d_from, d_to)
+    gift_cards = _get_gift_cards_revenue_range(d_from, d_to)
+    grouped = _build_inflows_by_method(bookings, commissions, d_from, d_to, gift_cards)
 
     ordered_methods = [
         "efectivo",

@@ -352,6 +352,8 @@ def new_empty_day(fecha: str) -> Dict[str, Any]:
         "cv_extra": 0,
         "resultado": 0,
         "bookings": [],
+        "n_gift_cards": 0,
+        "gift_cards": [],
     }
 
 

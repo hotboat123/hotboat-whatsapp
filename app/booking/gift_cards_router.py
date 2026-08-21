@@ -77,6 +77,9 @@ def _ensure_gift_cards_table(cur) -> None:
     # admin-bookings.html), added later so ALTER instead of the CREATE above.
     cur.execute("ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS ciudad_origen TEXT")
     cur.execute("ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS como_supieron TEXT")
+    # No per-payment array like all_appointments.pagos — a gift card is paid
+    # in one shot (Transbank or a manual entry), so a single column is enough.
+    cur.execute("ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS payment_method TEXT")
     _gift_cards_table_ensured = True
 
 
@@ -217,7 +220,8 @@ async def list_gift_cards_endpoint(x_admin_key: str = Header("")):
                 SELECT code, num_adultos, num_ninos, amount, buyer_name, buyer_phone,
                        buyer_email, recipient_name, dedication, sender_name, status,
                        purchased_at, expires_at, redeemed_at, redeemed_booking_ref, created_at,
-                       ciudad_origen, como_supieron, payment_id, payment_status, price_pp
+                       ciudad_origen, como_supieron, payment_id, payment_status, price_pp,
+                       payment_method
                 FROM gift_cards ORDER BY created_at DESC
             """)
             rows = cur.fetchall()
@@ -236,6 +240,7 @@ async def list_gift_cards_endpoint(x_admin_key: str = Header("")):
             "price_pp": r[20],
             "payment_id": r[18],
             "payment_status": r[19],
+            "payment_method": r[21],
             "is_expired": bool(r[10] == "active" and r[12] and r[12] < datetime.now(r[12].tzinfo)),
         }
         for r in rows
@@ -324,14 +329,20 @@ class UpdateGiftCardOriginRequest(BaseModel):
     recipient_name: Optional[str] = None
     dedication: Optional[str] = None
     sender_name: Optional[str] = None
+    buyer_email: Optional[str] = None
+    purchased_at: Optional[str] = None  # "YYYY-MM-DD" from an <input type=date>
+    amount: Optional[int] = None
+    payment_method: Optional[str] = None
 
 
 @gift_cards_router.put("/api/admin/gift-cards/{code}/origin")
 async def update_gift_card_origin_endpoint(code: str, body: UpdateGiftCardOriginRequest, x_admin_key: str = Header("")):
-    """Guarda ciudad_origen/como_supieron y el mensaje de regalo (para/
-    dedicatoria/de) — igual que en reservas, esto lo edita el staff a mano
-    desde el modal de detalle; el mensaje llega así también al mail de
-    confirmación (_build_gift_card_email lee estas mismas columnas)."""
+    """Saves every admin-editable field on a gift card in one shot (ciudad_origen/
+    como_supieron, the gift message, and buyer_email/purchased_at/amount/
+    payment_method) — one endpoint behind the panel's single "Guardar" button,
+    same as reservas. purchased_at/amount matter beyond display: P&L revenue
+    recognition (get_pnl in financial_router.py) reads them directly, so
+    correcting either here is also how you correct a gift card's revenue period."""
     _check_auth(x_admin_key)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -340,6 +351,10 @@ async def update_gift_card_origin_endpoint(code: str, body: UpdateGiftCardOrigin
                 UPDATE gift_cards
                 SET ciudad_origen = %s, como_supieron = %s,
                     recipient_name = %s, dedication = %s, sender_name = %s,
+                    buyer_email = %s,
+                    purchased_at = COALESCE(%s::timestamptz, purchased_at),
+                    amount = COALESCE(%s, amount),
+                    payment_method = %s,
                     updated_at = NOW()
                 WHERE code = %s
                 RETURNING id
@@ -349,6 +364,10 @@ async def update_gift_card_origin_endpoint(code: str, body: UpdateGiftCardOrigin
                 (body.recipient_name or "").strip() or None,
                 (body.dedication or "").strip() or None,
                 (body.sender_name or "").strip() or None,
+                (body.buyer_email or "").strip() or None,
+                (body.purchased_at or "").strip() or None,
+                body.amount,
+                (body.payment_method or "").strip() or None,
                 code,
             ))
             row = cur.fetchone()
@@ -477,13 +496,14 @@ def confirm_gift_card_payment(code: str, payment_id: Optional[str], status: str,
                     payment_id = %s,
                     payment_order_id = %s,
                     payment_status = %s,
+                    payment_method = CASE WHEN %s = 'approved' THEN 'transbank' ELSE payment_method END,
                     paid_at = CASE WHEN %s = 'approved' THEN NOW() ELSE paid_at END,
                     purchased_at = CASE WHEN %s = 'approved' THEN NOW() ELSE purchased_at END,
                     expires_at = CASE WHEN %s = 'approved' THEN NOW() + INTERVAL '{GIFT_CARD_VALIDITY_YEARS} years' ELSE expires_at END,
                     updated_at = NOW()
                 WHERE code = %s
                 RETURNING id
-            """, (new_status, payment_id or "", code, status, status, status, status, code))
+            """, (new_status, payment_id or "", code, status, status, status, status, status, code))
             row = cur.fetchone()
             conn.commit()
     if not row:

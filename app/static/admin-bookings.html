@@ -10670,10 +10670,6 @@ function openGiftCardDetailModal(code){
 
   const rows = [
     ['Comprador', `${escHtml(g.buyer_name||'—')}${g.buyer_phone?' · '+escHtml(g.buyer_phone):''}`],
-    ['Email', g.buyer_email ? escHtml(g.buyer_email) : '—'],
-    ['Fecha de compra', g.purchased_at ? fmtReservaCreada(g.purchased_at) : '—'],
-    ['Monto pagado', fmtMoney(g.amount)],
-    ['Método de pago', g.payment_id || g.payment_status ? `Transbank${g.payment_status?' · '+escHtml(g.payment_status):''}${g.payment_id?' · auth '+escHtml(g.payment_id):''}` : '—'],
     ['Personas', `${g.num_people}`],
     ['Vence', g.expires_at ? fmtReservaCreada(g.expires_at) : '—'],
   ];
@@ -10686,6 +10682,12 @@ function openGiftCardDetailModal(code){
       <span style="color:var(--muted)">${label}</span>
       <span style="text-align:right">${val}</span>
     </div>`).join('');
+
+  document.getElementById('gcd-buyer-email').value = g.buyer_email || '';
+  document.getElementById('gcd-purchased-date').value = g.purchased_at ? g.purchased_at.slice(0,10) : '';
+  document.getElementById('gcd-amount').value = g.amount || '';
+  const gcMethodSel = document.getElementById('gcd-payment-method');
+  gcMethodSel.innerHTML = `<option value="">— sin especificar —</option>${METODOS.map(m=>`<option value="${m}"${g.payment_method===m?' selected':''}>${m}</option>`).join('')}`;
 
   document.getElementById('gcd-recipient-name').value = g.recipient_name || '';
   document.getElementById('gcd-dedication').value = g.dedication || '';
@@ -10735,7 +10737,7 @@ function closeGiftCardDetailModal(){
   document.getElementById('giftcard-detail-modal').style.display = 'none';
 }
 
-async function saveGiftCardOrigin(){
+async function saveGiftCardDetails(){
   const code = document.getElementById('gcd-code-hidden').value;
   syncGcCiudadOrigenHidden();
   const canalSel = document.getElementById('gcd-como-supieron-sel').value;
@@ -10747,6 +10749,10 @@ async function saveGiftCardOrigin(){
     recipient_name: document.getElementById('gcd-recipient-name').value,
     dedication: document.getElementById('gcd-dedication').value,
     sender_name: document.getElementById('gcd-sender-name').value,
+    buyer_email: document.getElementById('gcd-buyer-email').value,
+    purchased_at: document.getElementById('gcd-purchased-date').value,
+    amount: +document.getElementById('gcd-amount').value || null,
+    payment_method: document.getElementById('gcd-payment-method').value,
   };
   try{
     await api(`/api/admin/gift-cards/${encodeURIComponent(code)}/origin`, {method:'PUT', body: JSON.stringify(body)});
@@ -11648,6 +11654,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     <div id="gcd-info" style="margin-bottom:1rem"></div>
 
+    <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:.8rem;margin-bottom:1rem">
+      <div style="font-size:.78rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">💳 Compra y pago</div>
+      <div class="form-row">
+        <div class="form-group-adm"><label>Email comprador</label>
+          <input id="gcd-buyer-email" type="email" placeholder="email@..."></div>
+        <div class="form-group-adm"><label>Fecha de compra</label>
+          <input id="gcd-purchased-date" type="date"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group-adm"><label>Monto pagado</label>
+          <input id="gcd-amount" type="number" min="0" inputmode="numeric"></div>
+        <div class="form-group-adm"><label>Método de pago</label>
+          <select id="gcd-payment-method"></select>
+        </div>
+      </div>
+    </div>
+
     <div id="gcd-message-wrap" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:.8rem;margin-bottom:1rem">
       <div style="font-size:.78rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">🎁 Mensaje del regalo <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(se envía en el mail de confirmación)</span></div>
       <div class="form-group-adm" style="margin-bottom:.5rem"><label>Para (destinatario)</label>
@@ -11671,7 +11694,7 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
 
     <div style="display:flex;gap:.6rem;margin-top:1rem">
-      <button class="btn-primary" onclick="saveGiftCardOrigin()" style="flex:1">💾 Guardar</button>
+      <button class="btn-primary" onclick="saveGiftCardDetails()" style="flex:1">💾 Guardar</button>
       <button class="btn-secondary" onclick="closeGiftCardDetailModal()">Cerrar</button>
     </div>
   </div>
