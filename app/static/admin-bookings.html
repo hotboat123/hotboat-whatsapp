@@ -428,6 +428,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('gastos');loadGastos()" id="nav-gastos">
       <span class="ni">🧾</span> Gastos
     </div>
+    <div class="nav-item" onclick="showSection('flujo-caja');loadFlujoCaja()" id="nav-flujo-caja">
+      <span class="ni">💵</span> Flujo de Caja Sheet
+    </div>
     <div class="nav-item" onclick="showSection('chatbot')" id="nav-chatbot">
       <span class="ni">🤖</span> Chatbot
     </div>
@@ -4467,6 +4470,53 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
     </div><!-- /section-gastos -->
 
+    <div id="section-flujo-caja" class="section">
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div class="chart-title">💵 Flujo de Caja — Sheet sincronizado</div>
+        <p style="color:var(--muted);font-size:.83rem;margin-bottom:.6rem;line-height:1.6">
+          Cada boleta escaneada en 🧾 Gastos agrega automáticamente una fila acá, con Categoría 1/2 pre-cargadas
+          si ya se había categorizado antes ese mismo comercio. Editar acá o en el Google Sheet actualiza el otro lado
+          (sync cada ~60s; los cambios desde la app se reflejan de inmediato).
+        </p>
+        <a href="https://docs.google.com/spreadsheets/d/1-EMhpS4r2yfpCg-Rc2d1fBhcRdRNhedrGzCEqR95_U4/edit" target="_blank" rel="noopener"
+           style="color:var(--gold);font-size:.85rem;text-decoration:none">📄 Abrir en Google Sheets ↗</a>
+      </div>
+
+      <div class="chart-wrap" style="margin-bottom:1rem">
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:.8rem">
+          <select id="fc-year" onchange="loadFlujoCaja()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.85rem;outline:none"></select>
+          <select id="fc-month" onchange="loadFlujoCaja()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.85rem;outline:none">
+            <option value="0">Todos los meses</option>
+          </select>
+          <button onclick="addFlujoCajaMovimiento()" style="margin-left:auto;background:var(--green);color:#fff;border:none;border-radius:8px;padding:.4rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">+ Nuevo movimiento</button>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:.8rem;white-space:nowrap">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:left">
+                  <th style="padding:.5rem .4rem">Fecha</th>
+                  <th style="padding:.5rem .4rem">Abonos</th>
+                  <th style="padding:.5rem .4rem">Cargos</th>
+                  <th style="padding:.5rem .4rem">Origen</th>
+                  <th style="padding:.5rem .4rem">Categoría 1</th>
+                  <th style="padding:.5rem .4rem">Categoría 2</th>
+                  <th style="padding:.5rem .4rem">Descripción</th>
+                  <th style="padding:.5rem .4rem">Observaciones</th>
+                  <th style="padding:.5rem .4rem">Facturado o IVA</th>
+                  <th style="padding:.5rem .4rem"></th>
+                </tr>
+              </thead>
+              <tbody id="fc-tbody">
+                <tr><td colspan="10" style="padding:2rem;text-align:center;color:var(--muted)">Cargando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div><!-- /section-flujo-caja -->
+
     <!-- ── Chatbot Admin ─────────────────────────────────────────── -->
     <div id="section-chatbot" class="section">
       <div style="display:grid;gap:1.2rem">
@@ -4876,7 +4926,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Extras','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Extras','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos','flujo-caja':'Flujo de Caja Sheet',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
   document.getElementById('section-title').textContent = titles[name]||name;
   const contentEl  = document.getElementById('content');
   const topbarBtns = ['year-sel','new-reserva-btn'];
@@ -14237,6 +14287,106 @@ async function deleteGasto(id){
     if(res.ok){ showToast('Gasto eliminado'); loadGastos(); }
     else showToast('Error al eliminar');
   } catch(e){ showToast('Error: ' + e.message); }
+}
+
+// ── Flujo de Caja ledger (synced with Google Sheets, see sheets_sync.py) ──
+(function _initFlujoCajaYear(){
+  const sel = document.getElementById('fc-year');
+  if(!sel) return;
+  const now = new Date().getFullYear();
+  for(let y = now; y >= now - 3; y--){
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    sel.appendChild(o);
+  }
+})();
+
+async function loadFlujoCaja(){
+  const year  = document.getElementById('fc-year')?.value  || 0;
+  const month = document.getElementById('fc-month')?.value || 0;
+  const tbody = document.getElementById('fc-tbody');
+  try {
+    const res = await api(`/api/admin/flujo-caja?year=${year}&month=${month}`);
+    renderFlujoCajaTable(res.movimientos || []);
+  } catch(e) {
+    if(tbody) tbody.innerHTML = `<tr><td colspan="10" style="padding:1.5rem;text-align:center;color:var(--muted)">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function _fcInput(id, field, value, type){
+  const v = (value===null||value===undefined) ? '' : String(value).replace(/"/g,'&quot;');
+  return `<input id="fc-${field}-${id}" type="${type||'text'}" value="${v}" onblur="saveFlujoCajaRow(${id})"
+    style="background:transparent;border:1px solid transparent;color:var(--text);border-radius:5px;padding:.25rem .35rem;font-size:.8rem;width:100%;min-width:${type==='date'?'125px':(type==='number'?'85px':'110px')};outline:none"
+    onfocus="this.style.borderColor='var(--border)'" onmouseover="this.style.borderColor='var(--border)'" onmouseout="if(document.activeElement!==this)this.style.borderColor='transparent'">`;
+}
+
+function renderFlujoCajaTable(movs){
+  const tbody = document.getElementById('fc-tbody');
+  if(!tbody) return;
+  if(!movs.length){
+    tbody.innerHTML = '<tr><td colspan="10" style="padding:2rem;text-align:center;color:var(--muted)">Sin movimientos en el período</td></tr>';
+    return;
+  }
+  tbody.innerHTML = movs.map(m => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'fecha',m.fecha,'date')}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'abonos',m.abonos,'number')}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'cargos',m.cargos,'number')}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'origen',m.origen)}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'categoria_1',m.categoria_1)}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'categoria_2',m.categoria_2)}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'descripcion',m.descripcion)}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'observaciones',m.observaciones)}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'facturado_o_iva',m.facturado_o_iva)}</td>
+      <td style="padding:.3rem .2rem;text-align:center">
+        <button onclick="deleteFlujoCajaMovimiento(${m.id})" title="Eliminar" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem">✕</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function saveFlujoCajaRow(id){
+  const val = (field) => document.getElementById(`fc-${field}-${id}`)?.value ?? '';
+  const numOrNull = (field) => { const v = val(field); return v==='' ? null : parseInt(v); };
+  const payload = {
+    fecha: val('fecha') || null,
+    abonos: numOrNull('abonos'),
+    cargos: numOrNull('cargos'),
+    origen: val('origen'),
+    categoria_1: val('categoria_1'),
+    categoria_2: val('categoria_2'),
+    descripcion: val('descripcion'),
+    observaciones: val('observaciones'),
+    facturado_o_iva: val('facturado_o_iva'),
+  };
+  try {
+    await api(`/api/admin/flujo-caja/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  } catch(e) {
+    showToast('Error guardando movimiento: ' + e.message);
+  }
+}
+
+async function addFlujoCajaMovimiento(){
+  const today = new Date().toISOString().slice(0,10);
+  try {
+    await api('/api/admin/flujo-caja', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fecha: today})});
+    showToast('✅ Movimiento agregado — completá los campos');
+    loadFlujoCaja();
+  } catch(e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+async function deleteFlujoCajaMovimiento(id){
+  if(!confirm('¿Eliminar este movimiento? (la fila del Sheet queda vacía, no se borra)')) return;
+  try {
+    await api(`/api/admin/flujo-caja/${id}`, {method:'DELETE'});
+    showToast('Movimiento eliminado');
+    loadFlujoCaja();
+  } catch(e) {
+    showToast('Error: ' + e.message);
+  }
 }
 
 // ── Categories config panel ─────────────────────────

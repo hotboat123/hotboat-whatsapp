@@ -294,7 +294,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     settings = get_settings()
     api_key = settings.gemini_api_key
     if not api_key:
-        raise HTTPException(status_code=503, detail="GOOGLE_API_KEY no configurado en Railway")
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY no configurado en Railway")
 
     prompt = (
         "Analiza esta boleta o ticket de Chile. Extrae: "
@@ -352,7 +352,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         logger.error(f"Gemini API error {e.response.status_code}: {last_body}")
         status = e.response.status_code
         if status == 400 and "API_KEY" in last_body.upper():
-            raise HTTPException(status_code=502, detail="GOOGLE_API_KEY inválida — verificá la key en Railway")
+            raise HTTPException(status_code=502, detail="GEMINI_API_KEY inválida — verificá la key en Railway")
         if status == 429:
             raise HTTPException(status_code=429, detail=f"Límite de Gemini (429): {last_body[:300]}")
         raise HTTPException(status_code=502, detail=f"Error de Gemini ({status}): {last_body[:200]}")
@@ -372,12 +372,26 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     search_text = f"{extracted.get('comercio', '')} {extracted.get('descripcion', '')}".lower()
     cat1_id = _match_category(search_text, cats)
 
+    # Flujo de Caja ledger suggestion (separate category vocabulary, learned
+    # from what's been saved for this comercio before — see flujo_caja_router.py)
+    flujo_caja_categoria_1, flujo_caja_categoria_2 = "", ""
+    try:
+        from app.booking.flujo_caja_router import lookup_producto_default
+        fc_suggestion = lookup_producto_default(extracted.get("comercio", ""))
+        if fc_suggestion:
+            flujo_caja_categoria_1 = fc_suggestion.get("categoria_1", "") or ""
+            flujo_caja_categoria_2 = fc_suggestion.get("categoria_2", "") or ""
+    except Exception as e:
+        logger.warning(f"flujo_caja producto-default lookup skipped: {e}")
+
     return {
         "ok": True,
         "monto": extracted.get("monto"),
         "comercio": extracted.get("comercio", ""),
         "fecha": extracted.get("fecha"),
         "categoria1_id": cat1_id,
+        "flujo_caja_categoria_1": flujo_caja_categoria_1,
+        "flujo_caja_categoria_2": flujo_caja_categoria_2,
     }
 
 
@@ -466,6 +480,16 @@ async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
             )
             (new_id,) = cur.fetchone()
         conn.commit()
+
+    try:
+        from app.booking.flujo_caja_router import create_movimiento_from_gasto
+        create_movimiento_from_gasto(
+            gasto_id=new_id, fecha=body.fecha, monto=body.monto,
+            comercio=body.comercio, notas=body.notas, tipo_documento=body.tipo_documento,
+        )
+    except Exception as e:
+        logger.warning(f"flujo_caja movimiento skipped for gasto {new_id}: {e}")
+
     return {"ok": True, "id": new_id, "imagen_path": imagen_path}
 
 

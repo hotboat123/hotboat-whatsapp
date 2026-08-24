@@ -40,6 +40,10 @@ pywebpush>=1.9.4,<2.0.0
 # Audio conversion (webm→ogg for WhatsApp voice messages)
 imageio-ffmpeg>=0.4.9
 
+# Google Sheets bidirectional sync (Flujo de Caja ledger)
+gspread>=6.0.0
+google-auth>=2.28.0
+
 
 
 

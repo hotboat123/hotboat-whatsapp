@@ -19,6 +19,7 @@ from app.booking.stock_router import stock_router
 from app.booking.financial_router import financial_router
 from app.booking.bot_config_router import bot_config_router, _ensure_tables as _ensure_bot_tables, seed_defaults as seed_bot_defaults
 from app.booking.gastos_router import gastos_router, _ensure_tables as _ensure_gastos_tables
+from app.booking.flujo_caja_router import flujo_caja_router, _ensure_tables as _ensure_flujo_caja_tables
 from app.booking.tabla_router import tabla_router, _ensure_tabla_table, _seed_tabla_products, _ensure_catalog_table, _seed_catalog_defaults
 from app.booking.reserva_router import reserva_router
 from app.booking.link_tracking_router import link_tracking_router
@@ -373,6 +374,23 @@ async def _run_yesterday_weekly_scheduler():
                 logger.info("📆 Weekly summary: %s", result_weekly)
         except Exception as _e:
             logger.error("Yesterday/weekly summary scheduler error: %s", _e)
+        await asyncio.sleep(60)
+
+
+async def _run_flujo_caja_sheets_sync_scheduler():
+    """Reconcile flujo_caja_movimientos with the Google Sheet every 60s —
+    pulls manual Sheet edits into the DB, pushes DB-side changes that
+    haven't reached the Sheet yet. No-ops (see sheets_sync._get_sheet)
+    until GOOGLE_SERVICE_ACCOUNT_JSON is configured."""
+    await asyncio.sleep(45)  # brief delay after startup
+    while True:
+        try:
+            from app.booking.sheets_sync import sync_once
+            result = await asyncio.to_thread(sync_once)
+            if result.get("pulled") or result.get("pushed"):
+                logger.info(f"📊 Flujo de Caja sheet sync: {result}")
+        except Exception as e:
+            logger.error(f"Flujo de Caja sheet sync error: {e}")
         await asyncio.sleep(60)
 
 
@@ -741,6 +759,10 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         logger.warning(f"gastos tables setup skipped: {_e}")
     try:
+        _ensure_flujo_caja_tables()
+    except Exception as _e:
+        logger.warning(f"flujo_caja tables setup skipped: {_e}")
+    try:
         _ensure_tabla_table()
         _seed_tabla_products()
         _ensure_catalog_table()
@@ -782,6 +804,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_visitor_session_closer_scheduler()),
             asyncio.create_task(run_followup_nudge_scheduler()),
             asyncio.create_task(run_unanswered_alert_scheduler()),
+            asyncio.create_task(_run_flujo_caja_sheets_sync_scheduler()),
         ])
         logger.info(f"🗑️ Pending-payment cleanup iniciado (cada 2 min, cancela > {PENDING_PAYMENT_STALE_MINUTES} min sin pagar)")
         logger.info("📧 Email sweeps scheduler iniciado (followup, cada 30 min)")
@@ -792,6 +815,7 @@ async def lifespan(app: FastAPI):
         logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
         logger.info("💬 Follow-up nudge scheduler iniciado (cada 15s, envía a los 2 min sin respuesta)")
         logger.info(f"⚠️ Unanswered-alert scheduler iniciado (cada 30s, alerta al operador a los {UNANSWERED_ALERT_MINUTES} min sin respuesta)")
+        logger.info("📊 Flujo de Caja sheet sync scheduler iniciado (cada 60s)")
         logger.info("🌐 Visitor session closer iniciado (cada 2 min, cierra sesiones tras 5 min de inactividad)")
 
     lock_task = asyncio.create_task(_acquire_lock_and_start_schedulers())
@@ -862,6 +886,7 @@ app.include_router(stock_router)
 app.include_router(financial_router)
 app.include_router(bot_config_router)
 app.include_router(gastos_router)
+app.include_router(flujo_caja_router)
 app.include_router(tabla_router)
 app.include_router(reserva_router)
 app.include_router(link_tracking_router)

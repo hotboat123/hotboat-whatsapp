@@ -35,7 +35,12 @@ class Settings(BaseSettings):
 
     # AI Vision — Anthropic Claude (receipt scanning)
     anthropic_api_key: str = ""
-    
+
+    # Google Sheets — bidirectional sync for the "Flujo de Caja" ledger
+    # (app/booking/sheets_sync.py). Full service-account JSON as a string.
+    google_service_account_json: str = ""
+    google_flujo_caja_sheet_id: str = "1-EMhpS4r2yfpCg-Rc2d1fBhcRdRNhedrGzCEqR95_U4"
+
     # Bot
     bot_name: str = "Capitan HotBoat"
     business_name: str = "Hot Boat"
