@@ -59,6 +59,11 @@ def _ensure_tables():
     CREATE INDEX IF NOT EXISTS idx_gastos_cat1 ON gastos(categoria1_id);
     ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS boletado BOOLEAN DEFAULT FALSE;
     ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS incluir_en_utilidad BOOLEAN DEFAULT TRUE;
+    CREATE TABLE IF NOT EXISTS gastos_origenes (
+        id SERIAL PRIMARY KEY,
+        nombre TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
     """
     try:
         with get_connection() as conn:
@@ -66,8 +71,27 @@ def _ensure_tables():
                 cur.execute(sql)
             conn.commit()
         _seed_default_categories()
+        _seed_default_origenes()
     except Exception as e:
         logger.error(f"gastos _ensure_tables: {e}")
+
+
+def _seed_default_origenes():
+    """Seeded once from the real distinct Origen values in flujo_caja_actual
+    (the ETL-synced ledger) — same "materialize the owner's real vocabulary"
+    treatment as _seed_default_categories, per his explicit request."""
+    DEFAULTS = ["Banco Estado", "Banco Chile", "Banco Chile Crédito", "MercadoPago", "Tenpo", "Efectivo"]
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for nombre in DEFAULTS:
+                    cur.execute(
+                        "INSERT INTO gastos_origenes (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING",
+                        (nombre,),
+                    )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"gastos seed origenes: {e}")
 
 
 def _seed_default_categories():
@@ -291,6 +315,50 @@ async def delete_categoria(cat_id: int, x_admin_key: str = Header("")):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM gastos_categorias WHERE id=%s", (cat_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+# ── Orígenes (cuenta/banco) ──────────────────────────────────────────────────
+
+class OrigenCreate(BaseModel):
+    nombre: str
+
+
+@gastos_router.get("/api/admin/gastos/origenes")
+async def list_origenes(x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, nombre FROM gastos_origenes ORDER BY nombre")
+            rows = cur.fetchall()
+    return {"ok": True, "origenes": [{"id": r[0], "nombre": r[1]} for r in rows]}
+
+
+@gastos_router.post("/api/admin/gastos/origenes")
+async def create_origen(body: OrigenCreate, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    nombre = body.nombre.strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="Ingresá un nombre")
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO gastos_origenes (nombre) VALUES (%s) "
+                "ON CONFLICT (nombre) DO UPDATE SET nombre=EXCLUDED.nombre RETURNING id",
+                (nombre,),
+            )
+            (new_id,) = cur.fetchone()
+        conn.commit()
+    return {"ok": True, "id": new_id}
+
+
+@gastos_router.delete("/api/admin/gastos/origenes/{origen_id}")
+async def delete_origen(origen_id: int, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM gastos_origenes WHERE id=%s", (origen_id,))
         conn.commit()
     return {"ok": True}
 

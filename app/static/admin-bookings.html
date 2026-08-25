@@ -4372,9 +4372,12 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría 2</label>
-            <select id="gastos-cat2" onchange="cascadeMainCategoriaToItems()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
-              <option value="">— Sin subcategoría —</option>
-            </select>
+            <div style="display:flex;gap:.35rem">
+              <select id="gastos-cat2" onchange="cascadeMainCategoriaToItems()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;flex:1;outline:none;box-sizing:border-box">
+                <option value="">— Sin subcategoría —</option>
+              </select>
+              <button onclick="deleteCurrentCat2()" title="Eliminar esta subcategoría" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.4rem .6rem;font-size:.9rem;cursor:pointer;flex-shrink:0">🗑️</button>
+            </div>
             <button id="gastos-new-cat2-btn" onclick="showNewCat2Form()" style="display:none;margin-top:.35rem;width:100%;background:transparent;color:var(--gold);border:1px dashed var(--gold);border-radius:6px;padding:.3rem;font-size:.82rem;cursor:pointer;text-align:center">➕ Nueva subcategoría</button>
             <div id="gastos-new-cat2-form" style="display:none;margin-top:.5rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem">
               <div style="font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:.4rem">Nueva subcategoría</div>
@@ -4418,7 +4421,17 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Origen (cuenta/banco)</label>
-            <input type="text" id="gastos-origen" placeholder="Banco Estado, efectivo…" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+            <select id="gastos-origen" onchange="handleNewOrigen()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+              <option value="">— Sin origen —</option>
+            </select>
+            <div id="gastos-new-origen-form" style="display:none;margin-top:.5rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem">
+              <div style="font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:.4rem">Nuevo origen</div>
+              <input id="no-nombre" placeholder="Nombre del banco/cuenta" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .6rem;font-size:.85rem;outline:none;width:100%;box-sizing:border-box;margin-bottom:.4rem">
+              <div style="display:flex;gap:.4rem">
+                <button onclick="createOrigenInline()" style="flex:1;background:var(--gold);color:#000;border:none;border-radius:6px;padding:.32rem;font-size:.82rem;font-weight:600;cursor:pointer">Guardar</button>
+                <button onclick="cancelNewOrigen()" style="background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:.32rem .6rem;font-size:.82rem;cursor:pointer">✕</button>
+              </div>
+            </div>
           </div>
           <div style="grid-column:1/-1">
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Observaciones</label>
@@ -13813,6 +13826,7 @@ let _gastosImgMime    = 'image/jpeg';
 let _editingGastoId   = null; // null = new, number = editing existing
 let _lastGastos       = [];  // last loaded gastos for edit lookup
 let _gastosItems      = [];  // [{descripcion, monto, categoria_1_id, categoria_2_id, observaciones}] — line items from a multi-product boleta scan
+let _gastosOrigenes   = [];  // [{id, nombre}] — bank/account origins, seeded from the owner's real flujo_caja_actual data
 
 // ── Init year selector ──────────────────────────────
 (function _initGastosYear(){
@@ -14004,6 +14018,69 @@ function loadGastosCat2(){
   if(btn2) btn2.style.display = (cat1Val && cat1Val !== '__new__') ? 'block' : 'none';
 }
 
+// ── Origen (cuenta/banco) select — same "real data, editable inline" pattern as Categoría 1 ──
+function populateGastosOrigenSelect(){
+  const sel = document.getElementById('gastos-origen');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Sin origen —</option>';
+  _gastosOrigenes.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.nombre; opt.textContent = o.nombre;
+    sel.appendChild(opt);
+  });
+  sel.insertAdjacentHTML('beforeend', '<option value="__new__">➕ Nuevo origen…</option>');
+  if(cur && cur !== '__new__') sel.value = cur;
+}
+
+function handleNewOrigen(){
+  const v = document.getElementById('gastos-origen')?.value;
+  const form = document.getElementById('gastos-new-origen-form');
+  if(v === '__new__'){
+    form.style.display = 'block';
+    document.getElementById('no-nombre').focus();
+  } else {
+    form.style.display = 'none';
+  }
+}
+
+function cancelNewOrigen(){
+  document.getElementById('gastos-new-origen-form').style.display = 'none';
+  document.getElementById('gastos-origen').value = '';
+}
+
+async function createOrigenInline(){
+  const nombre = document.getElementById('no-nombre').value.trim();
+  if(!nombre){ showToast('Ingresá un nombre'); return; }
+  try{
+    await api('/api/admin/gastos/origenes', { method:'POST', body: JSON.stringify({nombre}) });
+    const r = await api('/api/admin/gastos/origenes');
+    _gastosOrigenes = r.origenes || [];
+    document.getElementById('gastos-new-origen-form').style.display = 'none';
+    document.getElementById('no-nombre').value = '';
+    populateGastosOrigenSelect();
+    document.getElementById('gastos-origen').value = nombre;
+    showToast('Origen creado ✓');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function deleteCurrentCat2(){
+  const sel = document.getElementById('gastos-cat2');
+  const id  = sel?.value;
+  if(!id || id === '__new__'){ showToast('Elegí una subcategoría primero'); return; }
+  const cat = _gastosCategorias.find(c => String(c.id) === String(id));
+  if(!confirm(`¿Eliminar la subcategoría "${cat?.nombre||''}"?`)) return;
+  try {
+    const res = await api(`/api/admin/gastos/categorias/${id}`, {method:'DELETE'});
+    if(res.ok){
+      showToast('Subcategoría eliminada');
+      const cRes = await api('/api/admin/gastos/categorias');
+      _gastosCategorias = cRes.categorias || [];
+      loadGastosCat2();
+    } else showToast('Error al eliminar');
+  } catch(e){ showToast('Error: ' + e.message); }
+}
+
 function handleNewCat1(){
   const v = document.getElementById('gastos-cat1')?.value;
   const form = document.getElementById('gastos-new-cat1-form');
@@ -14088,7 +14165,7 @@ async function openGastoForm(){
   document.getElementById('gastos-comercio').value = '';
   document.getElementById('gastos-notas').value = '';
   document.getElementById('gastos-origen').value = '';
-  document.getElementById('gastos-tipo-doc').value = 'boleta';
+  document.getElementById('gastos-tipo-doc').value = 'factura';
   document.getElementById('gastos-iva-info').textContent = '';
   _gastosItems = [];
   renderGastosItems();
@@ -14108,6 +14185,11 @@ async function openGastoForm(){
   populateGastosSelects();
   document.getElementById('gastos-cat1').value = '';
   loadGastosCat2();
+  if(!_gastosOrigenes.length){
+    try{ const ro = await api('/api/admin/gastos/origenes'); _gastosOrigenes = ro.origenes||[]; }catch(_){}
+  }
+  populateGastosOrigenSelect();
+  document.getElementById('gastos-origen').value = '';
   document.getElementById('gastos-form-panel').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
@@ -14371,7 +14453,8 @@ async function saveGasto(){
   try {
     const tipo_documento      = document.getElementById('gastos-tipo-doc')?.value || 'boleta';
     const incluir_en_utilidad = document.getElementById('gastos-incluir-utilidad')?.checked ?? true;
-    const origen = document.getElementById('gastos-origen')?.value.trim() || '';
+    const _origenRaw = document.getElementById('gastos-origen')?.value || '';
+    const origen = _origenRaw !== '__new__' ? _origenRaw : '';
     const items = _gastosItems.map(it => {
       const c1 = _gastosCategorias.find(c => String(c.id) === String(it.categoria_1_id));
       const c2 = _gastosCategorias.find(c => String(c.id) === String(it.categoria_2_id));
