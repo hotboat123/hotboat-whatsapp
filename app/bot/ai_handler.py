@@ -54,7 +54,7 @@ except ImportError:
 
 settings = get_settings()
 
-DEFAULT_MODEL = "llama-3.3-70b-versatile"  # Groq model name (updated from deprecated llama-3.1-70b-versatile)
+DEFAULT_MODEL = "openai/gpt-oss-120b"  # Groq model name (llama-3.3-70b-versatile was removed from Groq's catalog entirely — 404 "model_not_found" — found 2026-08-25 while testing a new per-number AI persona; this had been silently breaking every AI-fallback reply, not just the new feature)
 
 
 def _default_editable_prompt() -> str:
@@ -175,6 +175,7 @@ class AIHandler:
         api_key, base_url = _PROVIDER_ENDPOINTS.get(provider, _PROVIDER_ENDPOINTS["groq"])()
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model or DEFAULT_MODEL
+        self.provider = provider
 
         if MCP_AVAILABLE:
             self.mcp_handler = MCPHandler()
@@ -254,10 +255,19 @@ class AIHandler:
                     {"role": "system", "content": self.system_prompt},
                     *messages
                 ],
-                "max_tokens": 500,
+                "max_tokens": 700,
                 "temperature": 0.7
             }
-            
+            if self.provider == "groq":
+                # DEFAULT_MODEL (and any other current Groq chat model) is a
+                # "gpt-oss"-style reasoning model — it spends part of
+                # max_tokens on a hidden reasoning trace before the visible
+                # reply, which without this was eating the whole budget and
+                # truncating (or blanking) replies. "low" keeps that
+                # overhead small; Gemini's OpenAI-compat endpoint doesn't
+                # recognize this param, so only send it for Groq.
+                api_params["reasoning_effort"] = "low"
+
             # Add tools if MCP is enabled and tools are available
             if tools:
                 api_params["tools"] = tools
@@ -311,12 +321,15 @@ class AIHandler:
                 ]
                 
                 # Get final response with tool results
-                final_response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages_with_tools,
-                    max_tokens=500,
-                    temperature=0.7
-                )
+                final_params = {
+                    "model": self.model,
+                    "messages": messages_with_tools,
+                    "max_tokens": 700,
+                    "temperature": 0.7,
+                }
+                if self.provider == "groq":
+                    final_params["reasoning_effort"] = "low"
+                final_response = self.client.chat.completions.create(**final_params)
                 
                 response_text = final_response.choices[0].message.content
             else:
