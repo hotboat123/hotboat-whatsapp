@@ -165,11 +165,14 @@ async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, cap
 
         scan = await scan_receipt(ScanRequest(imagen_base64=imagen_base64, mime_type="image/jpeg"), x_admin_key="")
         cat1 = get_categoria_by_id(scan.get("categoria1_id"))
+        comercio = scan.get("comercio") or ""
 
         payload = {
             "fecha": scan.get("fecha") or datetime.now().date().isoformat(),
             "monto": scan.get("monto") or 0,
-            "comercio": scan.get("comercio") or "",
+            "comercio": comercio,
+            "descripcion": caption or comercio,
+            "origen": "Banco Estado",
             "caption": caption or "",
             "categoria1_id": cat1["id"] if cat1 else None,
             "categoria1_nombre": cat1["nombre"] if cat1 else "",
@@ -194,9 +197,34 @@ async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, cap
         return True  # still admin-photo intent — don't fall through to the customer bot flow
 
 
+def _fecha_display(iso_fecha: str) -> str:
+    """YYYY-MM-DD -> DD-MM-YYYY for display (Chilean convention); falls back
+    to the raw value if it's not in the expected shape."""
+    try:
+        return datetime.strptime(iso_fecha, "%Y-%m-%d").strftime("%d-%m-%Y")
+    except (ValueError, TypeError):
+        return iso_fecha or ""
+
+
+def _parse_fecha_input(raw: str) -> Optional[str]:
+    """DD-MM-YYYY, DD/MM/YYYY, or already-ISO YYYY-MM-DD -> ISO. None if it
+    doesn't parse as any of those — explicit day-first, same reasoning as
+    sheets_sync._parse_sheet_date (a human typing a Chilean date, not a
+    machine writing ISO, is the common case here)."""
+    raw = (raw or "").strip()
+    for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
 def _pending_gasto_summary_text(payload: dict) -> str:
     monto_fmt = f"${(payload.get('monto') or 0):,.0f}".replace(",", ".")
     comercio = payload.get("comercio") or ""
+    descripcion = payload.get("descripcion") or ""
+    origen = payload.get("origen") or "(sin origen)"
     cat1 = payload.get("categoria1_nombre") or "(sin categoría)"
     cat2 = payload.get("categoria2_nombre") or ""
     cat_line = cat1 + (f" > {cat2}" if cat2 else "")
@@ -205,6 +233,9 @@ def _pending_gasto_summary_text(payload: dict) -> str:
     lines = [
         "📸 Vi esto en la boleta:",
         f"💰 {monto_fmt}" + (f" — {comercio}" if comercio else ""),
+        f"📅 Fecha: {_fecha_display(payload.get('fecha', ''))}",
+        f"📝 Descripción: {descripcion}",
+        f"🏦 Origen: {origen}",
         f"🗂️ Categoría: {cat_line}",
         f"📄 Tipo: {tipo}",
     ]
@@ -214,6 +245,9 @@ def _pending_gasto_summary_text(payload: dict) -> str:
         "",
         "Responde:",
         "✅ *ok* para agregarlo así",
+        "📅 *fecha: DD-MM-YYYY* para cambiar la fecha",
+        "📝 *desc: <texto>* para cambiar la descripción",
+        "🏦 *origen: <banco/cuenta>* para cambiar el origen",
         "🗂️ *cat: <categoría>* para cambiar la categoría (ej: cat: Mantenimiento)",
         "🗂️ *cat2: <subcategoría>* para la subcategoría",
         "📄 *boleta* o *factura* para el tipo de documento",
@@ -251,10 +285,11 @@ async def _finalize_pending_gasto(from_number: str, payload: dict) -> None:
 
     body = GastoCreate(
         fecha=payload.get("fecha") or datetime.now().date().isoformat(),
-        monto=monto, descripcion=payload.get("caption") or comercio, comercio=comercio,
+        monto=monto, descripcion=payload.get("descripcion") or comercio, comercio=comercio,
         imagen_base64=payload.get("imagen_base64", ""), imagen_mime=payload.get("imagen_mime", "image/jpeg"),
         categoria1_id=payload.get("categoria1_id"), categoria2_id=payload.get("categoria2_id"),
         tipo_documento=payload.get("tipo_documento") or "factura",
+        origen=payload.get("origen") or "",
         notas="Agregado desde WhatsApp", items=items,
     )
     res = await create_gasto(body, x_admin_key="")
@@ -264,6 +299,8 @@ async def _finalize_pending_gasto(from_number: str, payload: dict) -> None:
     reply = f"✅ Gasto agregado: {monto_fmt}"
     if comercio:
         reply += f" — {comercio}"
+    if payload.get("origen"):
+        reply += f"\n🏦 {payload['origen']}"
     if cat1_nombre:
         reply += f"\n🗂️ {cat1_nombre}" + (f" > {cat2_nombre}" if cat2_nombre else "")
     if len(items) > 1:
@@ -280,7 +317,7 @@ async def _handle_admin_gasto_reply(from_number: str, text_body: str) -> bool:
     it, anything else re-sends the summary. Returns False (nothing to do)
     when there's no pending gasto for this number, or it expired — the
     caller then falls through to whatever normally handles this number."""
-    from app.booking.gastos_router import get_pending_gasto, save_pending_gasto, resolve_category_by_name
+    from app.booking.gastos_router import get_pending_gasto, save_pending_gasto, resolve_category_by_name, resolve_origen_by_name
     from app.booking.gastos_router import clear_pending_gasto as _clear_pending
 
     payload = get_pending_gasto(from_number)
@@ -304,6 +341,33 @@ async def _handle_admin_gasto_reply(from_number: str, text_body: str) -> bool:
         save_pending_gasto(from_number, payload)
         await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
         return True
+
+    for prefix in ("fecha:",):
+        if text_lower.startswith(prefix):
+            raw = text[len(prefix):].strip()
+            parsed = _parse_fecha_input(raw)
+            if parsed:
+                payload["fecha"] = parsed
+                save_pending_gasto(from_number, payload)
+                await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
+            else:
+                await whatsapp_client.send_text_message(from_number, f'🤔 No entendí la fecha "{raw}". Probá con DD-MM-YYYY.')
+            return True
+
+    for prefix in ("desc:", "descripcion:", "descripción:"):
+        if text_lower.startswith(prefix):
+            payload["descripcion"] = text[len(prefix):].strip()
+            save_pending_gasto(from_number, payload)
+            await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
+            return True
+
+    for prefix in ("origen:",):
+        if text_lower.startswith(prefix):
+            raw = text[len(prefix):].strip()
+            payload["origen"] = resolve_origen_by_name(raw) or raw
+            save_pending_gasto(from_number, payload)
+            await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
+            return True
 
     for prefix in ("cat2:", "categoria2:", "categoría2:", "subcategoria:", "subcategoría:"):
         if text_lower.startswith(prefix):
