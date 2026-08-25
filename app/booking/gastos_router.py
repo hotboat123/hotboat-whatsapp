@@ -612,6 +612,25 @@ async def delete_gasto(gasto_id: int, x_admin_key: str = Header("")):
                         os.remove(full_path)
                     except Exception:
                         pass
+            # A gasto can have one or more flujo_caja_movimientos rows (one
+            # per line item) — the FK is ON DELETE SET NULL, so without this
+            # they'd survive as orphaned ledger rows instead of disappearing
+            # together with the gasto they came from.
+            cur.execute("SELECT id FROM flujo_caja_movimientos WHERE gasto_id=%s", (gasto_id,))
+            fc_ids = [r[0] for r in cur.fetchall()]
             cur.execute("DELETE FROM gastos WHERE id=%s", (gasto_id,))
         conn.commit()
+
+    if fc_ids:
+        try:
+            from app.booking.sheets_sync import clear_row
+            for fc_id in fc_ids:
+                clear_row(fc_id)
+        except Exception as e:
+            logger.warning(f"Sheets clear skipped while deleting gasto {gasto_id}: {e}")
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM flujo_caja_movimientos WHERE id = ANY(%s)", (fc_ids,))
+            conn.commit()
+
     return {"ok": True}

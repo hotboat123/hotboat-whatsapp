@@ -4354,9 +4354,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría 1</label>
-            <select id="gastos-cat1" onchange="loadGastosCat2();handleNewCat1()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+            <select id="gastos-cat1" onchange="loadGastosCat2();handleNewCat1();cascadeMainCategoriaToItems()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
               <option value="">— Sin categoría —</option>
             </select>
+            <div id="gastos-cat1-hint" style="display:none;font-size:.7rem;color:var(--muted);margin-top:.3rem">Se aplica como categoría por defecto a los ítems de abajo (podés cambiarla en cada uno).</div>
             <div id="gastos-new-cat1-form" style="display:none;margin-top:.5rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.6rem .7rem;display:none">
               <div style="font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:.4rem">Nueva categoría</div>
               <div style="display:grid;grid-template-columns:2.5rem 1fr;gap:.4rem;margin-bottom:.4rem">
@@ -4371,7 +4372,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
           <div>
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría 2</label>
-            <select id="gastos-cat2" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+            <select id="gastos-cat2" onchange="cascadeMainCategoriaToItems()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
               <option value="">— Sin subcategoría —</option>
             </select>
             <button id="gastos-new-cat2-btn" onclick="showNewCat2Form()" style="display:none;margin-top:.35rem;width:100%;background:transparent;color:var(--gold);border:1px dashed var(--gold);border-radius:6px;padding:.3rem;font-size:.82rem;cursor:pointer;text-align:center">➕ Nueva subcategoría</button>
@@ -4431,10 +4432,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <span style="font-weight:700;font-size:.85rem">🧾 Ítems de la boleta</span>
             <span id="gastos-items-count" style="font-size:.72rem;color:var(--muted)"></span>
           </div>
-          <div style="margin-bottom:.8rem">
-            <label style="font-size:.72rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría para toda la boleta (se aplica a todos los ítems; después ajustá los que sean distintos)</label>
-            <select id="gastos-items-bulk-cat1" onchange="applyBulkCategoriaToItems()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.82rem;width:100%;outline:none;box-sizing:border-box"></select>
-          </div>
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:.7rem">Categoría 1/2 de arriba = por defecto para todos los ítems. Cambiala ahí para aplicarla a todos, o ajustá cada ítem individualmente abajo.</div>
           <div id="gastos-items-list" style="display:flex;flex-direction:column;gap:.6rem"></div>
         </div>
 
@@ -14199,12 +14197,6 @@ function clearGastoImage(){
 }
 
 // ── Multi-item receipt (line items from a boleta with several products) ──
-function populateBulkCatSelect(){
-  const sel = document.getElementById('gastos-items-bulk-cat1');
-  if(!sel) return;
-  sel.innerHTML = gastosItemCat1Options(null);
-}
-
 function gastosItemCat1Options(selectedId){
   let html = `<option value="">— Elegir categoría —</option>`;
   _gastosCategorias.filter(c=>c.nivel===1).forEach(c=>{
@@ -14226,9 +14218,10 @@ function renderGastosItems(){
   const list  = document.getElementById('gastos-items-list');
   const countEl = document.getElementById('gastos-items-count');
   if(!panel || !list) return;
+  const cat1Hint = document.getElementById('gastos-cat1-hint');
+  if(cat1Hint) cat1Hint.style.display = _gastosItems.length ? 'block' : 'none';
   if(!_gastosItems.length){ panel.style.display = 'none'; return; }
   panel.style.display = 'block';
-  populateBulkCatSelect();
   const suma = _gastosItems.reduce((s,i)=>s+(parseInt(i.monto)||0),0);
   if(countEl) countEl.textContent = `${_gastosItems.length} ítem(s) — suma ${fmtCLP(suma)}`;
   list.innerHTML = _gastosItems.map((it, idx) => `
@@ -14264,9 +14257,14 @@ function removeGastoItem(idx){
   renderGastosItems();
 }
 
-function applyBulkCategoriaToItems(){
-  const val = document.getElementById('gastos-items-bulk-cat1').value;
-  _gastosItems.forEach(it => { it.categoria_1_id = val || null; it.categoria_2_id = null; });
+// Categoría 1/2 at the top of the form doubles as the default for every
+// item — changing it re-applies to all items (per-item selects below still
+// let you correct just one).
+function cascadeMainCategoriaToItems(){
+  if(!_gastosItems.length) return;
+  const cat1 = document.getElementById('gastos-cat1')?.value || null;
+  const cat2 = document.getElementById('gastos-cat2')?.value || null;
+  _gastosItems.forEach(it => { it.categoria_1_id = cat1; it.categoria_2_id = cat2; });
   renderGastosItems();
 }
 
@@ -14329,10 +14327,13 @@ async function scanGastosReceipt(){
     }
     calcGastosIva();
     if(res.items && res.items.length > 1){
+      // Per-item AI suggestion wins; otherwise default to whatever
+      // Categoría 1 the whole-receipt suggestion just set above.
+      const mainCat1 = document.getElementById('gastos-cat1').value || null;
       _gastosItems = res.items.map(it => ({
         descripcion: it.descripcion || '',
         monto: it.monto || 0,
-        categoria_1_id: it.categoria1_id || null,
+        categoria_1_id: it.categoria1_id || mainCat1,
         categoria_2_id: null,
       }));
       renderGastosItems();
@@ -14351,7 +14352,9 @@ async function scanGastosReceipt(){
 }
 
 // ── Save gasto ──────────────────────────────────────
+let _savingGasto = false; // guards against a double-tap firing two POSTs (one with items, one — after the form already reset — without)
 async function saveGasto(){
+  if(_savingGasto) return;
   const fecha   = document.getElementById('gastos-fecha').value;
   const monto   = parseInt(document.getElementById('gastos-monto').value) || 0;
   const comercio= document.getElementById('gastos-comercio').value.trim();
@@ -14362,6 +14365,9 @@ async function saveGasto(){
   const cat2    = (_c2raw && _c2raw !== '__new__') ? _c2raw : null;
   if(!fecha){ showToast('Ingresá la fecha'); return; }
   if(!monto){ showToast('Ingresá el monto'); return; }
+  _savingGasto = true;
+  const saveBtn = document.getElementById('gastos-save-btn');
+  if(saveBtn) saveBtn.disabled = true;
   try {
     const tipo_documento      = document.getElementById('gastos-tipo-doc')?.value || 'boleta';
     const incluir_en_utilidad = document.getElementById('gastos-incluir-utilidad')?.checked ?? true;
@@ -14395,6 +14401,9 @@ async function saveGasto(){
     }
   } catch(e){
     showToast('Error: ' + e.message);
+  } finally {
+    _savingGasto = false;
+    if(saveBtn) saveBtn.disabled = false;
   }
 }
 
