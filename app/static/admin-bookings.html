@@ -4525,19 +4525,20 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <thead>
                 <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:left">
                   <th style="padding:.5rem .4rem">Fecha</th>
-                  <th style="padding:.5rem .4rem">Abonos</th>
+                  <th style="padding:.5rem .4rem">Descripción</th>
                   <th style="padding:.5rem .4rem">Cargos</th>
-                  <th style="padding:.5rem .4rem">Origen</th>
+                  <th style="padding:.5rem .4rem">Abonos</th>
+                  <th style="padding:.5rem .4rem">Saldo</th>
                   <th style="padding:.5rem .4rem">Categoría 1</th>
                   <th style="padding:.5rem .4rem">Categoría 2</th>
-                  <th style="padding:.5rem .4rem">Descripción</th>
                   <th style="padding:.5rem .4rem">Observaciones</th>
-                  <th style="padding:.5rem .4rem">Facturado o IVA</th>
+                  <th style="padding:.5rem .4rem">Facturado</th>
+                  <th style="padding:.5rem .4rem">Origen</th>
                   <th style="padding:.5rem .4rem"></th>
                 </tr>
               </thead>
               <tbody id="fc-tbody">
-                <tr><td colspan="10" style="padding:2rem;text-align:center;color:var(--muted)">Cargando…</td></tr>
+                <tr><td colspan="11" style="padding:2rem;text-align:center;color:var(--muted)">Cargando…</td></tr>
               </tbody>
             </table>
           </div>
@@ -14535,20 +14536,21 @@ function renderFlujoCajaTable(movs){
   const tbody = document.getElementById('fc-tbody');
   if(!tbody) return;
   if(!movs.length){
-    tbody.innerHTML = '<tr><td colspan="10" style="padding:2rem;text-align:center;color:var(--muted)">Sin movimientos en el período</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="padding:2rem;text-align:center;color:var(--muted)">Sin movimientos en el período</td></tr>';
     return;
   }
   tbody.innerHTML = movs.map(m => `
     <tr style="border-bottom:1px solid var(--border)">
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'fecha',m.fecha,'date')}</td>
-      <td style="padding:.3rem .2rem">${_fcInput(m.id,'abonos',m.abonos,'number')}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'descripcion',m.descripcion)}</td>
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'cargos',m.cargos,'number')}</td>
-      <td style="padding:.3rem .2rem">${_fcInput(m.id,'origen',m.origen)}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'abonos',m.abonos,'number')}</td>
+      <td style="padding:.3rem .2rem;color:var(--muted);text-align:center">—</td>
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'categoria_1',m.categoria_1)}</td>
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'categoria_2',m.categoria_2)}</td>
-      <td style="padding:.3rem .2rem">${_fcInput(m.id,'descripcion',m.descripcion)}</td>
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'observaciones',m.observaciones)}</td>
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'facturado_o_iva',m.facturado_o_iva)}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'origen',m.origen)}</td>
       <td style="padding:.3rem .2rem;text-align:center">
         <button onclick="deleteFlujoCajaMovimiento(${m.id})" title="Eliminar" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem">✕</button>
       </td>

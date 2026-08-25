@@ -14,11 +14,14 @@ from app.db.connection import get_connection
 
 logger = logging.getLogger(__name__)
 
+# Column order in the Sheet — A through J. "Saldo" (E) is a deliberate gap:
+# it's a running balance the owner fills in himself (or via his own
+# formula), the app never reads or writes it.
 SHEET_COLUMNS = [
-    "fecha", "abonos", "cargos", "origen",
-    "categoria_1", "categoria_2", "descripcion",
-    "observaciones", "facturado_o_iva",
+    "fecha", "descripcion", "cargos", "abonos", None,
+    "categoria_1", "categoria_2", "observaciones", "facturado_o_iva", "origen",
 ]
+LAST_COL = "J"
 
 _client = None
 _client_checked = False
@@ -54,17 +57,7 @@ def _row_values(mov: dict) -> list:
         if v is None:
             return ""
         return str(v)
-    return [
-        fmt(mov.get("fecha", "")),
-        fmt(mov.get("abonos") or ""),
-        fmt(mov.get("cargos") or ""),
-        fmt(mov.get("origen", "")),
-        fmt(mov.get("categoria_1", "")),
-        fmt(mov.get("categoria_2", "")),
-        fmt(mov.get("descripcion", "")),
-        fmt(mov.get("observaciones", "")),
-        fmt(mov.get("facturado_o_iva", "")),
-    ]
+    return [fmt(mov.get(col, "")) if col else "" for col in SHEET_COLUMNS]
 
 
 def push_row(mov_id: int) -> None:
@@ -92,7 +85,7 @@ def push_row(mov_id: int) -> None:
                 values = _row_values(mov)
 
                 if sheet_row:
-                    ws.update(f"A{sheet_row}:I{sheet_row}", [values])
+                    ws.update(f"A{sheet_row}:{LAST_COL}{sheet_row}", [values])
                 else:
                     ws.append_row(values, value_input_option="USER_ENTERED")
                     # Row count right after append — safe because this whole
@@ -121,7 +114,7 @@ def clear_row(mov_id: int) -> None:
                 cur.execute("SELECT sheet_row FROM flujo_caja_movimientos WHERE id=%s", (mov_id,))
                 r = cur.fetchone()
         if r and r[0]:
-            ws.update(f"A{r[0]}:I{r[0]}", [[""] * 9])
+            ws.update(f"A{r[0]}:{LAST_COL}{r[0]}", [[""] * len(SHEET_COLUMNS)])
     except Exception as e:
         logger.error(f"Sheets clear_row({mov_id}) failed: {e}")
 
@@ -185,9 +178,9 @@ def sync_once() -> dict:
 
             # 1) Sheet → DB: any data row (2+) that differs from its last-known snapshot.
             for idx, row_vals in enumerate(all_values[1:], start=2):
-                if not any(c.strip() for c in row_vals[:1] + row_vals[6:7]):
-                    continue  # blank Fecha AND Descripción — not a real row yet
-                sheet_mov = {col: (row_vals[i] if i < len(row_vals) else "") for i, col in enumerate(SHEET_COLUMNS)}
+                if not any(c.strip() for c in row_vals[:2]):
+                    continue  # blank Fecha AND Descripción (columns A, B) — not a real row yet
+                sheet_mov = {col: (row_vals[i] if i < len(row_vals) else "") for i, col in enumerate(SHEET_COLUMNS) if col}
 
                 existing = by_sheet_row.get(idx)
                 if existing:
