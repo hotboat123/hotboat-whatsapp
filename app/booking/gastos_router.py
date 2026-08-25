@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import time
+import unicodedata
 from typing import List, Optional
 
 import httpx
@@ -270,11 +271,18 @@ def get_categoria_by_id(cat_id: Optional[int]) -> Optional[dict]:
     return {"id": row[0], "nombre": row[1], "parent_id": row[2]} if row else None
 
 
+def _fold(s: str) -> str:
+    """Lowercase + strip accents, for matching text typed on a phone (which
+    may or may not have the right accent) against DB names that do."""
+    return "".join(c for c in unicodedata.normalize("NFKD", (s or "").lower()) if not unicodedata.combining(c))
+
+
 def resolve_origen_by_name(name: str) -> Optional[str]:
-    """Case-insensitive lookup against gastos_origenes — exact match first,
-    then substring either direction. Returns the stored nombre (correct
-    casing) or None if nothing matches, so the caller can decide whether to
-    fall back to the raw text or ask the user to try another name."""
+    """Accent/case-insensitive lookup against gastos_origenes — exact match
+    first, then substring either direction. Returns the stored nombre
+    (correct casing) or None if nothing matches, so the caller can decide
+    whether to fall back to the raw text or ask the user to try another
+    name."""
     name = (name or "").strip()
     if not name:
         return None
@@ -282,20 +290,22 @@ def resolve_origen_by_name(name: str) -> Optional[str]:
         with conn.cursor() as cur:
             cur.execute("SELECT nombre FROM gastos_origenes")
             rows = [r[0] for r in cur.fetchall()]
-    name_lower = name.lower()
+    name_folded = _fold(name)
     for nombre in rows:
-        if nombre.lower() == name_lower:
+        if _fold(nombre) == name_folded:
             return nombre
     for nombre in rows:
-        if name_lower in nombre.lower() or nombre.lower() in name_lower:
+        if name_folded in _fold(nombre) or _fold(nombre) in name_folded:
             return nombre
     return None
 
 
 def resolve_category_by_name(name: str, nivel: int, parent_id: Optional[int] = None) -> Optional[dict]:
-    """Case-insensitive lookup against gastos_categorias — exact match first,
-    then substring either direction (so "banco" matches "Bancario" and
-    "mantenimiento de motor" matches "Motor"). None if nothing matches."""
+    """Accent/case-insensitive lookup against gastos_categorias — exact
+    match first, then substring either direction (so "banco" matches
+    "Bancario", "inversion empresa fabrica" matches "Inversión Empresa
+    Fábrica" even without the accents, and "mantenimiento de motor" matches
+    "Motor"). None if nothing matches."""
     name = (name or "").strip()
     if not name:
         return None
@@ -306,12 +316,12 @@ def resolve_category_by_name(name: str, nivel: int, parent_id: Optional[int] = N
             else:
                 cur.execute("SELECT id, nombre FROM gastos_categorias WHERE nivel=%s", (nivel,))
             rows = cur.fetchall()
-    name_lower = name.lower()
+    name_folded = _fold(name)
     for cat_id, nombre in rows:
-        if nombre.lower() == name_lower:
+        if _fold(nombre) == name_folded:
             return {"id": cat_id, "nombre": nombre}
     for cat_id, nombre in rows:
-        if name_lower in nombre.lower() or nombre.lower() in name_lower:
+        if name_folded in _fold(nombre) or _fold(nombre) in name_folded:
             return {"id": cat_id, "nombre": nombre}
     return None
 

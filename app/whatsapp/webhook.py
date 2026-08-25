@@ -4,6 +4,8 @@ WhatsApp webhook handler
 import asyncio
 import logging
 import os
+import re
+import unicodedata
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -260,6 +262,101 @@ _PENDING_GASTO_CONFIRM_WORDS = {"ok", "si", "sí", "dale", "listo", "confirmar",
 _PENDING_GASTO_CANCEL_WORDS = {"cancelar", "no", "descartar", "cancela"}
 
 
+def _strip_accents(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+
+
+# One free-form message can edit several fields at once (e.g. "Descripción
+# adaptador para motor. Categoría inversión, cat2 hb3. Boleta") — split on
+# sentence-ish punctuation and match each piece against these keyword
+# prefixes (colon optional, accents optional). Order matters: "categoria2"/
+# "cat2" checked before the bare "categoria"/"cat" pattern, even though \b
+# already stops "cat" from matching inside "cat2" — keeping them ordered
+# here is just belt-and-suspenders against a future edit to the patterns.
+_GASTO_FIELD_PATTERNS = [
+    ("tipo_documento", re.compile(r"^(boleta|factura)$")),
+    ("categoria2", re.compile(r"^(cat\s*2|categoria\s*2|subcategoria)\b[:\s]*")),
+    ("categoria1", re.compile(r"^(cat|categoria)\b[:\s]*")),
+    ("fecha", re.compile(r"^fecha\b[:\s]*")),
+    ("descripcion", re.compile(r"^(descripcion|desc)\b[:\s]*")),
+    ("origen", re.compile(r"^origen\b[:\s]*")),
+]
+
+
+def _parse_gasto_edit_segment(segment: str):
+    """One comma/period-delimited chunk of a reply -> (field, value), or
+    None if it doesn't start with any recognized keyword. Matching is done
+    on an accent-stripped, lowercased copy so "Categoría"/"categoria" both
+    work, but the VALUE is sliced from the original (accents intact) at the
+    same offset — accent-stripping never changes character count for
+    Spanish's vowels/ñ, so the offsets line up."""
+    original = segment.strip()
+    if not original:
+        return None
+    norm = _strip_accents(original).lower()
+    for field, pattern in _GASTO_FIELD_PATTERNS:
+        m = pattern.match(norm)
+        if not m:
+            continue
+        if field == "tipo_documento":
+            return ("tipo_documento", m.group(1))
+        value = original[m.end():].strip(" :")
+        if not value:
+            continue
+        return (field, value)
+    return None
+
+
+async def _apply_gasto_edits(from_number: str, payload: dict, edits: dict) -> list:
+    """Applies a {field: value} batch (already deduped, last-one-wins per
+    field) to `payload` in a fixed order — categoria1 before categoria2, so
+    a "cat2" in the same message resolves against the just-updated parent.
+    Returns a list of human-readable error strings for anything that didn't
+    resolve (unknown category name, unparseable date); payload is mutated
+    and saved for whatever DID apply."""
+    from app.booking.gastos_router import save_pending_gasto, resolve_category_by_name, resolve_origen_by_name
+
+    errors = []
+
+    if "tipo_documento" in edits:
+        payload["tipo_documento"] = edits["tipo_documento"]
+
+    if "fecha" in edits:
+        parsed = _parse_fecha_input(edits["fecha"])
+        if parsed:
+            payload["fecha"] = parsed
+        else:
+            errors.append(f'🤔 No entendí la fecha "{edits["fecha"]}". Probá con DD-MM-YYYY.')
+
+    if "descripcion" in edits:
+        payload["descripcion"] = edits["descripcion"]
+
+    if "origen" in edits:
+        payload["origen"] = resolve_origen_by_name(edits["origen"]) or edits["origen"]
+
+    if "categoria1" in edits:
+        match = resolve_category_by_name(edits["categoria1"], nivel=1)
+        if match:
+            payload["categoria1_id"] = match["id"]
+            payload["categoria1_nombre"] = match["nombre"]
+            payload["categoria2_id"] = None
+            payload["categoria2_nombre"] = ""
+        else:
+            errors.append(f'🤔 No encontré la categoría "{edits["categoria1"]}".')
+
+    if "categoria2" in edits:
+        match = resolve_category_by_name(edits["categoria2"], nivel=2, parent_id=payload.get("categoria1_id")) \
+            or resolve_category_by_name(edits["categoria2"], nivel=2)
+        if match:
+            payload["categoria2_id"] = match["id"]
+            payload["categoria2_nombre"] = match["nombre"]
+        else:
+            errors.append(f'🤔 No encontré la subcategoría "{edits["categoria2"]}".')
+
+    save_pending_gasto(from_number, payload)
+    return errors
+
+
 async def _finalize_pending_gasto(from_number: str, payload: dict) -> None:
     from app.booking.gastos_router import create_gasto, GastoCreate, GastoItemIn
     from app.booking.gastos_router import clear_pending_gasto as _clear_pending
@@ -312,12 +409,15 @@ async def _finalize_pending_gasto(from_number: str, payload: dict) -> None:
 
 async def _handle_admin_gasto_reply(from_number: str, text_body: str) -> bool:
     """A text reply from a number with a pending gasto confirmation (see
-    _handle_admin_gasto_photo) — "ok" saves it, "cat: X"/"cat2: X" edit the
-    category, "boleta"/"factura" edit the document type, "cancelar" drops
-    it, anything else re-sends the summary. Returns False (nothing to do)
-    when there's no pending gasto for this number, or it expired — the
-    caller then falls through to whatever normally handles this number."""
-    from app.booking.gastos_router import get_pending_gasto, save_pending_gasto, resolve_category_by_name, resolve_origen_by_name
+    _handle_admin_gasto_photo). "ok"/"cancelar" (or equivalents) act on the
+    whole message; anything else is split on . , ; / newlines and each
+    piece is matched against a field keyword (fecha/desc/origen/cat/cat2/
+    boleta/factura — see _parse_gasto_edit_segment), so ONE reply can edit
+    several fields at once, e.g. "Descripción X. Categoría Y, cat2 Z.
+    Boleta". Returns False (nothing to do) when there's no pending gasto for
+    this number, or it expired — the caller falls through to whatever
+    normally handles this number."""
+    from app.booking.gastos_router import get_pending_gasto
     from app.booking.gastos_router import clear_pending_gasto as _clear_pending
 
     payload = get_pending_gasto(from_number)
@@ -336,71 +436,21 @@ async def _handle_admin_gasto_reply(from_number: str, text_body: str) -> bool:
         await whatsapp_client.send_text_message(from_number, "❌ Gasto descartado.")
         return True
 
-    if text_lower in ("boleta", "factura"):
-        payload["tipo_documento"] = text_lower
-        save_pending_gasto(from_number, payload)
-        await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
+    edits = {}
+    for segment in re.split(r"[.,;\n]+", text):
+        parsed = _parse_gasto_edit_segment(segment)
+        if parsed:
+            edits[parsed[0]] = parsed[1]  # last occurrence of a field wins
+
+    if not edits:
+        await whatsapp_client.send_text_message(
+            from_number, "🤔 No entendí eso.\n\n" + _pending_gasto_summary_text(payload)
+        )
         return True
 
-    for prefix in ("fecha:",):
-        if text_lower.startswith(prefix):
-            raw = text[len(prefix):].strip()
-            parsed = _parse_fecha_input(raw)
-            if parsed:
-                payload["fecha"] = parsed
-                save_pending_gasto(from_number, payload)
-                await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
-            else:
-                await whatsapp_client.send_text_message(from_number, f'🤔 No entendí la fecha "{raw}". Probá con DD-MM-YYYY.')
-            return True
-
-    for prefix in ("desc:", "descripcion:", "descripción:"):
-        if text_lower.startswith(prefix):
-            payload["descripcion"] = text[len(prefix):].strip()
-            save_pending_gasto(from_number, payload)
-            await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
-            return True
-
-    for prefix in ("origen:",):
-        if text_lower.startswith(prefix):
-            raw = text[len(prefix):].strip()
-            payload["origen"] = resolve_origen_by_name(raw) or raw
-            save_pending_gasto(from_number, payload)
-            await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
-            return True
-
-    for prefix in ("cat2:", "categoria2:", "categoría2:", "subcategoria:", "subcategoría:"):
-        if text_lower.startswith(prefix):
-            name = text[len(prefix):].strip()
-            match = resolve_category_by_name(name, nivel=2, parent_id=payload.get("categoria1_id")) \
-                or resolve_category_by_name(name, nivel=2)
-            if match:
-                payload["categoria2_id"] = match["id"]
-                payload["categoria2_nombre"] = match["nombre"]
-                save_pending_gasto(from_number, payload)
-                await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
-            else:
-                await whatsapp_client.send_text_message(from_number, f'🤔 No encontré la subcategoría "{name}". Probá con otro nombre.')
-            return True
-
-    for prefix in ("cat:", "categoria:", "categoría:"):
-        if text_lower.startswith(prefix):
-            name = text[len(prefix):].strip()
-            match = resolve_category_by_name(name, nivel=1)
-            if match:
-                payload["categoria1_id"] = match["id"]
-                payload["categoria1_nombre"] = match["nombre"]
-                payload["categoria2_id"] = None
-                payload["categoria2_nombre"] = ""
-                save_pending_gasto(from_number, payload)
-                await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
-            else:
-                await whatsapp_client.send_text_message(from_number, f'🤔 No encontré la categoría "{name}". Probá con otro nombre.')
-            return True
-
-    await whatsapp_client.send_text_message(
-        from_number, "🤔 No entendí eso.\n\n" + _pending_gasto_summary_text(payload)
-    )
+    errors = await _apply_gasto_edits(from_number, payload, edits)
+    reply = ("\n".join(errors) + "\n\n" if errors else "") + _pending_gasto_summary_text(payload)
+    await whatsapp_client.send_text_message(from_number, reply)
     return True
 
 
