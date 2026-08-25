@@ -132,6 +132,75 @@ def _popeye_summon(lead: Optional[dict], text: Optional[str]) -> bool:
     return _is_popeye_trigger(text) or _popeye_session_active(lead)
 
 
+def _is_admin_number(phone: str) -> bool:
+    """True when an incoming message's sender is the owner's own WhatsApp
+    number (ADMIN_PHONE — same env var content_router.py already uses to
+    address outgoing admin notifications), comparing digits only so a
+    "+56 9..." vs "56912345678" formatting mismatch doesn't matter.
+    Supports a comma-separated list in case more than one number should
+    get this treatment later."""
+    digits = lambda s: "".join(c for c in (s or "") if c.isdigit())
+    target = digits(phone)
+    if not target:
+        return False
+    admins = os.getenv("ADMIN_PHONE", "56974950762").split(",")
+    return any(digits(a) == target for a in admins)
+
+
+async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, caption: str) -> bool:
+    """The owner sending Popeye a receipt photo runs it through the exact
+    same AI-scan + save pipeline as the 🧾 Gastos tab in the admin panel
+    (see gastos_router.py) — reuses those endpoint functions directly
+    instead of duplicating the Gemini call/DB insert. Returns True if a
+    gasto was created (so the caller can skip the normal bot flow for this
+    message either way — this function itself sends the WhatsApp reply)."""
+    import base64
+    try:
+        from app.booking.gastos_router import scan_receipt, create_gasto, ScanRequest, GastoCreate, GastoItemIn
+
+        with open(local_image_path, "rb") as f:
+            imagen_base64 = base64.b64encode(f.read()).decode()
+
+        scan = await scan_receipt(ScanRequest(imagen_base64=imagen_base64, mime_type="image/jpeg"), x_admin_key="")
+
+        monto = scan.get("monto") or 0
+        comercio = scan.get("comercio") or ""
+        fecha = scan.get("fecha") or datetime.now().date().isoformat()
+        items = [
+            GastoItemIn(descripcion=it.get("descripcion") or comercio, monto=it.get("monto") or 0)
+            for it in (scan.get("items") or [])
+            if it.get("descripcion")
+        ]
+
+        body = GastoCreate(
+            fecha=fecha, monto=monto, descripcion=caption or comercio, comercio=comercio,
+            imagen_base64=imagen_base64, imagen_mime="image/jpeg",
+            categoria1_id=scan.get("categoria1_id"), tipo_documento="factura",
+            notas="Agregado desde WhatsApp", items=items,
+        )
+        res = await create_gasto(body, x_admin_key="")
+
+        monto_fmt = f"${monto:,.0f}".replace(",", ".")
+        reply = f"✅ Gasto agregado: {monto_fmt}"
+        if comercio:
+            reply += f" — {comercio}"
+        if len(items) > 1:
+            reply += f"\n🧾 {len(items)} ítems detectados"
+        reply += "\nRevisalo en el panel (🧾 Gastos) para ajustar la categoría."
+        await whatsapp_client.send_text_message(from_number, reply)
+        logger.info(f"📸 Gasto creado desde WhatsApp (admin): id={res.get('id')} monto={monto} comercio={comercio}")
+        return True
+    except Exception as e:
+        logger.error(f"_handle_admin_gasto_photo failed: {e}")
+        try:
+            await whatsapp_client.send_text_message(
+                from_number, "⚠️ No pude leer la boleta automáticamente. Agrégala a mano en el panel de Gastos."
+            )
+        except Exception:
+            pass
+        return True  # still admin-photo intent — don't fall through to the customer bot flow
+
+
 async def _send_welcome_message_if_new(lead: Optional[dict], phone_number: str, contact_name: str) -> None:
     """Send the assigned human variant's one-time welcome message, if this
     lead was JUST created with one (see get_or_create_lead in
@@ -1030,6 +1099,15 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 display_url = media_url
             
             text_body = caption if caption else "[Imagen sin texto]"
+
+            # Owner sending a receipt photo on his own number → straight to
+            # Gastos (Gemini scan + save), no customer-facing flow at all
+            # (no push/email notification, no conversation_manager, no
+            # booking-image replies) — this channel is a utility shortcut,
+            # not a real conversation.
+            if local_image_path and _is_admin_number(from_number):
+                await _handle_admin_gasto_photo(from_number, local_image_path, caption)
+                return
 
             # Fetched here (not further down like before) so the push
             # notification below can be labeled with the lead's bot_variant
