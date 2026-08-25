@@ -148,47 +148,40 @@ def _is_admin_number(phone: str) -> bool:
 
 
 async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, caption: str) -> bool:
-    """The owner sending Popeye a receipt photo runs it through the exact
-    same AI-scan + save pipeline as the 🧾 Gastos tab in the admin panel
-    (see gastos_router.py) — reuses those endpoint functions directly
-    instead of duplicating the Gemini call/DB insert. Returns True if a
-    gasto was created (so the caller can skip the normal bot flow for this
-    message either way — this function itself sends the WhatsApp reply)."""
+    """The owner sending Popeye a receipt photo runs it through the same
+    AI-scan pipeline as the 🧾 Gastos tab in the admin panel (see
+    gastos_router.py) — but doesn't save it yet. The scan result is held as
+    a pending confirmation (gastos_router.save_pending_gasto) and a summary
+    is sent back; the next text reply from this same number is handled by
+    _handle_admin_gasto_reply() below, which confirms, edits, or cancels it.
+    Always returns True (admin-photo intent either way) so the caller skips
+    the normal customer bot flow for this message."""
     import base64
     try:
-        from app.booking.gastos_router import scan_receipt, create_gasto, ScanRequest, GastoCreate, GastoItemIn
+        from app.booking.gastos_router import scan_receipt, ScanRequest, save_pending_gasto, get_categoria_by_id
 
         with open(local_image_path, "rb") as f:
             imagen_base64 = base64.b64encode(f.read()).decode()
 
         scan = await scan_receipt(ScanRequest(imagen_base64=imagen_base64, mime_type="image/jpeg"), x_admin_key="")
+        cat1 = get_categoria_by_id(scan.get("categoria1_id"))
 
-        monto = scan.get("monto") or 0
-        comercio = scan.get("comercio") or ""
-        fecha = scan.get("fecha") or datetime.now().date().isoformat()
-        items = [
-            GastoItemIn(descripcion=it.get("descripcion") or comercio, monto=it.get("monto") or 0)
-            for it in (scan.get("items") or [])
-            if it.get("descripcion")
-        ]
-
-        body = GastoCreate(
-            fecha=fecha, monto=monto, descripcion=caption or comercio, comercio=comercio,
-            imagen_base64=imagen_base64, imagen_mime="image/jpeg",
-            categoria1_id=scan.get("categoria1_id"), tipo_documento="factura",
-            notas="Agregado desde WhatsApp", items=items,
-        )
-        res = await create_gasto(body, x_admin_key="")
-
-        monto_fmt = f"${monto:,.0f}".replace(",", ".")
-        reply = f"✅ Gasto agregado: {monto_fmt}"
-        if comercio:
-            reply += f" — {comercio}"
-        if len(items) > 1:
-            reply += f"\n🧾 {len(items)} ítems detectados"
-        reply += "\nRevisalo en el panel (🧾 Gastos) para ajustar la categoría."
-        await whatsapp_client.send_text_message(from_number, reply)
-        logger.info(f"📸 Gasto creado desde WhatsApp (admin): id={res.get('id')} monto={monto} comercio={comercio}")
+        payload = {
+            "fecha": scan.get("fecha") or datetime.now().date().isoformat(),
+            "monto": scan.get("monto") or 0,
+            "comercio": scan.get("comercio") or "",
+            "caption": caption or "",
+            "categoria1_id": cat1["id"] if cat1 else None,
+            "categoria1_nombre": cat1["nombre"] if cat1 else "",
+            "categoria2_id": None,
+            "categoria2_nombre": "",
+            "tipo_documento": "factura",
+            "items": scan.get("items") or [],
+            "imagen_base64": imagen_base64,
+            "imagen_mime": "image/jpeg",
+        }
+        save_pending_gasto(from_number, payload)
+        await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
         return True
     except Exception as e:
         logger.error(f"_handle_admin_gasto_photo failed: {e}")
@@ -199,6 +192,152 @@ async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, cap
         except Exception:
             pass
         return True  # still admin-photo intent — don't fall through to the customer bot flow
+
+
+def _pending_gasto_summary_text(payload: dict) -> str:
+    monto_fmt = f"${(payload.get('monto') or 0):,.0f}".replace(",", ".")
+    comercio = payload.get("comercio") or ""
+    cat1 = payload.get("categoria1_nombre") or "(sin categoría)"
+    cat2 = payload.get("categoria2_nombre") or ""
+    cat_line = cat1 + (f" > {cat2}" if cat2 else "")
+    tipo = "Factura" if payload.get("tipo_documento") == "factura" else "Boleta"
+    items = payload.get("items") or []
+    lines = [
+        "📸 Vi esto en la boleta:",
+        f"💰 {monto_fmt}" + (f" — {comercio}" if comercio else ""),
+        f"🗂️ Categoría: {cat_line}",
+        f"📄 Tipo: {tipo}",
+    ]
+    if len(items) > 1:
+        lines.append(f"🧾 {len(items)} ítems detectados (misma categoría para todos)")
+    lines += [
+        "",
+        "Responde:",
+        "✅ *ok* para agregarlo así",
+        "🗂️ *cat: <categoría>* para cambiar la categoría (ej: cat: Mantenimiento)",
+        "🗂️ *cat2: <subcategoría>* para la subcategoría",
+        "📄 *boleta* o *factura* para el tipo de documento",
+        "❌ *cancelar* para descartar",
+    ]
+    return "\n".join(lines)
+
+
+_PENDING_GASTO_CONFIRM_WORDS = {"ok", "si", "sí", "dale", "listo", "confirmar", "agregar", "agregalo", "agrégalo"}
+_PENDING_GASTO_CANCEL_WORDS = {"cancelar", "no", "descartar", "cancela"}
+
+
+async def _finalize_pending_gasto(from_number: str, payload: dict) -> None:
+    from app.booking.gastos_router import create_gasto, GastoCreate, GastoItemIn
+    from app.booking.gastos_router import clear_pending_gasto as _clear_pending
+
+    monto = payload.get("monto") or 0
+    comercio = payload.get("comercio") or ""
+    cat1_nombre = payload.get("categoria1_nombre") or ""
+    cat2_nombre = payload.get("categoria2_nombre") or ""
+    raw_items = payload.get("items") or []
+    # Whatever category was confirmed applies to every line item, same as
+    # the admin panel's "cascade to items" behavior — per-item overrides
+    # still need the panel, this flow only edits the whole-receipt category.
+    items = [
+        GastoItemIn(
+            descripcion=it.get("descripcion") or comercio,
+            monto=it.get("monto") or 0,
+            categoria_1=cat1_nombre,
+            categoria_2=cat2_nombre,
+        )
+        for it in raw_items
+        if it.get("descripcion")
+    ]
+
+    body = GastoCreate(
+        fecha=payload.get("fecha") or datetime.now().date().isoformat(),
+        monto=monto, descripcion=payload.get("caption") or comercio, comercio=comercio,
+        imagen_base64=payload.get("imagen_base64", ""), imagen_mime=payload.get("imagen_mime", "image/jpeg"),
+        categoria1_id=payload.get("categoria1_id"), categoria2_id=payload.get("categoria2_id"),
+        tipo_documento=payload.get("tipo_documento") or "factura",
+        notas="Agregado desde WhatsApp", items=items,
+    )
+    res = await create_gasto(body, x_admin_key="")
+    _clear_pending(from_number)
+
+    monto_fmt = f"${monto:,.0f}".replace(",", ".")
+    reply = f"✅ Gasto agregado: {monto_fmt}"
+    if comercio:
+        reply += f" — {comercio}"
+    if cat1_nombre:
+        reply += f"\n🗂️ {cat1_nombre}" + (f" > {cat2_nombre}" if cat2_nombre else "")
+    if len(items) > 1:
+        reply += f"\n🧾 {len(items)} ítems detectados"
+    reply += "\nRevisalo en el panel (🧾 Gastos) para ajustar más detalles."
+    await whatsapp_client.send_text_message(from_number, reply)
+    logger.info(f"📸 Gasto confirmado desde WhatsApp (admin): id={res.get('id')} monto={monto} comercio={comercio}")
+
+
+async def _handle_admin_gasto_reply(from_number: str, text_body: str) -> bool:
+    """A text reply from a number with a pending gasto confirmation (see
+    _handle_admin_gasto_photo) — "ok" saves it, "cat: X"/"cat2: X" edit the
+    category, "boleta"/"factura" edit the document type, "cancelar" drops
+    it, anything else re-sends the summary. Returns False (nothing to do)
+    when there's no pending gasto for this number, or it expired — the
+    caller then falls through to whatever normally handles this number."""
+    from app.booking.gastos_router import get_pending_gasto, save_pending_gasto, resolve_category_by_name
+    from app.booking.gastos_router import clear_pending_gasto as _clear_pending
+
+    payload = get_pending_gasto(from_number)
+    if not payload:
+        return False
+
+    text = (text_body or "").strip()
+    text_lower = text.lower()
+
+    if text_lower in _PENDING_GASTO_CONFIRM_WORDS:
+        await _finalize_pending_gasto(from_number, payload)
+        return True
+
+    if text_lower in _PENDING_GASTO_CANCEL_WORDS:
+        _clear_pending(from_number)
+        await whatsapp_client.send_text_message(from_number, "❌ Gasto descartado.")
+        return True
+
+    if text_lower in ("boleta", "factura"):
+        payload["tipo_documento"] = text_lower
+        save_pending_gasto(from_number, payload)
+        await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
+        return True
+
+    for prefix in ("cat2:", "categoria2:", "categoría2:", "subcategoria:", "subcategoría:"):
+        if text_lower.startswith(prefix):
+            name = text[len(prefix):].strip()
+            match = resolve_category_by_name(name, nivel=2, parent_id=payload.get("categoria1_id")) \
+                or resolve_category_by_name(name, nivel=2)
+            if match:
+                payload["categoria2_id"] = match["id"]
+                payload["categoria2_nombre"] = match["nombre"]
+                save_pending_gasto(from_number, payload)
+                await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
+            else:
+                await whatsapp_client.send_text_message(from_number, f'🤔 No encontré la subcategoría "{name}". Probá con otro nombre.')
+            return True
+
+    for prefix in ("cat:", "categoria:", "categoría:"):
+        if text_lower.startswith(prefix):
+            name = text[len(prefix):].strip()
+            match = resolve_category_by_name(name, nivel=1)
+            if match:
+                payload["categoria1_id"] = match["id"]
+                payload["categoria1_nombre"] = match["nombre"]
+                payload["categoria2_id"] = None
+                payload["categoria2_nombre"] = ""
+                save_pending_gasto(from_number, payload)
+                await whatsapp_client.send_text_message(from_number, _pending_gasto_summary_text(payload))
+            else:
+                await whatsapp_client.send_text_message(from_number, f'🤔 No encontré la categoría "{name}". Probá con otro nombre.')
+            return True
+
+    await whatsapp_client.send_text_message(
+        from_number, "🤔 No entendí eso.\n\n" + _pending_gasto_summary_text(payload)
+    )
+    return True
 
 
 # ── Per-number custom persona ────────────────────────────────────────────
@@ -707,6 +846,13 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
         if message_type == "text":
             text_body = message.get("text", {}).get("body", "")
             logger.info(f"💬 Message text: {text_body}")
+
+            # A reply to a pending gasto confirmation (see
+            # _handle_admin_gasto_photo) takes priority over everything else
+            # for this number — it's a direct continuation of a message they
+            # just sent, not a new conversation.
+            if await _handle_admin_gasto_reply(from_number, text_body):
+                return
 
             # Number with its own AI persona (see _CUSTOM_PROMPTS_DIR) → plain
             # AI chat, skip the entire HotBoat sales/booking flow below.

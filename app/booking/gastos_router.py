@@ -64,6 +64,11 @@ def _ensure_tables():
         nombre TEXT NOT NULL UNIQUE,
         created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS admin_gasto_pending (
+        phone_number TEXT PRIMARY KEY,
+        payload      JSONB NOT NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     """
     try:
         with get_connection() as conn:
@@ -207,6 +212,85 @@ def _match_category(text: str, categorias: list) -> Optional[int]:
         for kw in kws:
             if kw and kw.lower() in txt:
                 return cat["id"]
+    return None
+
+
+# ── Admin gasto-from-WhatsApp confirmation flow ─────────────────────────────
+# A photo from an admin number (see webhook.py:_is_admin_number) doesn't
+# create the gasto immediately anymore — it's scanned, a summary (amount,
+# category, tipo_documento) is held here keyed by phone_number, and the next
+# text reply from that same number either confirms it as-is, edits a field,
+# or cancels it. See webhook.py:_handle_admin_gasto_reply for the command
+# parsing. TTL below guards against a stray unrelated text minutes/hours
+# later being misread as a reply to a long-forgotten scan.
+_PENDING_GASTO_TTL_MINUTES = 20
+
+
+def save_pending_gasto(phone_number: str, payload: dict) -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO admin_gasto_pending (phone_number, payload, created_at) "
+                "VALUES (%s, %s, NOW()) "
+                "ON CONFLICT (phone_number) DO UPDATE SET payload=EXCLUDED.payload, created_at=NOW()",
+                (phone_number, json.dumps(payload, default=str)),
+            )
+        conn.commit()
+
+
+def get_pending_gasto(phone_number: str) -> Optional[dict]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT payload FROM admin_gasto_pending "
+                "WHERE phone_number=%s AND created_at > NOW() - INTERVAL '20 minutes'",
+                (phone_number,),
+            )
+            row = cur.fetchone()
+    if not row:
+        return None
+    payload = row[0]
+    return payload if isinstance(payload, dict) else json.loads(payload)
+
+
+def clear_pending_gasto(phone_number: str) -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM admin_gasto_pending WHERE phone_number=%s", (phone_number,))
+        conn.commit()
+
+
+def get_categoria_by_id(cat_id: Optional[int]) -> Optional[dict]:
+    if not cat_id:
+        return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, nombre, parent_id FROM gastos_categorias WHERE id=%s", (cat_id,))
+            row = cur.fetchone()
+    return {"id": row[0], "nombre": row[1], "parent_id": row[2]} if row else None
+
+
+def resolve_category_by_name(name: str, nivel: int, parent_id: Optional[int] = None) -> Optional[dict]:
+    """Case-insensitive lookup against gastos_categorias — exact match first,
+    then substring either direction (so "banco" matches "Bancario" and
+    "mantenimiento de motor" matches "Motor"). None if nothing matches."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            if parent_id:
+                cur.execute("SELECT id, nombre FROM gastos_categorias WHERE nivel=%s AND parent_id=%s", (nivel, parent_id))
+            else:
+                cur.execute("SELECT id, nombre FROM gastos_categorias WHERE nivel=%s", (nivel,))
+            rows = cur.fetchall()
+    name_lower = name.lower()
+    for cat_id, nombre in rows:
+        if nombre.lower() == name_lower:
+            return {"id": cat_id, "nombre": nombre}
+    for cat_id, nombre in rows:
+        if name_lower in nombre.lower() or nombre.lower() in name_lower:
+            return {"id": cat_id, "nombre": nombre}
     return None
 
 
