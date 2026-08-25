@@ -201,6 +201,77 @@ async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, cap
         return True  # still admin-photo intent — don't fall through to the customer bot flow
 
 
+# ── Per-number custom persona ────────────────────────────────────────────
+# A phone number can get its own AI persona instead of the HotBoat sales
+# bot, by dropping a plain-text file named "<digits>.txt" (no "+", spaces,
+# or dashes — just the digits, same normalization as _is_admin_number) in
+# this folder. The file's content becomes the ENTIRE system prompt for that
+# number — no HotBoat business info, no booking SAFETY_FOOTER (see
+# ai_handler.py) gets appended, since none of that applies to e.g. a
+# maintenance-troubleshooting assistant. Edit or add files there directly;
+# picked up on the next message, no restart needed.
+_CUSTOM_PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "..", "bot", "custom_prompts")
+
+
+def _get_custom_prompt_for_number(phone: str) -> Optional[str]:
+    digits = "".join(c for c in (phone or "") if c.isdigit())
+    if not digits:
+        return None
+    path = os.path.join(_CUSTOM_PROMPTS_DIR, f"{digits}.txt")
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+        return content or None
+    except Exception as e:
+        logger.error(f"Failed to read custom prompt file {path}: {e}")
+        return None
+
+
+async def _handle_custom_number_chat(from_number: str, text_body: str, custom_prompt: str, contact_name: str) -> None:
+    """Answers with a plain AI chat using `custom_prompt` as the full system
+    prompt — no cart, no availability, no menu, none of the deterministic
+    HotBoat booking bot. Keeps its own short text-only history from
+    whatsapp_conversations so it's a real back-and-forth, not single-shot."""
+    from app.bot.ai_handler import AIHandler
+    from app.db.leads import get_conversation_history
+
+    try:
+        history_raw = await get_conversation_history(from_number, limit=10)
+        history = [
+            {"role": "user" if h["direction"] == "incoming" else "assistant", "content": h["message_text"]}
+            for h in history_raw
+            if h.get("message_type") == "text" and h.get("message_text")
+        ]
+
+        handler = AIHandler()
+        handler.system_prompt = custom_prompt  # full override — see _CUSTOM_PROMPTS_DIR docstring
+
+        reply = await handler.generate_response(text_body, history, contact_name)
+        if reply == handler._fallback_response():
+            # generate_response() never raises — on any AI failure (quota,
+            # network, bad key) it silently returns AIHandler's hardcoded
+            # HotBoat sales menu, which would be nonsense coming from a
+            # custom persona. Treat it as a real failure here instead.
+            raise RuntimeError("AI call failed (got the default HotBoat fallback menu)")
+        await whatsapp_client.send_text_message(from_number, reply)
+        await save_conversation(
+            phone_number=from_number,
+            customer_name=contact_name,
+            message_text=text_body,
+            response_text=reply,
+            message_type="text",
+            direction="incoming",
+        )
+    except Exception as e:
+        logger.error(f"_handle_custom_number_chat failed for {from_number}: {e}")
+        try:
+            await whatsapp_client.send_text_message(from_number, "⚠️ No pude responder ahora, intenta de nuevo.")
+        except Exception:
+            pass
+
+
 async def _send_welcome_message_if_new(lead: Optional[dict], phone_number: str, contact_name: str) -> None:
     """Send the assigned human variant's one-time welcome message, if this
     lead was JUST created with one (see get_or_create_lead in
@@ -636,6 +707,13 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
         if message_type == "text":
             text_body = message.get("text", {}).get("body", "")
             logger.info(f"💬 Message text: {text_body}")
+
+            # Number with its own AI persona (see _CUSTOM_PROMPTS_DIR) → plain
+            # AI chat, skip the entire HotBoat sales/booking flow below.
+            custom_prompt = _get_custom_prompt_for_number(from_number)
+            if custom_prompt:
+                await _handle_custom_number_chat(from_number, text_body, custom_prompt, contact_name)
+                return
 
             # Resolve quoted/replied-to message text so the bot knows which
             # specific bot message the user is replying to.
