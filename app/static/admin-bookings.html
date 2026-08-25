@@ -4415,10 +4415,27 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
               <div style="font-size:.7rem;color:var(--muted);margin-top:.25rem">Activo = resta de la utilidad de Axel y Néstor</div>
             </div>
           </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Origen (cuenta/banco)</label>
+            <input type="text" id="gastos-origen" placeholder="Banco Estado, efectivo…" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
+          </div>
           <div style="grid-column:1/-1">
             <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.25rem">Observaciones</label>
             <input type="text" id="gastos-notas" placeholder="Ej: combustible para el bote norte, viaje del sábado…" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .7rem;font-size:.88rem;width:100%;outline:none;box-sizing:border-box">
           </div>
+        </div>
+
+        <!-- Multi-item receipt (populated after AI scan finds several line items) -->
+        <div id="gastos-items-panel" style="display:none;margin-top:.9rem;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.8rem .9rem">
+          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.7rem;flex-wrap:wrap">
+            <span style="font-weight:700;font-size:.85rem">🧾 Ítems de la boleta</span>
+            <span id="gastos-items-count" style="font-size:.72rem;color:var(--muted)"></span>
+          </div>
+          <div style="margin-bottom:.8rem">
+            <label style="font-size:.72rem;color:var(--muted);display:block;margin-bottom:.25rem">Categoría para toda la boleta (se aplica a todos los ítems; después ajustá los que sean distintos)</label>
+            <select id="gastos-items-bulk-cat1" onchange="applyBulkCategoriaToItems()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.82rem;width:100%;outline:none;box-sizing:border-box"></select>
+          </div>
+          <div id="gastos-items-list" style="display:flex;flex-direction:column;gap:.6rem"></div>
         </div>
 
         <div style="display:flex;gap:.6rem;margin-top:.9rem">
@@ -13797,6 +13814,7 @@ let _gastosImgBase64  = '';  // current image base64 (no prefix)
 let _gastosImgMime    = 'image/jpeg';
 let _editingGastoId   = null; // null = new, number = editing existing
 let _lastGastos       = [];  // last loaded gastos for edit lookup
+let _gastosItems      = [];  // [{descripcion, monto, categoria_1_id, categoria_2_id, observaciones}] — line items from a multi-product boleta scan
 
 // ── Init year selector ──────────────────────────────
 (function _initGastosYear(){
@@ -14071,8 +14089,11 @@ async function openGastoForm(){
   document.getElementById('gastos-monto').value = '';
   document.getElementById('gastos-comercio').value = '';
   document.getElementById('gastos-notas').value = '';
+  document.getElementById('gastos-origen').value = '';
   document.getElementById('gastos-tipo-doc').value = 'boleta';
   document.getElementById('gastos-iva-info').textContent = '';
+  _gastosItems = [];
+  renderGastosItems();
   const nc1 = document.getElementById('gastos-new-cat1-form');
   const nc2 = document.getElementById('gastos-new-cat2-form');
   if(nc1) nc1.style.display = 'none';
@@ -14173,6 +14194,80 @@ function clearGastoImage(){
   document.getElementById('gastos-scan-bar').style.display = 'none';
   document.getElementById('gastos-file-camera').value  = '';
   document.getElementById('gastos-file-gallery').value = '';
+  _gastosItems = [];
+  renderGastosItems();
+}
+
+// ── Multi-item receipt (line items from a boleta with several products) ──
+function populateBulkCatSelect(){
+  const sel = document.getElementById('gastos-items-bulk-cat1');
+  if(!sel) return;
+  sel.innerHTML = gastosItemCat1Options(null);
+}
+
+function gastosItemCat1Options(selectedId){
+  let html = `<option value="">— Elegir categoría —</option>`;
+  _gastosCategorias.filter(c=>c.nivel===1).forEach(c=>{
+    html += `<option value="${c.id}" ${String(c.id)===String(selectedId)?'selected':''}>${c.icono} ${c.nombre}</option>`;
+  });
+  return html;
+}
+
+function gastosItemCat2Options(parentId, selectedId){
+  let html = `<option value="">— Sin subcategoría —</option>`;
+  _gastosCategorias.filter(c=>c.nivel===2 && String(c.parent_id)===String(parentId)).forEach(c=>{
+    html += `<option value="${c.id}" ${String(c.id)===String(selectedId)?'selected':''}>${c.icono} ${c.nombre}</option>`;
+  });
+  return html;
+}
+
+function renderGastosItems(){
+  const panel = document.getElementById('gastos-items-panel');
+  const list  = document.getElementById('gastos-items-list');
+  const countEl = document.getElementById('gastos-items-count');
+  if(!panel || !list) return;
+  if(!_gastosItems.length){ panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  populateBulkCatSelect();
+  const suma = _gastosItems.reduce((s,i)=>s+(parseInt(i.monto)||0),0);
+  if(countEl) countEl.textContent = `${_gastosItems.length} ítem(s) — suma ${fmtCLP(suma)}`;
+  list.innerHTML = _gastosItems.map((it, idx) => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:.55rem .6rem;display:flex;flex-direction:column;gap:.4rem">
+      <div style="display:flex;gap:.4rem;align-items:center">
+        <input value="${(it.descripcion||'').replace(/"/g,'&quot;')}" oninput="_gastosItems[${idx}].descripcion=this.value"
+          placeholder="Descripción del producto"
+          style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;outline:none">
+        <input type="number" value="${it.monto||0}" oninput="_gastosItems[${idx}].monto=this.value;renderGastosItems()"
+          style="width:90px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;outline:none">
+        <button onclick="removeGastoItem(${idx})" title="Quitar ítem" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem">✕</button>
+      </div>
+      <div style="display:flex;gap:.4rem">
+        <select onchange="setItemCat1(${idx}, this.value)" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.8rem;outline:none">
+          ${gastosItemCat1Options(it.categoria_1_id)}
+        </select>
+        <select onchange="_gastosItems[${idx}].categoria_2_id=this.value||null" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.8rem;outline:none">
+          ${gastosItemCat2Options(it.categoria_1_id, it.categoria_2_id)}
+        </select>
+      </div>
+    </div>
+  `).join('');
+}
+
+function setItemCat1(idx, val){
+  _gastosItems[idx].categoria_1_id = val || null;
+  _gastosItems[idx].categoria_2_id = null;
+  renderGastosItems();
+}
+
+function removeGastoItem(idx){
+  _gastosItems.splice(idx, 1);
+  renderGastosItems();
+}
+
+function applyBulkCategoriaToItems(){
+  const val = document.getElementById('gastos-items-bulk-cat1').value;
+  _gastosItems.forEach(it => { it.categoria_1_id = val || null; it.categoria_2_id = null; });
+  renderGastosItems();
 }
 
 // ── IVA calculator (live preview) ──────────────────
@@ -14233,7 +14328,20 @@ async function scanGastosReceipt(){
       loadGastosCat2();
     }
     calcGastosIva();
-    showToast('✅ Escaneado con IA — revisá los campos');
+    if(res.items && res.items.length > 1){
+      _gastosItems = res.items.map(it => ({
+        descripcion: it.descripcion || '',
+        monto: it.monto || 0,
+        categoria_1_id: it.categoria1_id || null,
+        categoria_2_id: null,
+      }));
+      renderGastosItems();
+      showToast(`✅ Escaneado con IA — ${res.items.length} ítems detectados, revisá categorías`);
+    } else {
+      _gastosItems = [];
+      renderGastosItems();
+      showToast('✅ Escaneado con IA — revisá los campos');
+    }
   } catch(e){
     showToast('⚠️ Error de escaneo: ' + e.message);
   } finally {
@@ -14257,8 +14365,19 @@ async function saveGasto(){
   try {
     const tipo_documento      = document.getElementById('gastos-tipo-doc')?.value || 'boleta';
     const incluir_en_utilidad = document.getElementById('gastos-incluir-utilidad')?.checked ?? true;
+    const origen = document.getElementById('gastos-origen')?.value.trim() || '';
+    const items = _gastosItems.map(it => {
+      const c1 = _gastosCategorias.find(c => String(c.id) === String(it.categoria_1_id));
+      const c2 = _gastosCategorias.find(c => String(c.id) === String(it.categoria_2_id));
+      return {
+        descripcion: (it.descripcion || comercio).trim(),
+        monto: parseInt(it.monto) || 0,
+        categoria_1: c1 ? c1.nombre : '',
+        categoria_2: c2 ? c2.nombre : '',
+      };
+    });
     const payload = {
-      fecha, monto, comercio, notas, tipo_documento, incluir_en_utilidad,
+      fecha, monto, comercio, notas, tipo_documento, incluir_en_utilidad, origen, items,
       imagen_base64: _gastosImgBase64,
       imagen_mime:   _gastosImgMime,
       categoria1_id: cat1 ? parseInt(cat1) : null,

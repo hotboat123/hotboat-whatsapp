@@ -108,34 +108,60 @@ def lookup_producto_default(producto: str) -> Optional[dict]:
     return None
 
 
-def create_movimiento_from_gasto(gasto_id: int, fecha: str, monto: int, comercio: str,
-                                  notas: str, tipo_documento: str) -> Optional[int]:
+def create_movimientos_from_gasto(gasto_id: int, fecha: str, notas: str,
+                                   tipo_documento: str, origen: str, items: list) -> list:
     """Called from gastos_router.create_gasto() right after a gasto is
-    inserted — additive companion row, never blocks/rolls back the gasto
-    itself if this fails."""
-    suggestion = lookup_producto_default(comercio) or {}
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO flujo_caja_movimientos "
-                    "(fecha, cargos, descripcion, observaciones, facturado_o_iva, "
-                    "categoria_1, categoria_2, gasto_id) "
-                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-                    (fecha, monto, comercio, notas, tipo_documento,
-                     suggestion.get("categoria_1", ""), suggestion.get("categoria_2", ""), gasto_id),
-                )
-                (new_id,) = cur.fetchone()
-            conn.commit()
+    inserted — additive companion row(s), never blocks/rolls back the gasto
+    itself if this fails.
+
+    A boleta with several products (see the "pernos y tuercas" case) can
+    carry one item per product instead of a single lump total — each gets
+    its own cargos/descripcion/categoria, and each one that comes with an
+    explicit categoria also feeds the producto_defaults learning below. The
+    caller always builds `items` (a single-item list for the common
+    one-total case, or one item per product for a multi-line receipt).
+
+    Each item dict: {descripcion, monto, categoria_1, categoria_2}. A blank
+    categoria_1/categoria_2 on an item falls back to a producto_defaults
+    lookup keyed on that item's own descripcion.
+    """
+    new_ids = []
+    for item in items:
+        descripcion = (item.get("descripcion") or "").strip()
+        monto = item.get("monto")
+        cat1 = (item.get("categoria_1") or "").strip()
+        cat2 = (item.get("categoria_2") or "").strip()
+
+        if not cat1:
+            suggestion = lookup_producto_default(descripcion) or {}
+            cat1 = suggestion.get("categoria_1", "") or ""
+            cat2 = cat2 or (suggestion.get("categoria_2", "") or "")
+
         try:
-            from app.booking.sheets_sync import push_row
-            push_row(new_id)
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO flujo_caja_movimientos "
+                        "(fecha, cargos, origen, descripcion, observaciones, facturado_o_iva, "
+                        "categoria_1, categoria_2, gasto_id) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                        (fecha, monto, origen, descripcion, notas, tipo_documento,
+                         cat1, cat2, gasto_id),
+                    )
+                    (new_id,) = cur.fetchone()
+                conn.commit()
+            new_ids.append(new_id)
+            if cat1:
+                learn_producto_default(descripcion, cat1, cat2, descripcion)
+            try:
+                from app.booking.sheets_sync import push_row
+                push_row(new_id)
+            except Exception as e:
+                logger.warning(f"Sheets push skipped for movimiento {new_id}: {e}")
         except Exception as e:
-            logger.warning(f"Sheets push skipped for movimiento {new_id}: {e}")
-        return new_id
-    except Exception as e:
-        logger.error(f"create_movimiento_from_gasto(gasto_id={gasto_id}): {e}")
-        return None
+            logger.error(f"create_movimientos_from_gasto(gasto_id={gasto_id}, item={descripcion!r}): {e}")
+
+    return new_ids
 
 
 class MovimientoCreate(BaseModel):

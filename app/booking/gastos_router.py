@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import time
-from typing import Optional
+from typing import List, Optional
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException
@@ -197,6 +197,13 @@ def monto_neto(monto: int, tipo_documento: str) -> int:
     return monto
 
 
+class GastoItemIn(BaseModel):
+    descripcion: str = ""
+    monto: int = 0
+    categoria_1: str = ""
+    categoria_2: str = ""
+
+
 class GastoCreate(BaseModel):
     fecha: str
     monto: int
@@ -209,6 +216,8 @@ class GastoCreate(BaseModel):
     tipo_documento: str = "boleta"  # boleta | factura | sin_documento
     incluir_en_utilidad: bool = True
     notas: str = ""
+    origen: str = ""  # cuenta/banco de origen (para el ledger Flujo de Caja)
+    items: List[GastoItemIn] = []  # productos de una boleta con varios ítems
 
 
 class CategoriaCreate(BaseModel):
@@ -300,9 +309,14 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         "Analiza esta boleta o ticket de Chile. Extrae: "
         "1) monto total pagado en CLP (número entero, sin puntos ni símbolo $), "
         "2) nombre del comercio o negocio, "
-        "3) fecha de la boleta en formato YYYY-MM-DD (null si no es visible). "
+        "3) fecha de la boleta en formato YYYY-MM-DD (null si no es visible), "
+        "4) si la boleta detalla varios productos/artículos distintos (como una factura de ferretería "
+        "con una línea por producto), una lista 'items' con un objeto por producto: su descripción "
+        "(nombre del artículo tal como aparece) y su monto total en CLP (entero). Si la boleta es de "
+        "un solo producto o no se distinguen líneas, deja 'items' como lista vacía []. "
         "Responde SOLO con JSON válido sin texto ni comillas adicionales: "
-        '{"monto": 12500, "comercio": "Copec Av. Principal", "fecha": "2024-01-15"}'
+        '{"monto": 12500, "comercio": "Copec Av. Principal", "fecha": "2024-01-15", '
+        '"items": [{"descripcion": "Bencina 95", "monto": 12500}]}'
     )
 
     # Re-compress image to ≤800px JPEG before sending — keeps token count low
@@ -329,7 +343,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
                 {"text": prompt},
             ]
         }],
-        "generationConfig": {"maxOutputTokens": 300, "temperature": 0},
+        "generationConfig": {"maxOutputTokens": 1200, "temperature": 0},
     }
 
     extracted = None
@@ -384,6 +398,35 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     except Exception as e:
         logger.warning(f"flujo_caja producto-default lookup skipped: {e}")
 
+    # Per-item category suggestion — a boleta with several distinct products
+    # (e.g. a ferretería factura, one line per part) gets its own suggested
+    # categoria1_id per line, resolved from whatever's already been learned
+    # for that exact product description (see flujo_caja_router.py).
+    items_out = []
+    raw_items = extracted.get("items") or []
+    if isinstance(raw_items, list) and raw_items:
+        cats_by_name = {(c["nombre"] or "").strip().lower(): c["id"] for c in cats}
+        try:
+            from app.booking.flujo_caja_router import lookup_producto_default as _lookup
+        except Exception:
+            _lookup = None
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            desc = (item.get("descripcion") or "").strip()
+            monto_item = item.get("monto")
+            cat1_item_id = None
+            if _lookup and desc:
+                try:
+                    sug = _lookup(desc)
+                    if sug and sug.get("categoria_1"):
+                        cat1_item_id = cats_by_name.get(sug["categoria_1"].strip().lower())
+                except Exception:
+                    pass
+            if not cat1_item_id and desc:
+                cat1_item_id = _match_category(desc.lower(), cats)
+            items_out.append({"descripcion": desc, "monto": monto_item, "categoria1_id": cat1_item_id})
+
     return {
         "ok": True,
         "monto": extracted.get("monto"),
@@ -392,6 +435,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         "categoria1_id": cat1_id,
         "flujo_caja_categoria_1": flujo_caja_categoria_1,
         "flujo_caja_categoria_2": flujo_caja_categoria_2,
+        "items": items_out,
     }
 
 
@@ -482,10 +526,28 @@ async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
         conn.commit()
 
     try:
-        from app.booking.flujo_caja_router import create_movimiento_from_gasto
-        create_movimiento_from_gasto(
-            gasto_id=new_id, fecha=body.fecha, monto=body.monto,
-            comercio=body.comercio, notas=body.notas, tipo_documento=body.tipo_documento,
+        from app.booking.flujo_caja_router import create_movimientos_from_gasto
+        if body.items:
+            fc_items = [
+                {"descripcion": it.descripcion or body.comercio, "monto": it.monto,
+                 "categoria_1": it.categoria_1, "categoria_2": it.categoria_2}
+                for it in body.items
+            ]
+        else:
+            cat1_nombre, cat2_nombre = "", ""
+            cat_ids = [i for i in (body.categoria1_id, body.categoria2_id) if i]
+            if cat_ids:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT id, nombre FROM gastos_categorias WHERE id = ANY(%s)", (cat_ids,))
+                        names = dict(cur.fetchall())
+                cat1_nombre = names.get(body.categoria1_id, "") or ""
+                cat2_nombre = names.get(body.categoria2_id, "") or ""
+            fc_items = [{"descripcion": body.comercio, "monto": body.monto,
+                         "categoria_1": cat1_nombre, "categoria_2": cat2_nombre}]
+        create_movimientos_from_gasto(
+            gasto_id=new_id, fecha=body.fecha, notas=body.notas, tipo_documento=body.tipo_documento,
+            origen=body.origen, items=fc_items,
         )
     except Exception as e:
         logger.warning(f"flujo_caja movimiento skipped for gasto {new_id}: {e}")
