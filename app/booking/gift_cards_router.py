@@ -528,7 +528,7 @@ def _build_gift_card_email(code: str) -> Optional[dict]:
     if not gc or not gc.get("buyer_email"):
         return None
     n = gc["num_people"]
-    expires = gc.get("expires_at", "")[:10]
+    expires = (gc.get("expires_at") or "")[:10]
     expires_str = ""
     if expires:
         y, m, d = expires.split("-")
@@ -589,7 +589,7 @@ def _build_gift_card_certificate_html(code: str) -> Optional[str]:
     dedication_paragraphs = "".join(
         f"<p>{_esc(line)}</p>" for line in (gc.get("dedication") or "").splitlines() if line.strip()
     )
-    expires = gc.get("expires_at", "")[:10]
+    expires = (gc.get("expires_at") or "")[:10]
     expires_str = ""
     if expires:
         y, m, d = expires.split("-")
