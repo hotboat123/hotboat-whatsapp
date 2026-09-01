@@ -80,7 +80,43 @@ def _ensure_gift_cards_table(cur) -> None:
     # No per-payment array like all_appointments.pagos — a gift card is paid
     # in one shot (Transbank or a manual entry), so a single column is enough.
     cur.execute("ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS payment_method TEXT")
+    # Coupon applied at purchase (same shared `coupons` table as regular
+    # bookings — see /api/booking/coupon/{code} in content_router.py).
+    # coupon_discount is the CLP amount actually subtracted, not the percent,
+    # same convention as all_appointments.coupon_discount in db.py.
+    cur.execute("ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS coupon_code TEXT")
+    cur.execute("ALTER TABLE gift_cards ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC DEFAULT 0")
     _gift_cards_table_ensured = True
+
+
+def _validate_and_apply_coupon(cur, code: str, base_amount: int) -> tuple[int, str]:
+    """Re-validates a coupon server-side (never trust the client-computed
+    discount — unlike all_appointments' booking flow, which only checks this
+    at /api/booking/coupon/{code} and then trusts whatever the frontend sends
+    back) and returns (discounted_amount, normalized_code). Raises
+    HTTPException (same status/messages as validate_coupon in
+    content_router.py) if the coupon can't be applied. No booking_date_from/to
+    check — a gift card has no booking date yet."""
+    cur.execute("""
+        SELECT code, discount_percent, discount_fixed, max_uses, uses_count,
+               valid_from, expires_at
+        FROM coupons
+        WHERE UPPER(code)=UPPER(%s) AND is_active=TRUE
+    """, (code.strip(),))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Cupón no válido o inactivo")
+    norm_code, disc_pct, disc_fixed, max_uses, uses_count, valid_from, expires_at = row
+    today = datetime.now(CHILE_TZ).date()
+    if valid_from and valid_from > today:
+        raise HTTPException(status_code=410, detail=f"Este cupón estará activo a partir del {valid_from.strftime('%d/%m/%Y')}")
+    if expires_at and expires_at < today:
+        raise HTTPException(status_code=410, detail="Este cupón ha expirado")
+    if max_uses and uses_count >= max_uses:
+        raise HTTPException(status_code=410, detail="Este cupón ya alcanzó el límite de usos")
+    discount = int(disc_fixed) if disc_fixed and disc_fixed > 0 else round(base_amount * (float(disc_pct or 0) / 100))
+    discount = min(discount, base_amount)
+    return max(base_amount - discount, 0), norm_code
 
 
 def generate_gift_card_code() -> str:
@@ -106,6 +142,7 @@ class CreateGiftCardRequest(BaseModel):
     recipient_name: Optional[str] = None
     dedication: Optional[str] = None
     sender_name: Optional[str] = None
+    coupon_code: Optional[str] = None
     test_price: Optional[int] = None
 
 
@@ -132,15 +169,22 @@ async def create_gift_card_endpoint(request: CreateGiftCardRequest):
             amount = request.test_price
 
         code = generate_gift_card_code()
+        coupon_code = (request.coupon_code or "").strip() or None
+        coupon_discount = 0
         with get_connection() as conn:
             with conn.cursor() as cur:
                 _ensure_gift_cards_table(cur)
+                if coupon_code:
+                    discounted_amount, coupon_code = _validate_and_apply_coupon(cur, coupon_code, amount)
+                    coupon_discount = amount - discounted_amount
+                    amount = discounted_amount
                 cur.execute("""
                     INSERT INTO gift_cards
                         (code, num_adultos, num_ninos, price_pp, amount,
                          buyer_name, buyer_phone, buyer_email,
-                         recipient_name, dedication, sender_name, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending_payment')
+                         recipient_name, dedication, sender_name,
+                         coupon_code, coupon_discount, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending_payment')
                 """, (
                     code, adults, children, price_pp, amount,
                     request.buyer_name.strip(), request.buyer_phone.strip(),
@@ -148,7 +192,13 @@ async def create_gift_card_endpoint(request: CreateGiftCardRequest):
                     (request.recipient_name or "").strip() or None,
                     (request.dedication or "").strip() or None,
                     (request.sender_name or "").strip() or None,
+                    coupon_code, coupon_discount,
                 ))
+                if coupon_code:
+                    cur.execute(
+                        "UPDATE coupons SET uses_count=uses_count+1, updated_at=NOW() WHERE UPPER(code)=UPPER(%s)",
+                        (coupon_code,),
+                    )
                 conn.commit()
 
         from app.booking.router import _create_transbank_payment

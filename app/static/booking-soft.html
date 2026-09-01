@@ -3091,15 +3091,36 @@ function startGiftFlow(){
   S.isGift = true;
   S.selectedDate = null;
   S.selectedTime = null;
+  S.couponCode = ''; S.couponDiscount = 0; S.couponExtra = ''; S.couponPercent = 0;
   renderPeopleSelect();
 }
 
 function renderGiftForm(){
+  window._lastSummaryFn = renderGiftForm;   // so applyCoupon can re-render this view
+  const giftSub = pricingFor(S.numAdults, S.numChildren).sub;
+  const giftTotal = giftSub - (S.couponDiscount||0);
+  const giftCouponBlockHtml = `
+    <div style="margin-top:.9rem">
+      <div style="display:flex;gap:.5rem;align-items:stretch">
+        <input type="text" id="coupon-input" placeholder="${LANG==='pt'?'Código de cupom':LANG==='en'?'Coupon code':'Código de cupón'}"
+          value="${S.couponCode}"
+          style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.55rem .8rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em"
+          oninput="this.value=this.value.toUpperCase()">
+        <button onclick="applyCoupon()" id="coupon-btn"
+          style="background:var(--gold);color:#111;border:none;border-radius:10px;padding:.55rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer;white-space:nowrap">
+          ${LANG==='pt'?'Aplicar':LANG==='en'?'Apply':'Aplicar'}
+        </button>
+      </div>
+      <div id="coupon-msg" style="font-size:.8rem;margin-top:.3rem;min-height:1.2em"></div>
+    </div>`;
   mc.innerHTML = `
   ${stepsHtml('datos')}
   <div class="card">
     <div class="card-title">🎁 ${LANG==='en'?'Gift card':LANG==='pt'?'Gift card':'Gift card'} — ${S.numAdults + S.numChildren} ${LANG==='en'?'people':LANG==='pt'?'pessoas':'personas'}</div>
-    <div class="summary-row"><span>${LANG==='en'?'Amount':'Monto'}</span><span><strong>$${pricingFor(S.numAdults, S.numChildren).sub.toLocaleString('es-CL')}</strong></span></div>
+    <div class="summary-row"><span>${LANG==='en'?'Amount':'Monto'}</span><span><strong>$${giftSub.toLocaleString('es-CL')}</strong></span></div>
+    ${S.couponDiscount > 0 ? `<div class="summary-row" style="color:#4ade80"><span>🎟️ Cupón <strong>${S.couponCode}</strong></span><span>− $${S.couponDiscount.toLocaleString('es-CL')}</span></div>
+    <div class="summary-row total"><span>${t('labelTotal')}</span><span>$${giftTotal.toLocaleString('es-CL')}</span></div>` : ''}
+    ${giftCouponBlockHtml}
     <div class="info-box" style="margin-top:.6rem;font-size:.82rem">
       ${LANG==='en'
         ? 'Paid in full now. Valid 2 years — the recipient picks the date later.'
@@ -3170,6 +3191,7 @@ async function submitGiftCard(){
       recipient_name: S.giftTo || null,
       dedication: S.giftMsg || null,
       sender_name: S.giftFrom || null,
+      coupon_code: S.couponCode || null,
     };
     if(testPrice) payload.test_price = parseInt(testPrice);
     const r = await fetch('/api/gift-cards/create',{
@@ -4130,6 +4152,12 @@ async function init(){
           goDatos();
         }
       }
+    } else if(_queryParam(['gift'],2) === '1'){
+      // Deep link straight into the gift-card flow (e.g. from the
+      // companion_birthday marketing email's CTA) — same coupon prefill
+      // mechanism as the date-based flow above picks up ?coupon= once
+      // startGiftFlow()/renderGiftForm() puts #coupon-input in the DOM.
+      startGiftFlow();
     } else {
       renderMenu();
     }
