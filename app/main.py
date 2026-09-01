@@ -1535,7 +1535,7 @@ def _translate_text(text: str, target_lang: str) -> str:
         from openai import OpenAI as _OAI
         client = _OAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1")
         resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",  # llama-3.3-70b-versatile was removed from Groq's catalog (see app/bot/ai_handler.py)
             messages=[
                 {"role": "system", "content": (
                     f"You are a translator. Translate the user's message to {lang_name}. "
@@ -1547,6 +1547,7 @@ def _translate_text(text: str, target_lang: str) -> str:
             ],
             max_tokens=1024,
             temperature=0.1,
+            reasoning_effort="low",  # gpt-oss spends part of max_tokens on a hidden reasoning trace — keep it small so it doesn't eat the translation (see ai_handler.py)
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
@@ -2206,7 +2207,7 @@ def _ai_extract_booking(history: list) -> dict:
             base_url="https://api.groq.com/openai/v1",
         )
         resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",  # llama-3.3-70b-versatile was removed from Groq's catalog (see app/bot/ai_handler.py)
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": f"Mensajes del cliente:\n{transcript}"},
@@ -2214,6 +2215,7 @@ def _ai_extract_booking(history: list) -> dict:
             response_format={"type": "json_object"},
             temperature=0,
             max_tokens=150,
+            reasoning_effort="low",  # gpt-oss's hidden reasoning trace would otherwise eat this tight budget and return empty JSON (see ai_handler.py)
         )
         data = _json.loads(resp.choices[0].message.content)
         return {
