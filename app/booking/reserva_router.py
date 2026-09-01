@@ -8,11 +8,14 @@ used by /firma/{ref} and /tabla/{ref}.
 import json as _json
 import logging
 import os
+from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+from app.booking.db import CHILE_TZ
 
 logger = logging.getLogger(__name__)
 reserva_router = APIRouter()
@@ -189,7 +192,13 @@ async def add_extras_to_booking(booking_ref: str, body: AddExtrasRequest):
         if key in by_name:
             by_name[key]["quantity"] = int(by_name[key].get("quantity", 1)) + item.quantity
         else:
-            new_item = {"name": item.name, "price": item.price, "quantity": item.quantity}
+            # added_at/sold_by=None marks this as a customer self-service add
+            # (via this public link), not a crew upsell — see
+            # _normalize_extras_to_dict / update_reserva in admin_router.py.
+            new_item = {
+                "name": item.name, "price": item.price, "quantity": item.quantity,
+                "added_at": datetime.now(CHILE_TZ).isoformat(),
+            }
             existing_list.append(new_item)
             by_name[key] = new_item
         added_total += item.price * item.quantity

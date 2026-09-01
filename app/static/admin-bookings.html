@@ -425,6 +425,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('sueldos');calcWorkersView()" id="nav-sueldos">
       <span class="ni">👷</span> Sueldos
     </div>
+    <div class="nav-item" onclick="showSection('comisiones');loadComisiones()" id="nav-comisiones">
+      <span class="ni">🧑‍✈️</span> Comisiones extras
+    </div>
     <div class="nav-item" onclick="showSection('gastos');loadGastos()" id="nav-gastos">
       <span class="ni">🧾</span> Gastos
     </div>
@@ -4276,6 +4279,26 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
     </div>
 
+    <!-- ══ COMISIONES POR EXTRA PRESENCIAL ═════════════════════════════════════ -->
+    <div id="section-comisiones" class="section">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+        <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.9rem">
+          🧑‍✈️ EXTRAS VENDIDOS EN PERSONA (mismo día del paseo)
+        </div>
+        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+          <input type="date" id="com-desde" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
+          <span style="color:var(--muted);font-size:.8rem">→</span>
+          <input type="date" id="com-hasta" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
+          <button onclick="loadComisiones()" style="background:var(--gold);color:#111;border:none;border-radius:8px;padding:.4rem .9rem;font-size:.82rem;font-weight:700;cursor:pointer">Buscar</button>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.6rem">
+          Solo cuenta un extra que se agregó a la reserva el mismo día del paseo Y que tiene marcado quién lo vendió
+          (se elige al agregar el extra en el panel). Un extra elegido online al reservar no aparece acá.
+        </div>
+      </div>
+      <div id="comisiones-results" style="display:grid;gap:.9rem"></div>
+    </div>
+
     <!-- ══ GASTOS SECTION ════════════════════════════════════════════════════ -->
     <div id="section-gastos" class="section">
 
@@ -4737,6 +4760,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
 <script>
 const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+// Tripulación fija — usada tanto por "Quién los atendió" (reserva completa) como
+// por el selector "Quién lo vendió" al agregar un extra nuevo (comisiones).
+const ATEND=['Nestor','Axel','Tomás','Panchini','Esteban','Otro'];
 // Lunes = primer columna, domingo = última (ISO / Chile)
 const DAYS_SHORT=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 function calLeadDaysMonFirst(jsGetDay){ return (jsGetDay + 6) % 7; }
@@ -4955,7 +4981,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Extras','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',gastos:'Registro de Gastos','flujo-caja':'Flujo de Caja Sheet',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Extras','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',comisiones:'Comisiones por Extra Presencial',gastos:'Registro de Gastos','flujo-caja':'Flujo de Caja Sheet',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
   document.getElementById('section-title').textContent = titles[name]||name;
   const contentEl  = document.getElementById('content');
   const topbarBtns = ['year-sel','new-reserva-btn'];
@@ -5768,7 +5794,6 @@ async function openModal(id){
       <div class="form-group" style="margin-bottom:.8rem">
         <label>Quién los atendió <span style="color:var(--muted);font-size:.72rem;font-weight:400">(selecciona varios)</span></label>
         ${(()=>{
-          const ATEND=['Nestor','Axel','Tomás','Panchini','Esteban','Otro'];
           const saved = (r.quien_atendio||'').split(',').map(s=>s.trim()).filter(Boolean);
           const hasOtroVal = saved.find(s=>!ATEND.slice(0,-1).includes(s));
           const otroTxt = hasOtroVal || '';
@@ -6542,6 +6567,9 @@ async function saveModal(id){
         val.name=item.name; val.tabla_type=item.tabla_type;
         val.elige_1=item.elige_1||''; val.elige_2=item.elige_2||[]; val.elige_3=item.elige_3||[];
       }
+      // sold_by: solo importa para items nuevos (el servidor preserva el de
+      // items ya existentes por su cuenta — ver update_reserva en admin_router.py).
+      if(item.sold_by) val.sold_by=item.sold_by;
       extrasJson[item.key]=val; extrasTotal+=qty*price;
     }
   });
@@ -6638,6 +6666,61 @@ async function _autoConsumeStock(reservaId){
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtMoney(n){ if(!n&&n!==0) return '-'; return '$'+Math.round(+n).toLocaleString('es-CL'); }
+
+/** Fecha de hoy en Chile como YYYY-MM-DD (para comparar contra e-fecha). */
+function _todayCL(){ return new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}); }
+
+/** Sección "Comisiones extras" — GET /api/admin/reservas/extras-presenciales,
+ * agrupado por quién lo vendió. Ver ATEND / setExtraSoldBy / update_reserva
+ * (admin_router.py) para cómo se guarda el dato. */
+async function loadComisiones(){
+  const dEl = document.getElementById('com-desde');
+  const hEl = document.getElementById('com-hasta');
+  if(dEl && !dEl.value){
+    const today = new Date();
+    dEl.value = new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString('en-CA',{timeZone:'America/Santiago'});
+  }
+  if(hEl && !hEl.value) hEl.value = _todayCL();
+  const desde = dEl?.value, hasta = hEl?.value;
+  const results = document.getElementById('comisiones-results');
+  if(!desde || !hasta || !results) return;
+  results.innerHTML = '<div style="color:var(--muted);font-size:.85rem">Cargando...</div>';
+  try{
+    const d = await api(`/api/admin/reservas/extras-presenciales?desde=${desde}&hasta=${hasta}`);
+    const workers = Object.entries(d.por_trabajador||{}).sort((a,b)=>b[1].total-a[1].total);
+    if(!workers.length){
+      results.innerHTML = '<div style="color:var(--muted);font-size:.85rem">Sin extras presenciales en ese rango.</div>';
+      return;
+    }
+    results.innerHTML = workers.map(([name, info])=>`
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem 1.2rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem">
+          <div style="font-weight:700;font-size:.95rem">🧑‍✈️ ${escHtml(name)}</div>
+          <div style="font-weight:700;color:var(--gold)">${fmtMoney(info.total)}</div>
+        </div>
+        <div style="overflow-x:auto">
+        <table style="width:100%;font-size:.8rem;border-collapse:collapse">
+          <thead><tr style="color:var(--muted);text-align:left">
+            <th style="padding:.2rem .4rem">Fecha</th><th style="padding:.2rem .4rem">Cliente</th>
+            <th style="padding:.2rem .4rem">Extra</th><th style="padding:.2rem .4rem">Cant.</th>
+            <th style="padding:.2rem .4rem;text-align:right">Subtotal</th>
+          </tr></thead>
+          <tbody>
+            ${info.items.map(it=>`<tr>
+              <td style="padding:.2rem .4rem">${it.fecha}</td>
+              <td style="padding:.2rem .4rem">${escHtml(it.cliente||'')}</td>
+              <td style="padding:.2rem .4rem">${escHtml(it.extra||'')}</td>
+              <td style="padding:.2rem .4rem">${it.qty}</td>
+              <td style="padding:.2rem .4rem;text-align:right">${fmtMoney(it.subtotal)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>`).join('');
+  }catch(e){
+    results.innerHTML = `<div style="color:#f87171;font-size:.85rem">Error: ${e.message}</div>`;
+  }
+}
 
 /** all_appointments.created_at (ISO del API) → texto legible en hora Chile */
 function fmtReservaCreada(ts){
@@ -9131,7 +9214,7 @@ function initExtrasEditor(extrasJson){
     extrasJson.forEach((e,i)=>{
       const rawKey = (e.name||'extra_'+i).toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
       const key = rawKey || ('extra_'+i);
-      converted[key] = {qty: e.quantity||1, unit_price: e.price||0, name: e.name||'Extra'};
+      converted[key] = {qty: e.quantity||1, unit_price: e.price||0, name: e.name||'Extra', added_at: e.added_at||null, sold_by: e.sold_by||null};
     });
     extrasJson = converted;
   }
@@ -9141,7 +9224,7 @@ function initExtrasEditor(extrasJson){
     extrasJson.extras.forEach((e,i)=>{
       const rawKey = (e.name||'extra_'+i).toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
       const key = rawKey || ('extra_'+i);
-      converted[key] = {qty: e.quantity||1, unit_price: e.price||0, name: e.name||'Extra'};
+      converted[key] = {qty: e.quantity||1, unit_price: e.price||0, name: e.name||'Extra', added_at: e.added_at||null, sold_by: e.sold_by||null};
     });
     extrasJson = converted;
   }
@@ -9191,6 +9274,8 @@ function initExtrasEditor(extrasJson){
         elige_1:    isObj&&val.elige_1 ? val.elige_1 : '',
         elige_2:    isObj&&Array.isArray(val.elige_2) ? val.elige_2 : [],
         elige_3:    isObj&&Array.isArray(val.elige_3) ? val.elige_3 : [],
+        added_at:   isObj&&val.added_at ? val.added_at : null,
+        sold_by:    isObj&&val.sold_by ? val.sold_by : null,
       });
     } else {
       const cat = catalogByKey[key];
@@ -9202,6 +9287,8 @@ function initExtrasEditor(extrasJson){
         qty,
         unit_price: saved_price ?? (cat ? cat.price : 0),
         unit_cost:  cat ? (cat.cost||0) : 0,
+        added_at:   isObj&&val.added_at ? val.added_at : null,
+        sold_by:    isObj&&val.sold_by ? val.sold_by : null,
       });
     }
   });
@@ -9228,6 +9315,27 @@ function populateCatalogSelect(){
     .map(e=>`<option value="${escHtml(e.name)} — ${fmtMoney(e.price)}">`).join('');
 }
 
+/** Anotación bajo el nombre del extra: quién lo vendió (comisión presencial) si
+ * ya se guardó, un selector para elegirlo si recién se agregó esta sesión, o
+ * la fecha en que se agregó si no hay vendedor asignado (p.ej. elegido online). */
+function _extraMetaHtml(item, i){
+  const fechaReserva = document.getElementById('e-fecha')?.value || '';
+  if(item._isNew && !item.sold_by && fechaReserva===_todayCL()){
+    const opts = ATEND.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+    return `<select onchange="setExtraSoldBy(${i}, this.value)" style="margin-top:.2rem;font-size:.72rem;padding:.15rem .3rem;max-width:100%" title="¿Quién lo vendió? (comisión por venta presencial)">
+      <option value="">¿Quién lo vendió?</option>${opts}
+    </select>`;
+  }
+  const dateTxt = item.added_at ? fmtReservaCreada(item.added_at).slice(0,10) : '';
+  if(item.sold_by){
+    return `<div style="font-size:.7rem;color:var(--muted);margin-top:.15rem">🧑‍✈️ ${dateTxt?dateTxt+' · ':''}${escHtml(item.sold_by)}</div>`;
+  }
+  if(dateTxt){
+    return `<div style="font-size:.7rem;color:var(--muted);margin-top:.15rem">🕐 agregado ${dateTxt}</div>`;
+  }
+  return '';
+}
+
 function _renderTablaRow(item, i){
   const tCat = TABLA_CATALOG[item.tabla_type] || {};
   const ingHtml = `
@@ -9242,7 +9350,7 @@ function _renderTablaRow(item, i){
   const tabSub = (item.qty||1) * (item.unit_price||0);
   return `<div class="extras-row" style="flex-direction:column;align-items:stretch;gap:0">
     <div style="display:flex;align-items:center;gap:.4rem">
-      <div class="ex-name" title="${item.name}" style="flex:1">${item.name}</div>
+      <div class="ex-name" title="${item.name}" style="flex:1">${item.name}${_extraMetaHtml(item,i)}</div>
       <input type="number" min="1" step="1" value="${item.qty||1}" title="Cantidad"
         style="width:44px;text-align:center"
         oninput="_extrasItems[${i}].qty=+this.value||1;updateExtrasTotals();updateExtraSubtotal(${i})">
@@ -9267,7 +9375,7 @@ function renderExtrasEditor(){
   list.innerHTML = _extrasItems.map((item,i)=> item.tabla_type
     ? _renderTablaRow(item, i)
     : `<div class="extras-row">
-      <div class="ex-name" title="${item.name}">${item.name}</div>
+      <div class="ex-name" title="${item.name}">${item.name}${_extraMetaHtml(item,i)}</div>
       <input type="number" min="1" value="${item.qty}" title="Cantidad"
         oninput="_extrasItems[${i}].qty=+this.value||1;updateExtrasTotals();updateExtraSubtotal(${i})">
       <input type="number" min="0" value="${item.unit_price}" title="Precio unitario"
@@ -9335,10 +9443,17 @@ function addExtraFromSelect(){
       qty: 1,
       unit_price: cat.price||0,
       unit_cost: cat.cost||0,
+      sold_by: null,
+      _isNew: true,   // recién agregado en esta sesión de edición — todavía sin guardar
     });
   }
   inp.value='';
   renderExtrasEditor();
+}
+
+/** Cambia quién vendió un extra recién agregado (fila _isNew) — ver ATEND arriba. */
+function setExtraSoldBy(i, val){
+  if(_extrasItems[i]) _extrasItems[i].sold_by = val || null;
 }
 
 async function sendPaymentLink(id){

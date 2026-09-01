@@ -191,9 +191,17 @@ def create_booking(data: dict) -> dict:
     coupon_extra = (data.get("coupon_extra_benefit") or "").strip() or None
     if not coupon_code:
         coupon_extra = None
+    # added_at lets the admin panel tell an extra the customer chose online at
+    # booking time apart from one a staff member upsells in person later (see
+    # _normalize_extras_to_dict / update_reserva in admin_router.py) — no
+    # sold_by here, this is a self-service purchase, not a crew sale.
+    _created_at_iso = datetime.now(CHILE_TZ).isoformat()
     extras_payload = {
         "price_per_person": int(data["price_per_person"]),
-        "extras": data.get("extras") or [],
+        "extras": [
+            {**e, "added_at": _created_at_iso}
+            for e in (data.get("extras") or [])
+        ],
     }
     utm_source   = str(data.get("utm_source") or "")[:200]
     utm_medium   = str(data.get("utm_medium") or "")[:200]

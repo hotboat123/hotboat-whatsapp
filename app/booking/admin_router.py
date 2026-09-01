@@ -64,6 +64,53 @@ def _normalize_pagos_for_db(pagos: list) -> list:
     return out
 
 
+def _slugify_extra_name(name: str, fallback_idx: int) -> str:
+    """Same slug algorithm as admin-bookings.html's initExtrasEditor() (JS):
+    (name||'extra_'+i).toLowerCase().replace(/\\s+/g,'_').replace(/[^a-z0-9_]/g,'').
+    Must stay byte-for-byte equivalent — this is what lets the server match
+    keys the frontend will independently derive from the same old data when it
+    first loads a web-created (list-shape) booking into the extras editor."""
+    raw = (name or f"extra_{fallback_idx}").lower()
+    raw = re.sub(r"\s+", "_", raw)
+    raw = re.sub(r"[^a-z0-9_]", "", raw)
+    return raw or f"extra_{fallback_idx}"
+
+
+def _normalize_extras_to_dict(extras_json) -> dict:
+    """Mirrors admin-bookings.html's initExtrasEditor() list->dict conversion
+    (web/bot bookings store extras_json as a plain list, or a
+    {"price_per_person":N,"extras":[...]} wrapper; anything saved from the
+    admin panel is already a {key:{...}} dict). Used to diff a booking's
+    current extras_json against an incoming admin-panel save so pre-existing
+    items keep their original added_at/sold_by instead of getting stamped as
+    "just added" the first time an admin ever touches that booking."""
+    if isinstance(extras_json, str):
+        try:
+            extras_json = json.loads(extras_json)
+        except Exception:
+            extras_json = {}
+    if extras_json is None:
+        return {}
+    if isinstance(extras_json, list):
+        out = {}
+        for i, e in enumerate(extras_json):
+            if not isinstance(e, dict):
+                continue
+            key = _slugify_extra_name(e.get("name"), i)
+            val = {"qty": e.get("quantity") or 1, "unit_price": e.get("price") or 0, "name": e.get("name") or "Extra"}
+            if e.get("added_at"):
+                val["added_at"] = e["added_at"]
+            if e.get("sold_by"):
+                val["sold_by"] = e["sold_by"]
+            out[key] = val
+        return out
+    if isinstance(extras_json, dict) and isinstance(extras_json.get("extras"), list):
+        return _normalize_extras_to_dict(extras_json["extras"])
+    if isinstance(extras_json, dict):
+        return extras_json
+    return {}
+
+
 from app.booking.operator_settings import (
     get_vacation_days, add_vacation_day, remove_vacation_day,
     get_setting, set_setting, is_urgency_mode,
@@ -500,7 +547,36 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
             with conn.cursor() as cur:
                 # Convert dict/list fields for JSONB
                 if "extras_json" in updates:
-                    updates["extras_json"] = PgJson(updates["extras_json"])
+                    # Diff against what's currently stored so pre-existing extras
+                    # keep their original added_at/sold_by — the frontend always
+                    # sends the FULL extras dict on every save (see saveModal() in
+                    # admin-bookings.html), never a diff, and never trusted for
+                    # these two fields on items that already existed (only for
+                    # sold_by on a genuinely new item).
+                    cur.execute(f"SELECT extras_json FROM {TABLE} WHERE id=%s", (rid,))
+                    old_row = cur.fetchone()
+                    old_extras = _normalize_extras_to_dict(old_row[0]) if old_row else {}
+                    now_iso = datetime.now(CHILE_TZ).isoformat()
+                    new_extras = updates["extras_json"] or {}
+                    for key, val in new_extras.items():
+                        if not isinstance(val, dict):
+                            continue
+                        old_val = old_extras.get(key)
+                        if isinstance(old_val, dict) and old_val.get("added_at"):
+                            val["added_at"] = old_val["added_at"]
+                            if old_val.get("sold_by"):
+                                val["sold_by"] = old_val["sold_by"]
+                            else:
+                                val.pop("sold_by", None)
+                        elif old_val is not None:
+                            # Existed before this feature — no fabricated date.
+                            val.pop("added_at", None)
+                            val.pop("sold_by", None)
+                        else:
+                            val["added_at"] = now_iso
+                            if not val.get("sold_by"):
+                                val.pop("sold_by", None)
+                    updates["extras_json"] = PgJson(new_extras)
                 if "pagos" in updates:
                     updates["pagos"] = PgJson(_normalize_pagos_for_db(updates["pagos"]))
                 if "descuentos" in updates:
@@ -682,6 +758,62 @@ async def delete_reserva(rid: int, x_admin_key: str = Header("")):
         raise
     except Exception as e:
         logger.error(f"Error deleting reserva {rid}: {e}")
+
+
+@admin_router.get("/api/admin/reservas/extras-presenciales")
+async def extras_presenciales_report(
+    desde: str = Query(...),
+    hasta: str = Query(...),
+    x_admin_key: str = Header(""),
+):
+    """Extras vendidos EN PERSONA (added_at cae el mismo día que la fecha del
+    paseo, y tienen sold_by) dentro de [desde, hasta], agrupados por quién lo
+    vendió — insumo real para pagar el bono "extras presenciales" que hoy el
+    dueño calcula a mano en el simulador de Sueldos. Ver _normalize_extras_to_dict
+    y el diff en update_reserva() para cómo se guardan added_at/sold_by."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""SELECT id, nombre_cliente, fecha, extras_json
+                        FROM {TABLE}
+                        WHERE fecha >= %s AND fecha <= %s AND extras_json IS NOT NULL""",
+                    (desde, hasta),
+                )
+                rows = cur.fetchall()
+    except Exception as e:
+        logger.error(f"Error building extras-presenciales report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    by_worker: dict = {}
+    for rid, nombre_cliente, fecha, extras_json in rows:
+        fecha_str = fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha)
+        for key, val in _normalize_extras_to_dict(extras_json).items():
+            if not isinstance(val, dict):
+                continue
+            sold_by = val.get("sold_by")
+            added_at = val.get("added_at")
+            if not sold_by or not added_at:
+                continue
+            added_date = str(added_at)[:10]
+            if added_date != fecha_str:
+                continue
+            qty = float(val.get("qty") or 1)
+            unit_price = float(val.get("unit_price") or 0)
+            entry = by_worker.setdefault(sold_by, {"total": 0.0, "items": []})
+            entry["total"] += qty * unit_price
+            entry["items"].append({
+                "reserva_id": rid,
+                "cliente": nombre_cliente,
+                "fecha": fecha_str,
+                "extra": val.get("name") or key,
+                "qty": qty,
+                "unit_price": unit_price,
+                "subtotal": qty * unit_price,
+                "added_at": added_at,
+            })
+    return {"desde": desde, "hasta": hasta, "por_trabajador": by_worker}
 
 
 @admin_router.post("/api/admin/fix-blocked-slot")
