@@ -216,16 +216,21 @@ class AIHandler:
         self,
         message_text: str,
         conversation_history: List[Dict],
-        contact_name: str
+        contact_name: str,
+        extra_context: Optional[str] = None
     ) -> str:
         """
         Generate AI response using Groq via OpenAI SDK
-        
+
         Args:
             message_text: Current message
             conversation_history: Previous messages
             contact_name: User's name
-        
+            extra_context: Real-time data (currently: live availability from
+                AvailabilityChecker.check_availability, see conversation.py's
+                _try_ai_fallback) to ground the reply in, sent as an extra
+                system message right after the main prompt. None skips it.
+
         Returns:
             AI-generated response
         """
@@ -233,13 +238,13 @@ class AIHandler:
             # Build messages for AI (last 10 messages for context)
             messages = []
             recent_history = conversation_history[-10:] if len(conversation_history) > 10 else conversation_history
-            
+
             for msg in recent_history:
                 messages.append({
                     "role": msg["role"],
                     "content": msg["content"]
                 })
-            
+
             # Get available tools from MCP servers if enabled
             tools = None
             if self.mcp_handler and self.mcp_handler.enabled:
@@ -247,12 +252,23 @@ class AIHandler:
                 if available_tools:
                     tools = available_tools
                     logger.info(f"Using {len(tools)} MCP tools for this request")
-            
+
+            system_messages = [{"role": "system", "content": self.system_prompt}]
+            if extra_context:
+                system_messages.append({
+                    "role": "system",
+                    "content": (
+                        "Disponibilidad real, consultada ahora mismo — úsala si es "
+                        "relevante para responder, no la repitas literal si no aplica:\n\n"
+                        f"{extra_context}"
+                    ),
+                })
+
             # Call Groq API (supports OpenAI-compatible function calling)
             api_params = {
                 "model": self.model,
                 "messages": [
-                    {"role": "system", "content": self.system_prompt},
+                    *system_messages,
                     *messages
                 ],
                 "max_tokens": 700,
@@ -305,7 +321,7 @@ class AIHandler:
                 
                 # Make second API call with tool results
                 messages_with_tools = [
-                    {"role": "system", "content": self.system_prompt},
+                    *system_messages,
                     *messages,
                     {"role": "assistant", "content": message.content, "tool_calls": [
                         {

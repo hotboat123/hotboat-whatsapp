@@ -519,7 +519,7 @@ class ConversationManager:
             # A/B test: make this lead's assigned variant (if any) available
             # to every get_text()/get_bot_response() call for the rest of
             # this message via a contextvar — see app/bot/variant_overrides.py.
-            from app.bot.variant_overrides import set_current_variant, get_disabled_triggers
+            from app.bot.variant_overrides import set_current_variant, get_disabled_triggers, get_current_ai_model
             set_current_variant(metadata.get("bot_variant"))
 
             # Check if it's the first message - send welcome message
@@ -701,7 +701,11 @@ class ConversationManager:
                 language = metadata.get("language", "es")
                 response = self._get_main_menu_message(language)
             # PRIORITY 0.8: Allow users to restart availability flow at any step
-            elif self._should_interrupt_with_new_availability(message_text, conversation):
+            # — control variant only (no ai_model): an AI variant handles this
+            # itself in _try_ai_fallback, with real availability as context,
+            # instead of being forced into the scripted date parser (see
+            # get_current_ai_model docstring in variant_overrides.py).
+            elif self._should_interrupt_with_new_availability(message_text, conversation) and not get_current_ai_model():
                 logger.info("Priority availability question detected - restarting flow")
                 self._prepare_reservation_flow(conversation, reset=True)
                 response = await self._handle_reservation_date_response(
@@ -884,8 +888,9 @@ class ConversationManager:
                 logger.info("User confirming reservation from availability check")
                 response = await self._handle_reservation_confirmation(message_text, from_number, contact_name, conversation)
             
-            # Check if asking about availability
-            elif self.is_availability_query(message_text):
+            # Check if asking about availability — control variant only (see
+            # the PRIORITY 0.8 branch above for why AI variants skip this).
+            elif self.is_availability_query(message_text) and not get_current_ai_model():
                 logger.info("Checking availability (guided reservation flow)")
                 self._prepare_reservation_flow(conversation, reset=True)
                 response = await self._handle_reservation_date_response(message_text, from_number, contact_name, conversation)
@@ -1228,7 +1233,24 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             from app.bot.variant_overrides import get_current_system_prompt
             handler = AIHandler(model=model, custom_prompt=get_current_system_prompt(), provider=provider)
             history = conversation.get("messages", [])[-10:]
-            ai_text = await handler.generate_response(message_text, history, contact_name)
+
+            # Ground the reply in real availability when the message looks
+            # like it's asking for it — same heuristic used above to route
+            # the control variant into the scripted flow, reused here only
+            # to decide whether it's worth the lookup. Reuses the exact same
+            # checker/method the scripted flow relies on, so the AI quotes
+            # the same real slots instead of guessing. Never allowed to break
+            # the reply: log and continue without it on any failure.
+            extra_context = None
+            if self.is_availability_query(message_text):
+                try:
+                    if from_number:
+                        self.availability_checker.set_phone_number(from_number)
+                    extra_context = await self.availability_checker.check_availability(message_text)
+                except Exception as avail_exc:
+                    logger.warning(f"AI fallback: availability lookup failed, continuing without it: {avail_exc}")
+
+            ai_text = await handler.generate_response(message_text, history, contact_name, extra_context=extra_context)
             if not ai_text or ai_text.startswith("🥬 ¡Ahoy, grumete! ⚓"):  # that prefix marks AIHandler's own error fallback
                 return None
 
