@@ -9319,7 +9319,10 @@ function populateCatalogSelect(){
  * ya se guardó, un selector para elegirlo si recién se agregó esta sesión, o
  * la fecha en que se agregó si no hay vendedor asignado (p.ej. elegido online). */
 function _extraMetaHtml(item, i){
-  const fechaReserva = document.getElementById('e-fecha')?.value || '';
+  // e-fecha es dd/mm/yyyy (ver saveModal: g('e-fecha')), _todayCL() es yyyy-mm-dd — normalizar antes de comparar.
+  const fechaRaw = document.getElementById('e-fecha')?.value || '';
+  const fm = fechaRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const fechaReserva = fm ? `${fm[3]}-${fm[2]}-${fm[1]}` : fechaRaw;
   if(item._isNew && !item.sold_by && fechaReserva===_todayCL()){
     const opts = ATEND.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
     return `<select onchange="setExtraSoldBy(${i}, this.value)" style="margin-top:.2rem;font-size:.72rem;padding:.15rem .3rem;max-width:100%" title="¿Quién lo vendió? (comisión por venta presencial)">
