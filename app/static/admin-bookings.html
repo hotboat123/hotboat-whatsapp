@@ -426,7 +426,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       <span class="ni">👷</span> Sueldos
     </div>
     <div class="nav-item" onclick="showSection('comisiones');loadComisiones()" id="nav-comisiones">
-      <span class="ni">🧑‍✈️</span> Comisiones extras
+      <span class="ni">💸</span> Comisiones extras
     </div>
     <div class="nav-item" onclick="showSection('gastos');loadGastos()" id="nav-gastos">
       <span class="ni">🧾</span> Gastos
@@ -4283,7 +4283,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div id="section-comisiones" class="section">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
         <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.9rem">
-          🧑‍✈️ EXTRAS VENDIDOS EN PERSONA (mismo día del paseo)
+          💸 EXTRAS VENDIDOS EN PERSONA (mismo día del paseo)
         </div>
         <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
           <input type="date" id="com-desde" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
@@ -6695,7 +6695,7 @@ async function loadComisiones(){
     results.innerHTML = workers.map(([name, info])=>`
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem 1.2rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem">
-          <div style="font-weight:700;font-size:.95rem">🧑‍✈️ ${escHtml(name)}</div>
+          <div style="font-weight:700;font-size:.95rem">💸 ${escHtml(name)}</div>
           <div style="font-weight:700;color:var(--gold)">${fmtMoney(info.total)}</div>
         </div>
         <div style="overflow-x:auto">
@@ -9328,7 +9328,7 @@ function _extraMetaHtml(item, i){
   }
   const dateTxt = item.added_at ? fmtReservaCreada(item.added_at).slice(0,10) : '';
   if(item.sold_by){
-    return `<div style="font-size:.7rem;color:var(--muted);margin-top:.15rem">🧑‍✈️ ${dateTxt?dateTxt+' · ':''}${escHtml(item.sold_by)}</div>`;
+    return `<div style="font-size:.7rem;color:var(--muted);margin-top:.15rem">💸 ${dateTxt?dateTxt+' · ':''}${escHtml(item.sold_by)}</div>`;
   }
   if(dateTxt){
     return `<div style="font-size:.7rem;color:var(--muted);margin-top:.15rem">🕐 agregado ${dateTxt}</div>`;
