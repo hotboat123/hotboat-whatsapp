@@ -364,6 +364,64 @@ async def list_reservas(
 
 # ── Single reservation ────────────────────────────────────────────────────────
 
+@admin_router.get("/api/admin/reservas/extras-presenciales")
+async def extras_presenciales_report(
+    desde: str = Query(...),
+    hasta: str = Query(...),
+    x_admin_key: str = Header(""),
+):
+    """Extras vendidos EN PERSONA (added_at cae el mismo día que la fecha del
+    paseo, y tienen sold_by) dentro de [desde, hasta], agrupados por quién lo
+    vendió — insumo real para pagar el bono "extras presenciales" que hoy el
+    dueño calcula a mano en el simulador de Sueldos. Ver _normalize_extras_to_dict
+    y el diff en update_reserva() para cómo se guardan added_at/sold_by.
+    Debe quedar registrada ANTES de /api/admin/reservas/{rid} — si no, FastAPI
+    la matchea contra esa ruta e intenta parsear "extras-presenciales" como rid."""
+    _check_auth(x_admin_key)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""SELECT id, nombre_cliente, fecha, extras_json
+                        FROM {TABLE}
+                        WHERE fecha >= %s AND fecha <= %s AND extras_json IS NOT NULL""",
+                    (desde, hasta),
+                )
+                rows = cur.fetchall()
+    except Exception as e:
+        logger.error(f"Error building extras-presenciales report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    by_worker: dict = {}
+    for rid, nombre_cliente, fecha, extras_json in rows:
+        fecha_str = fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha)
+        for key, val in _normalize_extras_to_dict(extras_json).items():
+            if not isinstance(val, dict):
+                continue
+            sold_by = val.get("sold_by")
+            added_at = val.get("added_at")
+            if not sold_by or not added_at:
+                continue
+            added_date = str(added_at)[:10]
+            if added_date != fecha_str:
+                continue
+            qty = float(val.get("qty") or 1)
+            unit_price = float(val.get("unit_price") or 0)
+            entry = by_worker.setdefault(sold_by, {"total": 0.0, "items": []})
+            entry["total"] += qty * unit_price
+            entry["items"].append({
+                "reserva_id": rid,
+                "cliente": nombre_cliente,
+                "fecha": fecha_str,
+                "extra": val.get("name") or key,
+                "qty": qty,
+                "unit_price": unit_price,
+                "subtotal": qty * unit_price,
+                "added_at": added_at,
+            })
+    return {"desde": desde, "hasta": hasta, "por_trabajador": by_worker}
+
+
 @admin_router.get("/api/admin/reservas/{rid}")
 async def get_reserva(rid: int, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
@@ -759,61 +817,6 @@ async def delete_reserva(rid: int, x_admin_key: str = Header("")):
     except Exception as e:
         logger.error(f"Error deleting reserva {rid}: {e}")
 
-
-@admin_router.get("/api/admin/reservas/extras-presenciales")
-async def extras_presenciales_report(
-    desde: str = Query(...),
-    hasta: str = Query(...),
-    x_admin_key: str = Header(""),
-):
-    """Extras vendidos EN PERSONA (added_at cae el mismo día que la fecha del
-    paseo, y tienen sold_by) dentro de [desde, hasta], agrupados por quién lo
-    vendió — insumo real para pagar el bono "extras presenciales" que hoy el
-    dueño calcula a mano en el simulador de Sueldos. Ver _normalize_extras_to_dict
-    y el diff en update_reserva() para cómo se guardan added_at/sold_by."""
-    _check_auth(x_admin_key)
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"""SELECT id, nombre_cliente, fecha, extras_json
-                        FROM {TABLE}
-                        WHERE fecha >= %s AND fecha <= %s AND extras_json IS NOT NULL""",
-                    (desde, hasta),
-                )
-                rows = cur.fetchall()
-    except Exception as e:
-        logger.error(f"Error building extras-presenciales report: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-    by_worker: dict = {}
-    for rid, nombre_cliente, fecha, extras_json in rows:
-        fecha_str = fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha)
-        for key, val in _normalize_extras_to_dict(extras_json).items():
-            if not isinstance(val, dict):
-                continue
-            sold_by = val.get("sold_by")
-            added_at = val.get("added_at")
-            if not sold_by or not added_at:
-                continue
-            added_date = str(added_at)[:10]
-            if added_date != fecha_str:
-                continue
-            qty = float(val.get("qty") or 1)
-            unit_price = float(val.get("unit_price") or 0)
-            entry = by_worker.setdefault(sold_by, {"total": 0.0, "items": []})
-            entry["total"] += qty * unit_price
-            entry["items"].append({
-                "reserva_id": rid,
-                "cliente": nombre_cliente,
-                "fecha": fecha_str,
-                "extra": val.get("name") or key,
-                "qty": qty,
-                "unit_price": unit_price,
-                "subtotal": qty * unit_price,
-                "added_at": added_at,
-            })
-    return {"desde": desde, "hasta": hasta, "por_trabajador": by_worker}
 
 
 @admin_router.post("/api/admin/fix-blocked-slot")
