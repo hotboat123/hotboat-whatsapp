@@ -3881,13 +3881,13 @@ async function submitBooking(){
     }
 
     _trackEvent('booking_completed', S.selectedDate);
-    // If tabla extra was selected, redirect through tabla selection flow before payment
-    const _tablaExt = EXTRAS_CATALOG.find(e => _isTablaExtra(e));
-    if(_tablaExt && (S.extras[_tablaExt.id]||0) > 0){
-      const nextUrl = S.paymentUrl || (location.origin + '/');
-      window.location.href = `/tabla/${encodeURIComponent(S.bookingRef)}?next=${encodeURIComponent(nextUrl)}`;
-      return;
-    }
+    // Antes acá se desviaba al cliente por /tabla/{ref} a elegir ingredientes
+    // ANTES de pagar cuando había agregado el extra de tabla de picoteo — se
+    // sacó a pedido del dueño (2026-09-09): forzaba un paso extra antes del
+    // pago (mala conversión) y tenía un bug. Elegir ingredientes ahora queda
+    // para después de pagar — el link a /tabla/{ref} ya se manda en el mail
+    // de confirmación (tabla_url en booking_email.py) y en /mireserva, así
+    // que el cliente igual puede completarlo, solo que no bloquea el pago.
     // Un solo clic en "Pagar": si ya hay payment_url, salta directo a Transbank
     // en vez de mostrar la pantalla de resumen con su propio botón "Pagar"
     // (que era el segundo clic). Esa pantalla (renderPayment) sigue existiendo
