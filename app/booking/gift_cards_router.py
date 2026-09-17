@@ -14,8 +14,11 @@ tocaría todo el resto del sistema que sí asume fecha real.
 import logging
 import random
 import string
+from base64 import b64encode as _b64encode
 from datetime import datetime, timedelta
+from functools import lru_cache as _lru_cache
 from html import escape as _esc
+from os import path as _path
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
@@ -29,6 +32,25 @@ logger = logging.getLogger(__name__)
 gift_cards_router = APIRouter()
 
 GIFT_CARD_VALIDITY_YEARS = 2
+
+_STATIC_DIR = _path.join(_path.dirname(__file__), "..", "static")
+
+
+@_lru_cache(maxsize=None)
+def _data_uri(relative_path: str, mime: str) -> str:
+    """Reads a static asset once and returns it as a base64 data: URI.
+
+    Used for the gift-card certificate attachment (below): that HTML is
+    downloaded and opened standalone (Mail's HTML-attachment preview,
+    Files app, etc.), a context that — unlike a normal browser tab on the
+    site — does not reliably fetch external https:// images, so a real
+    photo showed as broken/missing even though the exact same markup
+    rendered fine as a web page. Embedding the bytes removes that
+    external fetch entirely.
+    """
+    with open(_path.join(_STATIC_DIR, relative_path), "rb") as f:
+        encoded = _b64encode(f.read()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
 
 
 def _check_auth(key: str):
@@ -622,16 +644,11 @@ def _build_gift_card_certificate_html(code: str) -> Optional[str]:
     if not gc:
         return None
 
-    import os as _os
-    logo_url = _os.environ.get("EMAIL_LOGO_URL", "").strip()
-    bg_url = _os.environ.get("EMAIL_GIFTCARD_BG_URL", "").strip()
-    if not logo_url or not bg_url:
-        railway_domain = _os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
-        if railway_domain:
-            if not logo_url:
-                logo_url = f"https://{railway_domain}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png"
-            if not bg_url:
-                bg_url = f"https://{railway_domain}/static/gift-cards/fondo-navidad-2.png"
+    # Embedded (not linked): this HTML is downloaded and opened standalone
+    # (Mail's attachment preview, Files app), which doesn't reliably fetch
+    # external images even over https — see _data_uri()'s docstring.
+    logo_url = _data_uri("Logo sin Fondo sin Chile Blanco.png", "image/png")
+    bg_url = _data_uri("gift-cards/fondo-navidad-2-email.jpg", "image/jpeg")
 
     n = gc["num_people"]
     recipient = _esc(gc.get("recipient_name") or "")
