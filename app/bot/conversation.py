@@ -1195,14 +1195,6 @@ Yo lo agrego automáticamente al carrito y luego puedes:
         "cotiza", "cotización", "cotizacion", "agendar",
     )
 
-    # Narrower than the above — no "reservar"/"agendar" — used to gate the
-    # deterministic price intercept in _try_ai_fallback, which must only
-    # fire on an actual price question, not any booking-intent message.
-    _PRICE_QUESTION_KEYWORDS = (
-        "precio", "precios", "cuanto", "cuánto", "vale", "sale", "cuesta",
-        "valor", "valores", "cotizar", "cotiza", "cotización", "cotizacion",
-    )
-
     async def _try_ai_fallback(
         self, message_text: str, conversation: dict, contact_name: str, language: str,
         from_number: Optional[str] = None,
@@ -1236,24 +1228,6 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             if provider not in ("groq", "gemini"):
                 logger.warning(f"AI fallback: unsupported provider '{provider}' for this variant, skipping")
                 return None
-
-            # Deterministic guard for one specific failure mode: a bare price
-            # question with no headcount given. A hardened, literal-quote
-            # system-prompt instruction was already shown (twice, on real
-            # customers) to not reliably stop the model from inventing an
-            # alternate "per-boat" pricing scheme when it has to guess a
-            # headcount. Headcount-specific price questions ("4 personas,
-            # cuánto sale?") stay on the AI path — tested correct there —
-            # this only intercepts the ambiguous case with the FAQ's own
-            # always-accurate canned price table instead of the LLM.
-            if (
-                not self.is_availability_query(message_text)
-                and any(kw in message_text.lower() for kw in self._PRICE_QUESTION_KEYWORDS)
-                and self._parse_party_size(message_text) is None
-            ):
-                return self.faq_handler.get_response(
-                    "precio", language, phone=from_number, customer_name=contact_name
-                )
 
             from app.bot.ai_handler import AIHandler
             from app.bot.variant_overrides import get_current_system_prompt
