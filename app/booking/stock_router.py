@@ -68,6 +68,10 @@ def _ensure_tables():
                 -- current_stock=NULL significa "sin control de inventario" (servicio,
                 -- disponibilidad ilimitada) en vez de "cero stock".
                 ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS slug TEXT UNIQUE;
+                -- "ADD COLUMN IF NOT EXISTS ... UNIQUE" skips the constraint when the
+                -- column already existed, and the extras endpoints rely on
+                -- ON CONFLICT (slug) — so create the unique index explicitly.
+                CREATE UNIQUE INDEX IF NOT EXISTS stock_products_slug_uniq ON stock_products (slug);
                 ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS show_in_booking BOOLEAN NOT NULL DEFAULT FALSE;
                 ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 999;
                 ALTER TABLE stock_products ADD COLUMN IF NOT EXISTS precio_venta INTEGER;
