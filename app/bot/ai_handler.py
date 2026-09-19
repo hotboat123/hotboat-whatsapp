@@ -133,6 +133,12 @@ IMPORTANTE:
 # forgot to restate them) would let the AI promise things the business
 # can't actually do — claim a fake email confirmation, or claim it added a
 # reservation to the cart when only the deterministic bot code can.
+PRICE_RULE = """REGLA DE PRECIOS (OBLIGATORIA):
+- "NO inventes precios. Usa SOLO la tabla de PRECIOS POR PERSONA de este prompt."
+- "Los precios dependen ÚNICAMENTE del número de personas. NUNCA existe un precio 'por embarcación', 'por tina' ni tarifas distintas por día de la semana."
+- Si no sabes cuántas personas son, no adivines: usa el texto indicado junto a la tabla de precios y pregunta para cuántas personas sería."""
+
+
 SAFETY_FOOTER = """PROCESO DE RESERVA (MUY IMPORTANTE):
 - NUNCA digas que una reserva está "confirmada" automáticamente.
 - NUNCA menciones "correo de confirmación", "mail de confirmación" o "email de confirmación".
@@ -148,6 +154,8 @@ LIMITACIONES TÉCNICAS (CRÍTICO):
 - En su lugar, pídeles que escriban la fecha, hora y número de personas en un mensaje.
 - Ejemplo: "Para reservar, dime la fecha, hora y número de personas. Por ejemplo: 'martes para 3 personas a las 18'"
 
+RECUERDA: "NO inventes precios; usa SOLO la tabla de precios por persona." Nunca digas "por embarcación".
+
 Responde en español chileno de manera natural y amigable."""
 
 
@@ -156,7 +164,7 @@ def build_system_prompt(custom_prompt: Optional[str] = None) -> str:
     safety footer — see SAFETY_FOOTER's docstring for why it's never
     skippable."""
     body = (custom_prompt or "").strip() or _default_editable_prompt()
-    return f"{body}\n\n{SAFETY_FOOTER}"
+    return f"{PRICE_RULE}\n\n{body}\n\n{SAFETY_FOOTER}"
 
 
 # provider -> (api_key, base_url) for AIHandler's OpenAI-compatible client.
