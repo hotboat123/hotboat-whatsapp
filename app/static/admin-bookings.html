@@ -4639,6 +4639,17 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
         </div>
 
+        <!-- Personas por número -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:1.2rem">
+          <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
+            <span style="font-weight:600;font-size:.95rem">🎭 Personas por número</span>
+            <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Los números de una persona NO reciben el bot de ventas de HotBoat: la IA les responde solo con el prompt de esa persona (ej. asistente de operaciones para el equipo). Cambios se aplican en ~30 s.</span>
+            <button onclick="addPersonaCard()" style="margin-left:auto;background:rgba(16,185,129,.15);border:1px solid #10b981;color:#10b981;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer">+ Nueva persona</button>
+            <button onclick="loadPersonas()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
+          </div>
+          <div id="personas-list" style="padding:.8rem 1.2rem;display:flex;flex-direction:column;gap:.9rem"></div>
+        </div>
+
         <!-- A/B test card -->
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
           <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
@@ -5014,7 +5025,7 @@ function showSection(name){
   if(name==='cal-extras') loadCalExtras();
   if(name==='financial') initFinancialSection();
   if(name==='simulator') requestAnimationFrame(()=>{ simCalc(); });
-  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); loadAbVariants(); loadAbResults(); }
+  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); loadPersonas(); loadAbVariants(); loadAbResults(); }
   if(name==='logs') initLogsSection();
   else clearInterval(_logAutoRefresh);
 }
@@ -15103,6 +15114,80 @@ async function toggleDisabledTrigger(id, key, disabled){
   const current = new Set((v && v.disabled_triggers) || []);
   if(disabled) current.add(key); else current.delete(key);
   await updateVariantField(id, 'disabled_triggers', Array.from(current));
+}
+
+
+// ── Personas por número ────────────────────────────────────────────────────
+const _PERSONA_INPUT_STYLE = 'width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .6rem;font-size:.83rem;outline:none;font-family:inherit';
+
+function _personaCardHtml(p){
+  const id = p.id == null ? 'new' : p.id;
+  return `<div class="persona-card" data-pid="${id}" style="border:1px solid var(--border);border-radius:10px;padding:.8rem;background:rgba(255,255,255,.02);display:flex;flex-direction:column;gap:.55rem">
+    <div>
+      <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem">Nombre</label>
+      <input class="persona-name" type="text" value="${escHtml(p.name||'')}" placeholder="ej: Asistente de operaciones" style="${_PERSONA_INPUT_STYLE}">
+    </div>
+    <div>
+      <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem" title="Solo dígitos con código de país, ej. 56912345678. Uno por línea (o separados por coma).">Números (uno por línea, ej. 56912345678)</label>
+      <textarea class="persona-numbers" rows="3" placeholder="56912345678" style="${_PERSONA_INPUT_STYLE};resize:vertical">${escHtml((p.numbers||[]).join('\n'))}</textarea>
+    </div>
+    <div>
+      <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.2rem">Prompt (es TODO lo que sabe la IA para estos números — no se agrega información de HotBoat)</label>
+      <textarea class="persona-prompt" rows="10" style="${_PERSONA_INPUT_STYLE};resize:vertical">${escHtml(p.system_prompt||'')}</textarea>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      ${p.id==null ? '' : `<button onclick="deletePersona(${p.id})" style="background:var(--card);border:1px solid #ef4444;color:#ef4444;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;cursor:pointer">Eliminar</button>`}
+      <button onclick="savePersona('${id}')" style="background:#10b981;color:#fff;border:none;border-radius:7px;padding:.35rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600">Guardar</button>
+    </div>
+  </div>`;
+}
+
+async function loadPersonas(){
+  const el = document.getElementById('personas-list');
+  if(!el) return;
+  try {
+    const r = await fetch('/api/admin/bot/personas');
+    if(!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    el.innerHTML = d.personas.length
+      ? d.personas.map(_personaCardHtml).join('')
+      : '<div style="color:var(--muted);font-size:.83rem">Aún no hay personas. Crea una con “+ Nueva persona”.</div>';
+  } catch(e){ el.innerHTML = '<div style="color:#ef4444;font-size:.83rem">Error: '+escHtml(e.message)+'</div>'; }
+}
+
+function addPersonaCard(){
+  const el = document.getElementById('personas-list');
+  if(el.querySelector('.persona-card[data-pid="new"]')) return;
+  if(!el.querySelector('.persona-card')) el.innerHTML = '';
+  el.insertAdjacentHTML('afterbegin', _personaCardHtml({id:null,name:'',numbers:[],system_prompt:''}));
+}
+
+async function savePersona(id){
+  const card = document.querySelector(`.persona-card[data-pid="${id}"]`);
+  const name = card.querySelector('.persona-name').value.trim();
+  const numbers = card.querySelector('.persona-numbers').value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean);
+  const system_prompt = card.querySelector('.persona-prompt').value.trim();
+  if(!name){ showToast('❌ El nombre es obligatorio', true); return; }
+  if(!system_prompt){ showToast('❌ El prompt es obligatorio', true); return; }
+  try {
+    const r = await fetch(id==='new' ? '/api/admin/bot/personas' : `/api/admin/bot/personas/${id}`, {
+      method: id==='new' ? 'POST' : 'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, system_prompt, numbers})
+    });
+    if(!r.ok){ let m = await r.text(); try{ m = JSON.parse(m).detail || m; }catch(_){} throw new Error(m); }
+    showToast('✅ Persona guardada');
+    loadPersonas();
+  } catch(e){ showToast('❌ '+e.message, true); }
+}
+
+async function deletePersona(id){
+  if(!confirm('¿Eliminar esta persona? Sus números volverán a recibir el bot de ventas normal.')) return;
+  try {
+    const r = await fetch(`/api/admin/bot/personas/${id}`, {method:'DELETE'});
+    if(!r.ok) throw new Error(await r.text());
+    showToast('✅ Persona eliminada');
+    loadPersonas();
+  } catch(e){ showToast('❌ '+e.message, true); }
 }
 
 async function loadAbVariants(){

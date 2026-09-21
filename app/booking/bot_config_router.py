@@ -479,6 +479,56 @@ def _all_faq_trigger_keys() -> List[str]:
     return sorted(keys)
 
 
+# ── Per-number personas (see app/bot/personas.py) ─────────────────────────────
+
+class PersonaBody(BaseModel):
+    name: str
+    system_prompt: str
+    numbers: List[str] = []
+
+
+@bot_config_router.get("/personas")
+async def list_personas_endpoint():
+    from app.bot.personas import list_personas
+    try:
+        return {"personas": list_personas()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@bot_config_router.post("/personas")
+async def create_persona_endpoint(data: PersonaBody):
+    from app.bot.personas import save_persona
+    try:
+        return {"ok": True, "id": save_persona(None, data.name, data.system_prompt, data.numbers)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@bot_config_router.put("/personas/{persona_id}")
+async def update_persona_endpoint(persona_id: int, data: PersonaBody):
+    from app.bot.personas import save_persona
+    try:
+        save_persona(persona_id, data.name, data.system_prompt, data.numbers)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@bot_config_router.delete("/personas/{persona_id}")
+async def delete_persona_endpoint(persona_id: int):
+    from app.bot.personas import delete_persona
+    try:
+        delete_persona(persona_id)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @bot_config_router.get("/ab-variants")
 async def list_ab_variants():
     """Return all A/B variants with their override count."""

@@ -456,30 +456,18 @@ async def _handle_admin_gasto_reply(from_number: str, text_body: str) -> bool:
 
 # ── Per-number custom persona ────────────────────────────────────────────
 # A phone number can get its own AI persona instead of the HotBoat sales
-# bot, by dropping a plain-text file named "<digits>.txt" (no "+", spaces,
-# or dashes — just the digits, same normalization as _is_admin_number) in
-# this folder. The file's content becomes the ENTIRE system prompt for that
-# number — no HotBoat business info, no booking SAFETY_FOOTER (see
-# ai_handler.py) gets appended, since none of that applies to e.g. a
-# maintenance-troubleshooting assistant. Edit or add files there directly;
-# picked up on the next message, no restart needed.
-_CUSTOM_PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "..", "bot", "custom_prompts")
+# bot. Personas (prompt + numbers) are managed in the admin panel's Chatbot
+# tab — see app/bot/personas.py. The prompt is the ENTIRE system prompt for
+# those numbers: no HotBoat business info, no booking SAFETY_FOOTER gets
+# appended. Changes apply within ~30 s, no restart needed.
 
 
 def _get_custom_prompt_for_number(phone: str) -> Optional[str]:
-    digits = "".join(c for c in (phone or "") if c.isdigit())
-    if not digits:
-        return None
-    path = os.path.join(_CUSTOM_PROMPTS_DIR, f"{digits}.txt")
-    if not os.path.isfile(path):
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-        return content or None
-    except Exception as e:
-        logger.error(f"Failed to read custom prompt file {path}: {e}")
-        return None
+    """Persona prompt for this number, managed in the admin panel's Chatbot
+    tab (app/bot/personas.py). Legacy <digits>.txt files are imported into
+    the DB once, so the DB is the only source of truth now."""
+    from app.bot.personas import get_persona_prompt_for_number
+    return get_persona_prompt_for_number(phone)
 
 
 async def _handle_custom_number_chat(from_number: str, text_body: str, custom_prompt: str, contact_name: str) -> None:
@@ -499,7 +487,7 @@ async def _handle_custom_number_chat(from_number: str, text_body: str, custom_pr
         ]
 
         handler = AIHandler()
-        handler.system_prompt = custom_prompt  # full override — see _CUSTOM_PROMPTS_DIR docstring
+        handler.system_prompt = custom_prompt  # full override of the system prompt (no HotBoat footer)
 
         reply = await handler.generate_response(text_body, history, contact_name)
         if reply == handler._fallback_response():
@@ -968,7 +956,7 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
             if await _handle_admin_gasto_reply(from_number, text_body):
                 return
 
-            # Number with its own AI persona (see _CUSTOM_PROMPTS_DIR) → plain
+            # Number with its own AI persona (see app/bot/personas.py) → plain
             # AI chat, skip the entire HotBoat sales/booking flow below.
             custom_prompt = _get_custom_prompt_for_number(from_number)
             if custom_prompt:
