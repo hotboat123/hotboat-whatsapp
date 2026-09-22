@@ -362,6 +362,93 @@ async def list_reservas(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@admin_router.get("/api/admin/reservas/worker-commission")
+async def worker_commission_report(
+    year: int = Query(...),
+    worker: str = Query("Esteban"),
+    umbral_res: int = Query(16),
+    rate_res: float = Query(5000),
+    pct_extras: float = Query(20),
+    x_admin_key: str = Header(""),
+):
+    """Comisión mensual de un trabajador, para pagar por vender extras en
+    persona y por sostener volumen alto de reservas — ver app/booking/db.py
+    (added_at/sold_by) y extras-presenciales arriba para la mecánica base.
+
+    Por mes calendario, dos componentes independientes:
+    - Bono por reservas: cuando el total de reservas CONFIRMADAS de la
+      empresa ese mes supera `umbral_res`, se paga `rate_res` por cada
+      reserva por encima del umbral (no solo las del trabajador — es un
+      bono por volumen alto, igual al que ya existe para Néstor en el
+      Simulador Financiero).
+    - Bono por extras: `pct_extras`% de la UTILIDAD (venta - costo, según
+      stock_products.cost_per_unit) de los extras que este trabajador
+      vendió en persona ese mes (mismo criterio que extras-presenciales:
+      added_at cae el mismo día que la fecha del paseo).
+
+    Debe quedar registrada ANTES de /api/admin/reservas/{rid} — mismo motivo
+    que extras-presenciales."""
+    _check_auth(x_admin_key)
+    try:
+        from app.booking.financial_router import CONFIRMED_STATUSES
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""SELECT id, fecha, status, extras_json
+                        FROM {TABLE}
+                        WHERE fecha >= %s AND fecha <= %s AND status = ANY(%s)""",
+                    (f"{year}-01-01", f"{year}-12-31", list(CONFIRMED_STATUSES)),
+                )
+                rows = cur.fetchall()
+                cur.execute("SELECT slug, cost_per_unit FROM stock_products WHERE slug IS NOT NULL")
+                cost_by_slug = {slug: float(cost or 0) for slug, cost in cur.fetchall()}
+    except Exception as e:
+        logger.error(f"Error building worker-commission report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    months = {m: {"reservas": 0, "venta_extras": 0.0, "costo_extras": 0.0, "items": []} for m in range(1, 13)}
+    for rid, fecha, status, extras_json in rows:
+        m = fecha.month
+        months[m]["reservas"] += 1
+        for key, val in _normalize_extras_to_dict(extras_json).items():
+            if not isinstance(val, dict) or val.get("sold_by") != worker:
+                continue
+            added_at = val.get("added_at")
+            if not added_at or str(added_at)[:10] != fecha.isoformat():
+                continue
+            qty = float(val.get("qty") or 1)
+            unit_price = float(val.get("unit_price") or 0)
+            venta = qty * unit_price
+            costo = qty * cost_by_slug.get(key, 0)
+            months[m]["venta_extras"] += venta
+            months[m]["costo_extras"] += costo
+            months[m]["items"].append({
+                "reserva_id": rid, "fecha": fecha.isoformat(),
+                "extra": val.get("name") or key, "qty": qty,
+                "venta": venta, "costo": costo, "utilidad": venta - costo,
+            })
+
+    out = []
+    for m in range(1, 13):
+        d = months[m]
+        utilidad_extras = d["venta_extras"] - d["costo_extras"]
+        bono_reservas = max(0, d["reservas"] - umbral_res) * rate_res
+        bono_extras = utilidad_extras * (pct_extras / 100)
+        out.append({
+            "month": m, "reservas": d["reservas"],
+            "venta_extras": round(d["venta_extras"]), "costo_extras": round(d["costo_extras"]),
+            "utilidad_extras": round(utilidad_extras),
+            "bono_reservas": round(bono_reservas), "bono_extras": round(bono_extras),
+            "total": round(bono_reservas + bono_extras),
+            "items": d["items"],
+        })
+    return {
+        "year": year, "worker": worker,
+        "umbral_res": umbral_res, "rate_res": rate_res, "pct_extras": pct_extras,
+        "months": out,
+    }
+
+
 # ── Single reservation ────────────────────────────────────────────────────────
 
 @admin_router.get("/api/admin/reservas/extras-presenciales")
