@@ -794,13 +794,20 @@ class ConversationManager:
                 response = await self._handle_cart_option_selection(message_text, from_number, contact_name, conversation)
             # Check if it's MULTIPLE menu number selections (e.g., "1,2,3" or "1 2 3")
             # BUT ONLY if we're in a menu context (early in conversation or user just asked for menu)
-            elif (menu_numbers := self.faq_handler.is_multiple_menu_numbers(message_text)) and self._should_interpret_as_menu(message_text, conversation):
+            # — control variant only: an AI variant never shows the numbered
+            # main menu (show_welcome_menu is off for those), so a bare
+            # number this early is almost certainly the customer answering
+            # something the AI itself just asked (e.g. headcount), not
+            # picking a menu option. Real bug: "4" answering "¿Para cuántas
+            # personas?" was showing the Extras menu instead of reaching the AI.
+            elif (menu_numbers := self.faq_handler.is_multiple_menu_numbers(message_text)) and self._should_interpret_as_menu(message_text, conversation) and not get_current_ai_model():
                 logger.info(f"Multiple menu numbers selected: {menu_numbers}")
                 language = conversation.get("metadata", {}).get("language", "es")
                 response = await self._handle_multiple_menu_selections(menu_numbers, conversation, language, from_number, contact_name)
             # Check if it's a single menu number selection (1-8)
             # BUT ONLY if we're in a menu context (early in conversation or user just asked for menu)
-            elif (menu_number := self.faq_handler.is_menu_number(message_text)) and self._should_interpret_as_menu(message_text, conversation):
+            # — control variant only, same reasoning as above.
+            elif (menu_number := self.faq_handler.is_menu_number(message_text)) and self._should_interpret_as_menu(message_text, conversation) and not get_current_ai_model():
                 logger.info(f"Menu number selected: {menu_number}")
                 language = conversation.get("metadata", {}).get("language", "es")
                 if menu_number == 1:
