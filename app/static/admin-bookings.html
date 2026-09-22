@@ -4234,61 +4234,6 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
-      <!-- Comisión real por trabajador (histórico, no hipotético) -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-top:1.2rem">
-        <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.3rem">💰 COMISIÓN REAL POR TRABAJADOR</div>
-        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.9rem;line-height:1.5">
-          Calculado con datos reales (no una proyección): reservas confirmadas de la empresa ese mes, y utilidad de los extras que este trabajador vendió en persona (marcados con "¿Quién lo vendió?" el mismo día del paseo).
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.8rem;align-items:end;margin-bottom:1rem">
-          <div>
-            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Trabajador</label>
-            <select id="wc-worker" onchange="loadWorkerCommission()"
-              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none"></select>
-          </div>
-          <div>
-            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Año</label>
-            <input type="number" id="wc-year" value="2026" min="2020" max="2099" step="1"
-              oninput="loadWorkerCommission()"
-              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
-          </div>
-          <div>
-            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem" title="Bono por reserva se paga solo por las reservas del mes que superen este número">Umbral reservas/mes</label>
-            <input type="number" id="wc-umbral" value="16" min="0" step="1"
-              oninput="loadWorkerCommission()"
-              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
-          </div>
-          <div>
-            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">$ por reserva sobre el umbral</label>
-            <input type="number" id="wc-rate" value="5000" min="0" step="500"
-              oninput="loadWorkerCommission()"
-              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
-          </div>
-          <div>
-            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem" title="% de la UTILIDAD (venta menos costo), no del precio de venta">% utilidad de extras vendidos</label>
-            <input type="number" id="wc-pct" value="20" min="0" max="100" step="1"
-              oninput="loadWorkerCommission()"
-              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
-          </div>
-        </div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:.83rem">
-            <thead>
-              <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:right">
-                <th style="text-align:left;padding:.4rem .5rem">Mes</th>
-                <th style="padding:.4rem .5rem">Reservas del mes</th>
-                <th style="padding:.4rem .5rem">Utilidad extras vendidos</th>
-                <th style="padding:.4rem .5rem">Bono reservas</th>
-                <th style="padding:.4rem .5rem">Bono extras</th>
-                <th style="padding:.4rem .5rem">Total</th>
-              </tr>
-            </thead>
-            <tbody id="wc-tbody"><tr><td colspan="6" style="padding:1rem;text-align:center;color:var(--muted)">Cargando…</td></tr></tbody>
-            <tfoot><tr id="wc-total-row" style="border-top:2px solid var(--border);font-weight:700"></tr></tfoot>
-          </table>
-        </div>
-      </div>
-
     </div><!-- /section-simulator -->
 
     <!-- ══ SUELDOS SECTION ══════════════════════════════════════════════════ -->
@@ -4402,6 +4347,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <span style="color:var(--muted);font-size:.8rem">→</span>
           <input type="date" id="com-hasta" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
           <button onclick="loadComisiones()" style="background:var(--gold);color:#111;border:none;border-radius:8px;padding:.4rem .9rem;font-size:.82rem;font-weight:700;cursor:pointer">Buscar</button>
+          <span style="color:var(--muted);font-size:.8rem;margin-left:.4rem">Trabajador:</span>
+          <select id="com-worker" onchange="renderComisiones()"
+            style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none"></select>
         </div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:.6rem">
           Solo cuenta un extra que se agregó a la reserva el mismo día del paseo Y que tiene marcado quién lo vendió
@@ -4409,6 +4357,63 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
       <div id="comisiones-results" style="display:grid;gap:.9rem"></div>
+
+      <!-- Comisión real por trabajador (bono reservas + % utilidad extras) —
+           independiente del Simulador Financiero: no lee ni escribe ninguna
+           variable de esa pestaña, solo su propio endpoint. -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-top:1.2rem">
+        <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.3rem">💰 COMISIÓN REAL POR TRABAJADOR (reservas + extras)</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.9rem;line-height:1.5">
+          Calculado con datos reales (no una proyección): reservas confirmadas de la empresa ese mes, y utilidad de los extras que este trabajador vendió en persona (la tabla de arriba).
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.8rem;align-items:end;margin-bottom:1rem">
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Trabajador</label>
+            <select id="wc-worker" onchange="loadWorkerCommission()"
+              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none"></select>
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">Año</label>
+            <input type="number" id="wc-year" value="2026" min="2020" max="2099" step="1"
+              oninput="loadWorkerCommission()"
+              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem" title="Bono por reserva se paga solo por las reservas del mes que superen este número">Umbral reservas/mes</label>
+            <input type="number" id="wc-umbral" value="16" min="0" step="1"
+              oninput="loadWorkerCommission()"
+              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem">$ por reserva sobre el umbral</label>
+            <input type="number" id="wc-rate" value="5000" min="0" step="500"
+              oninput="loadWorkerCommission()"
+              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
+          </div>
+          <div>
+            <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem" title="% de la UTILIDAD (venta menos costo), no del precio de venta">% utilidad de extras vendidos</label>
+            <input type="number" id="wc-pct" value="20" min="0" max="100" step="1"
+              oninput="loadWorkerCommission()"
+              style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;outline:none">
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.83rem">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:right">
+                <th style="text-align:left;padding:.4rem .5rem">Mes</th>
+                <th style="padding:.4rem .5rem">Reservas del mes</th>
+                <th style="padding:.4rem .5rem">Utilidad extras vendidos</th>
+                <th style="padding:.4rem .5rem">Bono reservas</th>
+                <th style="padding:.4rem .5rem">Bono extras</th>
+                <th style="padding:.4rem .5rem">Total</th>
+              </tr>
+            </thead>
+            <tbody id="wc-tbody"><tr><td colspan="6" style="padding:1rem;text-align:center;color:var(--muted)">Cargando…</td></tr></tbody>
+            <tfoot><tr id="wc-total-row" style="border-top:2px solid var(--border);font-weight:700"></tr></tfoot>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ══ GASTOS SECTION ════════════════════════════════════════════════════ -->
@@ -5136,7 +5141,8 @@ function showSection(name){
   if(name==='packs-admin') loadPacksAdmin();
   if(name==='cal-extras') loadCalExtras();
   if(name==='financial') initFinancialSection();
-  if(name==='simulator') requestAnimationFrame(()=>{ simCalc(); initWorkerCommission(); });
+  if(name==='simulator') requestAnimationFrame(()=>{ simCalc(); });
+  if(name==='comisiones') initWorkerCommission();
   if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); loadPersonas(); loadAbVariants(); loadAbResults(); }
   if(name==='logs') initLogsSection();
   else clearInterval(_logAutoRefresh);
@@ -6796,6 +6802,8 @@ function _todayCL(){ return new Date().toLocaleDateString('en-CA',{timeZone:'Ame
 /** Sección "Comisiones extras" — GET /api/admin/reservas/extras-presenciales,
  * agrupado por quién lo vendió. Ver ATEND / setExtraSoldBy / update_reserva
  * (admin_router.py) para cómo se guarda el dato. */
+let _comisionesData = null;
+
 async function loadComisiones(){
   const dEl = document.getElementById('com-desde');
   const hEl = document.getElementById('com-hasta');
@@ -6809,10 +6817,32 @@ async function loadComisiones(){
   if(!desde || !hasta || !results) return;
   results.innerHTML = '<div style="color:var(--muted);font-size:.85rem">Cargando...</div>';
   try{
-    const d = await api(`/api/admin/reservas/extras-presenciales?desde=${desde}&hasta=${hasta}`);
-    const workers = Object.entries(d.por_trabajador||{}).sort((a,b)=>b[1].total-a[1].total);
+    _comisionesData = await api(`/api/admin/reservas/extras-presenciales?desde=${desde}&hasta=${hasta}`);
+    const sel = document.getElementById('com-worker');
+    const prev = sel.value;
+    const soldWorkers = Object.keys(_comisionesData.por_trabajador||{});
+    // ATEND es la lista canónica de quién puede vender ("¿Quién lo vendió?" al
+    // agregar un extra); incluye a cualquiera con ventas que no esté en ATEND
+    // por si el dato quedó guardado con otro nombre.
+    const options = [...new Set([...ATEND, ...soldWorkers])];
+    sel.innerHTML = '<option value="">Todos</option>' + options.map(w=>`<option value="${escHtml(w)}">${escHtml(w)}</option>`).join('');
+    if(options.includes(prev)) sel.value = prev;
+    renderComisiones();
+  }catch(e){
+    results.innerHTML = `<div style="color:#f87171;font-size:.85rem">Error: ${e.message}</div>`;
+  }
+}
+
+function renderComisiones(){
+  const results = document.getElementById('comisiones-results');
+  if(!results || !_comisionesData) return;
+  const filterWorker = document.getElementById('com-worker')?.value || '';
+  try{
+    const d = _comisionesData;
+    let workers = Object.entries(d.por_trabajador||{}).sort((a,b)=>b[1].total-a[1].total);
+    if(filterWorker) workers = workers.filter(([name])=>name===filterWorker);
     if(!workers.length){
-      results.innerHTML = '<div style="color:var(--muted);font-size:.85rem">Sin extras presenciales en ese rango.</div>';
+      results.innerHTML = `<div style="color:var(--muted);font-size:.85rem">${filterWorker ? `${escHtml(filterWorker)} no vendió extras presenciales en ese rango.` : 'Sin extras presenciales en ese rango.'}</div>`;
       return;
     }
     results.innerHTML = workers.map(([name, info])=>`
