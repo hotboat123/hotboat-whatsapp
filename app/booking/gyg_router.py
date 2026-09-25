@@ -133,6 +133,46 @@ async def bookable_slots(days: int = 150, fresh: bool = False) -> dict:
     return out
 
 
+def _send_owner_email(subject: str, rows: list) -> None:
+    """Emails the owner about a GetYourGuide event. Best-effort: a mail failure
+    must never change the answer GYG gets (their booking is already saved)."""
+    try:
+        from html import escape
+        from app.booking.booking_email import _get_admin_email
+        from app.config import get_settings
+        from app.email.send_email import send_email
+        settings = get_settings()
+        to = _get_admin_email(settings)
+        if not to:
+            logger.warning("GYG owner email skipped: no admin email configured")
+            return
+        from_addr = (
+            (settings.resend_from_confirmations or "").strip()
+            or (settings.email_from or "").strip()
+            or "onboarding@resend.dev"
+        )
+        body = "".join(
+            f'<tr><td style="padding:6px 14px 6px 0;color:#6b7280">{escape(k)}</td>'
+            f'<td style="padding:6px 0;font-weight:600">{escape(str(v))}</td></tr>'
+            for k, v in rows if v
+        )
+        html = (
+            '<div style="font-family:Arial,sans-serif;font-size:15px;color:#111">'
+            f'<h2 style="margin:0 0 12px">{escape(subject)}</h2>'
+            f'<table style="border-collapse:collapse">{body}</table></div>'
+        )
+        result = send_email(to=to, subject=subject, html=html, from_address=from_addr, trigger="gyg_notification")
+        if not result.get("sent"):
+            logger.warning("GYG owner email not sent: %s", result.get("reason"))
+    except Exception as e:
+        logger.warning("GYG owner email failed: %s", e)
+
+
+async def _notify_owner(subject: str, rows: list) -> None:
+    import asyncio
+    await asyncio.to_thread(_send_owner_email, subject, rows)
+
+
 def _clear_availability_cache() -> None:
     try:
         from app.booking import router as booking_router
@@ -369,6 +409,12 @@ async def book(request: Request):
                 conn.commit()
         _clear_availability_cache()
         logger.info("GYG booking confirmed: %s (%s %s, %s people)", booking_ref, fecha, hora, n_res)
+        await _notify_owner(f"Nueva reserva GetYourGuide — {fecha:%d/%m/%Y} {hora:%H:%M}", [
+            ("Fecha", f"{fecha:%d/%m/%Y}"), ("Hora", f"{hora:%H:%M}"), ("Personas", n_res),
+            ("Cliente", name), ("Teléfono", lead.get("phoneNumber")), ("Email", lead.get("email")),
+            ("Hotel", data.get("travelerHotel")), ("Comentario", data.get("comment")),
+            ("Detalle de precio (GYG)", retail), ("Referencia GYG", gyg_ref), ("Referencia HotBoat", booking_ref),
+        ])
         return _ok(booking_ref)
     except Exception as e:
         logger.exception("gyg book failed")
@@ -389,11 +435,11 @@ async def cancel_booking(request: Request):
         ensure_gyg_tables()
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT appointment_id, status, fecha, hora FROM gyg_reservations WHERE booking_reference=%s FOR UPDATE", (ref,))
+                cur.execute("SELECT appointment_id, status, fecha, hora, num_people, gyg_booking_reference FROM gyg_reservations WHERE booking_reference=%s FOR UPDATE", (ref,))
                 row = cur.fetchone()
                 if not row:
                     return _err("INVALID_BOOKING", "Booking does not exist.")
-                appt_id, status, fecha, hora = row
+                appt_id, status, fecha, hora, n_people, gyg_ref = row
                 if status == "cancelled":
                     return _err("BOOKING_ALREADY_CANCELED", "The booking has been cancelled already.")
                 if datetime.combine(fecha, hora, tzinfo=CHILE_TZ) < datetime.now(CHILE_TZ):
@@ -403,6 +449,11 @@ async def cancel_booking(request: Request):
                 conn.commit()
         _clear_availability_cache()
         logger.info("GYG booking cancelled: %s", ref)
+        await _notify_owner(f"Reserva GetYourGuide CANCELADA — {fecha:%d/%m/%Y} {hora:%H:%M}", [
+            ("Fecha", f"{fecha:%d/%m/%Y}"), ("Hora", f"{hora:%H:%M}"), ("Personas", n_people),
+            ("Referencia GYG", gyg_ref), ("Referencia HotBoat", ref),
+            ("Estado", "El horario quedó libre otra vez"),
+        ])
         return {"data": {}}
     except Exception as e:
         logger.exception("gyg cancel-booking failed")
