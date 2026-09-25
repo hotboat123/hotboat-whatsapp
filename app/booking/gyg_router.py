@@ -207,7 +207,7 @@ async def get_availabilities(request: Request, productId: str = "", fromDateTime
                 dt = datetime.fromisoformat(iso)
                 if dt <= now or dt < start or dt > end:
                     continue
-                availabilities.append({"dateTime": iso, "vacancies": MAX_PEOPLE})
+                availabilities.append({"productId": productId, "dateTime": iso, "vacancies": MAX_PEOPLE})
         return {"data": {"availabilities": availabilities}}
     except Exception as e:
         logger.exception("gyg get-availabilities failed")
