@@ -511,3 +511,35 @@ def release_expired_holds() -> int:
     except Exception as e:
         logger.error("GYG expired-hold release failed: %s", e)
         return 0
+
+
+@gyg_router.post("/sandbox-notify-test")
+async def sandbox_notify_test(request: Request):
+    """Sends GYG's sandbox `notify-availability-update` a sample payload using
+    the stored GYG_NOTIFY_* credentials, for the Integrator Portal's "Test
+    GetYourGuide endpoints" step. Protected with the same Basic auth GYG uses
+    to call us, so the stored notify credentials never leave the server."""
+    if not _authorized(request):
+        return _err("AUTHORIZATION_FAILURE", "The provided authentication credentials are not valid.")
+    import httpx
+    user, password = os.environ.get("GYG_NOTIFY_USER", ""), os.environ.get("GYG_NOTIFY_PASSWORD", "")
+    if not user or not password:
+        return _err("VALIDATION_FAILURE", "GYG_NOTIFY_USER / GYG_NOTIFY_PASSWORD are not configured.")
+    base = os.environ.get("GYG_NOTIFY_BASE", "https://supplier-api.getyourguide.com").rstrip("/")
+    product_id = sorted(_configured_product_ids())[0]
+    slots = (await bookable_slots()).items()
+    availabilities = []
+    for dk, times in slots:
+        d = datetime.fromisoformat(dk).date()
+        for t in times[:2]:
+            availabilities.append({"dateTime": _iso_local(d, t), "vacancies": MAX_PEOPLE})
+        if len(availabilities) >= 2:
+            break
+    if availabilities:
+        availabilities[0] = {**availabilities[0], "vacancies": 0}
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(
+            f"{base}/sandbox/1/notify-availability-update", auth=(user, password),
+            json={"data": {"productId": product_id, "availabilities": availabilities}},
+        )
+    return {"status": resp.status_code, "body": resp.text[:500], "sent": availabilities}
