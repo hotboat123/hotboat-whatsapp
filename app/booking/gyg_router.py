@@ -256,12 +256,15 @@ async def reserve(request: Request):
                 # Serialise concurrent reserve/book/cancel for the same slot.
                 cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"gyg-slot:{fecha}:{hora}",))
 
-                # GYG retries: same booking reference with a live hold -> same answer.
+                # GYG retries: same booking reference, slot AND party size with a
+                # live hold -> same answer. A different party size is an amendment
+                # (GYG "Booking Change Flow"): it gets a brand-new reservation.
                 cur.execute(
                     "SELECT reservation_reference, expires_at FROM gyg_reservations "
-                    "WHERE gyg_booking_reference=%s AND fecha=%s AND hora=%s AND status IN ('held','booked') "
-                    "AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1",
-                    (gyg_ref, fecha, hora),
+                    "WHERE gyg_booking_reference=%s AND fecha=%s AND hora=%s AND num_people=%s "
+                    "AND status IN ('held','booked') AND expires_at > NOW() "
+                    "ORDER BY created_at DESC LIMIT 1",
+                    (gyg_ref, fecha, hora, n),
                 )
                 existing = cur.fetchone()
                 if existing:
@@ -275,7 +278,18 @@ async def reserve(request: Request):
                     (fecha, hora, list(NON_BLOCKING_STATUSES)),
                 )
                 taken = cur.fetchone()[0]
-                if hora not in free or taken:
+                # An amendment of an existing GYG booking (same GYG reference) may
+                # keep the same slot: the only thing blocking it is that booking's
+                # own row, which GYG cancels right after the new one is booked.
+                cur.execute(
+                    "SELECT COUNT(*) FROM gyg_reservations WHERE gyg_booking_reference=%s "
+                    "AND fecha=%s AND hora=%s AND status IN ('held','booked')",
+                    (gyg_ref, fecha, hora),
+                )
+                own = cur.fetchone()[0]
+                if own and taken == own:
+                    pass
+                elif hora not in free or taken:
                     return _err("NO_AVAILABILITY", f"The {fecha} {hora} slot is not available.")
 
                 reservation_ref = "GYGH" + _rand(10)
