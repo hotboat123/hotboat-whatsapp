@@ -266,7 +266,7 @@ async def reserve(request: Request):
                 existing = cur.fetchone()
                 if existing:
                     return {"data": {"reservationReference": existing[0],
-                                     "reservationExpiration": existing[1].astimezone(CHILE_TZ).isoformat()}}
+                                     "reservationExpiration": existing[1].astimezone(CHILE_TZ).isoformat(timespec="seconds")}}
 
                 free = (await bookable_slots(fresh=True)).get(str(fecha), [])
                 cur.execute(
@@ -305,7 +305,7 @@ async def reserve(request: Request):
                 )
                 conn.commit()
         _clear_availability_cache()
-        return {"data": {"reservationReference": reservation_ref, "reservationExpiration": expires.isoformat()}}
+        return {"data": {"reservationReference": reservation_ref, "reservationExpiration": expires.isoformat(timespec="seconds")}}
     except Exception as e:
         logger.exception("gyg reserve failed")
         return _err("INTERNAL_SYSTEM_FAILURE", str(e)[:200])
