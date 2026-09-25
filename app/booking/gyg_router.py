@@ -45,7 +45,11 @@ CHILE_TZ = ZoneInfo("America/Santiago")
 MIN_PEOPLE, MAX_PEOPLE = 2, 7
 HOLD_MINUTES = 30
 NON_BLOCKING_STATUSES = ("cancelled", "rejected", "cancelada", "solicitud")
-_UNSUPPORTED_CATEGORIES = {"COLLECTIVE", "GROUP"}
+def _supported_categories() -> set:
+    """Ticket categories sellable on the GYG product. HotBoat prices by group
+    size with a fixed child discount, so only ADULT and CHILD exist."""
+    raw = os.environ.get("GYG_TICKET_CATEGORIES", "ADULT,CHILD")
+    return {c.strip().upper() for c in raw.split(",") if c.strip()}
 
 
 def _configured_product_ids() -> set:
@@ -236,8 +240,8 @@ async def reserve(request: Request):
         if dt <= datetime.now(CHILE_TZ):
             return _err("VALIDATION_FAILURE", "The requested time is in the past.")
         for it in items:
-            if str(it.get("category", "")).upper() in _UNSUPPORTED_CATEGORIES:
-                return _err("INVALID_TICKET_CATEGORY", "Only individual ticket categories are sellable.",
+            if str(it.get("category", "")).upper() not in _supported_categories():
+                return _err("INVALID_TICKET_CATEGORY", f"The ticket category {it.get('category')} is not sellable.",
                             ticketCategory=it.get("category"))
         n = _total_people(items)
         if n is None or not (MIN_PEOPLE <= n <= MAX_PEOPLE):
