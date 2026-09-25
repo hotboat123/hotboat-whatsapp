@@ -61,10 +61,23 @@ def _err(code: str, message: str, **extra) -> dict:
     return {"errorCode": code, "errorMessage": message, **extra}
 
 
+def _accepted_credentials() -> list:
+    """GetYourGuide requires DIFFERENT credentials for its testing and
+    production environments, so two pairs are accepted:
+    GYG_INBOUND_USER/PASSWORD (testing) and GYG_INBOUND_USER_PROD/
+    GYG_INBOUND_PASSWORD_PROD (production)."""
+    pairs = []
+    for u, p in (("GYG_INBOUND_USER", "GYG_INBOUND_PASSWORD"),
+                 ("GYG_INBOUND_USER_PROD", "GYG_INBOUND_PASSWORD_PROD")):
+        user, password = os.environ.get(u, ""), os.environ.get(p, "")
+        if user and password:
+            pairs.append(f"{user}:{password}")
+    return pairs
+
+
 def _authorized(request: Request) -> bool:
-    user = os.environ.get("GYG_INBOUND_USER", "")
-    password = os.environ.get("GYG_INBOUND_PASSWORD", "")
-    if not user or not password:
+    pairs = _accepted_credentials()
+    if not pairs:
         return False
     header = request.headers.get("authorization", "")
     if not header.lower().startswith("basic "):
@@ -73,7 +86,7 @@ def _authorized(request: Request) -> bool:
         supplied = base64.b64decode(header[6:]).decode("utf-8")
     except Exception:
         return False
-    return hmac.compare_digest(supplied, f"{user}:{password}")
+    return any(hmac.compare_digest(supplied, pair) for pair in pairs)
 
 
 def ensure_gyg_tables() -> None:
