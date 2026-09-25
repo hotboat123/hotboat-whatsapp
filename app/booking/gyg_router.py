@@ -244,12 +244,24 @@ async def reserve(request: Request):
                 return _err("INVALID_TICKET_CATEGORY", f"The ticket category {it.get('category')} is not sellable.",
                             ticketCategory=it.get("category"))
         n = _total_people(items)
-        if n is None or not (MIN_PEOPLE <= n <= MAX_PEOPLE):
+        ensure_gyg_tables()
+        # A new booking needs 2-7 people, but GYG may amend an existing booking
+        # down to fewer travelers (their "Booking Change Flow" lowers the count
+        # by one); that keeps the same boat, so 1 is accepted for a known GYG ref.
+        min_people = MIN_PEOPLE
+        if n == 1:
+            with get_connection() as _c:
+                with _c.cursor() as _cur:
+                    _cur.execute(
+                        "SELECT 1 FROM gyg_reservations WHERE gyg_booking_reference=%s "
+                        "AND status IN ('held','booked') LIMIT 1", (gyg_ref,))
+                    if _cur.fetchone():
+                        min_people = 1
+        if n is None or not (min_people <= n <= MAX_PEOPLE):
             return _err("INVALID_PARTICIPANTS_CONFIGURATION",
                         f"HotBoat takes {MIN_PEOPLE} to {MAX_PEOPLE} people per boat.",
                         participantsConfiguration={"min": MIN_PEOPLE, "max": MAX_PEOPLE})
 
-        ensure_gyg_tables()
         fecha, hora = dt.date(), dt.strftime("%H:%M")
         with get_connection() as conn:
             with conn.cursor() as cur:
