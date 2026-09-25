@@ -24,6 +24,7 @@ from app.booking.tabla_router import tabla_router, _ensure_tabla_table, _seed_ta
 from app.booking.reserva_router import reserva_router
 from app.booking.link_tracking_router import link_tracking_router
 from app.booking.gift_cards_router import gift_cards_router
+from app.booking.gyg_router import gyg_router
 from app.email.ses_webhook import ses_webhook_router
 from app.meta_pixel import apply_meta_pixel_placeholder, is_meta_pixel_enabled
 from app.gtm import apply_gtm_placeholders
@@ -238,6 +239,19 @@ async def _run_pending_payment_cleanup_scheduler():
     await asyncio.sleep(30)  # short delay after startup
     while True:
         await asyncio.to_thread(_do_pending_payment_cleanup)
+        await asyncio.sleep(120)
+
+
+async def _run_gyg_sync_scheduler():
+    """GetYourGuide: release expired reservation holds and push availability
+    changes (see app/booking/gyg_sync.py). No-op until GYG credentials exist."""
+    await asyncio.sleep(60)
+    while True:
+        try:
+            from app.booking.gyg_sync import sync_availability_once
+            await sync_availability_once()
+        except Exception as e:
+            logger.error(f"GYG sync error: {e}")
         await asyncio.sleep(120)
 
 
@@ -794,6 +808,7 @@ async def lifespan(app: FastAPI):
 
         scheduler_tasks.extend([
             asyncio.create_task(_run_pending_payment_cleanup_scheduler()),
+            asyncio.create_task(_run_gyg_sync_scheduler()),
             asyncio.create_task(_run_email_sweeps_scheduler()),
             asyncio.create_task(_run_daily_summary_scheduler()),
             asyncio.create_task(_run_signature_summary_scheduler()),
@@ -891,6 +906,7 @@ app.include_router(tabla_router)
 app.include_router(reserva_router)
 app.include_router(link_tracking_router)
 app.include_router(gift_cards_router)
+app.include_router(gyg_router)
 app.include_router(ses_webhook_router)
 
 
