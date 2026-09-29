@@ -10613,7 +10613,10 @@ function generarRecibo(){
     : `<div style="margin-top:14px;padding:10px 14px;background:rgba(44,122,114,.10);border:1px solid #2c7a72;border-radius:6px;text-align:center;font-weight:700;color:#1f6359">✅ Pago completo</div>`;
 
   const emailHtml = `<!DOCTYPE html>
-<html lang="es"><head><meta charset="UTF-8"><title>Recibo HotBoat #${ref}</title></head>
+<html lang="es"><head><meta charset="UTF-8">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<title>Recibo HotBoat #${ref}</title>
+<style>:root{color-scheme:light;supported-color-schemes:light;}</style></head>
 <body style="margin:0;padding:0;background:#eef3f0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2a28">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#eef3f0"><tr><td align="center" style="padding:24px 8px">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #e3e9e6">
@@ -11290,7 +11293,10 @@ function generarReciboGiftCard(code){
     </tr>` : ''}`;
 
   const emailHtml = `<!DOCTYPE html>
-<html lang="es"><head><meta charset="UTF-8"><title>Recibo Gift Card HotBoat #${g.code}</title></head>
+<html lang="es"><head><meta charset="UTF-8">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<title>Recibo Gift Card HotBoat #${g.code}</title>
+<style>:root{color-scheme:light;supported-color-schemes:light;}</style></head>
 <body style="margin:0;padding:0;background:#eef3f0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2a28">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#eef3f0"><tr><td align="center" style="padding:24px 8px">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #e3e9e6">

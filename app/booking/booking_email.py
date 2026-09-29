@@ -470,7 +470,9 @@ def _hotboat_email_card(
     return f"""<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{hero_title} — {biz}</title></head>
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<title>{hero_title} — {biz}</title>
+<style>:root{{color-scheme:light;supported-color-schemes:light;}}</style></head>
 <body style="margin:0;padding:0;background:#eef3f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
 
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#eef3f0">
