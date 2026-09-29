@@ -446,13 +446,18 @@ def _hotboat_email_card(
     website = ctx.get("business_website", "#")
     biz     = ctx.get("business_name", "HotBoat")
     wa_num  = phone.replace(" ", "").replace("+", "")
-    # Logo: EMAIL_LOGO_URL env var > auto-detect Railway domain > text fallback
+    # Logo: EMAIL_LOGO_URL env var > auto-detect Railway domain > text fallback.
+    # Uses a version of the logo with the teal background baked in (not a
+    # transparent PNG): some mail apps (Gmail's iOS app in dark mode, at
+    # least) render a transparent PNG's alpha area as solid black instead of
+    # compositing it against the surrounding gradient, which made the logo
+    # look like it was sitting in an ugly black box for those recipients.
     import os as _os
     logo_url = _os.environ.get("EMAIL_LOGO_URL", "").strip()
     if not logo_url:
         railway_domain = _os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
         if railway_domain:
-            logo_url = f"https://{railway_domain}/static/Logo%20sin%20Fondo%20sin%20Chile%20Blanco.png"
+            logo_url = f"https://{railway_domain}/static/logo-email-teal.png"
 
     lang   = ctx.get("customer_language", "es")
     ref    = ctx.get("booking_ref", "")
