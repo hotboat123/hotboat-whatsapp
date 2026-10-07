@@ -777,6 +777,11 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         logger.warning(f"flujo_caja tables setup skipped: {_e}")
     try:
+        from app.bot.ai_usage import _ensure_tables as _ensure_ai_usage_tables
+        _ensure_ai_usage_tables()
+    except Exception as _e:
+        logger.warning(f"ai_usage table setup skipped: {_e}")
+    try:
         _ensure_tabla_table()
         _seed_tabla_products()
         _ensure_catalog_table()

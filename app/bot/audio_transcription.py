@@ -41,10 +41,24 @@ def _get_client() -> OpenAI:
 
 def _transcribe_sync(file_path: str) -> Optional[str]:
     with open(file_path, "rb") as f:
+        # verbose_json (vs. the default "json") also returns .duration —
+        # Whisper is billed by audio length, not tokens, so that's the
+        # usage figure worth tracking here (see app/bot/ai_usage.py).
         result = _get_client().audio.transcriptions.create(
             model=_TRANSCRIBE_MODEL,
             file=f,
+            response_format="verbose_json",
         )
+    try:
+        from app.bot.ai_usage import log_usage
+        log_usage(
+            provider="groq",
+            model=_TRANSCRIBE_MODEL,
+            call_type="transcription",
+            audio_seconds=getattr(result, "duration", None),
+        )
+    except Exception as e:
+        logger.warning(f"Audio transcription usage logging skipped: {e}")
     text = (result.text or "").strip()
     return text or None
 

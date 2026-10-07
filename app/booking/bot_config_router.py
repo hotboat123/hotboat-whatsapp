@@ -3,12 +3,16 @@ Bot configuration router — CRUD for chatbot messages and keywords.
 """
 import logging
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 bot_config_router = APIRouter(prefix="/api/admin/bot", tags=["bot-config"])
+
+
+def _check_auth(key: str):
+    pass  # Auth disabled (same as admin_router)
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -1465,3 +1469,32 @@ def seed_defaults():
         logger.info("✅ bot config defaults seeded")
     except Exception as e:
         logger.warning("bot config seed failed: %s", e)
+
+
+# ── AI usage tracking ────────────────────────────────────────────────────────
+# See app/bot/ai_usage.py — surfaces token/audio-seconds consumption per
+# (provider, model, call_type), plus operator-entered daily limits, so the
+# admin can watch each provider's free-tier quota instead of finding out it
+# ran out when the bot silently falls back to the static menu mid-season.
+
+class AiUsageLimitsUpdate(BaseModel):
+    limits: dict
+
+
+@bot_config_router.get("/ai-usage")
+async def get_ai_usage(days: int = 30, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.bot.ai_usage import get_usage_summary, get_usage_limits
+    return {
+        "ok": True,
+        "summary": get_usage_summary(days=days),
+        "limits": get_usage_limits(),
+    }
+
+
+@bot_config_router.put("/ai-usage/limits")
+async def set_ai_usage_limits(body: AiUsageLimitsUpdate, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.bot.ai_usage import set_usage_limits
+    ok = set_usage_limits(body.limits)
+    return {"ok": ok}

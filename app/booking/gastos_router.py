@@ -541,7 +541,21 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
             )
             last_body = resp.text[:400]
             resp.raise_for_status()
-            raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            data = resp.json()
+            try:
+                usage = data.get("usageMetadata", {}) or {}
+                from app.bot.ai_usage import log_usage
+                log_usage(
+                    provider="gemini",
+                    model="gemini-3.1-flash-lite",
+                    call_type="vision",
+                    prompt_tokens=usage.get("promptTokenCount"),
+                    completion_tokens=usage.get("candidatesTokenCount"),
+                    total_tokens=usage.get("totalTokenCount"),
+                )
+            except Exception as e:
+                logger.warning(f"Gemini scan usage logging skipped: {e}")
+            raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             extracted = json.loads(raw_text)

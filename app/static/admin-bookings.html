@@ -4822,6 +4822,17 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
         </div>
 
+        <!-- AI usage tracking card -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+          <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
+            <span style="font-weight:600;font-size:.95rem">📊 Uso de IA (tokens)</span>
+            <span style="color:var(--muted);font-size:.78rem;margin-left:.4rem">Cuánto consume cada IA — ingresa un límite diario para ver qué tan cerca estás de la cuota gratuita de cada proveedor.</span>
+            <button onclick="saveAiUsageLimits()" style="margin-left:auto;background:rgba(16,185,129,.15);border:1px solid #10b981;color:#10b981;border-radius:8px;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;white-space:nowrap">💾 Guardar límites</button>
+            <button onclick="loadAiUsage()" style="background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.32rem .7rem;font-size:.8rem;cursor:pointer">↻</button>
+          </div>
+          <div id="ai-usage-list" style="padding:.8rem 1.2rem;display:flex;flex-direction:column;gap:.7rem"></div>
+        </div>
+
       </div>
     </div><!-- /section-chatbot -->
 
@@ -5143,7 +5154,7 @@ function showSection(name){
   if(name==='financial') initFinancialSection();
   if(name==='simulator') requestAnimationFrame(()=>{ simCalc(); });
   if(name==='comisiones') initWorkerCommission();
-  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); loadPersonas(); loadAbVariants(); loadAbResults(); }
+  if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); loadPersonas(); loadAbVariants(); loadAbResults(); loadAiUsage(); }
   if(name==='logs') initLogsSection();
   else clearInterval(_logAutoRefresh);
 }
@@ -15459,6 +15470,88 @@ async function loadAbResults(){
     }).join('');
   } catch(e){
     el.innerHTML = `<span style="color:var(--red);font-size:.83rem">Error: ${e.message}</span>`;
+  }
+}
+
+// ── AI usage tracking (tokens per provider/model) ──────────────────────────
+let _aiUsageLimits = {};
+const _AI_PROVIDER_LABELS = {groq:'Groq', gemini:'Gemini'};
+const _AI_CALL_TYPE_LABELS = {chat:'💬 Chat', transcription:'🎤 Audio (Whisper)', vision:'📷 Boletas (escaneo)'};
+
+async function loadAiUsage(){
+  const el = document.getElementById('ai-usage-list');
+  if(!el) return;
+  el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1rem">Cargando…</div>';
+  try{
+    const r = await fetch('/api/admin/bot/ai-usage?days=30', {headers:{'x-admin-key':KEY||''}});
+    if(!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    _aiUsageLimits = d.limits || {};
+    const rows = d.summary || [];
+    if(!rows.length){
+      el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;text-align:center;padding:1rem">Sin datos de uso todavía — aparecerán apenas el bot responda con IA, transcriba un audio o escanees una boleta.</div>';
+      return;
+    }
+    const fmt = n => Math.round(n).toLocaleString('es-CL');
+    el.innerHTML = rows.map(row => {
+      const limitKey = `${row.provider}:${row.model}:${row.call_type}`;
+      const limit = _aiUsageLimits[limitKey] || {};
+      const isAudio = row.call_type === 'transcription';
+      const usedToday = isAudio ? row.audio_seconds_today : row.tokens_today;
+      const usedPeriod = isAudio ? row.audio_seconds_period : row.tokens_period;
+      const unit = isAudio ? 's' : 'tok';
+      const limitVal = isAudio ? (limit.daily_seconds || '') : (limit.daily_tokens || '');
+      const pct = limitVal ? Math.min(100, Math.round((usedToday / limitVal) * 100)) : null;
+      const barColor = pct===null ? 'var(--border)' : (pct>=90?'#ef4444':pct>=70?'#f59e0b':'#10b981');
+      return `
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.45rem">
+            <div>
+              <span style="font-weight:600;font-size:.85rem">${_AI_PROVIDER_LABELS[row.provider]||escHtml(row.provider)}</span>
+              <span style="color:var(--muted);font-size:.75rem;margin-left:.4rem">${escHtml(row.model)}</span>
+              <span style="margin-left:.5rem;font-size:.75rem">${_AI_CALL_TYPE_LABELS[row.call_type]||escHtml(row.call_type)}</span>
+            </div>
+            <div style="font-size:.78rem;color:var(--muted)">
+              Hoy: <b style="color:var(--text)">${fmt(usedToday)} ${unit}</b>
+              · últimos 30 días: <b style="color:var(--text)">${fmt(usedPeriod)} ${unit}</b>
+              · ${row.calls_today} llamada${row.calls_today===1?'':'s'} hoy
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:.6rem">
+            <div style="flex:1;height:7px;background:var(--border);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${pct===null?0:pct}%;background:${barColor};transition:width .3s"></div>
+            </div>
+            <input type="number" min="0" placeholder="Límite diario (${unit})" value="${limitVal}"
+                   data-limit-key="${limitKey}" data-is-audio="${isAudio}"
+                   style="width:150px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .5rem;font-size:.75rem;outline:none">
+            ${pct!==null?`<span style="font-size:.75rem;color:${barColor};font-weight:600;min-width:34px;text-align:right">${pct}%</span>`:''}
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e){
+    el.innerHTML = `<div style="color:var(--red);font-size:.82rem;text-align:center;padding:1rem">Error: ${e.message}</div>`;
+  }
+}
+
+async function saveAiUsageLimits(){
+  const inputs = document.querySelectorAll('#ai-usage-list input[data-limit-key]');
+  const limits = {..._aiUsageLimits};
+  inputs.forEach(inp => {
+    const key = inp.dataset.limitKey;
+    const isAudio = inp.dataset.isAudio === 'true';
+    const val = parseInt(inp.value, 10);
+    if(!val){ delete limits[key]; return; }
+    limits[key] = isAudio ? {daily_seconds: val} : {daily_tokens: val};
+  });
+  try{
+    const r = await fetch('/api/admin/bot/ai-usage/limits', {
+      method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY||''},
+      body: JSON.stringify({limits})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    await loadAiUsage();
+  } catch(e){
+    alert('Error guardando límites: ' + e.message);
   }
 }
 

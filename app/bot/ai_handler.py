@@ -223,7 +223,26 @@ class AIHandler:
         #     ]
         # })
         pass
-    
+
+    def _log_usage(self, response) -> None:
+        """Record this call's token usage — see app/bot/ai_usage.py. Never
+        raises: a logging hiccup must never break an actual AI reply."""
+        try:
+            usage = getattr(response, "usage", None)
+            if not usage:
+                return
+            from app.bot.ai_usage import log_usage
+            log_usage(
+                provider=self.provider,
+                model=self.model,
+                call_type="chat",
+                prompt_tokens=getattr(usage, "prompt_tokens", None),
+                completion_tokens=getattr(usage, "completion_tokens", None),
+                total_tokens=getattr(usage, "total_tokens", None),
+            )
+        except Exception as e:
+            logger.warning(f"AI usage logging skipped: {e}")
+
     async def generate_response(
         self,
         message_text: str,
@@ -302,7 +321,8 @@ class AIHandler:
                 api_params["tool_choice"] = "auto"  # Let model decide when to use tools
             
             response = self.client.chat.completions.create(**api_params)
-            
+            self._log_usage(response)
+
             # Extract response text
             message = response.choices[0].message
             
@@ -358,7 +378,8 @@ class AIHandler:
                 if self.provider == "groq":
                     final_params["reasoning_effort"] = "low"
                 final_response = self.client.chat.completions.create(**final_params)
-                
+                self._log_usage(final_response)
+
                 response_text = final_response.choices[0].message.content
             else:
                 # Normal response without tool calls
