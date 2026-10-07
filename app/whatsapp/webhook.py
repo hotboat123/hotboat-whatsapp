@@ -1691,8 +1691,22 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 display_url = f"/api/media/{media_id}"
             elif media_url:
                 display_url = media_url
-            
-            text_body = "[Audio recibido]"
+
+            # Speech-to-text: lets the bot actually read what was said
+            # instead of only acknowledging "recibimos tu audio" — see
+            # app/bot/audio_transcription.py. Falls back to the old static
+            # placeholders on any failure (no speech, API outage, etc.), so
+            # a transcription outage degrades to exactly today's behavior.
+            transcribed_text = None
+            if local_audio_path:
+                from app.bot.audio_transcription import transcribe_audio
+                transcribed_text = await transcribe_audio(local_audio_path)
+                if transcribed_text:
+                    logger.info(f"🎤📝 Audio transcribed: {transcribed_text[:200]}")
+                else:
+                    logger.info("🎤 Audio transcription returned nothing usable; falling back to placeholder")
+
+            text_body = transcribed_text or "[Audio recibido]"
 
             # Fetched here (not further down like before) so the push
             # notification below can be labeled with the lead's bot_variant
@@ -1708,10 +1722,11 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 from app.bot.variant_overrides import get_label_for_variant, is_variant_in_hours
                 _audio_variant = lead.get("bot_variant") if lead else None
                 if is_variant_in_hours(_audio_variant):
+                    _audio_preview = f"🎤 {transcribed_text[:60]}" if transcribed_text else "🎤 Audio"
                     await push_notifier.send_new_message_notification(
                         contact_name=contact_name,
                         phone_number=from_number,
-                        message_preview="🎤 Audio",
+                        message_preview=_audio_preview,
                         variant_label=get_label_for_variant(_audio_variant),
                     )
             except Exception as push_error:
@@ -1730,11 +1745,12 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
 
             # Check if bot is enabled for this user
             bot_enabled = lead.get("bot_enabled", True) if lead else True
-            # text_body is always the static "[Audio recibido]" placeholder
-            # (no speech-to-text in this pipeline), so this can never
-            # ORIGINATE a Popeye summon by keyword — it can only ride an
-            # already-open session from an earlier text message (see
-            # _popeye_summon/_popeye_session_active above).
+            # text_body is the real transcript when speech-to-text succeeded
+            # (see transcribed_text above), so a spoken "Hola Popeye" can now
+            # ORIGINATE a Popeye summon by keyword, same as a typed one —
+            # falls back to riding an already-open session (see
+            # _popeye_summon/_popeye_session_active above) only when
+            # transcription failed and text_body is the static placeholder.
             popeye_summon = (not bot_enabled) and _popeye_summon(lead, text_body)
 
             if not bot_enabled and not popeye_summon:
@@ -1761,12 +1777,15 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 from app.db.leads import extend_popeye_session
                 await extend_popeye_session(from_number)
 
-            # Process the audio message
+            # Process the audio message — feed the real transcript through
+            # the normal bot pipeline (FAQ/flows/AI fallback) exactly like a
+            # typed message, so Popeye can actually answer what was asked
+            # instead of only acknowledging the audio. Falls back to the old
+            # placeholder when transcription failed (see transcribed_text).
             try:
-                # For now, respond acknowledging the audio
                 response = await conversation_manager.process_message(
                     from_number=from_number,
-                    message_text="[El usuario envió un audio]",
+                    message_text=transcribed_text or "[El usuario envió un audio]",
                     contact_name=contact_name,
                     message_id=message_id,
                     lead_bot_variant=lead.get("bot_variant") if lead else None,
