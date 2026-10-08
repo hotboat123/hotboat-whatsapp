@@ -15503,6 +15503,13 @@ async function loadAiUsage(){
       const limitVal = isAudio ? (limit.daily_seconds || '') : (limit.daily_tokens || '');
       const pct = limitVal ? Math.min(100, Math.round((usedToday / limitVal) * 100)) : null;
       const barColor = pct===null ? 'var(--border)' : (pct>=90?'#ef4444':pct>=70?'#f59e0b':'#10b981');
+      // Some providers' real free-tier cap is requests/day rather than
+      // tokens/day (e.g. Gemini: 500 req/día, not a token budget) — a
+      // second, independent bar driven by calls_today so that limit can be
+      // tracked honestly instead of converted into a made-up token number.
+      const reqLimitVal = limit.daily_requests || '';
+      const reqPct = reqLimitVal ? Math.min(100, Math.round((row.calls_today / reqLimitVal) * 100)) : null;
+      const reqBarColor = reqPct===null ? 'var(--border)' : (reqPct>=90?'#ef4444':reqPct>=70?'#f59e0b':'#10b981');
       return `
         <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.45rem">
@@ -15517,14 +15524,23 @@ async function loadAiUsage(){
               · ${row.calls_today} llamada${row.calls_today===1?'':'s'} hoy
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:.6rem">
+          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.4rem">
             <div style="flex:1;height:7px;background:var(--border);border-radius:4px;overflow:hidden">
               <div style="height:100%;width:${pct===null?0:pct}%;background:${barColor};transition:width .3s"></div>
             </div>
             <input type="number" min="0" placeholder="Límite diario (${unit})" value="${limitVal}"
-                   data-limit-key="${limitKey}" data-is-audio="${isAudio}"
+                   data-limit-key="${limitKey}" data-metric="usage" data-is-audio="${isAudio}"
                    style="width:150px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .5rem;font-size:.75rem;outline:none">
             ${pct!==null?`<span style="font-size:.75rem;color:${barColor};font-weight:600;min-width:34px;text-align:right">${pct}%</span>`:''}
+          </div>
+          <div style="display:flex;align-items:center;gap:.6rem">
+            <div style="flex:1;height:7px;background:var(--border);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${reqPct===null?0:reqPct}%;background:${reqBarColor};transition:width .3s"></div>
+            </div>
+            <input type="number" min="0" placeholder="Límite diario (llamadas)" value="${reqLimitVal}"
+                   data-limit-key="${limitKey}" data-metric="requests"
+                   style="width:150px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .5rem;font-size:.75rem;outline:none">
+            ${reqPct!==null?`<span style="font-size:.75rem;color:${reqBarColor};font-weight:600;min-width:34px;text-align:right">${reqPct}%</span>`:''}
           </div>
         </div>`;
     }).join('');
@@ -15535,13 +15551,16 @@ async function loadAiUsage(){
 
 async function saveAiUsageLimits(){
   const inputs = document.querySelectorAll('#ai-usage-list input[data-limit-key]');
-  const limits = {..._aiUsageLimits};
+  const limits = {};
   inputs.forEach(inp => {
     const key = inp.dataset.limitKey;
+    const metric = inp.dataset.metric;
     const isAudio = inp.dataset.isAudio === 'true';
     const val = parseInt(inp.value, 10);
-    if(!val){ delete limits[key]; return; }
-    limits[key] = isAudio ? {daily_seconds: val} : {daily_tokens: val};
+    const entry = {...(limits[key] || _aiUsageLimits[key] || {})};
+    const field = metric === 'requests' ? 'daily_requests' : (isAudio ? 'daily_seconds' : 'daily_tokens');
+    if(val){ entry[field] = val; } else { delete entry[field]; }
+    if(Object.keys(entry).length){ limits[key] = entry; }
   });
   try{
     const r = await fetch('/api/admin/bot/ai-usage/limits', {
