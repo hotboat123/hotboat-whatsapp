@@ -168,14 +168,18 @@ def build_system_prompt(custom_prompt: Optional[str] = None) -> str:
 
 
 # provider -> (api_key, base_url) for AIHandler's OpenAI-compatible client.
-# Both Groq and Gemini speak the OpenAI chat-completions shape at these
-# endpoints, so the rest of AIHandler (tool calls, RateLimitError handling,
-# etc.) needs zero changes to support a second provider — see
+# Groq, Gemini and Cerebras all speak the OpenAI chat-completions shape at
+# these endpoints, so the rest of AIHandler (tool calls, RateLimitError
+# handling, etc.) needs zero changes to support another provider — see
 # bot_ab_variants.ai_provider (app/bot/variant_overrides.py:get_current_ai_model)
-# for where a variant picks one.
+# for where a variant picks one. Added 2026-10 to spread free-tier quota
+# across providers for the high season (see the "Uso de IA" admin
+# dashboard) — Cerebras gives 1M tokens/day free for gpt-oss-120b, the same
+# model Groq's "IA120b" variant already uses, vs. Groq's 200K/day.
 _PROVIDER_ENDPOINTS = {
     "groq": lambda: (settings.groq_api_key, "https://api.groq.com/openai/v1"),
     "gemini": lambda: (settings.gemini_api_key, "https://generativelanguage.googleapis.com/v1beta/openai/"),
+    "cerebras": lambda: (settings.cerebras_api_key, "https://api.cerebras.ai/v1"),
 }
 
 
@@ -305,14 +309,15 @@ class AIHandler:
                 "max_tokens": 700,
                 "temperature": 0.7
             }
-            if self.provider == "groq":
-                # DEFAULT_MODEL (and any other current Groq chat model) is a
-                # "gpt-oss"-style reasoning model — it spends part of
-                # max_tokens on a hidden reasoning trace before the visible
-                # reply, which without this was eating the whole budget and
+            if self.provider in ("groq", "cerebras"):
+                # DEFAULT_MODEL (and any other current Groq/Cerebras chat
+                # model) is a "gpt-oss"-style reasoning model — it spends
+                # part of max_tokens on a hidden reasoning trace before the
+                # visible reply (Cerebras defaults this to "medium" when
+                # unset), which without this was eating the whole budget and
                 # truncating (or blanking) replies. "low" keeps that
                 # overhead small; Gemini's OpenAI-compat endpoint doesn't
-                # recognize this param, so only send it for Groq.
+                # recognize this param, so only send it for these two.
                 api_params["reasoning_effort"] = "low"
 
             # Add tools if MCP is enabled and tools are available
@@ -375,7 +380,7 @@ class AIHandler:
                     "max_tokens": 700,
                     "temperature": 0.7,
                 }
-                if self.provider == "groq":
+                if self.provider in ("groq", "cerebras"):
                     final_params["reasoning_effort"] = "low"
                 final_response = self.client.chat.completions.create(**final_params)
                 self._log_usage(final_response)

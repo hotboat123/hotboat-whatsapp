@@ -30,8 +30,16 @@ class Settings(BaseSettings):
     # AI (Groq - FREE!)
     groq_api_key: str
 
-    # AI Vision — Google Gemini Flash (free tier: 1500 req/day)
+    # AI chat/vision — Google Gemini Flash (free tier, confirmed in AI
+    # Studio's own rate-limit page 2026-10: 500 requests/day per model, not
+    # a token budget — see the "Uso de IA" admin dashboard's daily_requests
+    # limit for gemini-3.5-flash-lite / gemini-3.1-flash-lite)
     gemini_api_key: str = ""
+
+    # AI chat — Cerebras (free tier: 1M tokens/day for gpt-oss-120b, the
+    # same model Groq's "IA120b" variant uses — OpenAI-compatible endpoint,
+    # see app/bot/ai_handler.py's _PROVIDER_ENDPOINTS)
+    cerebras_api_key: str = ""
 
     # AI Vision — Anthropic Claude (receipt scanning)
     anthropic_api_key: str = ""
