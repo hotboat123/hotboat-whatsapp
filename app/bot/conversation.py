@@ -944,10 +944,24 @@ Yo lo agrego automáticamente al carrito y luego puedes:
                 response = ai_response or self._get_main_menu_message(language)
             
             
-            # Add response to history
+            # Add response to history. response can be a {"type": "sequence",
+            # "messages": [...]} dict (kids/safety/rain FAQ branches above,
+            # sent to WhatsApp as several delayed bubbles) — must be flattened
+            # to plain text here, since this history is replayed verbatim as
+            # chat "content" to the Groq/Gemini API by _try_ai_fallback on
+            # every later turn. Found 2026-10-16: a raw dict stored as
+            # content made every subsequent AI call for that lead 400 with
+            # "content must be a string or array", silently stuck returning
+            # the static menu until that turn aged out of the last-10-messages
+            # window (Oct 11-16 logs show this repeating across multiple
+            # unrelated leads).
+            if isinstance(response, dict) and response.get("type") == "sequence":
+                history_content = "\n\n".join(response.get("messages", []))
+            else:
+                history_content = response
             conversation["messages"].append({
                 "role": "assistant",
-                "content": response,
+                "content": history_content,
                 "timestamp": datetime.now(CHILE_TZ).isoformat()
             })
             
@@ -1240,6 +1254,18 @@ Yo lo agrego automáticamente al carrito y luego puedes:
             from app.bot.variant_overrides import get_current_system_prompt
             handler = AIHandler(model=model, custom_prompt=get_current_system_prompt(), provider=provider)
             history = conversation.get("messages", [])[-10:]
+            # Defensive: Groq/Gemini's chat API 400s on any "content" that
+            # isn't a string or list of parts. Conversations persisted before
+            # the 2026-10-16 fix above can still have an old {"type":
+            # "sequence", ...} dict sitting in their stored history — coerce
+            # it to text here too so an already-poisoned lead self-heals on
+            # its next message instead of erroring until that turn ages out.
+            for h in history:
+                content = h.get("content")
+                if isinstance(content, dict):
+                    h["content"] = "\n\n".join(content.get("messages", [])) or str(content)
+                elif content is not None and not isinstance(content, (str, list)):
+                    h["content"] = str(content)
 
             # Ground the reply in real availability when the message looks
             # like it's asking for it — same heuristic used above to route
