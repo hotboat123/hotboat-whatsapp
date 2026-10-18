@@ -83,6 +83,32 @@ def ensure_conversation_state_table() -> None:
         logger.warning(f"bot_conversation_state table setup failed: {e}")
 
 
+def ensure_csat_responses_table() -> None:
+    """Permanent log of 24h check-in survey replies (rating 1-5 for Popeye,
+    and/or an escalation to Capitán Tomás) — see run_csat_survey_scheduler
+    in app/whatsapp/webhook.py for what sends the survey, and
+    ConversationManager._handle_csat_survey_reply below for what records a
+    row here. Separate from pending_csat_surveys (the ephemeral scheduling
+    row, reset on every inbound message) so a rating is never lost."""
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS csat_responses (
+                        id           SERIAL PRIMARY KEY,
+                        phone_number TEXT NOT NULL,
+                        contact_name TEXT,
+                        rating       SMALLINT,
+                        escalated    BOOLEAN NOT NULL DEFAULT FALSE,
+                        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"csat_responses table setup failed: {e}")
+
+
 class ConversationManager:
     """Manages conversations with users"""
     
@@ -409,7 +435,97 @@ class ConversationManager:
             logger.error(f"Error sending notification to Capitán Tomás: {e}")
             import traceback
             traceback.print_exc()
-    
+
+    async def _handle_csat_survey_reply(
+        self, message_text: str, from_number: str, contact_name: str, language: str
+    ) -> Optional[str]:
+        """If `from_number` has an unanswered 24h check-in survey (sent by
+        run_csat_survey_scheduler in app/whatsapp/webhook.py) and
+        message_text is a bare "1".."5" (rating for Popeye) or "7" (call
+        Capitán Tomás), handle it and return the reply text. Returns None —
+        letting the rest of the priority chain run as usual — when there's
+        no pending survey for this phone, or the message doesn't look like a
+        reply to it (e.g. a real new question).
+
+        By the time that survey went out it was the LAST thing sent to this
+        lead, so a lone digit reply is almost certainly answering it — even
+        if the conversation had been sitting mid-flow (awaiting_party_size,
+        an old numbered menu, etc.) since before the 24h window started
+        closing. That's why this is checked before everything else in
+        _process_message_impl, including active flows."""
+        import asyncio
+        from app.db.connection import get_connection
+
+        def _fetch() -> bool:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT 1 FROM pending_csat_surveys
+                        WHERE phone_number=%s AND sent_at IS NOT NULL AND responded_at IS NULL
+                        """,
+                        (from_number,),
+                    )
+                    return cur.fetchone() is not None
+
+        try:
+            has_pending_survey = await asyncio.get_event_loop().run_in_executor(None, _fetch)
+        except Exception as e:
+            logger.warning(f"csat survey lookup failed for {from_number}: {e}")
+            return None
+        if not has_pending_survey:
+            return None
+
+        key = {
+            "1": "1", "1️⃣": "1", "2": "2", "2️⃣": "2", "3": "3", "3️⃣": "3",
+            "4": "4", "4️⃣": "4", "5": "5", "5️⃣": "5", "7": "7", "7️⃣": "7",
+        }.get(message_text.strip())
+        if key is None:
+            return None
+
+        if key == "7":
+            logger.info(f"CSAT survey: {from_number} pidió hablar con el Capitán Tomás")
+            await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
+            await self._record_csat_response(from_number, contact_name, rating=None, escalated=True)
+            return self.faq_handler.get_response("llamar a tomas", language)
+
+        rating = int(key)
+        logger.info(f"CSAT survey: {from_number} calificó a Popeye con {rating}/5")
+        await self._record_csat_response(from_number, contact_name, rating=rating, escalated=False)
+        settings = get_settings()
+        return (
+            "¡Gracias por tu nota! 🦜✅\n\n"
+            "Si quieres reservar o tienes otra consulta, visita "
+            f"{settings.business_website} 🌊"
+        )
+
+    async def _record_csat_response(
+        self, phone_number: str, contact_name: str, rating: Optional[int], escalated: bool
+    ) -> None:
+        import asyncio
+        from app.db.connection import get_connection
+
+        def _write():
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO csat_responses (phone_number, contact_name, rating, escalated)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (phone_number, contact_name, rating, escalated),
+                    )
+                    cur.execute(
+                        "UPDATE pending_csat_surveys SET responded_at=NOW() WHERE phone_number=%s",
+                        (phone_number,),
+                    )
+                conn.commit()
+
+        try:
+            await asyncio.get_event_loop().run_in_executor(None, _write)
+        except Exception as e:
+            logger.warning(f"Could not record csat response for {phone_number}: {e}")
+
     async def process_message(
         self,
         from_number: str,
@@ -585,8 +701,19 @@ class ConversationManager:
             if is_first:
                 pass  # Summary email on first contact disabled
             
+            # PRIORITY -1: Reply to the 24h check-in survey — must win over
+            # everything below, including stale active flows, since a bare
+            # digit here almost certainly answers the survey, not whatever
+            # the conversation was doing a day ago. See
+            # _handle_csat_survey_reply's docstring.
+            csat_reply = await self._handle_csat_survey_reply(
+                message_text, from_number, contact_name, metadata.get("language", "es")
+            )
             requested_language = get_language_code_from_text(message_text)
-            if requested_language:
+            if csat_reply is not None:
+                logger.info("CSAT survey reply handled")
+                response = csat_reply
+            elif requested_language:
                 if requested_language in LANGUAGES:
                     logger.info(f"Language change requested: {requested_language}")
                     response = self._switch_language(conversation, requested_language)

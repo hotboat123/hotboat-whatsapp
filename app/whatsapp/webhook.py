@@ -24,6 +24,26 @@ FOLLOWUP_DELAY_S = 120  # 2 minutes
 FOLLOWUP_MSG_1 = "¿Todo bien? 😊"
 FOLLOWUP_MSG_2 = "¿Quieres que te ayude con algo? 🙌"
 
+# ── 24h check-in survey: WhatsApp's customer-service window closes 24h after
+# the lead's last message, after which only a paid template can reach them —
+# so we send one last free-text check-in right before it closes. Same
+# Postgres-backed scheduling pattern as the follow-up above, but the window
+# resets on EVERY inbound message (any message pushes due_at forward — see
+# _schedule_csat_survey), and the reply (a bare "1".."5" rating for Popeye,
+# or "7" to call Capitán Tomás) is handled in conversation.py's priority
+# chain (PRIORITY -1), since only that chain has FAQ/notify access.
+CSAT_SURVEY_DELAY_S = 23 * 3600 + 50 * 60  # 23h50m — just under the 24h window
+CSAT_SURVEY_MSG_1 = (
+    "Antes de que se cierre esta conversación... 🦜\n\n"
+    "¿Pude resolver todas tus dudas? Cuéntame cómo lo hice calificándome del "
+    "*1* al *5* ⭐ (1 = mal, 5 = excelente)"
+)
+CSAT_SURVEY_MSG_2 = (
+    "Si no fue así, escribe *7* 📞 y el Capitán Tomás te llama directo.\n\n"
+    "Y si quieres reservar o tienes otra consulta, visita: "
+    "https://hotboatchile.com/es/ 🌐"
+)
+
 # ── Outgoing message ID cache ─────────────────────────────────────────────────
 # Maps wamid (outgoing) → message text so that when a customer uses WhatsApp's
 # "reply to" feature we can resolve which bot message they're citing.
@@ -585,6 +605,107 @@ def _ensure_followup_table() -> None:
         logger.warning(f"pending_followups table setup failed: {e}")
 
 
+def _ensure_csat_survey_table() -> None:
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS pending_csat_surveys (
+                        phone_number TEXT PRIMARY KEY,
+                        contact_name TEXT,
+                        due_at       TIMESTAMPTZ NOT NULL,
+                        sent_at      TIMESTAMPTZ,
+                        responded_at TIMESTAMPTZ
+                    )
+                """)
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"pending_csat_surveys table setup failed: {e}")
+
+
+def _schedule_csat_survey(phone_number: str, contact_name: str) -> None:
+    """Push this phone's 24h check-in survey CSAT_SURVEY_DELAY_S into the
+    future and clear sent_at/responded_at — called on every inbound text
+    message (see the call sites below), mirroring how WhatsApp itself resets
+    the real 24h customer-service window on each customer message. Must only
+    be called AFTER conversation_manager.process_message() has already
+    checked whether THIS message was itself a reply to a still-pending
+    survey (PRIORITY -1 in conversation.py) — calling it earlier would wipe
+    sent_at/responded_at before that check runs, and the reply would never
+    be recognized as one."""
+    from app.db.connection import get_connection
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO pending_csat_surveys (phone_number, contact_name, due_at, sent_at, responded_at)
+                    VALUES (%s, %s, NOW() + (%s || ' seconds')::interval, NULL, NULL)
+                    ON CONFLICT (phone_number) DO UPDATE SET
+                        contact_name = EXCLUDED.contact_name,
+                        due_at       = EXCLUDED.due_at,
+                        sent_at      = NULL,
+                        responded_at = NULL
+                    """,
+                    (phone_number, contact_name, CSAT_SURVEY_DELAY_S),
+                )
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"schedule_csat_survey failed for {phone_number}: {e}")
+
+
+async def run_csat_survey_scheduler() -> None:
+    """Periodic job (same advisory-lock-gated pattern as the other
+    schedulers): sends the 24h check-in survey to any phone whose window is
+    due and not already sent, as a two-bubble nudge like the menu follow-up."""
+    from app.db.connection import get_connection
+    while True:
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT phone_number, contact_name FROM pending_csat_surveys
+                        WHERE sent_at IS NULL AND due_at <= NOW()
+                    """)
+                    due = cur.fetchall()
+
+            for phone_number, contact_name in due:
+                try:
+                    logger.info(f"🦜 Sending 24h check-in survey to {phone_number}")
+                    await whatsapp_client.send_text_message(phone_number, CSAT_SURVEY_MSG_1)
+                    await asyncio.sleep(1.5)
+                    await whatsapp_client.send_text_message(phone_number, CSAT_SURVEY_MSG_2)
+                    for msg in (CSAT_SURVEY_MSG_1, CSAT_SURVEY_MSG_2):
+                        try:
+                            await save_conversation(
+                                phone_number=phone_number,
+                                customer_name=contact_name,
+                                message_text="",
+                                response_text=msg,
+                                message_type="text",
+                                direction="outgoing",
+                            )
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.error(f"Error sending csat survey to {phone_number}: {e}")
+                finally:
+                    try:
+                        with get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "UPDATE pending_csat_surveys SET sent_at=NOW() WHERE phone_number=%s",
+                                    (phone_number,),
+                                )
+                            conn.commit()
+                    except Exception as e:
+                        logger.warning(f"failed to mark csat survey sent for {phone_number}: {e}")
+        except Exception as e:
+            logger.warning(f"csat_survey_scheduler error: {e}")
+        await asyncio.sleep(60)
+
+
 def _cancel_followup(phone_number: str) -> None:
     """Cancel any pending follow-up for this user (they replied)."""
     from app.db.connection import get_connection
@@ -1070,6 +1191,10 @@ async def process_message(message: Dict[str, Any], value: Dict[str, Any], conver
                 conversation_manager.pending_followup_requests.discard(from_number)
                 _schedule_followup(from_number, contact_name)
                 logger.info(f"⏰ Follow-up scheduled for {from_number} in {FOLLOWUP_DELAY_S}s")
+
+            # Reset the 24h check-in survey window — must run AFTER
+            # process_message (see _schedule_csat_survey's docstring for why).
+            _schedule_csat_survey(from_number, contact_name)
 
             response_text = None
             manual_handover_only = False
