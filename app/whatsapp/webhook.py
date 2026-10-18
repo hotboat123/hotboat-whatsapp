@@ -39,9 +39,9 @@ CSAT_SURVEY_MSG_1 = (
     "*1* al *5* ⭐ (1 = mal, 5 = excelente)"
 )
 CSAT_SURVEY_MSG_2 = (
-    "Si no fue así, escribe *7* 📞 y el Capitán Tomás te llama directo.\n\n"
+    "Si no fue así, escribe *7* 📞 y el Capitán Tomás te hablará en cuanto pueda.\n\n"
     "Y si quieres reservar o tienes otra consulta, visita: "
-    "https://hotboatchile.com/es/ 🌐"
+    "https://hotboat.cl 🌐"
 )
 
 # ── Outgoing message ID cache ─────────────────────────────────────────────────
