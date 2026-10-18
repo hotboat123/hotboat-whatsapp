@@ -620,7 +620,7 @@ class ConversationManager:
             # etc.), same as any other message; the final "nothing matched"
             # else-branch further down already tries the variant's AI model
             # before falling back to the menu as a last resort.
-            elif self._is_thanks_message(message_text):
+            elif self._is_thanks_message(message_text) and not get_current_ai_model():
                 logger.info("Gratitude detected - sending friendly reply")
                 language = metadata.get("language", "es")
                 response = get_text("thanks_response", language)
@@ -634,8 +634,20 @@ class ConversationManager:
             # awaiting_party_size: a fresh unprompted reservation message mentioning
             # "niños" was previously getting swallowed here before it ever reached the
             # reservation-intent check further down the chain.
+            #
+            # "and not get_current_ai_model()" on this and the two FAQ-style
+            # branches below (safety, rain) and the thanks branch above: an
+            # AI-variant lead answers these conversationally through
+            # _try_ai_fallback instead of this canned reply — found 2026-10-17,
+            # a real conversation where these canned sequence replies kept
+            # cutting off an otherwise natural AI exchange with an abrupt,
+            # unrelated reply. Reservation/cart/date/time handling further down
+            # this chain is NOT gated this way and stays fully deterministic —
+            # the AI here has no way to actually create a booking or charge
+            # anything, so that part must stay scripted regardless of variant.
             elif (
                 self._parse_party_size(message_text) is None
+                and not get_current_ai_model()
                 and (
                     "niño" in message_text.lower() or "niña" in message_text.lower()
                     or "nino" in message_text.lower() or "nina" in message_text.lower()
@@ -653,7 +665,7 @@ class ConversationManager:
                     "delay": 1.5
                 }
             # PRIORITY 0.66: Safety / security question — always answer regardless of active flow
-            elif any(w in message_text.lower() for w in ["seguridad", "seguro", "segura", "peligro", "peligroso", "peligrosa", "riesgo", "accidente", "emergencia", "salvavidas", "chaleco", "ahog"]):
+            elif not get_current_ai_model() and any(w in message_text.lower() for w in ["seguridad", "seguro", "segura", "peligro", "peligroso", "peligrosa", "riesgo", "accidente", "emergencia", "salvavidas", "chaleco", "ahog"]):
                 logger.info("Safety question detected - sending safety info sequence")
                 response = {
                     "type": "sequence",
@@ -666,7 +678,7 @@ class ConversationManager:
                     "delay": 1.5
                 }
             # PRIORITY 0.67: Rain / weather question — always answer regardless of active flow
-            elif "lluvia" in message_text.lower() or "llueve" in message_text.lower() or "lloviendo" in message_text.lower() or "llover" in message_text.lower() or "lluvioso" in message_text.lower() or "lluviosa" in message_text.lower() or "paraguas" in message_text.lower() or "impermeabl" in message_text.lower() or "mojarse" in message_text.lower() or "mojar" in message_text.lower():
+            elif not get_current_ai_model() and ("lluvia" in message_text.lower() or "llueve" in message_text.lower() or "lloviendo" in message_text.lower() or "llover" in message_text.lower() or "lluvioso" in message_text.lower() or "lluviosa" in message_text.lower() or "paraguas" in message_text.lower() or "impermeabl" in message_text.lower() or "mojarse" in message_text.lower() or "mojar" in message_text.lower()):
                 logger.info("Rain question detected - sending rain info sequence")
                 response = {
                     "type": "sequence",
