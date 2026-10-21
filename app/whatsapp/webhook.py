@@ -658,17 +658,31 @@ def _schedule_csat_survey(phone_number: str, contact_name: str) -> None:
 async def run_csat_survey_scheduler() -> None:
     """Periodic job (same advisory-lock-gated pattern as the other
     schedulers): sends the 24h check-in survey to any phone whose window is
-    due and not already sent, as a two-bubble nudge like the menu follow-up."""
+    due and not already sent, as a two-bubble nudge like the menu follow-up.
+
+    Claims due rows with an atomic UPDATE ... RETURNING instead of a SELECT
+    followed by a separate UPDATE after sending. The old two-step version let
+    a row sit "claimed in memory but still sent_at IS NULL in the DB" for the
+    whole duration of the WhatsApp send (two API calls + a 1.5s gap) — if the
+    scheduler-lock briefly changed hands between replicas, or the later
+    UPDATE failed, the next poll (or the newly-locked replica) would select
+    the same row again and resend the survey. Marking sent_at in the same
+    query as the SELECT closes that window: Postgres guarantees only one
+    concurrent claim of a given row can see it with sent_at IS NULL, so a
+    row can never be sent twice regardless of what happens afterward."""
     from app.db.connection import get_connection
     while True:
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        SELECT phone_number, contact_name FROM pending_csat_surveys
+                        UPDATE pending_csat_surveys
+                        SET sent_at = NOW()
                         WHERE sent_at IS NULL AND due_at <= NOW()
+                        RETURNING phone_number, contact_name
                     """)
                     due = cur.fetchall()
+                conn.commit()
 
             for phone_number, contact_name in due:
                 try:
@@ -689,18 +703,10 @@ async def run_csat_survey_scheduler() -> None:
                         except Exception:
                             pass
                 except Exception as e:
+                    # Already claimed (sent_at set) even on failure — a
+                    # permanently-failing send (bad number, etc.) shouldn't
+                    # retry forever, same philosophy as the follow-up nudge.
                     logger.error(f"Error sending csat survey to {phone_number}: {e}")
-                finally:
-                    try:
-                        with get_connection() as conn:
-                            with conn.cursor() as cur:
-                                cur.execute(
-                                    "UPDATE pending_csat_surveys SET sent_at=NOW() WHERE phone_number=%s",
-                                    (phone_number,),
-                                )
-                            conn.commit()
-                    except Exception as e:
-                        logger.warning(f"failed to mark csat survey sent for {phone_number}: {e}")
         except Exception as e:
             logger.warning(f"csat_survey_scheduler error: {e}")
         await asyncio.sleep(60)
