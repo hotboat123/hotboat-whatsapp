@@ -1634,10 +1634,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
       <!-- Fechas -->
       <div style="display:flex;align-items:center;gap:.5rem">
-        <input type="date" id="fin-date-from" onchange="loadFinancial()"
+        <input type="date" id="fin-date-from" onchange="loadFinancialDebounced()"
           style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
         <span style="color:var(--muted);font-size:.8rem">→</span>
-        <input type="date" id="fin-date-to" onchange="loadFinancial()"
+        <input type="date" id="fin-date-to" onchange="loadFinancialDebounced()"
           style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
       </div>
       <!-- Shortcuts de período -->
@@ -12403,6 +12403,17 @@ function setFinTab(t){
 function loadFinancial(){
   if(_finTab==='pnl')      loadPnl();
   if(_finTab==='cashflow') loadCashFlow();
+}
+
+// fin-date-from and fin-date-to each fire their own onchange: picking a new
+// custom range means two changes in quick succession, and firing on the
+// first one queries with the OLD value still in the other field (often an
+// empty/mismatched range that renders as all-$0 for a moment). Debounce so
+// only the settled, fully-updated range is fetched.
+let _finDateDebounceTimer = null;
+function loadFinancialDebounced(){
+  clearTimeout(_finDateDebounceTimer);
+  _finDateDebounceTimer = setTimeout(loadFinancial, 250);
 }
 
 // ── CSV export (tabla actual P&L / Flujo / Forecast) ─────────
