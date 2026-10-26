@@ -5,6 +5,7 @@ per-booking fixed costs are surfaced for P&L / cash-flow reporting.
 """
 from __future__ import annotations
 
+import calendar
 import json
 import logging
 import re
@@ -30,7 +31,9 @@ def _slugify(s: str) -> str:
 def get_financial_structure() -> Dict[str, Any]:
     raw = get_setting(FIN_STRUCTURE_KEY, "")
     default: Dict[str, Any] = {
-        "costo_fijo_diario_prorrateado": 21700,
+        "costo_fijo_mensual": 400000,
+        "costo_fijo_mensual_alta_temporada": 600000,
+        "meses_alta_temporada": [1, 2],
         "costo_operativo_por_reserva": 18000,
         "experience_slug_whitelist": [],
     }
@@ -371,17 +374,33 @@ def merge_day_discount(dst: Dict[str, Any], discount_applied: int) -> None:
     dst["total_descuentos"] = dst.get("total_descuentos", 0) + int(discount_applied)
 
 
+def structural_monthly_amount(year: int, month: int, structure: Dict[str, Any]) -> float:
+    """Costo fijo (arriendo + sueldo) del mes: costo_fijo_mensual_alta_temporada
+    en los meses listados en meses_alta_temporada (default: enero y febrero),
+    costo_fijo_mensual en el resto."""
+    alta_meses = {int(x) for x in (structure.get("meses_alta_temporada") or [])}
+    if month in alta_meses:
+        return float(structure.get("costo_fijo_mensual_alta_temporada") or 0)
+    return float(structure.get("costo_fijo_mensual") or 0)
+
+
+def structural_daily_rate(d: date, structure: Dict[str, Any]) -> float:
+    """Costo fijo mensual del mes de `d`, prorrateado por los días reales de ese mes."""
+    monthly = structural_monthly_amount(d.year, d.month, structure)
+    days_in_month = calendar.monthrange(d.year, d.month)[1]
+    return monthly / days_in_month if days_in_month else 0.0
+
+
 def apply_structural_to_days(
     days: Dict[str, Dict[str, Any]],
     d_from: date,
     d_to: date,
-    daily_rate: float,
+    structure: Dict[str, Any],
 ) -> None:
-    rate = int(round(float(daily_rate or 0)))
     for ds in iso_dates_inclusive(d_from, d_to):
         if ds not in days:
             days[ds] = new_empty_day(ds)
-        days[ds]["costo_estructural"] = rate
+        days[ds]["costo_estructural"] = int(round(structural_daily_rate(date.fromisoformat(ds), structure)))
 
 
 def finalize_pnl_day(d: Dict[str, Any]) -> None:

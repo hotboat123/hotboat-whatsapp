@@ -1702,9 +1702,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable alojamiento (desde extras_json/catálogo)">CV Aloj</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable experiencia (desde extras_json/catálogo)">CV Exp</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable otros extras (desde extras_json/catálogo)">CV Extra</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo diario prorrateado (día calendario × tarifa)">C.Fijo día</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo mensual (arriendo + sueldo), prorrateado por los días del mes">C.Fijo día</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Mkt</th>
-                <th style="padding:.55rem .45rem;text-align:right">Result.</th>
+                <th style="padding:.55rem .45rem;text-align:right">Utilidad a Repartir</th>
                 <th style="padding:.55rem .45rem;text-align:center">%</th>
               </tr>
             </thead>
@@ -1749,7 +1749,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right">Saldo ini.</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#2ecc71">Entr. neto</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costos operativos reservas (fecha salida)">Op.res.</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo diario prorrateado por día calendario">C.Fijo día</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo mensual (arriendo + sueldo), prorrateado por los días del mes">C.Fijo día</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Mkt</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Σ salidas</th>
                 <th style="padding:.55rem .45rem;text-align:right">Flujo neto</th>
@@ -12210,14 +12210,24 @@ document.addEventListener('DOMContentLoaded', () => {
   <div style="background:var(--card);border-radius:14px;max-width:520px;margin:auto;padding:1.5rem">
     <div style="font-size:1rem;font-weight:700;margin-bottom:.4rem">🏗️ Parámetros P&amp;L / Flujo</div>
     <div style="color:var(--muted);font-size:.78rem;margin-bottom:1rem">
-      <strong>Costo fijo diario (estructura):</strong> se aplica a cada día calendario del rango (D × tarifa) y resta en resultado y en flujo de caja.<br>
+      <strong>Costo fijo mensual (estructura: arriendo + sueldo):</strong> se prorratea por los días reales de cada mes y resta en resultado y en flujo de caja. Sin IVA (arriendo exento, sueldo no tiene IVA).<br>
       <strong>Costo operativo por reserva:</strong> se aplica por cada reserva confirmada del período (N × tarifa).<br>
       <strong>Slugs experiencia:</strong> claves en <code>extras_json</code> que cuentan como experiencia además de los prefijos <code>exp__</code>, <code>experiencia…</code>, <code>pack_exp…</code>.
     </div>
     <div style="display:flex;flex-direction:column;gap:.85rem">
       <div>
-        <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Costo fijo diario prorrateado (CLP / día)</label>
-        <input type="number" id="fin-str-daily" min="0" step="1" placeholder="21700"
+        <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Costo fijo mensual (CLP / mes, sin IVA)</label>
+        <input type="number" id="fin-str-monthly" min="0" step="1" placeholder="400000"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Costo fijo mensual en temporada alta (CLP / mes, sin IVA)</label>
+        <input type="number" id="fin-str-monthly-alta" min="0" step="1" placeholder="600000"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Meses de temporada alta (1=Ene … 12=Dic, separados por coma)</label>
+        <input type="text" id="fin-str-meses-alta" placeholder="1, 2"
           style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box">
       </div>
       <div>
@@ -12614,10 +12624,11 @@ async function loadPnl(){
     renderPnlZones(d.data || [], d.totals, d.view);
     renderReservasPnl(d.data || [], d.totals, d.view);
     const pd = d.period_calendar_days || 0;
-    const dr = (d.structure && d.structure.costo_fijo_diario_prorrateado) || 0;
+    const strMonthly = (d.structure && d.structure.costo_fijo_mensual) || 0;
+    const strAlta    = (d.structure && d.structure.costo_fijo_mensual_alta_temporada) || 0;
     document.getElementById('fin-pnl-loading').textContent =
       (d.data||[]).length === 0 ? 'Sin filas en este período' :
-      (dr && pd ? `${pd} días cal. · estructura ${fmtClp(dr)}/día` : '');
+      (strMonthly && pd ? `${pd} días cal. · estructura ${fmtClp(strMonthly)}/mes (temporada alta: ${fmtClp(strAlta)}/mes)` : '');
   } catch(e){
     console.error('loadPnl error:', e);
     document.getElementById('fin-pnl-loading').textContent = 'Error al cargar';
@@ -12642,7 +12653,7 @@ function renderPnlKpis(t, periodDays, structure){
     {label:'Costo estructura', value: '-'+fmtClp(t.costo_estructural||0), color:'var(--red)',
      sub: periodDays ? `${periodDays} días calendario` : ''},
     {label:'Marketing',        value: '-'+fmtClp(t.marketing),       color:'var(--red)'},
-    {label:'Resultado',        value: fmtClp(t.resultado),           color: colorNum(t.resultado),
+    {label:'Utilidad a Repartir', value: fmtClp(t.resultado),        color: colorNum(t.resultado),
      sub: `Margen ${margin}%`},
   ]);
   const el2 = document.getElementById('fin-pnl-kpis-2');
@@ -13350,7 +13361,9 @@ async function openFinStructureModal(){
   try {
     const r = await fetch('/api/admin/financial/structure', { headers: { 'x-admin-key': getKey() } });
     const s = await r.json();
-    document.getElementById('fin-str-daily').value = s.costo_fijo_diario_prorrateado ?? 21700;
+    document.getElementById('fin-str-monthly').value = s.costo_fijo_mensual ?? 400000;
+    document.getElementById('fin-str-monthly-alta').value = s.costo_fijo_mensual_alta_temporada ?? 600000;
+    document.getElementById('fin-str-meses-alta').value = (s.meses_alta_temporada || [1, 2]).join(', ');
     document.getElementById('fin-str-per-booking').value = s.costo_operativo_por_reserva ?? 18000;
     document.getElementById('fin-str-whitelist').value = (s.experience_slug_whitelist || []).join(', ');
     document.getElementById('fin-str-cost-pct').value = ((s.costo_pct_forecast ?? 0) * 100).toFixed(1);
@@ -13358,7 +13371,10 @@ async function openFinStructureModal(){
 }
 
 async function saveFinStructure(){
-  const daily = parseFloat(String(document.getElementById('fin-str-daily').value || '0')) || 0;
+  const monthly = parseFloat(String(document.getElementById('fin-str-monthly').value || '0')) || 0;
+  const monthlyAlta = parseFloat(String(document.getElementById('fin-str-monthly-alta').value || '0')) || 0;
+  const mesesAlta = document.getElementById('fin-str-meses-alta').value.split(',')
+    .map(x => parseInt(x.trim(), 10)).filter(x => x >= 1 && x <= 12);
   const perBooking = parseFloat(String(document.getElementById('fin-str-per-booking').value || '0')) || 0;
   const wl = document.getElementById('fin-str-whitelist').value.split(',')
     .map(x => x.trim().toLowerCase()).filter(Boolean);
@@ -13367,7 +13383,9 @@ async function saveFinStructure(){
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'x-admin-key': getKey() },
       body: JSON.stringify({
-        costo_fijo_diario_prorrateado: daily,
+        costo_fijo_mensual: monthly,
+        costo_fijo_mensual_alta_temporada: monthlyAlta,
+        meses_alta_temporada: mesesAlta,
         costo_operativo_por_reserva: perBooking,
         experience_slug_whitelist: wl,
         costo_pct_forecast: (parseFloat(document.getElementById('fin-str-cost-pct').value) || 0) / 100,

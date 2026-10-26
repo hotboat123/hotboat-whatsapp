@@ -24,6 +24,8 @@ from app.booking.financial_breakdown import (
     merge_day_discount,
     new_empty_day,
     split_booking_financials,
+    structural_daily_rate,
+    structural_monthly_amount,
 )
 
 logger = logging.getLogger(__name__)
@@ -432,7 +434,6 @@ def _build_pnl_days(
 ) -> Dict[str, Dict]:
     """Build per-day P&L dict with income/cost breakdown and structural daily cost."""
     structure = get_financial_structure()
-    daily_struct = float(structure.get("costo_fijo_diario_prorrateado") or 0)
     costo_por_reserva = float(structure.get("costo_operativo_por_reserva") or 18000)
     wl = set(structure.get("experience_slug_whitelist") or [])
     cost_catalog = load_extra_cost_catalog()
@@ -503,7 +504,7 @@ def _build_pnl_days(
     # get the complete month's fixed cost (not just the days inside the filter window).
     _struct_from = date(d_from.year, d_from.month, 1)
     _struct_to   = date(d_to.year, d_to.month, _cal.monthrange(d_to.year, d_to.month)[1])
-    apply_structural_to_days(days, _struct_from, _struct_to, daily_struct)
+    apply_structural_to_days(days, _struct_from, _struct_to, structure)
 
     all_days_with_mkt = set(days.keys()) | set(mkt_by_day.keys())
     for day in all_days_with_mkt:
@@ -631,7 +632,6 @@ def _build_cashflow_days(
 ) -> Dict[str, Dict]:
     """Build per-day cash flow based on actual payment dates."""
     structure = get_financial_structure()
-    daily_struct = float(structure.get("costo_fijo_diario_prorrateado") or 0)
     costo_por_reserva = float(structure.get("costo_operativo_por_reserva") or 18000)
     wl = set(structure.get("experience_slug_whitelist") or [])
     cost_catalog = load_extra_cost_catalog()
@@ -716,14 +716,13 @@ def _build_cashflow_days(
     )
 
     days: Dict[str, Dict] = {}
-    struct_int = int(round(daily_struct))
     for day in all_days:
         try:
             dt = date.fromisoformat(day)
             in_range = d_from <= dt <= d_to
         except ValueError:
             in_range = False
-        out_struct = struct_int if in_range else 0
+        out_struct = int(round(structural_daily_rate(dt, structure))) if in_range else 0
 
         total_inflow_neto = sum(p["amount_neto"] for p in inflows_by_day[day])
         total_inflow_bruto = sum(p["amount_bruto"] for p in inflows_by_day[day])
@@ -1375,7 +1374,6 @@ async def get_forecast_table(
         week_cost_fc_plan      = plan.get("week_cost_forecast", {})
         month_cost_fc_plan     = plan.get("month_cost_forecast", {})
         structure          = get_financial_structure()
-        daily_struct       = float(structure.get("costo_fijo_diario_prorrateado") or 0)
         costo_por_reserva_fc = float(structure.get("costo_operativo_por_reserva") or 18000)
         cost_pct           = float(structure.get("costo_pct_forecast") or 0)  # % of income for forecast/budget costs
 
@@ -1531,7 +1529,7 @@ async def get_forecast_table(
                 wcb_val = _week_cost_budget_fallback(ws)
                 sug_val, sug_src = _week_suggested(w["iso_year"], w["iso_week"], w["is_past"])
                 actual_costs  = data["costs"]  if data else None
-                week_fixed    = daily_struct * 7
+                week_fixed    = sum(structural_daily_rate(ws + timedelta(days=i), structure) for i in range(7))
                 week_mkt      = int(mkt_by_week.get(w["key"], 0))
                 actual_result = (data["income"] - data["costs"] - week_fixed - week_mkt) if data else None
                 result.append({
@@ -1692,8 +1690,7 @@ async def get_forecast_table(
             fc_val = int(fc_val) if fc_val is not None else None
             fc_cost_val = month_cost_fc_plan.get(mk)
             fc_cost_val = int(fc_cost_val) if fc_cost_val is not None else None
-            month_days   = _calendar.monthrange(y, m)[1]
-            month_fixed  = int(daily_struct * month_days)
+            month_fixed  = int(structural_monthly_amount(y, m, structure))
             month_mkt    = int(mkt_by_month.get(mk, 0))
             _zd          = zone_by_month.get(mk, {})
             _cv_total    = (int(_zd.get("cv_aloj", 0)) + int(_zd.get("cv_exp", 0))
@@ -1827,8 +1824,14 @@ async def put_financial_structure(request: Request, x_admin_key: str = Header(""
     if not isinstance(body, dict):
         raise HTTPException(400, "JSON object expected")
     merged = get_financial_structure()
-    if "costo_fijo_diario_prorrateado" in body:
-        merged["costo_fijo_diario_prorrateado"] = float(body["costo_fijo_diario_prorrateado"] or 0)
+    if "costo_fijo_mensual" in body:
+        merged["costo_fijo_mensual"] = float(body["costo_fijo_mensual"] or 0)
+    if "costo_fijo_mensual_alta_temporada" in body:
+        merged["costo_fijo_mensual_alta_temporada"] = float(body["costo_fijo_mensual_alta_temporada"] or 0)
+    if "meses_alta_temporada" in body:
+        meses = body["meses_alta_temporada"]
+        if isinstance(meses, list):
+            merged["meses_alta_temporada"] = sorted({int(x) for x in meses if 1 <= int(x) <= 12})
     if "costo_operativo_por_reserva" in body:
         merged["costo_operativo_por_reserva"] = float(body["costo_operativo_por_reserva"] or 0)
     if "experience_slug_whitelist" in body:
