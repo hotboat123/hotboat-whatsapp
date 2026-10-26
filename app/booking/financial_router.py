@@ -517,9 +517,9 @@ def _build_pnl_days(
 
 _PNL_DAY_MONEY_FIELDS = (
     "gross", "commission_deduction", "net_income", "costo_operacional",
-    "marketing", "costo_estructural", "ingreso_reserva", "ingreso_aloj",
+    "marketing", "ingreso_reserva", "ingreso_aloj",
     "ingreso_exp", "ingreso_extra", "total_descuentos", "cv_aloj",
-    "cv_exp", "cv_extra", "resultado",
+    "cv_exp", "cv_extra",
 )
 _PNL_BOOKING_MONEY_FIELDS = (
     "ingreso_total", "commission", "net_income", "costo",
@@ -533,12 +533,21 @@ def _strip_iva_from_pnl_days(days: Dict[str, Dict]) -> None:
     (1 + IVA_RATE) so the Detalle P&L report reads net of IVA throughout.
     Applied once here, right after _build_pnl_days and before totals/weekly/
     monthly aggregation, so daily/weekly/monthly views and the grand total
-    all stay consistent with each other."""
+    all stay consistent with each other.
+
+    costo_estructural (arriendo + sueldo, C.FIJO DÍA) is excluded: the admin
+    enters that daily rate directly as a net figure (rent is IVA-exempt,
+    salary never carries IVA), so it never had IVA to strip — dividing it
+    here would double-deflate it against the raw value shown in the
+    settings modal / header. resultado is recomputed from the adjusted
+    pieces afterward instead of being divided directly, since it mixes
+    stripped fields with the untouched costo_estructural."""
     factor = 1 + IVA_RATE
     for d in days.values():
         for k in _PNL_DAY_MONEY_FIELDS:
             if k in d:
                 d[k] = _fmt_int(d[k] / factor)
+        finalize_pnl_day(d)
         for b in d.get("bookings", []):
             for k in _PNL_BOOKING_MONEY_FIELDS:
                 if k in b:
