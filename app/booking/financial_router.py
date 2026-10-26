@@ -515,6 +515,39 @@ def _build_pnl_days(
     return days
 
 
+_PNL_DAY_MONEY_FIELDS = (
+    "gross", "commission_deduction", "net_income", "costo_operacional",
+    "marketing", "costo_estructural", "ingreso_reserva", "ingreso_aloj",
+    "ingreso_exp", "ingreso_extra", "total_descuentos", "cv_aloj",
+    "cv_exp", "cv_extra", "resultado",
+)
+_PNL_BOOKING_MONEY_FIELDS = (
+    "ingreso_total", "commission", "net_income", "costo",
+    "ingreso_reserva", "ingreso_aloj", "ingreso_exp", "ingreso_extra",
+    "descuentos_aplicados", "cv_aloj", "cv_exp", "cv_extra",
+)
+
+
+def _strip_iva_from_pnl_days(days: Dict[str, Dict]) -> None:
+    """Scale every P&L money figure (income AND cost columns) down by
+    (1 + IVA_RATE) so the Detalle P&L report reads net of IVA throughout.
+    Applied once here, right after _build_pnl_days and before totals/weekly/
+    monthly aggregation, so daily/weekly/monthly views and the grand total
+    all stay consistent with each other."""
+    factor = 1 + IVA_RATE
+    for d in days.values():
+        for k in _PNL_DAY_MONEY_FIELDS:
+            if k in d:
+                d[k] = _fmt_int(d[k] / factor)
+        for b in d.get("bookings", []):
+            for k in _PNL_BOOKING_MONEY_FIELDS:
+                if k in b:
+                    b[k] = _fmt_int(b[k] / factor)
+        for gc in d.get("gift_cards", []):
+            if "amount" in gc:
+                gc["amount"] = _fmt_int(gc["amount"] / factor)
+
+
 def _aggregate_weeks(days: Dict[str, Dict]) -> List[Dict]:
     weeks: Dict[str, Dict] = {}
     for day_str, d in sorted(days.items()):
@@ -937,6 +970,7 @@ async def get_pnl(
     gift_cards = _get_gift_cards_revenue_range(d_from, d_to)
 
     days = _build_pnl_days(bookings, marketing, commissions, d_from, d_to, gift_cards)
+    _strip_iva_from_pnl_days(days)
     struct = get_financial_structure()
     period_days = (d_to - d_from).days + 1
 
