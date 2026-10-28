@@ -41,10 +41,14 @@ CSAT_SURVEY_MSG_1 = (
 )
 CSAT_SURVEY_MSG_2 = (
     "Si no fue así, escribe *7* 📞 y el Capitán Tomás te hablará en cuanto pueda.\n\n"
-    "Si quieres vivir otra experiencia increíble en Pucón, escribe *8* 🙌 y te pondremos en "
-    "contacto con Diego, que tiene los mejores contactos locales para que vivas experiencias "
-    "de calidad. Ofrece ⛵ Velerismo, 🚴 bicicleta eléctrica, 🚣 rafting, 🐎 cabalgatas, "
-    "🌋 cuevas volcánicas y 🥾 caminata al cráter.\n\n"
+    "🌋 *Ya conociste Pucón desde el agua. ¿Y desde el cráter de un volcán?*\n\n"
+    "Escribe *8* y te conectamos con *Diego*, de Andes Volcánico. Te arma la salida en "
+    "privado y con guías certificados:\n\n"
+    "🌋 Subida al cráter del Villarrica, el volcán más activo de Chile\n"
+    "🔦 Cavernas volcánicas, se hacen incluso con lluvia\n"
+    "🚣 Rafting en el Trancura, desde 8 años\n"
+    "🚴 Bici, trekking y termas\n\n"
+    "Cuéntale qué te gustaría hacer y te propone el plan.\n\n"
     "Y si quieres reservar o tienes otra consulta, visita: "
     "https://hotboat.cl 🌐"
 )
