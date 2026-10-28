@@ -30,8 +30,9 @@ FOLLOWUP_MSG_2 = "¿Quieres que te ayude con algo? 🙌"
 # Postgres-backed scheduling pattern as the follow-up above, but the window
 # resets on EVERY inbound message (any message pushes due_at forward — see
 # _schedule_csat_survey), and the reply (a bare "1".."5" rating for Popeye,
-# or "7" to call Capitán Tomás) is handled in conversation.py's priority
-# chain (PRIORITY -1), since only that chain has FAQ/notify access.
+# "7" to call Capitán Tomás, or "8" to be put in touch with the tercerized
+# experiences vendor) is handled in conversation.py's priority chain
+# (PRIORITY -1), since only that chain has FAQ/notify access.
 CSAT_SURVEY_DELAY_S = 23 * 3600 + 50 * 60  # 23h50m — just under the 24h window
 CSAT_SURVEY_MSG_1 = (
     "Antes de que se cierre esta conversación... 🦜\n\n"
@@ -40,6 +41,10 @@ CSAT_SURVEY_MSG_1 = (
 )
 CSAT_SURVEY_MSG_2 = (
     "Si no fue así, escribe *7* 📞 y el Capitán Tomás te hablará en cuanto pueda.\n\n"
+    "Si quieres vivir otra experiencia increíble en Pucón, escribe *8* 🙌 y te pondremos en "
+    "contacto con Diego, que tiene los mejores contactos locales para que vivas experiencias "
+    "de calidad. Ofrece ⛵ Velerismo, 🚴 bicicleta eléctrica, 🚣 rafting, 🐎 cabalgatas, "
+    "🌋 cuevas volcánicas y 🥾 caminata al cráter.\n\n"
     "Y si quieres reservar o tienes otra consulta, visita: "
     "https://hotboat.cl 🌐"
 )

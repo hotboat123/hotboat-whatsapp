@@ -7564,7 +7564,7 @@ async function adminRegisterPush() {
     const json = subscription.toJSON();
     await fetch('/api/push/subscribe', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': getKey() },
       body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
     });
     box.innerHTML = '<span style="color:#4ade80">✅ Dispositivo registrado. Las notificaciones llegarán a este navegador/celular.</span>';
@@ -15952,6 +15952,12 @@ async function deleteBotKeyword(id){
         </select>
         <div style="font-size:.72rem;color:var(--muted);margin-top:.25rem">Vincula este login a "Tom", "Esteban", etc. para que el sistema sepa quién respondió cada mensaje.</div>
       </div>
+      <div>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer" title="Cuando un cliente escribe 8 en la encuesta de las 24h pidiendo otra experiencia (velerismo, rafting, etc.), este usuario recibe la notificación push en su celular/navegador registrado — nadie más la recibe.">
+          <input id="um-is-vendor" type="checkbox" style="accent-color:#4a9eff;width:16px;height:16px;cursor:pointer">
+          <span style="font-size:.82rem">🙌 Vendedor de experiencias — recibe la notificación cuando un cliente escribe *8*</span>
+        </label>
+      </div>
     </div>
     <div style="display:flex;gap:.6rem;margin-top:1.3rem">
       <button onclick="closeUserModal()" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:.65rem;font-size:.85rem;cursor:pointer">Cancelar</button>
@@ -15990,12 +15996,15 @@ async function loadAdminUsers(){
       const secs = u.sections ? u.sections.map(s=>(_SECTION_LABELS[s]||s)).join(', ') : '🔓 Acceso completo';
       const variantBadge = u.variant_key
         ? `<div style="font-size:.72rem;color:#4a9eff;margin-top:.1rem">🤖 Vinculado a: ${escHtml(u.variant_key)}</div>` : '';
+      const vendorBadge = u.is_vendor
+        ? `<div style="font-size:.72rem;color:#fbbf24;margin-top:.1rem">🙌 Vendedor de experiencias (recibe notificación del *8*)</div>` : '';
       return `<div style="display:flex;align-items:flex-start;gap:.7rem;padding:.6rem .75rem;background:var(--surface);border:1px solid var(--border);border-radius:10px">
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:.88rem">${escHtml(u.name)}</div>
           <div style="font-size:.72rem;color:var(--muted);margin-top:.15rem">🔑 ${u.key_masked}</div>
           <div style="font-size:.72rem;color:var(--muted);margin-top:.1rem;line-height:1.5">${escHtml(secs)}</div>
           ${variantBadge}
+          ${vendorBadge}
         </div>
         <div style="display:flex;gap:.4rem;flex-shrink:0">
           <button onclick="openUserModal(${u.idx})" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:.28rem .6rem;font-size:.78rem;cursor:pointer">✏️</button>
@@ -16011,6 +16020,7 @@ async function openUserModal(idx){
   document.getElementById('user-modal-title').textContent = _userModalIdx !== null ? '✏️ Editar usuario' : '👤 Agregar usuario';
   document.getElementById('um-name').value = '';
   document.getElementById('um-key').value  = '';
+  document.getElementById('um-is-vendor').checked = false;
 
   // Build section checkboxes
   const secDiv = document.getElementById('um-sections');
@@ -16048,6 +16058,7 @@ async function openUserModal(idx){
           });
         }
         variantSelect.value = u.variant_key || '';
+        document.getElementById('um-is-vendor').checked = !!u.is_vendor;
       }
     } catch(_){}
   }
@@ -16067,14 +16078,15 @@ async function saveUserModal(){
   const checked = [...document.querySelectorAll('input[name="um-sec"]:checked')].map(cb=>cb.value);
   const sections = checked.length ? checked : null; // null = full access
   const variant_key = document.getElementById('um-variant').value || null;
+  const is_vendor = document.getElementById('um-is-vendor').checked;
 
   try {
     if(_userModalIdx !== null){
-      const body = {name, sections, variant_key};
+      const body = {name, sections, variant_key, is_vendor};
       if(key) body.key = key;
       await api(`/api/admin/users/${_userModalIdx}`,{method:'PUT',body:JSON.stringify(body)});
     } else {
-      await api('/api/admin/users',{method:'POST',body:JSON.stringify({name,key,sections,variant_key})});
+      await api('/api/admin/users',{method:'POST',body:JSON.stringify({name,key,sections,variant_key,is_vendor})});
     }
     closeUserModal();
     loadAdminUsers();

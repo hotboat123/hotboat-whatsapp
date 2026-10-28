@@ -85,11 +85,12 @@ def ensure_conversation_state_table() -> None:
 
 def ensure_csat_responses_table() -> None:
     """Permanent log of 24h check-in survey replies (rating 1-5 for Popeye,
-    and/or an escalation to Capitán Tomás) — see run_csat_survey_scheduler
-    in app/whatsapp/webhook.py for what sends the survey, and
-    ConversationManager._handle_csat_survey_reply below for what records a
-    row here. Separate from pending_csat_surveys (the ephemeral scheduling
-    row, reset on every inbound message) so a rating is never lost."""
+    and/or an escalation to Capitán Tomás or to a tercerized-experiences
+    vendor) — see run_csat_survey_scheduler in app/whatsapp/webhook.py for
+    what sends the survey, and ConversationManager._handle_csat_survey_reply
+    below for what records a row here. Separate from pending_csat_surveys
+    (the ephemeral scheduling row, reset on every inbound message) so a
+    rating is never lost."""
     from app.db.connection import get_connection
     try:
         with get_connection() as conn:
@@ -101,9 +102,11 @@ def ensure_csat_responses_table() -> None:
                         contact_name TEXT,
                         rating       SMALLINT,
                         escalated    BOOLEAN NOT NULL DEFAULT FALSE,
+                        escalated_to TEXT,
                         created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
+                cur.execute("ALTER TABLE csat_responses ADD COLUMN IF NOT EXISTS escalated_to TEXT")
             conn.commit()
     except Exception as e:
         logger.warning(f"csat_responses table setup failed: {e}")
@@ -436,13 +439,47 @@ class ConversationManager:
             import traceback
             traceback.print_exc()
 
+    async def _notify_vendor_experiencias(self, customer_name: str, customer_phone: str) -> None:
+        """Push-notify every admin_user flagged is_vendor=True (tercerized
+        local experiences — velerismo, rafting, etc.) when a lead presses 8
+        on the 24h check-in survey asking to be put in touch with them.
+        Deliberately looks up vendors by the is_vendor flag on admin_users
+        instead of a hardcoded name/number, so Tomás can add, rename, or
+        swap out vendors from the admin panel without a code change. Push
+        only (no WhatsApp/email fallback) — the vendor is expected to have
+        the admin PWA installed with notifications enabled."""
+        try:
+            from app.booking.admin_router import _get_admin_users
+            from app.notifications.push_notifier import push_notifier
+
+            vendors = [u.get("name") for u in _get_admin_users() if u.get("is_vendor") and u.get("name")]
+            if not vendors:
+                logger.warning(
+                    "CSAT survey: %s pidió contacto de experiencias pero no hay ningún vendor configurado",
+                    customer_phone,
+                )
+                return
+
+            title = f"🙌 {customer_name} quiere vivir una experiencia"
+            body = f"Pidió que lo contactes para coordinar. Tel: +{customer_phone}"
+            data = {"type": "vendor_lead", "phone": customer_phone, "contact_name": customer_name}
+            for vendor_name in vendors:
+                sent = await push_notifier.send_notification_to_vendor(vendor_name, title, body, data)
+                if not sent:
+                    logger.warning(f"No se pudo notificar al vendor {vendor_name} (sin suscripción push activa)")
+        except Exception as e:
+            logger.error(f"Error notifying experiences vendor: {e}")
+            import traceback
+            traceback.print_exc()
+
     async def _handle_csat_survey_reply(
         self, message_text: str, from_number: str, contact_name: str, language: str
     ) -> Optional[str]:
         """If `from_number` has an unanswered 24h check-in survey (sent by
         run_csat_survey_scheduler in app/whatsapp/webhook.py) and
-        message_text is a bare "1".."5" (rating for Popeye) or "7" (call
-        Capitán Tomás), handle it and return the reply text. Returns None —
+        message_text is a bare "1".."5" (rating for Popeye), "7" (call
+        Capitán Tomás), or "8" (put in touch with the tercerized
+        experiences vendor), handle it and return the reply text. Returns None —
         letting the rest of the priority chain run as usual — when there's
         no pending survey for this phone, or the message doesn't look like a
         reply to it (e.g. a real new question).
@@ -479,6 +516,7 @@ class ConversationManager:
         key = {
             "1": "1", "1️⃣": "1", "2": "2", "2️⃣": "2", "3": "3", "3️⃣": "3",
             "4": "4", "4️⃣": "4", "5": "5", "5️⃣": "5", "7": "7", "7️⃣": "7",
+            "8": "8", "8️⃣": "8",
         }.get(message_text.strip())
         if key is None:
             return None
@@ -486,8 +524,23 @@ class ConversationManager:
         if key == "7":
             logger.info(f"CSAT survey: {from_number} pidió hablar con el Capitán Tomás")
             await self._notify_capitan_tomas(contact_name, from_number, [], reason="call_request")
-            await self._record_csat_response(from_number, contact_name, rating=None, escalated=True)
+            await self._record_csat_response(
+                from_number, contact_name, rating=None, escalated=True, escalated_to="capitan_tomas",
+            )
             return self.faq_handler.get_response("llamar a tomas", language)
+
+        if key == "8":
+            logger.info(f"CSAT survey: {from_number} pidió contacto con el vendor de experiencias")
+            await self._notify_vendor_experiencias(contact_name, from_number)
+            await self._record_csat_response(
+                from_number, contact_name, rating=None, escalated=True, escalated_to="experiencias",
+            )
+            return (
+                "¡Genial! 🙌 Ya avisamos a nuestro contacto de experiencias, se pondrá en "
+                "comunicación contigo pronto.\n\n"
+                "Si quieres reservar con nosotros o tienes otra consulta, visita "
+                "https://hotboat.cl 🌐"
+            )
 
         rating = int(key)
         logger.info(f"CSAT survey: {from_number} calificó a Popeye con {rating}/5")
@@ -500,7 +553,8 @@ class ConversationManager:
         )
 
     async def _record_csat_response(
-        self, phone_number: str, contact_name: str, rating: Optional[int], escalated: bool
+        self, phone_number: str, contact_name: str, rating: Optional[int], escalated: bool,
+        escalated_to: Optional[str] = None,
     ) -> None:
         import asyncio
         from app.db.connection import get_connection
@@ -510,10 +564,10 @@ class ConversationManager:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
-                        INSERT INTO csat_responses (phone_number, contact_name, rating, escalated)
-                        VALUES (%s, %s, %s, %s)
+                        INSERT INTO csat_responses (phone_number, contact_name, rating, escalated, escalated_to)
+                        VALUES (%s, %s, %s, %s, %s)
                         """,
-                        (phone_number, contact_name, rating, escalated),
+                        (phone_number, contact_name, rating, escalated, escalated_to),
                     )
                     cur.execute(
                         "UPDATE pending_csat_surveys SET responded_at=NOW() WHERE phone_number=%s",

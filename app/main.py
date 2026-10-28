@@ -505,6 +505,33 @@ def _ensure_web_push_table():
         logger.warning(f"web_push_subscriptions table setup failed: {e}")
 
 
+def _ensure_vendor_push_table():
+    """Create vendor_push_subscriptions table if it doesn't exist. Separate
+    from web_push_subscriptions (which broadcasts "new message" alerts to
+    every registered device) so a vendor's device (e.g. Diego, tercerized
+    experiences) only ever gets the targeted notifications sent via
+    push_notifier.send_notification_to_vendor, never the general broadcast."""
+    try:
+        from app.db.connection import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS vendor_push_subscriptions (
+                        id              SERIAL PRIMARY KEY,
+                        admin_user_name TEXT NOT NULL,
+                        endpoint        TEXT UNIQUE NOT NULL,
+                        p256dh          TEXT NOT NULL,
+                        auth            TEXT NOT NULL,
+                        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        last_used_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                conn.commit()
+        logger.info("✅ vendor_push_subscriptions table ready")
+    except Exception as e:
+        logger.warning(f"vendor_push_subscriptions table setup failed: {e}")
+
+
 _EXTRAS_SEED = [
     # (extra_name_lower, display_name, precio_venta, costo, icon, sort_order)
     ("tabla_4_personas",  "Tabla de Picoteo Grande (4 personas)",     25000,  0, "🍇",  1),
@@ -712,6 +739,7 @@ async def lifespan(app: FastAPI):
     ensure_conversation_state_table()
     ensure_csat_responses_table()
     _ensure_web_push_table()
+    _ensure_vendor_push_table()
     from app.booking.stock_router import _ensure_tables as _ensure_stock_tables
     _ensure_stock_tables()
     _seed_extras_visibility()
@@ -1118,10 +1146,31 @@ class PushSubscribeRequest(BaseModel):
 
 
 @app.post("/api/push/subscribe")
-async def push_subscribe(request: PushSubscribeRequest):
-    """Register a Web Push subscription."""
+async def push_subscribe(request: PushSubscribeRequest, x_admin_key: str = Header("")):
+    """Register a Web Push subscription.
+
+    If x-admin-key resolves to an admin_user with is_vendor=True (e.g.
+    Diego, tercerized experiences), the subscription is stored separately
+    in vendor_push_subscriptions instead of the general broadcast table —
+    so that device only ever receives targeted notifications
+    (push_notifier.send_notification_to_vendor), never the "new message"
+    broadcast every other registered device gets."""
     from app.notifications import push_notifier
     logger.info("📲 Push subscribe request — endpoint: %s...", request.endpoint[:60])
+
+    if x_admin_key:
+        from app.booking.admin_router import _get_admin_users, verify_admin_key
+        user = verify_admin_key(x_admin_key, _get_admin_users())
+        if user and user.get("is_vendor") and user.get("name"):
+            ok = await push_notifier.register_vendor_subscription(
+                admin_user_name=user["name"],
+                endpoint=request.endpoint,
+                p256dh=request.keys.get("p256dh", ""),
+                auth=request.keys.get("auth", ""),
+            )
+            logger.info("📲 Vendor push subscribe result for %s: %s", user["name"], "OK" if ok else "FAILED")
+            return {"status": "ok" if ok else "error"}
+
     ok = await push_notifier.register_subscription(
         endpoint=request.endpoint,
         p256dh=request.keys.get("p256dh", ""),

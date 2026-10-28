@@ -200,6 +200,7 @@ async def admin_login(x_admin_key: str = Header("")):
         "sections": user.get("sections"),   # None = full access
         "is_super": user.get("sections") is None,
         "variant_key": user.get("variant_key"),   # ver POST /api/admin/chat-login en main.py
+        "is_vendor": bool(user.get("is_vendor")),
     }
 
 
@@ -217,7 +218,8 @@ async def list_admin_users(x_admin_key: str = Header("")):
             k = u.get("key", "")
             masked_key = (k[:2] + "***" + k[-2:]) if len(k) > 4 else "***"
         masked.append({"idx": i, "name": u.get("name", ""), "key_masked": masked_key,
-                       "sections": u.get("sections"), "variant_key": u.get("variant_key")})
+                       "sections": u.get("sections"), "variant_key": u.get("variant_key"),
+                       "is_vendor": bool(u.get("is_vendor"))})
     return {"users": masked}
 
 
@@ -234,6 +236,7 @@ async def create_admin_user(request: Request, x_admin_key: str = Header("")):
     # WhatsApp y así reasignar la conversación / medir conversión por
     # persona real, no por a quién se le asignó originalmente.
     variant_key = (body.get("variant_key") or "").strip() or None
+    is_vendor = bool(body.get("is_vendor"))
     if not name or not key:
         raise HTTPException(400, "nombre y contraseña son requeridos")
     users = _get_admin_users()
@@ -242,7 +245,10 @@ async def create_admin_user(request: Request, x_admin_key: str = Header("")):
     # queda ningún texto plano con el que comparar directamente.
     if verify_admin_key(key, users) is not None:
         raise HTTPException(409, "Ya existe un usuario con esa contraseña")
-    users.append({"name": name, "key_hash": _hash_key(key), "sections": sections, "variant_key": variant_key})
+    users.append({
+        "name": name, "key_hash": _hash_key(key), "sections": sections,
+        "variant_key": variant_key, "is_vendor": is_vendor,
+    })
     _save_admin_users(users)
     return {"ok": True}
 
@@ -267,6 +273,8 @@ async def update_admin_user(idx: int, request: Request, x_admin_key: str = Heade
         users[idx]["sections"] = body["sections"]
     if "variant_key" in body:
         users[idx]["variant_key"] = (body["variant_key"] or "").strip() or None
+    if "is_vendor" in body:
+        users[idx]["is_vendor"] = bool(body["is_vendor"])
     _save_admin_users(users)
     return {"ok": True}
 

@@ -160,6 +160,103 @@ class PushNotifier:
 
         return await self.send_notification(title, body, data)
 
+    async def send_notification_to_vendor(
+        self,
+        admin_user_name: str,
+        title: str,
+        body: str,
+        data: Optional[Dict] = None,
+    ) -> bool:
+        """Like send_notification, but targeted at one admin_user's own
+        device(s) (vendor_push_subscriptions, keyed by admin_user_name)
+        instead of every registered device. Used for the tercerized
+        experiences vendor (button 8 on the 24h check-in survey) so that
+        notification doesn't also reach Tomás/other admins' devices."""
+        if not self.enabled:
+            logger.warning("Web Push disabled — VAPID_PRIVATE_KEY not set.")
+            return False
+
+        subscriptions = await self._get_vendor_subscriptions(admin_user_name)
+        if not subscriptions:
+            logger.warning("No Web Push subscriptions registered for vendor %s.", admin_user_name)
+            return False
+
+        payload = {"title": title, "body": body, **(data or {})}
+        results = await asyncio.gather(
+            *[
+                asyncio.to_thread(_send_web_push_sync, sub, payload, self._private_key)
+                for sub in subscriptions
+            ],
+            return_exceptions=True,
+        )
+        expired_endpoints = [
+            sub["endpoint"]
+            for sub, result in zip(subscriptions, results)
+            if result is _EXPIRED_SENTINEL
+        ]
+        if expired_endpoints:
+            asyncio.create_task(self._delete_vendor_subscriptions(expired_endpoints))
+
+        sent = sum(1 for r in results if r is True)
+        logger.info("Web Push sent to %d/%d vendor subscription(s) for %s: %s",
+                    sent, len(subscriptions), admin_user_name, title[:60])
+        return sent > 0
+
+    async def register_vendor_subscription(
+        self, admin_user_name: str, endpoint: str, p256dh: str, auth: str
+    ) -> bool:
+        try:
+            from app.db.connection import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO vendor_push_subscriptions (admin_user_name, endpoint, p256dh, auth)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (endpoint) DO UPDATE
+                        SET admin_user_name = EXCLUDED.admin_user_name,
+                            p256dh = EXCLUDED.p256dh,
+                            auth   = EXCLUDED.auth,
+                            last_used_at = NOW()
+                    """, (admin_user_name, endpoint, p256dh, auth))
+                    conn.commit()
+            logger.info("Web Push vendor subscription registered/updated for %s", admin_user_name)
+            return True
+        except Exception as exc:
+            logger.error("Error registering vendor Web Push subscription: %s", exc)
+            return False
+
+    async def _get_vendor_subscriptions(self, admin_user_name: str) -> List[Dict]:
+        try:
+            from app.db.connection import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT endpoint, p256dh, auth FROM vendor_push_subscriptions
+                        WHERE admin_user_name = %s AND last_used_at > NOW() - INTERVAL '90 days'
+                    """, (admin_user_name,))
+                    rows = cur.fetchall()
+            return [
+                {"endpoint": r[0], "keys": {"p256dh": r[1], "auth": r[2]}}
+                for r in rows
+            ]
+        except Exception as exc:
+            logger.error("Error fetching vendor Web Push subscriptions: %s", exc)
+            return []
+
+    async def _delete_vendor_subscriptions(self, endpoints: List[str]) -> None:
+        try:
+            from app.db.connection import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.executemany(
+                        "DELETE FROM vendor_push_subscriptions WHERE endpoint = %s",
+                        [(ep,) for ep in endpoints],
+                    )
+                    conn.commit()
+            logger.info("Removed %d expired vendor push subscription(s)", len(endpoints))
+        except Exception as exc:
+            logger.error("Error removing expired vendor push subscriptions: %s", exc)
+
     async def register_subscription(self, endpoint: str, p256dh: str, auth: str) -> bool:
         try:
             from app.db.connection import get_connection
