@@ -202,8 +202,13 @@ def _ensure_tables():
                         label           TEXT NOT NULL,
                         message         TEXT NOT NULL,
                         sort_order      INT NOT NULL DEFAULT 0,
-                        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        marks_csat_sent BOOLEAN NOT NULL DEFAULT FALSE
                     )
+                """)
+                cur.execute("""
+                    ALTER TABLE custom_quick_replies
+                    ADD COLUMN IF NOT EXISTS marks_csat_sent BOOLEAN NOT NULL DEFAULT FALSE
                 """)
                 conn.commit()
         logger.info("✅ bot_responses / bot_keywords / bot_ab_variants tables ready")
@@ -337,11 +342,13 @@ class CustomQuickReplyCreate(BaseModel):
     label: str
     message: str
     admin_user_name: Optional[str] = None  # only honored for a full-access (sections=None) requester, to set up quick replies on behalf of another operator (e.g. Tom configuring Esteban's)
+    marks_csat_sent: bool = False  # if true, sending this snippet also marks the 24h check-in survey as sent for that conversation (see send_custom_quick_reply in main.py), so the automatic scheduler doesn't send it again
 
 
 class CustomQuickReplyUpdate(BaseModel):
     label: Optional[str] = None
     message: Optional[str] = None
+    marks_csat_sent: Optional[bool] = None
 
 
 def _resolve_target_user(x_admin_key: str, requested_target: Optional[str] = None):
@@ -375,12 +382,12 @@ async def list_custom_quick_replies(x_admin_key: str = Header(""), admin_user_na
     with _get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT id, label, message, sort_order FROM custom_quick_replies
+                SELECT id, label, message, sort_order, marks_csat_sent FROM custom_quick_replies
                 WHERE admin_user_name = %s ORDER BY sort_order, id
             """, (admin_user_name,))
             rows = cur.fetchall()
     return {"replies": [
-        {"id": r[0], "label": r[1], "message": r[2], "sort_order": r[3]} for r in rows
+        {"id": r[0], "label": r[1], "message": r[2], "sort_order": r[3], "marks_csat_sent": r[4]} for r in rows
     ]}
 
 
@@ -397,9 +404,9 @@ async def create_custom_quick_reply(body: CustomQuickReplyCreate, x_admin_key: s
                         (admin_user_name,))
             next_order = cur.fetchone()[0]
             cur.execute("""
-                INSERT INTO custom_quick_replies (admin_user_name, label, message, sort_order)
-                VALUES (%s, %s, %s, %s) RETURNING id
-            """, (admin_user_name, label, message, next_order))
+                INSERT INTO custom_quick_replies (admin_user_name, label, message, sort_order, marks_csat_sent)
+                VALUES (%s, %s, %s, %s, %s) RETURNING id
+            """, (admin_user_name, label, message, next_order, body.marks_csat_sent))
             new_id = cur.fetchone()[0]
         conn.commit()
     return {"id": new_id}
@@ -417,6 +424,8 @@ async def update_custom_quick_reply(reply_id: int, body: CustomQuickReplyUpdate,
         fields.append("label = %s"); values.append(body.label.strip())
     if body.message is not None:
         fields.append("message = %s"); values.append(body.message.strip())
+    if body.marks_csat_sent is not None:
+        fields.append("marks_csat_sent = %s"); values.append(body.marks_csat_sent)
     if not fields:
         return {"ok": True}
     # A full-access admin (Tom) can edit any row by id; anyone else only their own.

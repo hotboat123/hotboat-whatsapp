@@ -1991,13 +1991,13 @@ async def send_custom_quick_reply(phone_number: str, body: CustomQuickReplySend,
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT message FROM custom_quick_replies WHERE id = %s AND admin_user_name = %s",
+                "SELECT message, marks_csat_sent FROM custom_quick_replies WHERE id = %s AND admin_user_name = %s",
                 (body.id, admin_user_name),
             )
             row = cur.fetchone()
     if not row:
         raise HTTPException(404, "Respuesta rápida no encontrada")
-    message = row[0]
+    message, marks_csat_sent = row
 
     lead = await get_or_create_lead(phone_number)
     customer_name = lead.get('customer_name', phone_number)
@@ -2023,6 +2023,25 @@ async def send_custom_quick_reply(phone_number: str, body: CustomQuickReplySend,
                                          "timestamp": datetime.now(CHILE_TZ).isoformat()})
         sent.append(out)
     conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+
+    if marks_csat_sent:
+        # This snippet IS the 24h check-in survey (sent manually, early) — mark
+        # it sent in pending_csat_surveys so run_csat_survey_scheduler() doesn't
+        # also send it automatically later for this same window. Upsert because
+        # a row may not exist yet (schedule_csat_survey only runs on the
+        # inbound-message path).
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO pending_csat_surveys (phone_number, contact_name, due_at, sent_at, responded_at)
+                        VALUES (%s, %s, NOW(), NOW(), NULL)
+                        ON CONFLICT (phone_number) DO UPDATE SET sent_at = NOW()
+                    """, (phone_number, customer_name))
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Could not mark csat survey as sent for {phone_number}: {e}")
+
     return {
         "status": "success", "phone_number": phone_number,
         "message_sent": f"{len(sent)} mensaje(s) enviado(s)" if len(sent) > 1 else (sent[0] if sent else ""),

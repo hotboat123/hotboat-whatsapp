@@ -40,10 +40,10 @@ CSAT_SURVEY_MSG_1 = (
     "*1* al *5* ⭐ (1 = mal, 5 = excelente)"
 )
 CSAT_SURVEY_MSG_2 = (
-    "Si no fue así, escribe *7* 📞 y el Capitán Tomás te hablará en cuanto pueda.\n\n"
-    "🌋 *Ya conociste Pucón desde el agua. ¿Y desde el cráter de un volcán?*\n\n"
-    "Escribe *8* y te conectamos con *Diego*, de Andes Volcánico. Te arma la salida en "
-    "privado y con guías certificados:\n\n"
+    "Si no fue así, escribe 7 📞 y el Capitán Tomás te hablará en cuanto pueda.\n\n"
+    "🌋 Ya conociste Pucón con la Experiencia HotBoat. ¿Y desde el cráter de un volcán?\n\n"
+    "Escribe 8 y te conectamos con Diego, experto en actividades de calidad en Pucón. Te "
+    "arma la salida en privado y con guías certificados:\n\n"
     "🌋 Subida al cráter del Villarrica, el volcán más activo de Chile\n"
     "🔦 Cavernas volcánicas, se hacen incluso con lluvia\n"
     "🚣 Rafting en el Trancura, desde 8 años\n"
