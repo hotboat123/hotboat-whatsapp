@@ -779,6 +779,11 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           Si no agregas ninguna, sigues viendo los botones por defecto del sistema, sin cambios.
         </p>
       </div>
+      <div id="qr-user-switch-wrap" style="margin-bottom:1rem;display:none">
+        <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">Viendo/editando respuestas de</label>
+        <select id="qr-user-switch" onchange="_onQrUserSwitch()"
+          style="background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.4rem .6rem;font-size:.85rem;outline:none;max-width:280px"></select>
+      </div>
       <div class="chart-wrap" style="margin-bottom:1.2rem">
         <div class="chart-title">+ Agregar respuesta rápida</div>
         <div style="display:flex;flex-direction:column;gap:.6rem;max-width:520px">
@@ -16004,35 +16009,99 @@ async function deleteBotKeyword(id){
 <script>
 // ── Custom quick replies (per-user WhatsApp chat shortcuts) ──────────────────
 
+let _qrTargetUser = null; // null = self (own key's user); else another operator's name (full-access admins only)
+
+function _qrQS(){
+  return (_qrTargetUser && _qrTargetUser !== _userName) ? `?admin_user_name=${encodeURIComponent(_qrTargetUser)}` : '';
+}
+
+async function _ensureQrUserSwitch(){
+  const wrap = document.getElementById('qr-user-switch-wrap');
+  const sel = document.getElementById('qr-user-switch');
+  if(!wrap || !sel) return;
+  if(!_userIsSuper){ wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  if(sel.dataset.loaded) return;
+  try {
+    const d = await api('/api/admin/users');
+    const names = (d.users||[]).map(u=>u.name).filter(Boolean);
+    if(!names.includes(_userName)) names.unshift(_userName);
+    sel.innerHTML = names.map(n=>`<option value="${escHtml(n)}"${n===_userName?' selected':''}>${escHtml(n)}${n===_userName?' (tú)':''}</option>`).join('');
+    sel.dataset.loaded = '1';
+  } catch(e){ /* non-fatal — switch just stays hidden/empty */ }
+}
+
+function _onQrUserSwitch(){
+  const sel = document.getElementById('qr-user-switch');
+  _qrTargetUser = sel ? sel.value : null;
+  loadCustomQuickReplies();
+}
+
 async function loadCustomQuickReplies(){
   const el = document.getElementById('quick-replies-list');
   if(!el) return;
+  await _ensureQrUserSwitch();
   el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Cargando...</div>';
   try {
-    const d = await api('/api/admin/bot/custom-quick-replies');
+    const d = await api(`/api/admin/bot/custom-quick-replies${_qrQS()}`);
     const replies = d.replies || [];
     if(!replies.length){
-      el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Todavía no tienes respuestas rápidas propias — seguirás viendo las del sistema en el chat.</div>';
+      el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Todavía no tiene respuestas rápidas propias — seguirá viendo las del sistema en el chat.</div>';
       return;
     }
     el.innerHTML = replies.map(r=>`
-      <div style="display:flex;align-items:flex-start;gap:.7rem;padding:.6rem .75rem;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+      <div style="display:flex;align-items:flex-start;gap:.7rem;padding:.6rem .75rem;background:var(--surface);border:1px solid var(--border);border-radius:10px" id="qr-row-${r.id}">
         <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:.88rem">${escHtml(r.label)}</div>
-          <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem;white-space:pre-wrap">${escHtml(r.message)}</div>
+          <div class="qr-view-${r.id}">
+            <div style="font-weight:600;font-size:.88rem">${escHtml(r.label)}</div>
+            <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem;white-space:pre-wrap">${escHtml(r.message)}</div>
+          </div>
+          <div class="qr-edit-${r.id}" style="display:none">
+            <input id="qr-edit-label-${r.id}" type="text" value="${escHtml(r.label)}"
+              style="width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.85rem;outline:none;box-sizing:border-box;margin-bottom:.4rem">
+            <textarea id="qr-edit-message-${r.id}" rows="3"
+              style="width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .6rem;font-size:.85rem;outline:none;box-sizing:border-box;resize:vertical">${escHtml(r.message)}</textarea>
+            <div style="display:flex;gap:.4rem;margin-top:.4rem">
+              <button class="btn-primary" style="padding:.25rem .6rem;font-size:.78rem" onclick="saveCustomQuickReply(${r.id})">Guardar</button>
+              <button style="background:none;border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.25rem .6rem;font-size:.78rem;cursor:pointer" onclick="_toggleQrEdit(${r.id}, false)">Cancelar</button>
+            </div>
+          </div>
         </div>
-        <button onclick="deleteCustomQuickReply(${r.id})" style="background:none;border:1px solid var(--border);color:var(--red);border-radius:7px;padding:.28rem .6rem;font-size:.78rem;cursor:pointer;flex-shrink:0">🗑️</button>
+        <div style="display:flex;gap:.35rem;flex-shrink:0">
+          <button onclick="_toggleQrEdit(${r.id}, true)" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.28rem .6rem;font-size:.78rem;cursor:pointer">✏️</button>
+          <button onclick="deleteCustomQuickReply(${r.id})" style="background:none;border:1px solid var(--border);color:var(--red);border-radius:7px;padding:.28rem .6rem;font-size:.78rem;cursor:pointer">🗑️</button>
+        </div>
       </div>
     `).join('');
   } catch(e){ el.innerHTML = `<div style="color:var(--red);font-size:.82rem">Error: ${e.message}</div>`; }
+}
+
+function _toggleQrEdit(id, editing){
+  const row = document.getElementById(`qr-row-${id}`);
+  if(!row) return;
+  row.querySelector(`.qr-view-${id}`).style.display = editing ? 'none' : '';
+  row.querySelector(`.qr-edit-${id}`).style.display = editing ? '' : 'none';
+}
+
+async function saveCustomQuickReply(id){
+  const label = document.getElementById(`qr-edit-label-${id}`).value.trim();
+  const message = document.getElementById(`qr-edit-message-${id}`).value.trim();
+  if(!label || !message){ showToast('Completa el texto del botón y el mensaje'); return; }
+  try {
+    await api(`/api/admin/bot/custom-quick-replies/${id}`, {method:'PUT', body: JSON.stringify({label, message})});
+    loadCustomQuickReplies();
+    showToast('✅ Guardado');
+  } catch(e){ showToast('❌ '+e.message); }
 }
 
 async function addCustomQuickReply(){
   const label = document.getElementById('qr-new-label').value.trim();
   const message = document.getElementById('qr-new-message').value.trim();
   if(!label || !message){ showToast('Completa el texto del botón y el mensaje'); return; }
+  const body = {label, message};
+  if(_qrTargetUser && _qrTargetUser !== _userName) body.admin_user_name = _qrTargetUser;
   try {
-    await api('/api/admin/bot/custom-quick-replies', {method:'POST', body: JSON.stringify({label, message})});
+    await api('/api/admin/bot/custom-quick-replies', {method:'POST', body: JSON.stringify(body)});
     document.getElementById('qr-new-label').value = '';
     document.getElementById('qr-new-message').value = '';
     loadCustomQuickReplies();

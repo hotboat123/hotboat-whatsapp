@@ -344,11 +344,34 @@ class CustomQuickReplyUpdate(BaseModel):
     message: Optional[str] = None
 
 
-@bot_config_router.get("/custom-quick-replies")
-async def list_custom_quick_replies(x_admin_key: str = Header("")):
-    admin_user_name = _resolve_admin_user_name(x_admin_key)
-    if not admin_user_name:
+def _resolve_target_user(x_admin_key: str, requested_target: Optional[str] = None):
+    """Resolve who a custom-quick-replies request operates on.
+
+    Normally that's just the requester (own key → own name). A full-access
+    admin (sections=None, e.g. Tom) may instead pass `requested_target` to
+    operate on another operator's quick replies (e.g. setting up Esteban's).
+    Returns (admin_user_name, is_full_access).
+    """
+    from app.booking.admin_router import _get_admin_users, verify_admin_key
+    users = _get_admin_users()
+    requester = verify_admin_key(x_admin_key, users)
+    if not requester:
         raise HTTPException(401, "Clave inválida")
+    admin_user_name = requester.get("name")
+    is_full_access = requester.get("sections") is None
+    target = (requested_target or "").strip()
+    if target and target != admin_user_name:
+        if not is_full_access:
+            raise HTTPException(403, "Solo un admin con acceso completo puede gestionar respuestas rápidas de otro usuario")
+        if not any(u.get("name") == target for u in users):
+            raise HTTPException(404, f"Usuario '{target}' no existe")
+        admin_user_name = target
+    return admin_user_name, is_full_access
+
+
+@bot_config_router.get("/custom-quick-replies")
+async def list_custom_quick_replies(x_admin_key: str = Header(""), admin_user_name: Optional[str] = None):
+    admin_user_name, _ = _resolve_target_user(x_admin_key, admin_user_name)
     with _get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -363,19 +386,7 @@ async def list_custom_quick_replies(x_admin_key: str = Header("")):
 
 @bot_config_router.post("/custom-quick-replies")
 async def create_custom_quick_reply(body: CustomQuickReplyCreate, x_admin_key: str = Header("")):
-    from app.booking.admin_router import _get_admin_users, verify_admin_key
-    users = _get_admin_users()
-    requester = verify_admin_key(x_admin_key, users)
-    if not requester:
-        raise HTTPException(401, "Clave inválida")
-    admin_user_name = requester.get("name")
-    target = (body.admin_user_name or "").strip()
-    if target and target != admin_user_name:
-        if requester.get("sections") is not None:
-            raise HTTPException(403, "Solo un admin con acceso completo puede crear respuestas rápidas para otro usuario")
-        if not any(u.get("name") == target for u in users):
-            raise HTTPException(404, f"Usuario '{target}' no existe")
-        admin_user_name = target
+    admin_user_name, _ = _resolve_target_user(x_admin_key, body.admin_user_name)
     label = body.label.strip()
     message = body.message.strip()
     if not label or not message:
@@ -396,9 +407,11 @@ async def create_custom_quick_reply(body: CustomQuickReplyCreate, x_admin_key: s
 
 @bot_config_router.put("/custom-quick-replies/{reply_id}")
 async def update_custom_quick_reply(reply_id: int, body: CustomQuickReplyUpdate, x_admin_key: str = Header("")):
-    admin_user_name = _resolve_admin_user_name(x_admin_key)
-    if not admin_user_name:
+    from app.booking.admin_router import _get_admin_users, verify_admin_key
+    requester = verify_admin_key(x_admin_key, _get_admin_users())
+    if not requester:
         raise HTTPException(401, "Clave inválida")
+    is_full_access = requester.get("sections") is None
     fields, values = [], []
     if body.label is not None:
         fields.append("label = %s"); values.append(body.label.strip())
@@ -406,11 +419,17 @@ async def update_custom_quick_reply(reply_id: int, body: CustomQuickReplyUpdate,
         fields.append("message = %s"); values.append(body.message.strip())
     if not fields:
         return {"ok": True}
-    values += [reply_id, admin_user_name]
+    # A full-access admin (Tom) can edit any row by id; anyone else only their own.
+    if is_full_access:
+        values += [reply_id]
+        where = "id = %s"
+    else:
+        values += [reply_id, requester.get("name")]
+        where = "id = %s AND admin_user_name = %s"
     with _get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"UPDATE custom_quick_replies SET {', '.join(fields)} WHERE id = %s AND admin_user_name = %s",
+                f"UPDATE custom_quick_replies SET {', '.join(fields)} WHERE {where}",
                 values,
             )
             if cur.rowcount == 0:
@@ -421,15 +440,20 @@ async def update_custom_quick_reply(reply_id: int, body: CustomQuickReplyUpdate,
 
 @bot_config_router.delete("/custom-quick-replies/{reply_id}")
 async def delete_custom_quick_reply(reply_id: int, x_admin_key: str = Header("")):
-    admin_user_name = _resolve_admin_user_name(x_admin_key)
-    if not admin_user_name:
+    from app.booking.admin_router import _get_admin_users, verify_admin_key
+    requester = verify_admin_key(x_admin_key, _get_admin_users())
+    if not requester:
         raise HTTPException(401, "Clave inválida")
+    is_full_access = requester.get("sections") is None
+    if is_full_access:
+        params = (reply_id,)
+        where = "id = %s"
+    else:
+        params = (reply_id, requester.get("name"))
+        where = "id = %s AND admin_user_name = %s"
     with _get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM custom_quick_replies WHERE id = %s AND admin_user_name = %s",
-                (reply_id, admin_user_name),
-            )
+            cur.execute(f"DELETE FROM custom_quick_replies WHERE {where}", params)
             if cur.rowcount == 0:
                 raise HTTPException(404, "No encontrada")
         conn.commit()
