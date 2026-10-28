@@ -336,6 +336,7 @@ async def get_quick_replies():
 class CustomQuickReplyCreate(BaseModel):
     label: str
     message: str
+    admin_user_name: Optional[str] = None  # only honored for a full-access (sections=None) requester, to set up quick replies on behalf of another operator (e.g. Tom configuring Esteban's)
 
 
 class CustomQuickReplyUpdate(BaseModel):
@@ -362,9 +363,19 @@ async def list_custom_quick_replies(x_admin_key: str = Header("")):
 
 @bot_config_router.post("/custom-quick-replies")
 async def create_custom_quick_reply(body: CustomQuickReplyCreate, x_admin_key: str = Header("")):
-    admin_user_name = _resolve_admin_user_name(x_admin_key)
-    if not admin_user_name:
+    from app.booking.admin_router import _get_admin_users, verify_admin_key
+    users = _get_admin_users()
+    requester = verify_admin_key(x_admin_key, users)
+    if not requester:
         raise HTTPException(401, "Clave inválida")
+    admin_user_name = requester.get("name")
+    target = (body.admin_user_name or "").strip()
+    if target and target != admin_user_name:
+        if requester.get("sections") is not None:
+            raise HTTPException(403, "Solo un admin con acceso completo puede crear respuestas rápidas para otro usuario")
+        if not any(u.get("name") == target for u in users):
+            raise HTTPException(404, f"Usuario '{target}' no existe")
+        admin_user_name = target
     label = body.label.strip()
     message = body.message.strip()
     if not label or not message:
