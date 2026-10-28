@@ -178,6 +178,29 @@ def _is_authenticated(request: Request) -> bool:
     token = _get_auth_cookie(request)
     return bool(token and _verify_session_token(token))
 
+def _get_session_admin_user_name(request: Request) -> str | None:
+    """Real admin_users.name this /chat session belongs to, decoded from the
+    kia_auth cookie (see POST /api/admin/chat-login, which now signs in the
+    matched admin_user's actual name instead of the generic "admin"
+    literal). None for the plain shared /api/auth/login (2-part payload),
+    the master-key path, or when no admin_users are configured at all (in
+    every one of those cases there's no real per-person identity to scope
+    anything to). Mirrors _get_session_variant_key below. Used by the
+    custom-quick-replies endpoints so each operator's /chat quick-reply bar
+    only ever shows their own snippets."""
+    token = _get_auth_cookie(request)
+    if not token or not _verify_session_token(token):
+        return None
+    try:
+        payload = token.rsplit(":", 1)[0]
+        parts = payload.split(":")
+        if len(parts) == 3 and parts[0] and parts[0] != "admin":
+            return parts[0]
+    except Exception:
+        pass
+    return None
+
+
 def _get_session_variant_key(request: Request) -> str | None:
     """Decode the operator's linked bot_ab_variants.variant_key out of an
     already-verified kia_auth cookie, or None if there isn't one — either
@@ -1020,11 +1043,16 @@ async def admin_chat_login(x_admin_key: str = Header("")):
     user editor), that gets signed into the session token so
     /api/send-message later knows exactly which operator is sending a
     reply, not just "some admin" — see _make_session_token/
-    _get_session_variant_key above."""
+    _get_session_variant_key above. The matched entry's own name (not the
+    generic "admin" literal) is signed in too, independent of whether it
+    has a variant_key, so _get_session_admin_user_name can scope
+    custom-quick-replies to the actual logged-in operator even when they
+    have no bot persona (e.g. a tercerized-experiences vendor)."""
     import json as _json
     from app.booking.admin_router import verify_admin_key
     master_key = os.environ.get("ADMIN_MASTER_KEY", "")
     matched_variant_key = ""
+    session_username = "admin"
     if master_key and x_admin_key == master_key:
         valid = True
     else:
@@ -1040,9 +1068,14 @@ async def admin_chat_login(x_admin_key: str = Header("")):
             valid = user is not None
             if user:
                 matched_variant_key = user.get("variant_key") or ""
+                # ":" would break the colon-delimited token payload; names
+                # aren't expected to contain one, but strip just in case.
+                name = (user.get("name") or "").strip().replace(":", "")
+                if name:
+                    session_username = name
     if not valid:
         raise HTTPException(status_code=401)
-    token = _make_session_token("admin", matched_variant_key)
+    token = _make_session_token(session_username, matched_variant_key)
     response = JSONResponse({"ok": True})
     response.set_cookie(key="kia_auth", value=token, max_age=60*60*24*30,
                         httponly=True, samesite="lax", secure=settings.is_production)
@@ -1914,6 +1947,71 @@ async def send_quick_reply(phone_number: str, request: QuickReplyRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Per-user custom quick replies — /chat iframe surface (cookie-session
+# based, see _get_session_admin_user_name) ─────────────────────────────────
+# Management (add/edit/delete) is x-admin-key based, in bot_config_router.py
+# — these two just read/send against whatever the logged-in /chat session's
+# admin_user_name already has.
+
+@app.get("/api/custom-quick-replies/mine")
+async def get_my_custom_quick_replies(http_request: Request):
+    """Used=False (plus no replies) tells app.js to keep showing the legacy
+    menu_option-driven quick-reply bar unchanged — the default experience
+    for anyone (including the shared/master-key login) who hasn't set up
+    their own snippets yet."""
+    admin_user_name = _get_session_admin_user_name(http_request)
+    if not admin_user_name:
+        return {"use_custom": False, "replies": []}
+    from app.db.connection import get_connection
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, label, message FROM custom_quick_replies
+                WHERE admin_user_name = %s ORDER BY sort_order, id
+            """, (admin_user_name,))
+            rows = cur.fetchall()
+    if not rows:
+        return {"use_custom": False, "replies": []}
+    return {"use_custom": True, "replies": [{"id": r[0], "label": r[1], "message": r[2]} for r in rows]}
+
+
+class CustomQuickReplySend(BaseModel):
+    id: int
+    translate_to: Optional[str] = None
+
+
+@app.post("/api/conversations/{phone_number}/custom-quick-reply")
+async def send_custom_quick_reply(phone_number: str, body: CustomQuickReplySend, http_request: Request):
+    admin_user_name = _get_session_admin_user_name(http_request)
+    if not admin_user_name:
+        raise HTTPException(401, "Sesión no identificada")
+    from app.db.connection import get_connection
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT message FROM custom_quick_replies WHERE id = %s AND admin_user_name = %s",
+                (body.id, admin_user_name),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Respuesta rápida no encontrada")
+    message = row[0]
+
+    lead = await get_or_create_lead(phone_number)
+    customer_name = lead.get('customer_name', phone_number)
+    tgt_lang = (body.translate_to or "").strip().lower() or None
+    out = await asyncio.to_thread(_translate_text, message.strip(), tgt_lang) if tgt_lang else message.strip()
+    await whatsapp_client.send_text_message(to=phone_number, message=out)
+    await save_conversation(phone_number=phone_number, customer_name=customer_name,
+                            message_text="", response_text=out,
+                            message_type="text", direction="outgoing")
+    conversation = await conversation_manager.get_conversation(phone_number, customer_name)
+    conversation["messages"].append({"role": "assistant", "content": out,
+                                     "timestamp": datetime.now(CHILE_TZ).isoformat()})
+    conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
+    return {"status": "success", "phone_number": phone_number, "message_sent": out}
 
 
 # ============================================================================

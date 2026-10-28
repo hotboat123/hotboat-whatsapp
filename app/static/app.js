@@ -2718,10 +2718,28 @@ function updateQualityUI(quality) {
 }
 
 // ── Dynamic quick-reply buttons ───────────────────────────────────────────────
+// Each operator sees their OWN custom_quick_replies (plain canned-text
+// snippets, managed from admin-bookings.html's Respuestas Rápidas tab) once
+// they've made at least one; everyone else (including before anyone has
+// customized anything) keeps seeing the legacy menu_option-driven buttons,
+// unchanged — see GET /api/custom-quick-replies/mine in main.py.
 
-let _qrButtons = [];  // cached from API
+let _qrButtons = [];       // legacy menu_option buttons, cached from API
+let _qrCustom = null;      // this operator's own custom_quick_replies, or null = using legacy
 
 async function loadQuickReplyButtons() {
+    try {
+        const cr = await fetch('/api/custom-quick-replies/mine');
+        const cd = await cr.json();
+        if (cd.use_custom) {
+            _qrCustom = cd.replies || [];
+            renderQuickReplyButtons();
+            return;
+        }
+    } catch (e) {
+        console.warn('Could not load custom quick replies:', e);
+    }
+    _qrCustom = null;
     try {
         const r = await fetch('/api/admin/bot/quick-replies');
         const d = await r.json();
@@ -2736,6 +2754,16 @@ async function loadQuickReplyButtons() {
 function renderQuickReplyButtons() {
     const container = document.getElementById('quick-reply-dynamic');
     if (!container) return;
+    if (_qrCustom) {
+        if (!_qrCustom.length) {
+            container.innerHTML = '<span style="color:var(--muted);font-size:.75rem">Sin respuestas rápidas propias — agrégalas en Configuración → Respuestas Rápidas</span>';
+            return;
+        }
+        container.innerHTML = _qrCustom.map(b =>
+            `<button type="button" class="quick-reply-btn" onclick="sendCustomQuickReply(${b.id})" title="${b.message}">${b.label}</button>`
+        ).join('');
+        return;
+    }
     if (!_qrButtons.length) {
         container.innerHTML = '<span style="color:var(--muted);font-size:.75rem">Sin botones configurados</span>';
         return;
@@ -2744,6 +2772,31 @@ function renderQuickReplyButtons() {
         const lbl = b.button_label || String(b.menu_option);
         return `<button type="button" class="quick-reply-btn" onclick="sendQuickReply(${b.menu_option})" title="${lbl}">${lbl}</button>`;
     }).join('');
+}
+
+// Send one of THIS operator's own custom quick replies (plain text, no
+// bot-menu logic — see send_custom_quick_reply in main.py)
+async function sendCustomQuickReply(id) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', 'warning');
+        return;
+    }
+    const btn = (_qrCustom || []).find(b => b.id === id);
+    const label = btn ? btn.label : String(id);
+    try {
+        showToast(`Enviando: ${label}…`, 'info');
+        const response = await fetch(`${API_BASE}/api/conversations/${currentConversation.phone_number}/custom-quick-reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, translate_to: activeTranslateLang || null })
+        });
+        if (!response.ok) throw new Error('Failed to send custom quick reply');
+        showToast(`"${label}" enviado`, 'success');
+        await selectConversation(currentConversation.phone_number);
+    } catch (error) {
+        console.error('Error sending custom quick reply:', error);
+        showToast('Error al enviar respuesta rápida', 'error');
+    }
 }
 
 // Send quick reply menu option

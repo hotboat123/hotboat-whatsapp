@@ -186,10 +186,35 @@ def _ensure_tables():
                         UNIQUE(variant_key, message_key)
                     )
                 """)
+                # Per-admin-user quick-reply snippets — deliberately separate
+                # from bot_responses' menu_option system (the existing
+                # "Chatbot" quick-reply buttons replay real bot menu logic:
+                # multi-message sequences, images, cart state, etc. — none of
+                # that applies to a free-text canned reply). An operator with
+                # zero rows here still sees the legacy menu_option-driven
+                # buttons unchanged — see GET /custom-quick-replies/mine in
+                # main.py for the fallback. Only once they add their own does
+                # their quick-reply bar switch to this independent list.
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS custom_quick_replies (
+                        id              SERIAL PRIMARY KEY,
+                        admin_user_name TEXT NOT NULL,
+                        label           TEXT NOT NULL,
+                        message         TEXT NOT NULL,
+                        sort_order      INT NOT NULL DEFAULT 0,
+                        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
                 conn.commit()
         logger.info("✅ bot_responses / bot_keywords / bot_ab_variants tables ready")
     except Exception as e:
         logger.warning("bot config tables setup failed: %s", e)
+
+
+def _resolve_admin_user_name(x_admin_key: str) -> Optional[str]:
+    from app.booking.admin_router import _get_admin_users, verify_admin_key
+    user = verify_admin_key(x_admin_key, _get_admin_users())
+    return user.get("name") if user else None
 
 
 # ── Responses ─────────────────────────────────────────────────────────────────
@@ -298,6 +323,106 @@ async def get_quick_replies():
         ]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Per-user custom quick replies (management, from admin-bookings.html) ──────
+# x-admin-key identifies the operator, same pattern as the admin_users and
+# vendor push-subscription endpoints. Each operator only ever sees/edits
+# their own rows — there is no shared/global row in this table (the
+# "default" experience for someone who hasn't made their own yet is just
+# the legacy menu_option-driven buttons, untouched, via /quick-replies above
+# and /api/custom-quick-replies/mine in main.py for the /chat iframe).
+
+class CustomQuickReplyCreate(BaseModel):
+    label: str
+    message: str
+
+
+class CustomQuickReplyUpdate(BaseModel):
+    label: Optional[str] = None
+    message: Optional[str] = None
+
+
+@bot_config_router.get("/custom-quick-replies")
+async def list_custom_quick_replies(x_admin_key: str = Header("")):
+    admin_user_name = _resolve_admin_user_name(x_admin_key)
+    if not admin_user_name:
+        raise HTTPException(401, "Clave inválida")
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, label, message, sort_order FROM custom_quick_replies
+                WHERE admin_user_name = %s ORDER BY sort_order, id
+            """, (admin_user_name,))
+            rows = cur.fetchall()
+    return {"replies": [
+        {"id": r[0], "label": r[1], "message": r[2], "sort_order": r[3]} for r in rows
+    ]}
+
+
+@bot_config_router.post("/custom-quick-replies")
+async def create_custom_quick_reply(body: CustomQuickReplyCreate, x_admin_key: str = Header("")):
+    admin_user_name = _resolve_admin_user_name(x_admin_key)
+    if not admin_user_name:
+        raise HTTPException(401, "Clave inválida")
+    label = body.label.strip()
+    message = body.message.strip()
+    if not label or not message:
+        raise HTTPException(400, "label y message son requeridos")
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM custom_quick_replies WHERE admin_user_name = %s",
+                        (admin_user_name,))
+            next_order = cur.fetchone()[0]
+            cur.execute("""
+                INSERT INTO custom_quick_replies (admin_user_name, label, message, sort_order)
+                VALUES (%s, %s, %s, %s) RETURNING id
+            """, (admin_user_name, label, message, next_order))
+            new_id = cur.fetchone()[0]
+        conn.commit()
+    return {"id": new_id}
+
+
+@bot_config_router.put("/custom-quick-replies/{reply_id}")
+async def update_custom_quick_reply(reply_id: int, body: CustomQuickReplyUpdate, x_admin_key: str = Header("")):
+    admin_user_name = _resolve_admin_user_name(x_admin_key)
+    if not admin_user_name:
+        raise HTTPException(401, "Clave inválida")
+    fields, values = [], []
+    if body.label is not None:
+        fields.append("label = %s"); values.append(body.label.strip())
+    if body.message is not None:
+        fields.append("message = %s"); values.append(body.message.strip())
+    if not fields:
+        return {"ok": True}
+    values += [reply_id, admin_user_name]
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE custom_quick_replies SET {', '.join(fields)} WHERE id = %s AND admin_user_name = %s",
+                values,
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(404, "No encontrada")
+        conn.commit()
+    return {"ok": True}
+
+
+@bot_config_router.delete("/custom-quick-replies/{reply_id}")
+async def delete_custom_quick_reply(reply_id: int, x_admin_key: str = Header("")):
+    admin_user_name = _resolve_admin_user_name(x_admin_key)
+    if not admin_user_name:
+        raise HTTPException(401, "Clave inválida")
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM custom_quick_replies WHERE id = %s AND admin_user_name = %s",
+                (reply_id, admin_user_name),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(404, "No encontrada")
+        conn.commit()
+    return {"ok": True}
 
 
 # ── Shared helper (importable by other modules) ───────────────────────────────

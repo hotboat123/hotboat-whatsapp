@@ -395,6 +395,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('coupons')" id="nav-coupons">
       <span class="ni">🎟️</span> Cupones
     </div>
+    <div class="nav-item" onclick="showSection('quick-replies')" id="nav-quick-replies">
+      <span class="ni">⚡</span> Respuestas Rápidas
+    </div>
     <div class="nav-item" onclick="showSection('giftcards');loadGiftCards()" id="nav-giftcards">
       <span class="ni">🎀</span> Gift Cards
     </div>
@@ -767,6 +770,33 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </table>
       </div>
     </div><!-- /section-coupons -->
+
+    <div id="section-quick-replies" class="section">
+      <div style="margin-bottom:1.2rem">
+        <h2 style="margin:0;font-size:1.1rem">⚡ Respuestas Rápidas</h2>
+        <p style="margin:.2rem 0 0;color:var(--muted);font-size:.8rem">
+          Tus propios atajos de texto para el chat de WhatsApp (pestaña 💬 WhatsApp) — solo tú los ves y los usas.
+          Si no agregas ninguna, sigues viendo los botones por defecto del sistema, sin cambios.
+        </p>
+      </div>
+      <div class="chart-wrap" style="margin-bottom:1.2rem">
+        <div class="chart-title">+ Agregar respuesta rápida</div>
+        <div style="display:flex;flex-direction:column;gap:.6rem;max-width:520px">
+          <div>
+            <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">Texto del botón</label>
+            <input id="qr-new-label" type="text" placeholder="Ej: Saludo Diego"
+              style="width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">Mensaje que se envía</label>
+            <textarea id="qr-new-message" rows="3" placeholder="Ej: ¡Hola! Soy Diego de Experiencias Mágicas Pucón 🙌 ¿Qué experiencia te gustaría vivir?"
+              style="width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box;resize:vertical"></textarea>
+          </div>
+          <button class="btn-primary" style="align-self:flex-start" onclick="addCustomQuickReply()">+ Agregar</button>
+        </div>
+      </div>
+      <div id="quick-replies-list" style="display:flex;flex-direction:column;gap:.55rem"></div>
+    </div><!-- /section-quick-replies -->
 
     <div id="section-giftcards" class="section">
       <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:1.2rem">
@@ -5145,6 +5175,7 @@ function showSection(name){
   if(name==='clientes') loadClients();
   if(name==='stats'){ loadStats(); loadCashReport(); loadFunnel(7); loadActivity(); }
   if(name==='extras-cat') loadExtrasCat();
+  if(name==='quick-replies') loadCustomQuickReplies();
   if(name==='emails') loadEmailBookingConfig();
   if(name==='settings'){ loadSettings(); loadVacationDays(); loadUrgencyDays(); adminCheckPushState(); if(_userIsSuper) loadAdminUsers(); onHighSeasonTypeChange(); }
   if(name==='alojamientos-admin') loadAlojamientos();
@@ -15967,12 +15998,59 @@ async function deleteBotKeyword(id){
 </div>
 
 <script>
+// ── Custom quick replies (per-user WhatsApp chat shortcuts) ──────────────────
+
+async function loadCustomQuickReplies(){
+  const el = document.getElementById('quick-replies-list');
+  if(!el) return;
+  el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Cargando...</div>';
+  try {
+    const d = await api('/api/admin/bot/custom-quick-replies');
+    const replies = d.replies || [];
+    if(!replies.length){
+      el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Todavía no tienes respuestas rápidas propias — seguirás viendo las del sistema en el chat.</div>';
+      return;
+    }
+    el.innerHTML = replies.map(r=>`
+      <div style="display:flex;align-items:flex-start;gap:.7rem;padding:.6rem .75rem;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:.88rem">${escHtml(r.label)}</div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem;white-space:pre-wrap">${escHtml(r.message)}</div>
+        </div>
+        <button onclick="deleteCustomQuickReply(${r.id})" style="background:none;border:1px solid var(--border);color:var(--red);border-radius:7px;padding:.28rem .6rem;font-size:.78rem;cursor:pointer;flex-shrink:0">🗑️</button>
+      </div>
+    `).join('');
+  } catch(e){ el.innerHTML = `<div style="color:var(--red);font-size:.82rem">Error: ${e.message}</div>`; }
+}
+
+async function addCustomQuickReply(){
+  const label = document.getElementById('qr-new-label').value.trim();
+  const message = document.getElementById('qr-new-message').value.trim();
+  if(!label || !message){ showToast('Completa el texto del botón y el mensaje'); return; }
+  try {
+    await api('/api/admin/bot/custom-quick-replies', {method:'POST', body: JSON.stringify({label, message})});
+    document.getElementById('qr-new-label').value = '';
+    document.getElementById('qr-new-message').value = '';
+    loadCustomQuickReplies();
+    showToast('✅ Respuesta rápida agregada');
+  } catch(e){ showToast('❌ '+e.message); }
+}
+
+async function deleteCustomQuickReply(id){
+  if(!confirm('¿Eliminar esta respuesta rápida?')) return;
+  try {
+    await api(`/api/admin/bot/custom-quick-replies/${id}`, {method:'DELETE'});
+    loadCustomQuickReplies();
+    showToast('✅ Eliminada');
+  } catch(e){ showToast('❌ '+e.message); }
+}
+
 // ── Admin Users management ────────────────────────────────────────────────────
 
 const _SECTION_LABELS = {
   'calendar':'📅 Calendario','lista':'📋 Reservas','clientes':'👥 Clientes',
   'stats':'📊 Estadísticas','extras-cat':'🏷️ Extras',
-  'tablas-admin':'🍽 Tablas','coupons':'🎟️ Cupones','giftcards':'🎀 Gift Cards','emails':'✉️ Emails reservas',
+  'tablas-admin':'🍽 Tablas','coupons':'🎟️ Cupones','quick-replies':'⚡ Respuestas Rápidas','giftcards':'🎀 Gift Cards','emails':'✉️ Emails reservas',
   'alojamientos-admin':'🏠 Alojamientos','aloj-bookings':'📋 Reservas Aloj.',
   'experiencias':'🏔️ Experiencias','packs-admin':'🎁 Packs','cal-extras':'🗓️ Cal. Extras',
   'financial':'💰 Finanzas','simulator':'🎯 Simulador','sueldos':'👷 Sueldos',
