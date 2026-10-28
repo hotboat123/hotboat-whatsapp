@@ -791,6 +791,10 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
             <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:.25rem">Mensaje que se envía</label>
             <textarea id="qr-new-message" rows="3" placeholder="Ej: ¡Hola! Soy Diego de Experiencias Mágicas Pucón 🙌 ¿Qué experiencia te gustaría vivir?"
               style="width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box;resize:vertical"></textarea>
+            <p style="margin:.3rem 0 0;color:var(--muted);font-size:.72rem">
+              💡 Escribe <code>---</code> en una línea sola para separar en varios mensajes seguidos.
+              Usa <code>{first_name}</code> para que se reemplace por el nombre del cliente.
+            </p>
           </div>
           <button class="btn-primary" style="align-self:flex-start" onclick="addCustomQuickReply()">+ Agregar</button>
         </div>

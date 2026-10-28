@@ -2001,17 +2001,32 @@ async def send_custom_quick_reply(phone_number: str, body: CustomQuickReplySend,
 
     lead = await get_or_create_lead(phone_number)
     customer_name = lead.get('customer_name', phone_number)
+    first_name = customer_name.split()[0] if customer_name else customer_name
     tgt_lang = (body.translate_to or "").strip().lower() or None
-    out = await asyncio.to_thread(_translate_text, message.strip(), tgt_lang) if tgt_lang else message.strip()
-    await whatsapp_client.send_text_message(to=phone_number, message=out)
-    await save_conversation(phone_number=phone_number, customer_name=customer_name,
-                            message_text="", response_text=out,
-                            message_type="text", direction="outgoing")
     conversation = await conversation_manager.get_conversation(phone_number, customer_name)
-    conversation["messages"].append({"role": "assistant", "content": out,
-                                     "timestamp": datetime.now(CHILE_TZ).isoformat()})
+
+    # "\n---\n" splits the snippet into a sequence of separate WhatsApp
+    # messages (same convention as the legacy menu_option quick-replies), and
+    # "{first_name}" is substituted with the lead's first name, same as the
+    # legacy hardcoded "Tomás" greeting.
+    sequence = [p.strip().replace("{first_name}", first_name) for p in message.split("\n---\n") if p.strip()]
+    sent = []
+    for i, part in enumerate(sequence):
+        if i > 0:
+            await asyncio.sleep(1.5)
+        out = await asyncio.to_thread(_translate_text, part, tgt_lang) if tgt_lang else part
+        await whatsapp_client.send_text_message(to=phone_number, message=out)
+        await save_conversation(phone_number=phone_number, customer_name=customer_name,
+                                message_text="", response_text=out,
+                                message_type="text", direction="outgoing")
+        conversation["messages"].append({"role": "assistant", "content": out,
+                                         "timestamp": datetime.now(CHILE_TZ).isoformat()})
+        sent.append(out)
     conversation["last_interaction"] = datetime.now(CHILE_TZ).isoformat()
-    return {"status": "success", "phone_number": phone_number, "message_sent": out}
+    return {
+        "status": "success", "phone_number": phone_number,
+        "message_sent": f"{len(sent)} mensaje(s) enviado(s)" if len(sent) > 1 else (sent[0] if sent else ""),
+    }
 
 
 # ============================================================================
