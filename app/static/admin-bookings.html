@@ -11042,10 +11042,16 @@ function renderGiftCards(list){
 }
 
 async function markGiftCardRedeemed(code){
-  if(!confirm(`¿Marcar la gift card ${code} como canjeada?`)) return;
+  const ref = prompt(`Gift card ${code}\n\nID de la reserva donde se usó (lo ves en la ficha de la reserva) — el P&L va a reconocer el ingreso el día de ESA reserva, no hoy.\n\nDéjalo vacío si todavía no sabes cuál es (podrás completarlo después deshaciendo y rehaciendo el canje).`);
+  if(ref === null) return; // canceló
+  const redeemed_booking_ref = ref.trim() || null;
   try{
-    await api(`/api/admin/gift-cards/${encodeURIComponent(code)}/redeem`, {method:'POST', body: JSON.stringify({})});
-    showToast('🎀 Gift card marcada como canjeada');
+    const res = await api(`/api/admin/gift-cards/${encodeURIComponent(code)}/redeem`, {method:'POST', body: JSON.stringify({redeemed_booking_ref})});
+    if(res && res.booking){
+      showToast(`🎀 Canjeada → vinculada a reserva de ${res.booking.nombre_cliente} (${res.booking.fecha})`);
+    } else {
+      showToast('🎀 Gift card marcada como canjeada' + (redeemed_booking_ref ? '' : ' (sin reserva vinculada todavía)'));
+    }
     loadGiftCards();
   }catch(e){ showToast('Error: '+e.message); }
 }

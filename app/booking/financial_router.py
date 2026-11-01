@@ -209,11 +209,10 @@ def _get_bookings_cashflow_range(date_from: date, date_to: date) -> List[Dict]:
 
 def _get_gift_cards_revenue_range(date_from: date, date_to: date) -> List[Dict]:
     """Paid gift cards (status active/redeemed — excludes pending_payment and
-    rejected) with purchased_at in range. A gift card has no `fecha` of its
-    own (no service date until redeemed, and redemption isn't wired to a
-    real booking yet — see gift_cards_router.py), so purchased_at is used
-    as both its P&L recognition date and its cash-flow date, the same way a
-    booking's pago `date` drives cash-flow independently of its `fecha`."""
+    rejected) with purchased_at in range. Used for CASH FLOW / inflows-by-method
+    only — the cash really arrives at purchase, independent of when (or
+    whether) the trip is served. For P&L recognition, see
+    _get_gift_cards_pnl_range(), which uses the service date instead."""
     from app.booking.gift_cards_router import _ensure_gift_cards_table
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -230,6 +229,43 @@ def _get_gift_cards_revenue_range(date_from: date, date_to: date) -> List[Dict]:
                 {
                     "code": r[0], "amount": float(r[1] or 0), "method": r[2],
                     "fecha": r[3].isoformat(), "buyer_name": r[4] or "",
+                }
+                for r in cur.fetchall()
+            ]
+
+
+def _get_gift_cards_pnl_range(date_from: date, date_to: date) -> List[Dict]:
+    """Gift cards recognized for P&L on the day the trip was actually served,
+    not the purchase date (pedido del usuario 2026-11-01: "esa reserva no se
+    atiende ese día [de compra]. Se debe considerar el día que se atendió").
+
+    Recognition date = the linked redemption booking's `fecha` when
+    redeemed_booking_ref resolves to a real all_appointments row; falls back
+    to redeemed_at (the day staff marked it redeemed in admin) for gift cards
+    redeemed before this fix existed, when no ref was ever recorded. A gift
+    card still 'active' (not yet redeemed) has no service date — correctly
+    excluded from P&L until it's redeemed, even though its cash already
+    shows up in cash flow at purchase (see _get_gift_cards_revenue_range)."""
+    from app.booking.gift_cards_router import _ensure_gift_cards_table
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_gift_cards_table(cur)
+            cur.execute("""
+                SELECT gc.code, gc.amount, COALESCE(gc.payment_method, 'transferencia'),
+                       gc.buyer_name,
+                       COALESCE(aa.fecha, gc.redeemed_at::date) AS pnl_fecha
+                FROM gift_cards gc
+                LEFT JOIN all_appointments aa
+                  ON gc.redeemed_booking_ref ~ '^[0-9]+$'
+                 AND aa.id = gc.redeemed_booking_ref::int
+                WHERE gc.status = 'redeemed'
+                  AND COALESCE(aa.fecha, gc.redeemed_at::date) IS NOT NULL
+                  AND COALESCE(aa.fecha, gc.redeemed_at::date) BETWEEN %s AND %s
+            """, (date_from, date_to))
+            return [
+                {
+                    "code": r[0], "amount": float(r[1] or 0), "method": r[2],
+                    "buyer_name": r[3] or "", "fecha": r[4].isoformat(),
                 }
                 for r in cur.fetchall()
             ]
@@ -975,7 +1011,7 @@ async def get_pnl(
     commissions = _get_commissions()
     bookings   = _get_bookings_range(d_from, d_to)
     marketing  = _get_marketing_costs_range(d_from, d_to)
-    gift_cards = _get_gift_cards_revenue_range(d_from, d_to)
+    gift_cards = _get_gift_cards_pnl_range(d_from, d_to)
 
     days = _build_pnl_days(bookings, marketing, commissions, d_from, d_to, gift_cards)
     _strip_iva_from_pnl_days(days)

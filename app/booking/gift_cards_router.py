@@ -511,23 +511,43 @@ class RedeemGiftCardRequest(BaseModel):
 @gift_cards_router.post("/api/admin/gift-cards/{code}/redeem")
 async def redeem_gift_card_endpoint(code: str, body: RedeemGiftCardRequest, x_admin_key: str = Header("")):
     """Marca la gift card canjeada a mano — no valida fecha de vencimiento
-    acá a propósito, el dueño ya la está viendo y decidiendo caso a caso."""
+    acá a propósito, el dueño ya la está viendo y decidiendo caso a caso.
+
+    redeemed_booking_ref (id de all_appointments, como string) enlaza la
+    gift card con la reserva real donde se usó -- el P&L la reconoce el día
+    de ESA reserva (fecha de atención), no el día de compra (ver
+    financial_router.py::_get_gift_cards_pnl_range). Si viene un ref, se
+    valida contra all_appointments ANTES de guardar -- un ref que no resuelve
+    a una reserva real dejaría la gift card sin fecha de reconocimiento en el
+    P&L (nunca aparecería), así que se rechaza con 400 en vez de guardarlo
+    silenciosamente mal."""
     _check_auth(x_admin_key)
+    booking_info = None
     with get_connection() as conn:
         with conn.cursor() as cur:
             _ensure_gift_cards_table(cur)
+            ref = (body.redeemed_booking_ref or "").strip() or None
+            if ref is not None:
+                if not ref.isdigit():
+                    raise HTTPException(status_code=400, detail="El ID de la reserva debe ser numérico")
+                cur.execute("SELECT id, nombre_cliente, fecha FROM all_appointments WHERE id = %s", (int(ref),))
+                booking_row = cur.fetchone()
+                if not booking_row:
+                    raise HTTPException(status_code=400, detail=f"No existe ninguna reserva con id {ref}")
+                booking_info = {"id": booking_row[0], "nombre_cliente": booking_row[1],
+                                 "fecha": booking_row[2].isoformat() if booking_row[2] else None}
             cur.execute("""
                 UPDATE gift_cards
                 SET status = 'redeemed', redeemed_at = NOW(),
                     redeemed_booking_ref = %s, updated_at = NOW()
                 WHERE code = %s AND status = 'active'
                 RETURNING id
-            """, (body.redeemed_booking_ref, code))
+            """, (ref, code))
             row = cur.fetchone()
             conn.commit()
     if not row:
         raise HTTPException(status_code=404, detail="Gift card no encontrada o no está activa")
-    return {"ok": True}
+    return {"ok": True, "booking": booking_info}
 
 
 @gift_cards_router.post("/api/admin/gift-cards/{code}/unredeem")
