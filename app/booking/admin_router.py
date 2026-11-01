@@ -539,7 +539,7 @@ async def extras_vendidos_report(
     como rid)."""
     _check_auth(x_admin_key)
     try:
-        from app.booking.financial_router import CONFIRMED_STATUSES
+        from app.booking.financial_router import CONFIRMED_STATUSES, IVA_RATE
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -564,9 +564,11 @@ async def extras_vendidos_report(
             if not isinstance(val, dict):
                 continue
             qty = float(val.get("qty") or 1)
-            unit_price = float(val.get("unit_price") or 0)
+            # unit_price (precio al cliente) y cost_per_unit (costo proveedor) vienen
+            # con IVA incluido -- se les saca el IVA para que la utilidad sea neta.
+            unit_price = float(val.get("unit_price") or 0) / (1 + IVA_RATE)
             venta = qty * unit_price
-            costo = qty * cost_by_slug.get(key, 0)
+            costo = qty * cost_by_slug.get(key, 0) / (1 + IVA_RATE)
             item = {
                 "reserva_id": rid, "cliente": nombre_cliente, "fecha": fecha_str,
                 "extra": val.get("name") or key, "qty": qty,

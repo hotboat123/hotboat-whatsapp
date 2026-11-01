@@ -4475,7 +4475,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <button onclick="loadExtrasVendidos()" style="background:var(--gold);color:#111;border:none;border-radius:8px;padding:.4rem .9rem;font-size:.82rem;font-weight:700;cursor:pointer">Buscar</button>
         </div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:.6rem">
-          Por fecha del paseo, solo reservas confirmadas/pagadas/aprobadas. Online = el cliente lo agregó solo al reservar (sin vendedor asignado). Presencial = lo vendió un trabajador en persona, agrupado por quién. Costo según el catálogo de productos (stock_products).
+          Por fecha del paseo, solo reservas confirmadas/pagadas/aprobadas. Online = el cliente lo agregó solo al reservar (sin vendedor asignado). Presencial = lo vendió un trabajador en persona, agrupado por quién. Costo según el catálogo de productos (stock_products). Venta, costo y utilidad se muestran <strong>sin IVA</strong> (se le resta el 19%).
         </div>
       </div>
 
@@ -7007,7 +7007,7 @@ async function loadExtrasVendidos(){
 
 function _evCard(title, venta, costo, utilidad, accent){
   return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem 1.2rem">
-    <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">${title}</div>
+    <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">${title} <span style="opacity:.7;text-transform:none;letter-spacing:0">(sin IVA)</span></div>
     <div style="font-weight:700;font-size:1.3rem;color:${accent};margin-bottom:.35rem">${fmtMoney(venta)}</div>
     <div style="font-size:.78rem;color:var(--muted);display:flex;justify-content:space-between">
       <span>Costo ${fmtMoney(costo)}</span><span>Utilidad ${fmtMoney(utilidad)}</span>
