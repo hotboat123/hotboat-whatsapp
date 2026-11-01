@@ -137,7 +137,10 @@ async def transbank_return(request: Request):
     buy_order = result.get("buy_order", "")
     status = "approved" if approved else "rejected"
     try:
-        confirm_payment_by_ref(buy_order, result.get("authorization_code"), status, amount=result.get("amount"))
+        confirm_payment_by_ref(
+            buy_order, result.get("authorization_code"), status,
+            amount=result.get("amount"), payment_type_code=result.get("payment_type_code"),
+        )
     except Exception as e:
         logger.error(f"Transbank confirm error for buy_order {buy_order}: {e}")
 

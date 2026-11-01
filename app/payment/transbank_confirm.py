@@ -22,7 +22,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def confirm_payment_by_ref(buy_order: str, payment_id: str | None, status: str, amount: float | None = None) -> bool:
+# Transbank's commit response includes `payment_type_code` (VD = débito; VN,
+# VC, SI, S2, NC, etc. = algún tipo de crédito) -- usado para distinguir
+# transbank_credito/transbank_debito en financial_router.py's DEFAULT_COMMISSIONS
+# (tasas y tratamiento de IVA distintos por tarjeta). Antes de esto, cada pago
+# se guardaba con method="transbank" genérico sin importar el tipo de tarjeta,
+# así que la comisión de débito (configurada como iva_included=False, distinta
+# de crédito) nunca se aplicaba de verdad -- todo se calculaba como crédito.
+_DEBIT_PAYMENT_TYPE_CODES = {"VD"}
+
+
+def _transbank_method(payment_type_code: str | None) -> str:
+    if not payment_type_code:
+        return "transbank"
+    return "transbank_debito" if payment_type_code.upper() in _DEBIT_PAYMENT_TYPE_CODES else "transbank_credito"
+
+
+def confirm_payment_by_ref(
+    buy_order: str,
+    payment_id: str | None,
+    status: str,
+    amount: float | None = None,
+    payment_type_code: str | None = None,
+) -> bool:
     """status is 'approved' or 'rejected'. Returns True if some booking was
     found and updated (regardless of which table it lived in)."""
     buy_order = (buy_order or "").strip()
@@ -31,7 +53,7 @@ def confirm_payment_by_ref(buy_order: str, payment_id: str | None, status: str, 
 
     if _confirm_gift_card(buy_order, payment_id, status, amount):
         return True
-    if _confirm_hotboat_booking(buy_order, payment_id, status, amount):
+    if _confirm_hotboat_booking(buy_order, payment_id, status, amount, payment_type_code):
         return True
     if _confirm_accommodation_booking(buy_order, payment_id, status):
         return True
@@ -42,7 +64,13 @@ def confirm_payment_by_ref(buy_order: str, payment_id: str | None, status: str, 
     return False
 
 
-def _record_pago(buy_order: str, payment_id: str | None, status: str, amount: float | None) -> None:
+def _record_pago(
+    buy_order: str,
+    payment_id: str | None,
+    status: str,
+    amount: float | None,
+    payment_type_code: str | None = None,
+) -> None:
     """Append this charge to all_appointments.pagos — the WooCommerce webhook
     (admin_router.py's /api/woo-webhook) used to be what filled this column
     for Transbank payments; the admin-force confirmation email sums it to
@@ -73,7 +101,7 @@ def _record_pago(buy_order: str, payment_id: str | None, status: str, amount: fl
                 return
             pagos.append({
                 "amount": float(amount),
-                "method": "transbank",
+                "method": _transbank_method(payment_type_code),
                 "authorization_code": payment_id,
                 "date": _date.today().isoformat(),
                 "status": status,
@@ -96,7 +124,13 @@ def _confirm_gift_card(buy_order: str, payment_id: str | None, status: str, amou
     return confirm_gift_card_payment(buy_order, payment_id, status, amount)
 
 
-def _confirm_hotboat_booking(buy_order: str, payment_id: str | None, status: str, amount: float | None = None) -> bool:
+def _confirm_hotboat_booking(
+    buy_order: str,
+    payment_id: str | None,
+    status: str,
+    amount: float | None = None,
+    payment_type_code: str | None = None,
+) -> bool:
     from app.booking.db import update_booking_payment, get_booking_by_ref
 
     updated = update_booking_payment(buy_order, payment_id or "", buy_order, status)
@@ -105,7 +139,7 @@ def _confirm_hotboat_booking(buy_order: str, payment_id: str | None, status: str
 
     if status == "approved":
         try:
-            _record_pago(buy_order, payment_id, status, amount)
+            _record_pago(buy_order, payment_id, status, amount, payment_type_code)
         except Exception as pago_err:
             logger.warning(f"Transbank confirm: pagos record error for {buy_order}: {pago_err}")
 
