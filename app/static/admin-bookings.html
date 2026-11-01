@@ -431,6 +431,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('comisiones');loadComisiones()" id="nav-comisiones">
       <span class="ni">💸</span> Comisiones extras
     </div>
+    <div class="nav-item" onclick="showSection('extras-vendidos');loadExtrasVendidos()" id="nav-extras-vendidos">
+      <span class="ni">🛍️</span> Extras Vendidos
+    </div>
     <div class="nav-item" onclick="showSection('gastos');loadGastos()" id="nav-gastos">
       <span class="ni">🧾</span> Gastos
     </div>
@@ -4459,6 +4462,34 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
       </div>
     </div>
 
+    <!-- ══ EXTRAS VENDIDOS (online vs. presencial, con costo/utilidad) ═════════ -->
+    <div id="section-extras-vendidos" class="section">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+        <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.9rem">
+          🛍️ EXTRAS VENDIDOS — ONLINE VS. PRESENCIAL
+        </div>
+        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+          <input type="date" id="ev-desde" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
+          <span style="color:var(--muted);font-size:.8rem">→</span>
+          <input type="date" id="ev-hasta" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.82rem;outline:none">
+          <button onclick="loadExtrasVendidos()" style="background:var(--gold);color:#111;border:none;border-radius:8px;padding:.4rem .9rem;font-size:.82rem;font-weight:700;cursor:pointer">Buscar</button>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.6rem">
+          Por fecha del paseo, solo reservas confirmadas/pagadas/aprobadas. Online = el cliente lo agregó solo al reservar (sin vendedor asignado). Presencial = lo vendió un trabajador en persona, agrupado por quién. Costo según el catálogo de productos (stock_products).
+        </div>
+      </div>
+
+      <div id="ev-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.9rem;margin-bottom:1.2rem"></div>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.7rem">🌐 Online</div>
+        <div id="ev-online-table" style="overflow-x:auto"></div>
+      </div>
+
+      <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.7rem">🧑‍✈️ PRESENCIAL, POR VENDEDOR</div>
+      <div id="ev-presencial-results" style="display:grid;gap:.9rem"></div>
+    </div>
+
     <!-- ══ GASTOS SECTION ════════════════════════════════════════════════════ -->
     <div id="section-gastos" class="section">
 
@@ -5060,7 +5091,7 @@ function doLogout(){
 function _applyNavPermissions(){
   const allSections = ['calendar','lista','clientes','stats','extras-cat','tablas-admin',
     'coupons','giftcards','emails','alojamientos-admin','aloj-bookings','experiencias','packs-admin',
-    'cal-extras','financial','simulator','sueldos','gastos','whatsapp','chatbot','payment-test','logs','settings'];
+    'cal-extras','financial','simulator','sueldos','extras-vendidos','gastos','whatsapp','chatbot','payment-test','logs','settings'];
   allSections.forEach(sec=>{
     const el = document.getElementById('nav-'+sec);
     if(!el) return;
@@ -6091,6 +6122,20 @@ async function openModal(id){
       </div>
       <div style="margin-top:1rem">
         <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
+          🙌 Propina <span style="opacity:.6;text-transform:none;letter-spacing:0">(no es ingreso de HotBoat, no entra al P&amp;L)</span>
+        </label>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <input id="e-propina_monto" type="number" placeholder="Monto $" value="${r.propina_monto||''}"
+            style="width:120px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none">
+          <select id="e-propina_metodo_pago"
+            style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.83rem;outline:none">
+            <option value=""${!r.propina_metodo_pago?' selected':''}>— método de pago —</option>
+            ${METODOS.map(m=>`<option value="${m}"${r.propina_metodo_pago===m?' selected':''}>${m}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:1rem">
+        <label style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.5rem">
           Descuentos aplicados
           <span id="desc-total" style="color:var(--red);font-weight:700;margin-left:.5rem"></span>
         </label>
@@ -6803,6 +6848,8 @@ async function saveModal(id){
     costo_operativo_total:costoFijo+costoVar,
     tiene_cruce:g('e-tiene_cruce')==='true',
     extras_json: JSON.parse(JSON.stringify(extrasJson)),
+    propina_monto: +g('e-propina_monto')||0,
+    propina_metodo_pago: g('e-propina_metodo_pago')||null,
   };
   // Pagos y descuentos
   syncPagosDatesFromPickers();
@@ -6812,7 +6859,7 @@ async function saveModal(id){
   body.coupon_code = _appliedCoupon ? _appliedCoupon.code : null;
   body.coupon_discount = _appliedCoupon ? (_appliedCoupon.discount_amount || 0) : 0;
   // Remove nulls/empty strings but keep jsonb fields
-  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount','boletado','incluir_en_utilidad']);
+  const keepAlways = new Set(['extras_json','descuentos','pagos','quien_atendio','ciudad_origen','fecha','hora','coupon_code','coupon_discount','boletado','incluir_en_utilidad','propina_monto','propina_metodo_pago']);
   Object.keys(body).forEach(k=>{ if(!keepAlways.has(k)&&(body[k]===''||body[k]===null)) delete body[k]; });
   try{
     await api(`/api/admin/reservas/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -6928,6 +6975,103 @@ function renderComisiones(){
   }catch(e){
     results.innerHTML = `<div style="color:#f87171;font-size:.85rem">Error: ${e.message}</div>`;
   }
+}
+
+/** Sección "Extras Vendidos" — GET /api/admin/reservas/extras-vendidos, venta/
+ * costo/utilidad de extras separados en online (sin vendedor) vs. presencial
+ * (agrupado por quién lo vendió). Ver extras_vendidos_report en admin_router.py. */
+async function loadExtrasVendidos(){
+  const dEl = document.getElementById('ev-desde');
+  const hEl = document.getElementById('ev-hasta');
+  if(dEl && !dEl.value){
+    const today = new Date();
+    dEl.value = new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString('en-CA',{timeZone:'America/Santiago'});
+  }
+  if(hEl && !hEl.value) hEl.value = _todayCL();
+  const desde = dEl?.value, hasta = hEl?.value;
+  const summary = document.getElementById('ev-summary');
+  const onlineTable = document.getElementById('ev-online-table');
+  const presResults = document.getElementById('ev-presencial-results');
+  if(!desde || !hasta || !summary) return;
+  summary.innerHTML = '<div style="color:var(--muted);font-size:.85rem">Cargando...</div>';
+  onlineTable.innerHTML = ''; presResults.innerHTML = '';
+  try{
+    const d = await api(`/api/admin/reservas/extras-vendidos?desde=${desde}&hasta=${hasta}`);
+    renderExtrasVendidosSummary(d);
+    renderExtrasVendidosOnline(d.online);
+    renderExtrasVendidosPresencial(d.presencial);
+  }catch(e){
+    summary.innerHTML = `<div style="color:#f87171;font-size:.85rem">Error: ${e.message}</div>`;
+  }
+}
+
+function _evCard(title, venta, costo, utilidad, accent){
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem 1.2rem">
+    <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">${title}</div>
+    <div style="font-weight:700;font-size:1.3rem;color:${accent};margin-bottom:.35rem">${fmtMoney(venta)}</div>
+    <div style="font-size:.78rem;color:var(--muted);display:flex;justify-content:space-between">
+      <span>Costo ${fmtMoney(costo)}</span><span>Utilidad ${fmtMoney(utilidad)}</span>
+    </div>
+  </div>`;
+}
+
+function renderExtrasVendidosSummary(d){
+  const summary = document.getElementById('ev-summary');
+  if(!summary) return;
+  summary.innerHTML = [
+    _evCard('🌐 Online', d.online.venta, d.online.costo, d.online.utilidad, 'var(--blue)'),
+    _evCard('🧑‍✈️ Presencial', d.presencial.venta, d.presencial.costo, d.presencial.utilidad, 'var(--gold)'),
+    _evCard('Σ Total', d.total.venta, d.total.costo, d.total.utilidad, '#4ade80'),
+  ].join('');
+}
+
+function _evItemsTable(items){
+  if(!items || !items.length) return '<div style="color:var(--muted);font-size:.85rem">Sin ventas en ese rango.</div>';
+  return `<table style="width:100%;font-size:.8rem;border-collapse:collapse">
+    <thead><tr style="color:var(--muted);text-align:left">
+      <th style="padding:.2rem .4rem">Fecha</th><th style="padding:.2rem .4rem">Cliente</th>
+      <th style="padding:.2rem .4rem">Extra</th><th style="padding:.2rem .4rem">Cant.</th>
+      <th style="padding:.2rem .4rem;text-align:right">Venta</th>
+      <th style="padding:.2rem .4rem;text-align:right">Costo</th>
+      <th style="padding:.2rem .4rem;text-align:right">Utilidad</th>
+    </tr></thead>
+    <tbody>
+      ${items.map(it=>`<tr>
+        <td style="padding:.2rem .4rem">${it.fecha}</td>
+        <td style="padding:.2rem .4rem">${escHtml(it.cliente||'')}</td>
+        <td style="padding:.2rem .4rem">${escHtml(it.extra||'')}</td>
+        <td style="padding:.2rem .4rem">${it.qty}</td>
+        <td style="padding:.2rem .4rem;text-align:right">${fmtMoney(it.venta)}</td>
+        <td style="padding:.2rem .4rem;text-align:right">${fmtMoney(it.costo)}</td>
+        <td style="padding:.2rem .4rem;text-align:right">${fmtMoney(it.utilidad)}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function renderExtrasVendidosOnline(online){
+  const el = document.getElementById('ev-online-table');
+  if(!el) return;
+  el.innerHTML = _evItemsTable(online?.items);
+}
+
+function renderExtrasVendidosPresencial(presencial){
+  const el = document.getElementById('ev-presencial-results');
+  if(!el) return;
+  const workers = Object.entries(presencial?.por_trabajador||{}).sort((a,b)=>b[1].venta-a[1].venta);
+  if(!workers.length){
+    el.innerHTML = '<div style="color:var(--muted);font-size:.85rem">Sin extras presenciales en ese rango.</div>';
+    return;
+  }
+  el.innerHTML = workers.map(([name, info])=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem 1.2rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;gap:.4rem">
+        <div style="font-weight:700;font-size:.95rem">🧑‍✈️ ${escHtml(name)}</div>
+        <div style="font-size:.8rem;color:var(--muted)">Venta <strong style="color:var(--gold)">${fmtMoney(info.venta)}</strong>
+          · Costo ${fmtMoney(info.costo)} · Utilidad <strong>${fmtMoney(info.utilidad)}</strong></div>
+      </div>
+      <div style="overflow-x:auto">${_evItemsTable(info.items)}</div>
+    </div>`).join('');
 }
 
 /** all_appointments.created_at (ISO del API) → texto legible en hora Chile */
@@ -8440,6 +8584,12 @@ function renderHighSeasonList(){
 
 // ── Payment rows ──────────────────────────────────────────────────────────────
 const METODOS = ['transferencia','mercadopago','transbank','efectivo','cheque','otro'];
+// Hour-range options for "¿a qué hora se pagó?" (08-09, 09-10, ... 22-23) — a
+// range, not an exact time, since that's as precisely as staff can usually say.
+const HORA_RANGOS = Array.from({length:15},(_,i)=>{
+  const h=8+i, z=n=>String(n).padStart(2,'0');
+  return `${z(h)}:00-${z(h+1)}:00`;
+});
 let _pagos = [];   // working copy of pagos array for current modal
 
 /** Normalize pago.date to YYYY-MM-DD (ISO con hora, dd/mm/yyyy). */
@@ -8501,6 +8651,12 @@ function renderPagos(){
       <input class="pago-fecha-native" type="date" value="${normalizePagoDate(p.date)}" data-pago-idx="${i}" autocomplete="off"
         style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .6rem;font-size:.83rem;outline:none;min-width:9.5rem"
         onchange="_pagos[${i}].date=normalizePagoDate(this.value)||''">
+      <select class="p-hora-rango" onchange="_pagos[${i}].hora_rango=this.value"
+        title="Hora aproximada del pago"
+        style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .6rem;font-size:.83rem;outline:none;min-width:7rem">
+        <option value=""${!p.hora_rango?' selected':''}>— hora —</option>
+        ${HORA_RANGOS.map(h=>`<option value="${h}"${p.hora_rango===h?' selected':''}>${h}</option>`).join('')}
+      </select>
       <label title="Boleta emitida" style="display:flex;align-items:center;gap:.25rem;cursor:pointer;font-size:.78rem;color:${p.boletado?'#4ade80':'var(--muted)'};white-space:nowrap;border:1px solid ${p.boletado?'rgba(16,185,129,.4)':'var(--border)'};border-radius:6px;padding:.3rem .45rem;background:${p.boletado?'rgba(16,185,129,.08)':'transparent'};transition:.15s">
         <input type="checkbox" ${p.boletado?'checked':''} style="accent-color:#4ade80;margin:0"
           onchange="_pagos[${i}].boletado=this.checked;const lbl=this.closest('label');lbl.style.color=this.checked?'#4ade80':'var(--muted)';lbl.style.borderColor=this.checked?'rgba(16,185,129,.4)':'var(--border)';lbl.style.background=this.checked?'rgba(16,185,129,.08)':'transparent';calcIvaVenta()">
@@ -8540,7 +8696,7 @@ function todayLocalISO(){
 }
 
 function addPago(){
-  _pagos.push({amount:'',method:'transferencia',date:todayLocalISO(),boletado:false});
+  _pagos.push({amount:'',method:'transferencia',date:todayLocalISO(),hora_rango:'',boletado:false});
   renderPagos();
 }
 
@@ -16143,7 +16299,7 @@ const _SECTION_LABELS = {
   'tablas-admin':'🍽 Tablas','coupons':'🎟️ Cupones','quick-replies':'⚡ Respuestas Rápidas','giftcards':'🎀 Gift Cards','emails':'✉️ Emails reservas',
   'alojamientos-admin':'🏠 Alojamientos','aloj-bookings':'📋 Reservas Aloj.',
   'experiencias':'🏔️ Experiencias','packs-admin':'🎁 Packs','cal-extras':'🗓️ Cal. Extras',
-  'financial':'💰 Finanzas','simulator':'🎯 Simulador','sueldos':'👷 Sueldos',
+  'financial':'💰 Finanzas','simulator':'🎯 Simulador','sueldos':'👷 Sueldos','extras-vendidos':'🛍️ Extras Vendidos',
   'gastos':'🧾 Gastos','whatsapp':'💬 WhatsApp','chatbot':'🤖 Chatbot','payment-test':'💳 Test Pagos',
   'logs':'🔍 Logs','settings':'⚙️ Configuración',
 };

@@ -517,6 +517,99 @@ async def extras_presenciales_report(
     return {"desde": desde, "hasta": hasta, "por_trabajador": by_worker}
 
 
+@admin_router.get("/api/admin/reservas/extras-vendidos")
+async def extras_vendidos_report(
+    desde: str = Query(...),
+    hasta: str = Query(...),
+    x_admin_key: str = Header(""),
+):
+    """Venta/costo/utilidad de los extras vendidos en [desde, hasta] (reservas
+    CONFIRMADAS/pagadas/aprobadas, por fecha del paseo), separados en dos
+    canales según el mismo criterio que extras-presenciales/worker-commission:
+    - online: el extra no tiene `sold_by` -- lo agregó el cliente solo, vía el
+      link de reserva (ver booking-soft.html / reserva_router.py).
+    - presencial: el extra SÍ tiene `sold_by` -- lo vendió un trabajador en
+      persona, agrupado por quién. A diferencia de extras-presenciales (que
+      exige added_at == fecha del paseo, por ser insumo de un bono por venta
+      del día), aquí se cuenta cualquier extra presencial de la reserva --
+      esto es un reporte de ventas, no de bono.
+    Costo según stock_products.cost_per_unit (mismo criterio que worker-commission).
+    Debe quedar registrada ANTES de /api/admin/reservas/{rid} -- mismo motivo
+    que extras-presenciales (si no, FastAPI intenta parsear "extras-vendidos"
+    como rid)."""
+    _check_auth(x_admin_key)
+    try:
+        from app.booking.financial_router import CONFIRMED_STATUSES
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""SELECT id, nombre_cliente, fecha, extras_json
+                        FROM {TABLE}
+                        WHERE fecha >= %s AND fecha <= %s AND status = ANY(%s)
+                          AND extras_json IS NOT NULL""",
+                    (desde, hasta, list(CONFIRMED_STATUSES)),
+                )
+                rows = cur.fetchall()
+                cur.execute("SELECT slug, cost_per_unit FROM stock_products WHERE slug IS NOT NULL")
+                cost_by_slug = {slug: float(cost or 0) for slug, cost in cur.fetchall()}
+    except Exception as e:
+        logger.error(f"Error building extras-vendidos report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    online = {"venta": 0.0, "costo": 0.0, "items": []}
+    by_worker: dict = {}
+    for rid, nombre_cliente, fecha, extras_json in rows:
+        fecha_str = fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha)
+        for key, val in _normalize_extras_to_dict(extras_json).items():
+            if not isinstance(val, dict):
+                continue
+            qty = float(val.get("qty") or 1)
+            unit_price = float(val.get("unit_price") or 0)
+            venta = qty * unit_price
+            costo = qty * cost_by_slug.get(key, 0)
+            item = {
+                "reserva_id": rid, "cliente": nombre_cliente, "fecha": fecha_str,
+                "extra": val.get("name") or key, "qty": qty,
+                "venta": venta, "costo": costo, "utilidad": venta - costo,
+            }
+            sold_by = val.get("sold_by")
+            if sold_by:
+                entry = by_worker.setdefault(sold_by, {"venta": 0.0, "costo": 0.0, "items": []})
+                entry["venta"] += venta
+                entry["costo"] += costo
+                entry["items"].append(item)
+            else:
+                online["venta"] += venta
+                online["costo"] += costo
+                online["items"].append(item)
+
+    def _round_block(d):
+        return {
+            "venta": round(d["venta"]), "costo": round(d["costo"]),
+            "utilidad": round(d["venta"] - d["costo"]), "items": d["items"],
+        }
+
+    por_trabajador = {w: _round_block(d) for w, d in by_worker.items()}
+    presencial_venta = sum(d["venta"] for d in by_worker.values())
+    presencial_costo = sum(d["costo"] for d in by_worker.values())
+    online_out = _round_block(online)
+    presencial_out = {
+        "venta": round(presencial_venta), "costo": round(presencial_costo),
+        "utilidad": round(presencial_venta - presencial_costo),
+        "por_trabajador": por_trabajador,
+    }
+    return {
+        "desde": desde, "hasta": hasta,
+        "online": online_out,
+        "presencial": presencial_out,
+        "total": {
+            "venta": online_out["venta"] + presencial_out["venta"],
+            "costo": online_out["costo"] + presencial_out["costo"],
+            "utilidad": online_out["utilidad"] + presencial_out["utilidad"],
+        },
+    }
+
+
 @admin_router.get("/api/admin/reservas/{rid}")
 async def get_reserva(rid: int, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
@@ -664,6 +757,22 @@ class UpdateReservaRequest(BaseModel):
     coupon_extra_benefit: Optional[str] = None
     boletado: Optional[bool] = None
     incluir_en_utilidad: Optional[bool] = None
+    propina_monto: Optional[float] = None
+    propina_metodo_pago: Optional[str] = None
+
+
+def _ensure_propina_columns():
+    """propina_monto/propina_metodo_pago: tip left for the crew, tracked
+    separately from `pagos` (which feeds financial_router.py's revenue/
+    commission math) — a tip is not HotBoat revenue, so it must never be
+    summed into ingreso_total or a pago's commission_deduction."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS propina_monto NUMERIC DEFAULT 0;
+                ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS propina_metodo_pago TEXT DEFAULT NULL;
+            """)
+            conn.commit()
 
 
 @admin_router.put("/api/admin/reservas/{rid}")
@@ -692,6 +801,12 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
         updates['boletado'] = body.boletado
     if 'incluir_en_utilidad' in body.model_fields_set:
         updates['incluir_en_utilidad'] = body.incluir_en_utilidad
+    if 'propina_monto' in body.model_fields_set or 'propina_metodo_pago' in body.model_fields_set:
+        _ensure_propina_columns()
+    if 'propina_monto' in body.model_fields_set:
+        updates['propina_monto'] = body.propina_monto or 0
+    if 'propina_metodo_pago' in body.model_fields_set:
+        updates['propina_metodo_pago'] = body.propina_metodo_pago
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
     try:
