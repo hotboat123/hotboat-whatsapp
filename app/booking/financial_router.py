@@ -825,6 +825,46 @@ def _parse_pago_date(raw_date: Any, fallback_date: Any) -> Optional[date]:
         return None
 
 
+def _get_propinas_range(d_from: date, d_to: date, commissions: Dict) -> Dict[str, Any]:
+    """
+    Propinas cobradas en el período (fecha = último pago de la reserva).
+    No son ingreso de HotBoat (no entran al P&L ni a net_cashflow) pero sí llegan al
+    banco por el mismo cobro, así que se muestran aparte para poder cuadrar el banco.
+    """
+    out: Dict[str, Any] = {"count": 0, "bruto": 0, "commission": 0, "neto": 0, "details": []}
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT a.id, COALESCE(a.nombre_cliente, ''), a.propina_monto,
+                           lower(COALESCE(a.propina_metodo_pago, '')), COALESCE(a.fecha::text, ''),
+                           COALESCE((SELECT max(p->>'date') FROM jsonb_array_elements(COALESCE(a.pagos, '[]'::jsonb)) p), '')
+                    FROM all_appointments a
+                    WHERE COALESCE(a.propina_monto, 0) > 0 AND a.status = ANY(%s)
+                """, (list(CONFIRMED_STATUSES),))
+                rows = cur.fetchall()
+    except Exception as e:  # columnas propina_* aún no creadas
+        logger.warning(f"propinas no disponibles: {e}")
+        return out
+    for bid, nombre, monto, metodo, fecha, ultimo_pago in rows:
+        pago_dt = _parse_pago_date(ultimo_pago or None, fecha)
+        if not pago_dt or not (d_from <= pago_dt <= d_to):
+            continue
+        metodo = _normalize_payment_method(metodo or "otro")
+        bruto = _fmt_int(monto)
+        comm = _fmt_int(bruto * float(commissions.get(metodo, {}).get("rate", 0.0)))
+        out["count"] += 1
+        out["bruto"] += bruto
+        out["commission"] += comm
+        out["neto"] += bruto - comm
+        out["details"].append({
+            "booking_id": bid, "nombre_cliente": nombre, "payment_date": pago_dt.isoformat(),
+            "method": metodo, "bruto": bruto, "commission": comm, "neto": bruto - comm,
+        })
+    out["details"].sort(key=lambda d: d["payment_date"])
+    return out
+
+
 def _build_inflows_by_method(
     bookings: List[Dict],
     commissions: Dict,
@@ -1152,6 +1192,7 @@ async def get_inflows_by_method(
         "date_to": date_to,
         "totals": totals,
         "data": rows,
+        "propinas": _get_propinas_range(d_from, d_to, commissions),
     }
 
 

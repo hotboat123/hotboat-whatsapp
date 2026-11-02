@@ -1834,6 +1834,29 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </table>
         </div>
       </div>
+
+      <!-- Propinas: llegan al banco pero no son ingreso de HotBoat (fuera de P&L y de las entradas de arriba) -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-top:1rem">
+        <div style="padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <span style="font-weight:600;font-size:.92rem">🙌 Propinas <span style="opacity:.6;font-weight:400;font-size:.76rem">(no son ingreso de HotBoat · se suman al banco, no al P&amp;L)</span></span>
+          <span id="fin-cf-propinas-total" style="color:var(--muted);font-size:.78rem"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:.81rem">
+            <thead>
+              <tr style="background:var(--card);color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em">
+                <th style="padding:.55rem .7rem;text-align:left">Fecha</th>
+                <th style="padding:.55rem .45rem;text-align:left">Reserva</th>
+                <th style="padding:.55rem .45rem;text-align:left">Método</th>
+                <th style="padding:.55rem .45rem;text-align:right">Propina</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Comisión</th>
+                <th style="padding:.55rem .45rem;text-align:right">Neto equipo</th>
+              </tr>
+            </thead>
+            <tbody id="fin-cf-propinas-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ── Forecast Panel ─────────────────────────────────────────────── -->
@@ -8584,11 +8607,12 @@ function renderHighSeasonList(){
 
 // ── Payment rows ──────────────────────────────────────────────────────────────
 const METODOS = ['transferencia','mercadopago','transbank','efectivo','cheque','otro'];
-// Hour-range options for "¿a qué hora se pagó?" (08-09, 09-10, ... 22-23) — a
-// range, not an exact time, since that's as precisely as staff can usually say.
-const HORA_RANGOS = Array.from({length:15},(_,i)=>{
-  const h=8+i, z=n=>String(n).padStart(2,'0');
-  return `${z(h)}:00-${z(h+1)}:00`;
+// Hour-range options for "¿a qué hora se pagó?" (08-10, 10-12, ... 22-00, 00-02) — a
+// 2-hour range, not an exact time, since that's as precisely as staff can usually say.
+// Los cobros del Point pueden caer de madrugada (paseo de noche), de ahí 22-00 y 00-02.
+const HORA_RANGOS = Array.from({length:9},(_,i)=>{
+  const h=(8+i*2)%24, z=n=>String(n).padStart(2,'0');
+  return `${z(h)}:00-${z((h+2)%24)}:00`;
 });
 let _pagos = [];   // working copy of pagos array for current modal
 
@@ -13296,12 +13320,35 @@ async function loadCfMethodsBreakdown(from, to){
     const d = await r.json();
     _finLastCfMethods = d;
     renderCfMethodsBreakdown(d.data || [], d.totals || { inflow_bruto: 0, inflow_commission: 0, inflow_neto: 0, count: 0 });
+    renderCfPropinas(d.propinas);
     loadingEl.textContent = (d.data || []).length ? '' : 'Sin ingresos en este período';
   }catch(e){
     console.error('loadCfMethodsBreakdown error:', e);
     loadingEl.textContent = 'Error al cargar';
     renderCfMethodsBreakdown([], { inflow_bruto: 0, inflow_commission: 0, inflow_neto: 0, count: 0 });
   }
+}
+
+function renderCfPropinas(p){
+  const tbody = document.getElementById('fin-cf-propinas-tbody');
+  const totalEl = document.getElementById('fin-cf-propinas-total');
+  if(!tbody) return;
+  const rows = (p && Array.isArray(p.details)) ? p.details : [];
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:1rem;text-align:center;color:var(--muted)">Sin propinas en este período</td></tr>';
+    if(totalEl) totalEl.textContent = '';
+    return;
+  }
+  tbody.innerHTML = rows.map(r=>`
+    <tr style="border-top:1px solid var(--border)">
+      <td style="padding:.55rem .7rem">${escHtml(r.payment_date)}</td>
+      <td style="padding:.55rem .45rem">${escHtml(r.nombre_cliente||'')} <span style="color:var(--muted)">#${r.booking_id}</span></td>
+      <td style="padding:.55rem .45rem">${_cfMethodLabel(r.method)}</td>
+      <td style="padding:.55rem .45rem;text-align:right">${fmtClp(r.bruto)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(r.commission)}</td>
+      <td style="padding:.55rem .45rem;text-align:right">${fmtClp(r.neto)}</td>
+    </tr>`).join('');
+  if(totalEl) totalEl.textContent = `${p.count} · ${fmtClp(p.bruto)} bruto · ${fmtClp(p.neto)} neto`;
 }
 
 function renderCfMethodsBreakdown(rows, totals){
