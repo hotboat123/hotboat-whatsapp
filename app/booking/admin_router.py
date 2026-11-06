@@ -3002,104 +3002,61 @@ async def woo_webhook(request: Request):
 
 @admin_router.get("/api/admin/payment-diagnostics")
 async def payment_diagnostics(x_admin_key: str = Header("")):
-    """Returns current payment config, webhook URL, and recent webhook events."""
+    """Returns current Transbank Webpay Plus config and recent /api/transbank/return
+    events. Replaces the old WooCommerce-webhook diagnostics, which stopped
+    reflecting reality once checkout moved off WooCommerce (43c14af)."""
     _check_auth(x_admin_key)
-    from app.payment.woocommerce import WOO_URL, WOO_CK, WOO_CS, WOO_SECRET, APP_URL
+    from app.booking.router import get_recent_transbank_events
 
-    # Test WooCommerce connectivity
-    woo_reachable = False
-    woo_error = ""
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(f"{WOO_URL}/wp-json/wc/v3/system_status",
-                                 auth=(WOO_CK, WOO_CS))
-            woo_reachable = r.is_success
-            if not woo_reachable:
-                woo_error = f"HTTP {r.status_code}"
-    except Exception as ce:
-        woo_error = str(ce)[:120]
+    environment = os.getenv("TRANSBANK_ENVIRONMENT", "test")
+    is_production = environment == "production"
+    base = os.getenv("PUBLIC_BASE_URL", os.getenv("APP_URL", "https://whatsapp.hotboat.cl"))
 
     return {
-        "webhook_url":        f"{APP_URL}/api/woo-webhook",
-        "app_url":            APP_URL,
-        "woo_url":            WOO_URL,
-        "woo_credentials_ok": bool(WOO_CK and WOO_CS),
-        "webhook_secret_set": bool(WOO_SECRET),
-        "woo_reachable":      woo_reachable,
-        "woo_error":          woo_error,
-        "recent_webhook_events": list(_webhook_log),
+        "environment":       environment,
+        "is_production":     is_production,
+        "commerce_code_set": bool(os.getenv("TRANSBANK_COMMERCE_CODE")) if is_production else True,
+        "api_key_set":       bool(os.getenv("TRANSBANK_API_KEY")) if is_production else True,
+        "return_url":        f"{base}/api/transbank/return",
+        "recent_webhook_events": get_recent_transbank_events(),
     }
 
 
 @admin_router.post("/api/admin/test-payment")
 async def create_test_payment(x_admin_key: str = Header("")):
     """
-    Create a real $1.000 CLP WooCommerce order for end-to-end payment testing.
-    Returns the /pagar URL — open it in a browser to test Transbank.
-    A test row is inserted in all_appointments so the webhook can confirm it.
+    Starts a real $1.000 CLP Webpay Plus transaction through the same code
+    path a live booking uses (app.booking.router.create_test_transbank_payment).
+    Open payment_url, complete it with Transbank, then check
+    GET /api/admin/payment-diagnostics for the return event.
     """
     _check_auth(x_admin_key)
-    from app.payment.woocommerce import create_order
-    from psycopg.types.json import Jsonb as PgJson
+    from app.booking.router import create_test_transbank_payment
 
-    test_ref = f"TEST-{int(datetime.now().timestamp())}"
-
-    # Insert a minimal test reservation so the webhook can find it
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""INSERT INTO {TABLE}
-                    (source, source_id, nombre_cliente, telefono, email,
-                     fecha, num_personas, ingreso_total, status, created_at, updated_at)
-                    VALUES ('hotboat_web', %s, 'Test Pago', '+56900000000', 'test@hotboatchile.com',
-                            CURRENT_DATE, 1, 1000, 'pending_payment', NOW(), NOW())
-                    ON CONFLICT DO NOTHING""",
-                (test_ref,)
-            )
-            conn.commit()
-
-    order = await create_order(
-        reservation_id=0,
-        booking_ref=test_ref,
-        nombre="Test Pago HotBoat",
-        telefono="+56900000000",
-        email="test@hotboatchile.com",
-        monto_reserva=1000,
-        monto_extras=0,
-        fecha=datetime.now(CHILE_TZ).strftime("%Y-%m-%d"),
-        num_personas=1,
-    )
-
-    # Store WC order_id in test reservation
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"UPDATE {TABLE} SET payment_id=%s WHERE source='hotboat_web' AND source_id=%s",
-                (str(order["order_id"]), test_ref)
-            )
-            conn.commit()
+    result = await create_test_transbank_payment()
+    if not result.get("payment_url"):
+        raise HTTPException(status_code=502, detail="Transbank no respondió al crear la transacción de prueba.")
 
     return {
-        "ok":              True,
-        "test_ref":        test_ref,
-        "wc_order_id":     order["order_id"],
-        "payment_url":     order["payment_url"],
-        "woo_direct_url":  order["woo_direct_url"],
-        "amount_clp":      1000,
-        "instructions":    (
-            "1. Abre payment_url en el navegador y completa el pago con Transbank. "
-            "2. Después revisa GET /api/admin/payment-diagnostics para ver si el webhook se recibió. "
-            "3. Si 'result: confirmed' aparece en recent_webhook_events, el flujo completo funciona."
+        "ok":           True,
+        "test_ref":     result["test_ref"],
+        "payment_url":  result["payment_url"],
+        "amount_clp":   1000,
+        "instructions": (
+            "1. Abre payment_url y completa el pago con Transbank (usa una tarjeta real si el ambiente es "
+            "'production', o las tarjetas de prueba de Transbank si es 'test'). "
+            "2. Pulsa 'Verificar configuración' arriba: el evento más reciente debe mostrar result='approved'."
         ),
     }
 
 
 @admin_router.get("/api/admin/webhook-events")
 async def get_webhook_events(x_admin_key: str = Header("")):
-    """Returns the last 50 webhook events received."""
+    """Returns the last 50 Transbank return events (approved/rejected/cancelled/error)."""
     _check_auth(x_admin_key)
-    return {"events": list(_webhook_log), "total": len(_webhook_log)}
+    from app.booking.router import get_recent_transbank_events
+    events = get_recent_transbank_events()
+    return {"events": events, "total": len(events)}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -1,6 +1,7 @@
 """FastAPI router for /booking and /api/booking/*"""
 import html as _html
 import logging, os, re, time as _time
+from collections import deque
 from typing import Any, Dict, Optional
 from datetime import datetime, timedelta
 from urllib.parse import quote
@@ -12,6 +13,11 @@ from pydantic import BaseModel
 # Simple in-memory cache for availability (avoids re-running 60-day scan on rapid reloads)
 _avail_cache: dict = {}
 _AVAIL_CACHE_TTL = 30  # seconds
+
+# Last 50 /api/transbank/return hits (approved/rejected/cancelled/error) — lets
+# the admin "Test Pagos" panel show whether a Webpay round-trip actually came
+# back, without needing DB access. In-memory only, resets on deploy.
+_transbank_log: deque = deque(maxlen=50)
 
 from app.booking.models import CreateBookingRequest
 from app.meta_pixel import apply_meta_pixel_placeholder
@@ -108,6 +114,20 @@ async def pagar_tbk(token: str = Query(...), url: str = Query(...)):
     </body></html>""")
 
 
+def _log_transbank_event(result: str, booking_ref: str = "", amount: Optional[float] = None, detail: str = "") -> None:
+    _transbank_log.appendleft({
+        "ts": datetime.now(CHILE_TZ).strftime("%Y-%m-%d %H:%M:%S"),
+        "result": result,
+        "booking_ref": booking_ref,
+        "total": amount,
+        "detail": detail,
+    })
+
+
+def get_recent_transbank_events() -> list:
+    return list(_transbank_log)
+
+
 @router.api_route("/api/transbank/return", methods=["GET", "POST"])
 async def transbank_return(request: Request):
     """Webpay Plus comes back here with token_ws on completion (or TBK_TOKEN /
@@ -120,6 +140,7 @@ async def transbank_return(request: Request):
     token_ws = form.get("token_ws") or request.query_params.get("token_ws")
     if not token_ws:
         booking_ref = form.get("TBK_ORDEN_COMPRA") or request.query_params.get("TBK_ORDEN_COMPRA", "")
+        _log_transbank_event("cancelled", booking_ref=booking_ref)
         return RedirectResponse(
             f"/booking/failure?booking_ref={quote(booking_ref)}&payment_status=rejected", status_code=303
         )
@@ -131,11 +152,16 @@ async def transbank_return(request: Request):
         result = commit_transaction(token_ws)
     except Exception as e:
         logger.error(f"Transbank commit error for token {token_ws}: {e}")
+        _log_transbank_event("commit_error", detail=str(e)[:160])
         return RedirectResponse("/booking/failure", status_code=303)
 
     approved = result.get("response_code") == 0 and result.get("status") == "AUTHORIZED"
     buy_order = result.get("buy_order", "")
     status = "approved" if approved else "rejected"
+    _log_transbank_event(
+        status, booking_ref=buy_order, amount=result.get("amount"),
+        detail="" if approved else f"response_code={result.get('response_code')} status={result.get('status')}",
+    )
     try:
         confirm_payment_by_ref(
             buy_order, result.get("authorization_code"), status,
@@ -188,6 +214,35 @@ async def _create_transbank_payment(booking_ref: str, amount: float, session_id:
     except Exception as e:
         logger.warning(f"Transbank create skip [{booking_ref}]: {e}")
         return None
+
+
+async def create_test_transbank_payment() -> Dict[str, Any]:
+    """Starts a real $1.000 CLP Webpay Plus transaction through the exact
+    same path a live booking uses (_create_transbank_payment above), so
+    opening the returned URL and paying it is a faithful end-to-end test of
+    what a real customer experiences today. Replaces the old admin
+    test-payment tool, which created a WooCommerce order and stopped
+    reflecting reality once checkout moved off WooCommerce (see git history:
+    43c14af 'Integrate Transbank Webpay Plus directly, replacing
+    WooCommerce')."""
+    from app.db.connection import get_connection
+
+    test_ref = f"TEST-{int(_time.time())}"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO all_appointments
+                   (source, source_id, nombre_cliente, telefono, email,
+                    fecha, num_personas, ingreso_total, status, created_at, updated_at)
+                   VALUES ('hotboat_web', %s, 'Test Pago', '+56900000000', 'test@hotboatchile.com',
+                           CURRENT_DATE, 1, 1000, 'pending_payment', NOW(), NOW())
+                   ON CONFLICT DO NOTHING""",
+                (test_ref,),
+            )
+            conn.commit()
+
+    payment_url = await _create_transbank_payment(test_ref, 1000)
+    return {"test_ref": test_ref, "payment_url": payment_url}
 
 
 @router.get("/api/booking/dynamic-price")
