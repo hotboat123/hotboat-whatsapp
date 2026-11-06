@@ -1749,7 +1749,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable experiencia (desde extras_json/catálogo)">CV Exp</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo variable otros extras (desde extras_json/catálogo)">CV Extra</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo mensual (arriendo + sueldo), prorrateado por los días del mes">C.Fijo día</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Mkt</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Meta Ads (Instagram/Facebook)">Meta</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Google Ads">Google</th>
                 <th style="padding:.55rem .45rem;text-align:right">Utilidad a Repartir</th>
                 <th style="padding:.55rem .45rem;text-align:center">%</th>
               </tr>
@@ -1796,7 +1797,8 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:right;color:#2ecc71">Entr. neto</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costos operativos reservas (fecha salida)">Op.res.</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Costo fijo mensual (arriendo + sueldo), prorrateado por los días del mes">C.Fijo día</th>
-                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Mkt</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Meta Ads (Instagram/Facebook)">Meta</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c" title="Google Ads">Google</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Σ salidas</th>
                 <th style="padding:.55rem .45rem;text-align:right">Flujo neto</th>
                 <th style="padding:.55rem .45rem;text-align:right;font-weight:700">Saldo fin.</th>
@@ -12542,8 +12544,11 @@ document.addEventListener('DOMContentLoaded', () => {
       <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Costos operativos presupuestados</label>
         <input type="number" id="fin-budget-costs" placeholder="0"
           style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
-      <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Marketing presupuestado</label>
+      <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Meta Ads presupuestado</label>
         <input type="number" id="fin-budget-marketing" placeholder="0"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
+      <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Google Ads presupuestado</label>
+        <input type="number" id="fin-budget-google-ads" placeholder="0"
           style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;outline:none;box-sizing:border-box"></div>
       <div><label style="color:var(--muted);font-size:.78rem;display:block;margin-bottom:.3rem">Notas</label>
         <input type="text" id="fin-budget-notes" placeholder="opcional"
@@ -12697,7 +12702,7 @@ function exportFinancialTableCsv(){
       'periodo', 'vista_agregacion', 'fecha_desde', 'fecha_hasta', 'n_reservas', 'ingreso_bruto',
       'ingreso_reserva', 'ingreso_aloj', 'ingreso_exp', 'ingreso_extra', 'comisiones', 'ingreso_neto',
       'costo_operacional', 'cv_aloj', 'cv_exp', 'cv_extra', 'costo_estructural',
-      'marketing', 'resultado', 'margen_pct_sobre_bruto',
+      'meta_ads', 'google_ads', 'resultado', 'margen_pct_sobre_bruto',
     ];
     const rows = [headers];
     data.forEach(row => {
@@ -12717,7 +12722,8 @@ function exportFinancialTableCsv(){
         finCsvNum(row.cv_exp),
         finCsvNum(row.cv_extra),
         finCsvNum(row.costo_estructural),
-        finCsvNum(row.marketing),
+        finCsvNum(row.marketing_meta),
+        finCsvNum(row.marketing_google),
         finCsvNum(row.resultado),
         margin,
       ]);
@@ -12740,7 +12746,8 @@ function exportFinancialTableCsv(){
         finCsvNum(t.cv_exp),
         finCsvNum(t.cv_extra),
         finCsvNum(t.costo_estructural),
-        finCsvNum(t.marketing),
+        finCsvNum(t.marketing_meta),
+        finCsvNum(t.marketing_google),
         finCsvNum(t.resultado),
         margin,
       ]);
@@ -12757,7 +12764,8 @@ function exportFinancialTableCsv(){
     const { data, view, opening_balance } = _finLastCf;
     const headers = [
       'periodo', 'vista_agregacion', 'fecha_desde', 'fecha_hasta', 'saldo_inicial_parametro',
-      'saldo_inicial_dia', 'entradas_neto', 'salida_op_reservas', 'salida_estructura', 'salida_marketing',
+      'saldo_inicial_dia', 'entradas_neto', 'salida_op_reservas', 'salida_estructura',
+      'salida_meta_ads', 'salida_google_ads',
       'total_salidas', 'flujo_neto', 'saldo_final',
     ];
     const rows = [headers];
@@ -12771,7 +12779,8 @@ function exportFinancialTableCsv(){
         finCsvNum(row.inflow_neto),
         finCsvNum(row.outflow_opex),
         finCsvNum(row.outflow_estructural),
-        finCsvNum(row.outflow_marketing),
+        finCsvNum(row.outflow_marketing_meta),
+        finCsvNum(row.outflow_marketing_google),
         finCsvNum(row.total_outflow),
         finCsvNum(row.net_cashflow),
         finCsvNum(row.ending_balance),
@@ -12788,7 +12797,8 @@ function exportFinancialTableCsv(){
     }
     const headers = [
       'mes', 'n_reservas', 'confirmadas', 'pendientes', 'ingreso_bruto', 'ingreso_neto', 'costo',
-      'resultado_forecast', 'presupuesto_ingreso', 'presupuesto_costos', 'presupuesto_marketing', 'vs_presupuesto_ingreso',
+      'resultado_forecast', 'presupuesto_ingreso', 'presupuesto_costos', 'presupuesto_meta_ads',
+      'presupuesto_google_ads', 'vs_presupuesto_ingreso',
     ];
     const rows = [headers];
     _finLastForecast.forEach(m => {
@@ -12805,6 +12815,7 @@ function exportFinancialTableCsv(){
         finCsvNum(b.income_budget),
         finCsvNum(b.costs_budget),
         finCsvNum(b.marketing_budget),
+        finCsvNum(b.google_ads_budget),
         finCsvNum(m.vs_budget),
       ]);
     });
@@ -12882,7 +12893,8 @@ function renderPnlKpis(t, periodDays, structure){
     {label:'Costos Op. (N x $18.000)', value: '-'+fmtClp(t.costo_operacional), color:'var(--red)'},
     {label:'Costo estructura', value: '-'+fmtClp(t.costo_estructural||0), color:'var(--red)',
      sub: periodDays ? `${periodDays} días calendario` : ''},
-    {label:'Marketing',        value: '-'+fmtClp(t.marketing),       color:'var(--red)'},
+    {label:'Meta Ads',         value: '-'+fmtClp(t.marketing_meta||0),   color:'var(--red)'},
+    {label:'Google Ads',       value: '-'+fmtClp(t.marketing_google||0), color:'var(--red)'},
     {label:'Utilidad a Repartir', value: fmtClp(t.resultado),        color: colorNum(t.resultado),
      sub: `Margen ${margin}%`},
   ]);
@@ -12919,7 +12931,8 @@ function _pnlRowTds(row, sm){
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('cv_exp'))}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('cv_extra'))}</td>
     <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('costo_estructural'))}</td>
-    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(row.marketing)}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('marketing_meta'))}</td>
+    <td style="${p};text-align:right;color:var(--red)">-${fmtClp(v('marketing_google'))}</td>
     <td style="${p};text-align:right;font-weight:600;color:${colorNum(row.resultado)}">${fmtClp(row.resultado)}</td>
     <td style="${p};text-align:center;color:${colorNum(margin)}">${margin}%</td>`;
 }
@@ -12927,7 +12940,7 @@ function _pnlRowTds(row, sm){
 function renderPnlTable(data, view, totals){
   const tbody = document.getElementById('fin-pnl-tbody');
   const tfoot = document.getElementById('fin-pnl-tfoot');
-  const COLSP = 18;
+  const COLSP = 19;
   tbody.innerHTML = '';
 
   data.forEach((row, idx) => {
@@ -12980,7 +12993,8 @@ function renderPnlTable(data, view, totals){
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('cv_exp'))}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('cv_extra'))}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('costo_estructural'))}</td>
-      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(t.marketing)}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('marketing_meta'))}</td>
+      <td style="padding:.5rem .4rem;text-align:right;color:var(--red)">-${fmtClp(tv('marketing_google'))}</td>
       <td style="padding:.5rem .4rem;text-align:right;color:${colorNum(t.resultado)}">${fmtClp(t.resultado)}</td>
       <td style="padding:.5rem .4rem;text-align:center;color:${colorNum(margin)}">${margin}%</td>
     </tr>`;
@@ -13511,7 +13525,8 @@ function renderCfKpis(data){
   const totalIn  = data.reduce((s,d)=>s+(d.inflow_neto||0),0);
   const opOut    = data.reduce((s,d)=>s+(d.outflow_opex||0),0);
   const estrOut  = data.reduce((s,d)=>s+(d.outflow_estructural||0),0);
-  const mktOut   = data.reduce((s,d)=>s+(d.outflow_marketing||0),0);
+  const mktMetaOut   = data.reduce((s,d)=>s+(d.outflow_marketing_meta||0),0);
+  const mktGoogleOut = data.reduce((s,d)=>s+(d.outflow_marketing_google||0),0);
   const totalOut = data.reduce((s,d)=>s+(d.total_outflow||0),0);
   const netFlow  = data.reduce((s,d)=>s+(d.net_cashflow||0),0);
   const last     = data[data.length-1];
@@ -13519,7 +13534,8 @@ function renderCfKpis(data){
     {label:'Total Entradas Netas', value: fmtClp(totalIn),           color:'var(--green)'},
     {label:'Op. reservas (egreso)', value: '-'+fmtClp(opOut),         color:'var(--red)'},
     {label:'Estructura (días)',     value: '-'+fmtClp(estrOut),       color:'var(--red)'},
-    {label:'Marketing',            value: '-'+fmtClp(mktOut),        color:'var(--red)'},
+    {label:'Meta Ads',             value: '-'+fmtClp(mktMetaOut),    color:'var(--red)'},
+    {label:'Google Ads',           value: '-'+fmtClp(mktGoogleOut),  color:'var(--red)'},
     {label:'Σ Salidas',             value: '-'+fmtClp(totalOut),     color:'var(--red)'},
     {label:'Flujo Neto',           value: fmtClp(netFlow),             color: colorNum(netFlow)},
     {label:'Saldo Final',          value: fmtClp(last.ending_balance), color:'var(--gold)'},
@@ -13528,7 +13544,7 @@ function renderCfKpis(data){
 
 function renderCfTable(data, view){
   const tbody = document.getElementById('fin-cf-tbody');
-  const CF_COLS = 10;
+  const CF_COLS = 11;
   tbody.innerHTML = '';
   if(!data||!data.length){
     tbody.innerHTML = `<tr><td colspan="${CF_COLS}" style="padding:1.5rem;text-align:center;color:var(--muted)">Sin datos en el período</td></tr>`;
@@ -13553,7 +13569,8 @@ function renderCfTable(data, view){
       <td style="padding:.55rem .45rem;text-align:right;color:var(--green)">+${fmtClp(row.inflow_neto)}</td>
       <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.outflow_opex)}</td>
       <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.outflow_estructural||0)}</td>
-      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.outflow_marketing)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.outflow_marketing_meta)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.outflow_marketing_google)}</td>
       <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(row.total_outflow)}</td>
       <td style="padding:.55rem .45rem;text-align:right;color:${colorNum(row.net_cashflow)}">${fmtClp(row.net_cashflow)}</td>
       <td style="padding:.55rem .45rem;text-align:right;font-weight:700;font-size:.9rem;color:var(--gold)">${fmtClp(endBal)}</td>
@@ -13574,7 +13591,8 @@ function renderCfTable(data, view){
           <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--green)">+${fmtClp(d.inflow_neto)}</td>
           <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.outflow_opex)}</td>
           <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.outflow_estructural||0)}</td>
-          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.outflow_marketing)}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.outflow_marketing_meta)}</td>
+          <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.outflow_marketing_google)}</td>
           <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:var(--red)">-${fmtClp(d.total_outflow)}</td>
           <td style="padding:.4rem .45rem;text-align:right;font-size:.75rem;color:${colorNum(d.net_cashflow)}">${fmtClp(d.net_cashflow)}</td>
           <td style="padding:.4rem .45rem;text-align:right;font-weight:600;font-size:.75rem;color:var(--gold)">${fmtClp(d.ending_balance)}</td>
@@ -14071,6 +14089,7 @@ async function fcEditZoneBudget(periodKey, monthKey, budgetField, currentVal){
     income_budget:    existing.income_budget    || 0,
     costs_budget:     existing.costs_budget     || 0,
     marketing_budget: existing.marketing_budget || 0,
+    google_ads_budget: existing.google_ads_budget || 0,
     notes:            existing.notes            || '',
     reserva_budget:   existing.reserva_budget   || 0,
     aloj_budget:      existing.aloj_budget      || 0,
@@ -14100,7 +14119,8 @@ async function fcEditBudget(weekOrMonthKey, monthKey, currentVal, isWeekly){
         await fetch(`/api/admin/financial/budget/${yr}/${parseInt(mo)}`,{
           method:'PUT', headers:{'Content-Type':'application/json','x-admin-key':KEY},
           body: JSON.stringify({income_budget:val, costs_budget:(row&&row.manual_costs)||0,
-                                marketing_budget:(row&&row.manual_marketing)||0, notes:''})
+                                marketing_budget:(row&&row.manual_marketing)||0,
+                                google_ads_budget:(row&&row.manual_google_ads)||0, notes:''})
         });
         if(row) row.manual_income = val||null;
       }
@@ -14300,6 +14320,7 @@ async function openBudgetModal(year, month){
   document.getElementById('fin-budget-income').value    = d.income_budget    || '';
   document.getElementById('fin-budget-costs').value     = d.costs_budget     || '';
   document.getElementById('fin-budget-marketing').value = d.marketing_budget || '';
+  document.getElementById('fin-budget-google-ads').value = d.google_ads_budget || '';
   document.getElementById('fin-budget-notes').value     = d.notes            || '';
   document.getElementById('fin-budget-reserva').value   = d.reserva_budget   || '';
   document.getElementById('fin-budget-aloj').value      = d.aloj_budget      || '';
@@ -14317,6 +14338,7 @@ async function saveBudget(){
       income_budget:    parseFloat(document.getElementById('fin-budget-income').value)    || 0,
       costs_budget:     parseFloat(document.getElementById('fin-budget-costs').value)     || 0,
       marketing_budget: parseFloat(document.getElementById('fin-budget-marketing').value) || 0,
+      google_ads_budget: parseFloat(document.getElementById('fin-budget-google-ads').value) || 0,
       notes:            document.getElementById('fin-budget-notes').value || '',
       reserva_budget:   parseFloat(document.getElementById('fin-budget-reserva').value)   || 0,
       aloj_budget:      parseFloat(document.getElementById('fin-budget-aloj').value)      || 0,

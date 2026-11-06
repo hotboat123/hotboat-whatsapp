@@ -378,11 +378,37 @@ def _get_marketing_costs_range(date_from: date, date_to: date) -> List[Dict]:
             return results
 
 
+def _get_google_ads_costs_range(date_from: date, date_to: date) -> List[Dict]:
+    """Daily Google Ads spend from google_ads_performance (synced live via
+    the Google Ads API — see customer_id/campaign_id columns). Summed at
+    report_level='campaign' only: campaign-level rows already aggregate all
+    of that campaign's ad groups, so also summing the 'adgroup' rows would
+    double-count every day's cost."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT date_start::text, SUM(cost_micros) / 1000000.0
+                    FROM google_ads_performance
+                    WHERE report_level = 'campaign' AND date_start BETWEEN %s AND %s
+                    GROUP BY date_start
+                    ORDER BY date_start
+                    """,
+                    (date_from, date_to),
+                )
+                rows = cur.fetchall()
+        return [{"fecha": r[0], "amount": float(r[1] or 0)} for r in rows]
+    except Exception as e:
+        logger.warning("google_ads_performance query failed: %s — returning empty", e)
+        return []
+
+
 def _get_budget(year: int, month: int) -> Dict:
     with get_connection() as conn:
         with conn.cursor() as cur:
             # Idempotent migration — adds zone columns if they don't exist yet
-            for col in ("aloj_budget", "exp_budget", "extra_budget", "reserva_budget"):
+            for col in ("aloj_budget", "exp_budget", "extra_budget", "reserva_budget", "google_ads_budget"):
                 cur.execute(
                     f"ALTER TABLE financial_budget ADD COLUMN IF NOT EXISTS {col} NUMERIC DEFAULT 0"
                 )
@@ -390,7 +416,8 @@ def _get_budget(year: int, month: int) -> Dict:
             cur.execute("""
                 SELECT income_budget, costs_budget, marketing_budget, notes,
                        COALESCE(aloj_budget,0), COALESCE(exp_budget,0),
-                       COALESCE(extra_budget,0), COALESCE(reserva_budget,0)
+                       COALESCE(extra_budget,0), COALESCE(reserva_budget,0),
+                       COALESCE(google_ads_budget,0)
                 FROM financial_budget WHERE year=%s AND month=%s
             """, (year, month))
             r = cur.fetchone()
@@ -398,9 +425,11 @@ def _get_budget(year: int, month: int) -> Dict:
                 return {"income_budget": float(r[0]), "costs_budget": float(r[1]),
                         "marketing_budget": float(r[2]), "notes": r[3] or "",
                         "aloj_budget": float(r[4]), "exp_budget": float(r[5]),
-                        "extra_budget": float(r[6]), "reserva_budget": float(r[7])}
+                        "extra_budget": float(r[6]), "reserva_budget": float(r[7]),
+                        "google_ads_budget": float(r[8])}
             return {"income_budget": 0, "costs_budget": 0, "marketing_budget": 0, "notes": "",
-                    "aloj_budget": 0, "exp_budget": 0, "extra_budget": 0, "reserva_budget": 0}
+                    "aloj_budget": 0, "exp_budget": 0, "extra_budget": 0, "reserva_budget": 0,
+                    "google_ads_budget": 0}
 
 
 # ── P&L calculation core ──────────────────────────────────────────────────────
@@ -467,8 +496,16 @@ def _build_pnl_days(
     d_from: date,
     d_to: date,
     gift_cards: Optional[List[Dict]] = None,
+    marketing_google: Optional[List[Dict]] = None,
 ) -> Dict[str, Dict]:
-    """Build per-day P&L dict with income/cost breakdown and structural daily cost."""
+    """Build per-day P&L dict with income/cost breakdown and structural daily cost.
+
+    `marketing` is Meta Ads spend (marketing_costs_daily); `marketing_google`
+    is Google Ads spend (google_ads_performance) — kept as separate params so
+    callers that don't care about the channel split (e.g. nothing left today)
+    can still pass just Meta. Each day gets both `marketing_meta` and
+    `marketing_google`, plus `marketing` as their sum (unchanged semantics —
+    finalize_pnl_day() keeps deducting the combined total)."""
     structure = get_financial_structure()
     costo_por_reserva = float(structure.get("costo_operativo_por_reserva") or 18000)
     wl = set(structure.get("experience_slug_whitelist") or [])
@@ -478,6 +515,9 @@ def _build_pnl_days(
     mkt_by_day: Dict[str, float] = defaultdict(float)
     for m in marketing:
         mkt_by_day[m["fecha"]] += m["amount"]
+    mkt_google_by_day: Dict[str, float] = defaultdict(float)
+    for m in (marketing_google or []):
+        mkt_google_by_day[m["fecha"]] += m["amount"]
 
     days: Dict[str, Dict] = {}
     for b in bookings:
@@ -542,11 +582,15 @@ def _build_pnl_days(
     _struct_to   = date(d_to.year, d_to.month, _cal.monthrange(d_to.year, d_to.month)[1])
     apply_structural_to_days(days, _struct_from, _struct_to, structure)
 
-    all_days_with_mkt = set(days.keys()) | set(mkt_by_day.keys())
+    all_days_with_mkt = set(days.keys()) | set(mkt_by_day.keys()) | set(mkt_google_by_day.keys())
     for day in all_days_with_mkt:
         if day not in days:
             days[day] = new_empty_day(day)
-        days[day]["marketing"] = _fmt_int(mkt_by_day.get(day, 0))
+        meta_amt = _fmt_int(mkt_by_day.get(day, 0))
+        google_amt = _fmt_int(mkt_google_by_day.get(day, 0))
+        days[day]["marketing_meta"] = meta_amt
+        days[day]["marketing_google"] = google_amt
+        days[day]["marketing"] = meta_amt + google_amt
         finalize_pnl_day(days[day])
 
     return days
@@ -554,7 +598,7 @@ def _build_pnl_days(
 
 _PNL_DAY_MONEY_FIELDS = (
     "gross", "commission_deduction", "net_income", "costo_operacional",
-    "marketing", "ingreso_reserva", "ingreso_aloj",
+    "ingreso_reserva", "ingreso_aloj",
     "ingreso_exp", "ingreso_extra", "total_descuentos", "cv_aloj",
     "cv_exp", "cv_extra",
 )
@@ -576,9 +620,13 @@ def _strip_iva_from_pnl_days(days: Dict[str, Dict]) -> None:
     enters that daily rate directly as a net figure (rent is IVA-exempt,
     salary never carries IVA), so it never had IVA to strip — dividing it
     here would double-deflate it against the raw value shown in the
-    settings modal / header. resultado is recomputed from the adjusted
-    pieces afterward instead of being divided directly, since it mixes
-    stripped fields with the untouched costo_estructural."""
+    settings modal / header. marketing / marketing_meta / marketing_google
+    are excluded for the same reason: Meta Ads' and Google Ads' own
+    reporting (marketing_costs_daily / google_ads_performance) already
+    returns net-of-IVA spend, so there's no IVA in them to strip. resultado
+    is recomputed from the adjusted pieces afterward instead of being
+    divided directly, since it mixes stripped fields with the untouched
+    costo_estructural and marketing figures."""
     factor = 1 + IVA_RATE
     for d in days.values():
         for k in _PNL_DAY_MONEY_FIELDS:
@@ -606,7 +654,8 @@ def _aggregate_weeks(days: Dict[str, Dict]) -> List[Dict]:
             weeks[week_key] = {
                 "week": week_key, "week_start": week_start, "week_end": week_end,
                 "n_reservas": 0, "n_gift_cards": 0, "gross": 0, "commission_deduction": 0,
-                "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
+                "net_income": 0, "costo_operacional": 0, "marketing": 0,
+                "marketing_meta": 0, "marketing_google": 0, "resultado": 0,
                 "costo_estructural": 0,
                 "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
                 "total_descuentos": 0,
@@ -621,6 +670,8 @@ def _aggregate_weeks(days: Dict[str, Dict]) -> List[Dict]:
         w["net_income"]           += d["net_income"]
         w["costo_operacional"]    += d["costo_operacional"]
         w["marketing"]            += d["marketing"]
+        w["marketing_meta"]       += d.get("marketing_meta", 0)
+        w["marketing_google"]     += d.get("marketing_google", 0)
         w["resultado"]            += d["resultado"]
         aggregate_breakdown_into_week_month(w, d)
         w["days"].append(d)
@@ -635,7 +686,8 @@ def _aggregate_months(days: Dict[str, Dict]) -> List[Dict]:
             months[month_key] = {
                 "month": month_key,
                 "n_reservas": 0, "n_gift_cards": 0, "gross": 0, "commission_deduction": 0,
-                "net_income": 0, "costo_operacional": 0, "marketing": 0, "resultado": 0,
+                "net_income": 0, "costo_operacional": 0, "marketing": 0,
+                "marketing_meta": 0, "marketing_google": 0, "resultado": 0,
                 "costo_estructural": 0,
                 "ingreso_reserva": 0, "ingreso_aloj": 0, "ingreso_exp": 0, "ingreso_extra": 0,
                 "total_descuentos": 0,
@@ -650,6 +702,8 @@ def _aggregate_months(days: Dict[str, Dict]) -> List[Dict]:
         m["net_income"]           += d["net_income"]
         m["costo_operacional"]    += d["costo_operacional"]
         m["marketing"]            += d["marketing"]
+        m["marketing_meta"]       += d.get("marketing_meta", 0)
+        m["marketing_google"]     += d.get("marketing_google", 0)
         m["resultado"]            += d["resultado"]
         aggregate_breakdown_into_week_month(m, d)
         m["days"].append(d)
@@ -665,8 +719,11 @@ def _build_cashflow_days(
     d_from: date,
     d_to: date,
     gift_cards: Optional[List[Dict]] = None,
+    marketing_google: Optional[List[Dict]] = None,
 ) -> Dict[str, Dict]:
-    """Build per-day cash flow based on actual payment dates."""
+    """Build per-day cash flow based on actual payment dates. `marketing` is
+    Meta Ads spend, `marketing_google` is Google Ads spend — see
+    _build_pnl_days' docstring for why they're kept separate."""
     structure = get_financial_structure()
     costo_por_reserva = float(structure.get("costo_operativo_por_reserva") or 18000)
     wl = set(structure.get("experience_slug_whitelist") or [])
@@ -687,10 +744,13 @@ def _build_cashflow_days(
         od["cv_extra"] += sp["cv_extra"]
         od["costo_fijo"] = 0
 
-    # Outflows: marketing
+    # Outflows: marketing (Meta Ads + Google Ads, tracked separately)
     mkt_by_day: Dict[str, float] = defaultdict(float)
     for m in marketing:
         mkt_by_day[m["fecha"]] += m["amount"]
+    mkt_google_by_day: Dict[str, float] = defaultdict(float)
+    for m in (marketing_google or []):
+        mkt_google_by_day[m["fecha"]] += m["amount"]
 
     # Inflows: pagos by payment date (net of commission).
     # If a booking has no pagos, fall back to ingreso_total on the booking date.
@@ -747,6 +807,7 @@ def _build_cashflow_days(
     all_days = (
         set(opex_by_day.keys())
         | set(mkt_by_day.keys())
+        | set(mkt_google_by_day.keys())
         | set(inflows_by_day.keys())
         | set(iso_dates_inclusive(d_from, d_to))
     )
@@ -764,7 +825,9 @@ def _build_cashflow_days(
         total_inflow_bruto = sum(p["amount_bruto"] for p in inflows_by_day[day])
         total_commission = sum(p["commission"] for p in inflows_by_day[day])
         outflow_opex = _fmt_int(opex_by_day[day])
-        outflow_mkt = _fmt_int(mkt_by_day[day])
+        outflow_mkt_meta = _fmt_int(mkt_by_day[day])
+        outflow_mkt_google = _fmt_int(mkt_google_by_day[day])
+        outflow_mkt = outflow_mkt_meta + outflow_mkt_google
         det = cf_opex_detail[day]
         total_outflow = outflow_opex + outflow_mkt + out_struct
         days[day] = {
@@ -774,6 +837,8 @@ def _build_cashflow_days(
             "inflow_neto":        _fmt_int(total_inflow_neto),
             "outflow_opex":       outflow_opex,
             "outflow_marketing":  outflow_mkt,
+            "outflow_marketing_meta":   outflow_mkt_meta,
+            "outflow_marketing_google": outflow_mkt_google,
             "outflow_estructural": out_struct,
             "outflow_cv_aloj":    int(det["cv_aloj"]),
             "outflow_cv_exp":     int(det["cv_exp"]),
@@ -989,7 +1054,9 @@ def _aggregate_cf_weeks(days_list: List[Dict]) -> List[Dict]:
             weeks[week_key] = {
                 "week": week_key, "week_start": week_start, "week_end": week_end,
                 "inflow_bruto": 0, "inflow_commission": 0, "inflow_neto": 0,
-                "outflow_opex": 0, "outflow_marketing": 0, "outflow_estructural": 0,
+                "outflow_opex": 0, "outflow_marketing": 0,
+                "outflow_marketing_meta": 0, "outflow_marketing_google": 0,
+                "outflow_estructural": 0,
                 "outflow_cv_aloj": 0, "outflow_cv_exp": 0, "outflow_cv_extra": 0,
                 "outflow_costo_fijo_reservas": 0,
                 "total_outflow": 0, "net_cashflow": 0,
@@ -997,11 +1064,13 @@ def _aggregate_cf_weeks(days_list: List[Dict]) -> List[Dict]:
             }
         w = weeks[week_key]
         for k in ("inflow_bruto", "inflow_commission", "inflow_neto",
-                  "outflow_opex", "outflow_marketing", "outflow_estructural",
+                  "outflow_opex", "outflow_marketing",
+                  "outflow_marketing_meta", "outflow_marketing_google",
+                  "outflow_estructural",
                   "outflow_cv_aloj", "outflow_cv_exp", "outflow_cv_extra",
                   "outflow_costo_fijo_reservas",
                   "total_outflow", "net_cashflow"):
-            w[k] += d[k]
+            w[k] += d.get(k, 0)
         w["ending_balance"] = d["ending_balance"]
         w["days"].append(d)
     return list(weeks.values())
@@ -1015,7 +1084,9 @@ def _aggregate_cf_months(days_list: List[Dict]) -> List[Dict]:
             months[month_key] = {
                 "month": month_key,
                 "inflow_bruto": 0, "inflow_commission": 0, "inflow_neto": 0,
-                "outflow_opex": 0, "outflow_marketing": 0, "outflow_estructural": 0,
+                "outflow_opex": 0, "outflow_marketing": 0,
+                "outflow_marketing_meta": 0, "outflow_marketing_google": 0,
+                "outflow_estructural": 0,
                 "outflow_cv_aloj": 0, "outflow_cv_exp": 0, "outflow_cv_extra": 0,
                 "outflow_costo_fijo_reservas": 0,
                 "total_outflow": 0, "net_cashflow": 0,
@@ -1023,11 +1094,13 @@ def _aggregate_cf_months(days_list: List[Dict]) -> List[Dict]:
             }
         m = months[month_key]
         for k in ("inflow_bruto", "inflow_commission", "inflow_neto",
-                  "outflow_opex", "outflow_marketing", "outflow_estructural",
+                  "outflow_opex", "outflow_marketing",
+                  "outflow_marketing_meta", "outflow_marketing_google",
+                  "outflow_estructural",
                   "outflow_cv_aloj", "outflow_cv_exp", "outflow_cv_extra",
                   "outflow_costo_fijo_reservas",
                   "total_outflow", "net_cashflow"):
-            m[k] += d[k]
+            m[k] += d.get(k, 0)
         m["ending_balance"] = d["ending_balance"]
         m["days"].append(d)
     return list(months.values())
@@ -1051,9 +1124,10 @@ async def get_pnl(
     commissions = _get_commissions()
     bookings   = _get_bookings_range(d_from, d_to)
     marketing  = _get_marketing_costs_range(d_from, d_to)
+    marketing_google = _get_google_ads_costs_range(d_from, d_to)
     gift_cards = _get_gift_cards_pnl_range(d_from, d_to)
 
-    days = _build_pnl_days(bookings, marketing, commissions, d_from, d_to, gift_cards)
+    days = _build_pnl_days(bookings, marketing, commissions, d_from, d_to, gift_cards, marketing_google)
     _strip_iva_from_pnl_days(days)
     struct = get_financial_structure()
     period_days = (d_to - d_from).days + 1
@@ -1066,6 +1140,8 @@ async def get_pnl(
         "net_income": sum(d["net_income"] for d in days.values()),
         "costo_operacional": sum(d["costo_operacional"] for d in days.values()),
         "marketing": sum(d["marketing"] for d in days.values()),
+        "marketing_meta": sum(d.get("marketing_meta", 0) for d in days.values()),
+        "marketing_google": sum(d.get("marketing_google", 0) for d in days.values()),
         "costo_estructural": sum(d.get("costo_estructural", 0) for d in days.values()),
         "ingreso_reserva": sum(d.get("ingreso_reserva", 0) for d in days.values()),
         "ingreso_aloj": sum(d.get("ingreso_aloj", 0) for d in days.values()),
@@ -1123,9 +1199,10 @@ async def get_cashflow(
     commissions = _get_commissions()
     bookings   = _get_bookings_cashflow_range(d_from, d_to)
     marketing  = _get_marketing_costs_range(d_from, d_to)
+    marketing_google = _get_google_ads_costs_range(d_from, d_to)
     gift_cards = _get_gift_cards_revenue_range(d_from, d_to)
 
-    days = _build_cashflow_days(bookings, marketing, commissions, d_from, d_to, gift_cards)
+    days = _build_cashflow_days(bookings, marketing, commissions, d_from, d_to, gift_cards, marketing_google)
     days_list = _add_running_balance(days, opening_balance)
 
     if view == "weekly":
@@ -1333,14 +1410,15 @@ async def delete_marketing_cost(cost_id: int, x_admin_key: str = Header("")):
 # ── Budget CRUD ───────────────────────────────────────────────────────────────
 
 class BudgetIn(BaseModel):
-    income_budget:    float = 0
-    costs_budget:     float = 0
-    marketing_budget: float = 0
-    notes:            str   = ""
-    aloj_budget:      float = 0
-    exp_budget:       float = 0
-    extra_budget:     float = 0
-    reserva_budget:   float = 0
+    income_budget:     float = 0
+    costs_budget:      float = 0
+    marketing_budget:  float = 0  # Meta Ads
+    google_ads_budget: float = 0
+    notes:             str   = ""
+    aloj_budget:       float = 0
+    exp_budget:        float = 0
+    extra_budget:      float = 0
+    reserva_budget:    float = 0
 
 
 @financial_router.get("/api/admin/financial/budget/{year}/{month}")
@@ -1356,24 +1434,28 @@ async def upsert_budget(year: int, month: int, body: BudgetIn,
             # Ensure zone columns exist (idempotent migration)
             cur.execute("""
                 ALTER TABLE financial_budget
-                    ADD COLUMN IF NOT EXISTS aloj_budget    NUMERIC DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS exp_budget     NUMERIC DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS extra_budget   NUMERIC DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS reserva_budget NUMERIC DEFAULT 0
+                    ADD COLUMN IF NOT EXISTS aloj_budget       NUMERIC DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS exp_budget        NUMERIC DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS extra_budget      NUMERIC DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS reserva_budget    NUMERIC DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS google_ads_budget NUMERIC DEFAULT 0
             """)
             cur.execute("""
                 INSERT INTO financial_budget (year, month, income_budget, costs_budget,
-                    marketing_budget, notes, aloj_budget, exp_budget, extra_budget, reserva_budget)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    marketing_budget, notes, aloj_budget, exp_budget, extra_budget, reserva_budget,
+                    google_ads_budget)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (year, month) DO UPDATE
                     SET income_budget=%s, costs_budget=%s, marketing_budget=%s,
                         notes=%s, aloj_budget=%s, exp_budget=%s, extra_budget=%s,
-                        reserva_budget=%s, updated_at=NOW()
+                        reserva_budget=%s, google_ads_budget=%s, updated_at=NOW()
             """, (year, month,
                   body.income_budget, body.costs_budget, body.marketing_budget, body.notes,
                   body.aloj_budget, body.exp_budget, body.extra_budget, body.reserva_budget,
+                  body.google_ads_budget,
                   body.income_budget, body.costs_budget, body.marketing_budget, body.notes,
-                  body.aloj_budget, body.exp_budget, body.extra_budget, body.reserva_budget))
+                  body.aloj_budget, body.exp_budget, body.extra_budget, body.reserva_budget,
+                  body.google_ads_budget))
             conn.commit()
     return {"year": year, "month": month, **body.dict()}
 
@@ -1494,8 +1576,8 @@ async def get_forecast_table(
             d_from_w = weeks_list[0]["ws"] - timedelta(weeks=104)
             d_to_w   = weeks_list[-1]["we"]
 
-            # Load marketing spend aggregated by ISO week key
-            _mkt_raw_w = _get_marketing_costs_range(d_from_w, d_to_w)
+            # Load marketing spend (Meta + Google) aggregated by ISO week key
+            _mkt_raw_w = _get_marketing_costs_range(d_from_w, d_to_w) + _get_google_ads_costs_range(d_from_w, d_to_w)
             mkt_by_week: Dict[str, float] = {}
             for _mr in _mkt_raw_w:
                 try:
@@ -1549,7 +1631,8 @@ async def get_forecast_table(
             def _week_cost_budget_fallback(ws):
                 y, m = ws.year, ws.month
                 b = month_budgets.get((y, m), {})
-                costs = (b.get("costs_budget", 0) or 0) + (b.get("marketing_budget", 0) or 0)
+                costs = ((b.get("costs_budget", 0) or 0) + (b.get("marketing_budget", 0) or 0)
+                         + (b.get("google_ads_budget", 0) or 0))
                 if not costs:
                     return None
                 _, days = _cal.monthrange(y, m)
@@ -1622,6 +1705,7 @@ async def get_forecast_table(
                     "manual_income":    wbval,
                     "manual_costs":     wcb_val,
                     "manual_marketing": None,
+                    "manual_google_ads": None,
                     "manual_is_override": bval_is_override,
                     "forecast_income":  wfval,
                     "forecast_costs":   wcf_val,
@@ -1659,8 +1743,8 @@ async def get_forecast_table(
         nxt_y, nxt_m = _madd(end_y, end_m, 1)
         d_to = date(nxt_y, nxt_m, 1) - timedelta(days=1)
 
-        # Load marketing spend for the full range and aggregate by YYYY-MM
-        _mkt_raw_m = _get_marketing_costs_range(d_from, d_to)
+        # Load marketing spend (Meta + Google) for the full range and aggregate by YYYY-MM
+        _mkt_raw_m = _get_marketing_costs_range(d_from, d_to) + _get_google_ads_costs_range(d_from, d_to)
         mkt_by_month: Dict[str, float] = {}
         for _mr in _mkt_raw_m:
             _mk = _mr["fecha"][:7]
@@ -1761,7 +1845,7 @@ async def get_forecast_table(
             is_past    = key < (cy, cm)
             is_current = key == (cy, cm)
             data   = by_month.get(key)
-            budget = budgets.get(key, {"income_budget": 0, "costs_budget": 0, "marketing_budget": 0})
+            budget = budgets.get(key, {"income_budget": 0, "costs_budget": 0, "marketing_budget": 0, "google_ads_budget": 0})
             sug_val, sug_src = _suggested(y, m) if not is_past else (None, None)
             fc_val = month_forecast_plan.get(mk)
             fc_val = int(fc_val) if fc_val is not None else None
@@ -1786,6 +1870,7 @@ async def get_forecast_table(
                 "manual_income":    int(budget["income_budget"])    if budget["income_budget"]    else None,
                 "manual_costs":     int(budget["costs_budget"])     if budget["costs_budget"]     else None,
                 "manual_marketing": int(budget["marketing_budget"]) if budget["marketing_budget"] else None,
+                "manual_google_ads": int(budget.get("google_ads_budget") or 0) if budget.get("google_ads_budget") else None,
                 "manual_is_override": True,
                 "forecast_income":  fc_val,
                 "forecast_costs":   fc_cost_val,

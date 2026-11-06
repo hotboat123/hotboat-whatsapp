@@ -344,6 +344,8 @@ def new_empty_day(fecha: str) -> Dict[str, Any]:
         "net_income": 0,
         "costo_operacional": 0,
         "marketing": 0,
+        "marketing_meta": 0,
+        "marketing_google": 0,
         "costo_estructural": 0,
         "ingreso_reserva": 0,
         "ingreso_aloj": 0,
