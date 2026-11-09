@@ -59,8 +59,13 @@ def _ensure_variant_col(cur) -> None:
 _popeye_col_ensured: bool = False
 
 def _ensure_popeye_col(cur) -> None:
-    """Add popeye_until column if not present (runs once per process). See
-    extend_popeye_session() below and the popeye_summon gate in webhook.py."""
+    """Add popeye_until column if not present (runs once per process).
+    Historical: used to back a "Hola Popeye" escape hatch that let the bot
+    answer even while bot_enabled was FALSE for a lead — removed 2026-11-09
+    because it could reactivate the bot without an operator's knowledge
+    whenever a customer merely mentioned "popeye" mid-conversation. Column
+    kept only so existing rows/queries referencing it don't break; nothing
+    writes to it anymore."""
     global _popeye_col_ensured
     if _popeye_col_ensured:
         return
@@ -84,30 +89,6 @@ def _ensure_quality_col(cur) -> None:
         "ALTER TABLE whatsapp_leads ADD COLUMN IF NOT EXISTS quality_rating SMALLINT"
     )
     _quality_col_ensured = True
-
-
-async def extend_popeye_session(phone_number: str, minutes: int = 10) -> None:
-    """Push popeye_until forward — called every time a message rides the
-    "Hola Popeye" pass-through (see _is_popeye_trigger/popeye_summon in
-    webhook.py), whether it's the message that said the trigger phrase or a
-    later one still inside the window. A rolling window (not a fixed one
-    from the first trigger) so the conversation stays open as long as the
-    customer keeps talking to Popeye, and lapses N minutes after they go
-    quiet — same idea as bot_enabled, but temporary and never persisted as
-    a real state change (the lead's actual bot_enabled column never moves,
-    an operator still sees it as human-assigned)."""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                _ensure_popeye_col(cur)
-                cur.execute(
-                    "UPDATE whatsapp_leads SET popeye_until = NOW() + (%s || ' minutes')::interval "
-                    "WHERE phone_number = %s",
-                    (minutes, phone_number),
-                )
-                conn.commit()
-    except Exception as e:
-        logger.warning(f"extend_popeye_session failed for {phone_number}: {e}")
 
 
 def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
