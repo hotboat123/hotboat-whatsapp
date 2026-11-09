@@ -126,9 +126,19 @@ def _is_popeye_trigger(text: Optional[str]) -> bool:
     escribe Hola Popeye" escape hatch the welcome message tells a
     human-assigned lead about (see default_welcome_message() in
     app/bot/variant_overrides.py — if that wording ever changes, keep
-    this trigger in sync with it)."""
+    this trigger in sync with it).
+
+    Requires BOTH "hola" and "popeye" somewhere in the message, not just
+    "popeye" alone. Bug reported 2026-11-09: a customer whose bot had been
+    manually disabled mid-conversation asked "Donde embarcamos popeye" —
+    a normal question that happens to name the bot's persona, not an
+    attempt to summon it — and the bare \\bpopeye\\b match let the bot
+    answer anyway (and then kept answering: see _popeye_session_active's
+    rolling window), silently undoing the operator's takeover."""
     import re
-    return bool(text and re.search(r"\bpopeye\b", text, re.IGNORECASE))
+    if not text:
+        return False
+    return bool(re.search(r"\bpopeye\b", text, re.IGNORECASE)) and bool(re.search(r"\bhola\b", text, re.IGNORECASE))
 
 
 def _popeye_session_active(lead: Optional[dict]) -> bool:
