@@ -896,7 +896,7 @@ def _get_propinas_range(d_from: date, d_to: date, commissions: Dict) -> Dict[str
     No son ingreso de HotBoat (no entran al P&L ni a net_cashflow) pero sí llegan al
     banco por el mismo cobro, así que se muestran aparte para poder cuadrar el banco.
     """
-    out: Dict[str, Any] = {"count": 0, "bruto": 0, "commission": 0, "neto": 0, "details": []}
+    out: Dict[str, Any] = {"count": 0, "bruto": 0, "commission": 0, "iva": 0, "neto": 0, "details": []}
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -916,15 +916,23 @@ def _get_propinas_range(d_from: date, d_to: date, commissions: Dict) -> Dict[str
         if not pago_dt or not (d_from <= pago_dt <= d_to):
             continue
         metodo = _normalize_payment_method(metodo or "otro")
+        cfg = commissions.get(metodo, {"rate": 0.0, "iva_included": False})
         bruto = _fmt_int(monto)
-        comm = _fmt_int(bruto * float(commissions.get(metodo, {}).get("rate", 0.0)))
+        comm = _fmt_int(bruto * float(cfg.get("rate", 0.0)))
+        neto_pre_iva = bruto - comm
+        # IVA se descuenta del neto equipo (no del bruto), y solo para métodos cuya
+        # comisión ya incluye IVA (hoy: transbank_credito) — misma bandera que usa
+        # _net_amount() para los ingresos normales.
+        iva = _fmt_int(neto_pre_iva - neto_pre_iva / (1 + IVA_RATE)) if cfg.get("iva_included") else 0
+        neto = neto_pre_iva - iva
         out["count"] += 1
         out["bruto"] += bruto
         out["commission"] += comm
-        out["neto"] += bruto - comm
+        out["iva"] += iva
+        out["neto"] += neto
         out["details"].append({
             "booking_id": bid, "nombre_cliente": nombre, "payment_date": pago_dt.isoformat(),
-            "method": metodo, "bruto": bruto, "commission": comm, "neto": bruto - comm,
+            "method": metodo, "bruto": bruto, "commission": comm, "iva": iva, "neto": neto,
         })
     out["details"].sort(key=lambda d: d["payment_date"])
     return out

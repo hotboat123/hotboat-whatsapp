@@ -1852,6 +1852,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
                 <th style="padding:.55rem .45rem;text-align:left">Método</th>
                 <th style="padding:.55rem .45rem;text-align:right">Propina</th>
                 <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">Comisión</th>
+                <th style="padding:.55rem .45rem;text-align:right;color:#e74c3c">IVA</th>
                 <th style="padding:.55rem .45rem;text-align:right">Neto equipo</th>
               </tr>
             </thead>
@@ -13350,7 +13351,7 @@ function renderCfPropinas(p){
   if(!tbody) return;
   const rows = (p && Array.isArray(p.details)) ? p.details : [];
   if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:1rem;text-align:center;color:var(--muted)">Sin propinas en este período</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:1rem;text-align:center;color:var(--muted)">Sin propinas en este período</td></tr>';
     if(totalEl) totalEl.textContent = '';
     return;
   }
@@ -13361,6 +13362,7 @@ function renderCfPropinas(p){
       <td style="padding:.55rem .45rem">${_cfMethodLabel(r.method)}</td>
       <td style="padding:.55rem .45rem;text-align:right">${fmtClp(r.bruto)}</td>
       <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">-${fmtClp(r.commission)}</td>
+      <td style="padding:.55rem .45rem;text-align:right;color:var(--red)">${r.iva?('-'+fmtClp(r.iva)):'—'}</td>
       <td style="padding:.55rem .45rem;text-align:right">${fmtClp(r.neto)}</td>
     </tr>`).join('');
   if(totalEl) totalEl.textContent = `${p.count} · ${fmtClp(p.bruto)} bruto · ${fmtClp(p.neto)} neto`;
