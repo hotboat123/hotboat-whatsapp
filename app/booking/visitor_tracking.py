@@ -31,6 +31,7 @@ def persist_booking_visitor_event(
     utm_content: Optional[str] = None,
     fbclid: Optional[str] = None,
     parametro_url: Optional[str] = None,
+    gclid: Optional[str] = None,
 ) -> None:
     """Append one tracking event (one row per /api/booking/track call).
     link_token (if present) ties this visit's whole funnel back to a specific
@@ -56,19 +57,20 @@ def persist_booking_visitor_event(
     utm_ct = (utm_content or "").strip()[:200] or None
     fbc = (fbclid or "").strip()[:200] or None
     param_url = (parametro_url or "").strip()[:500] or None
+    gcl = (gclid or "").strip()[:200] or None
 
     sql = """
         INSERT INTO booking_visitor_events (
             session_id, event_type, extra_date, time_label,
             lang, referrer, is_returning, recorded_at, link_token, visitor_id,
-            utm_source, utm_medium, utm_campaign, utm_content, fbclid, parametro_url
+            utm_source, utm_medium, utm_campaign, utm_content, fbclid, parametro_url, gclid
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         sid, et, extra, (time_label or "")[:16], (lang or "es")[:8],
         (referrer or "")[:500], bool(is_returning), recorded_at, lt, vid,
-        utm_s, utm_m, utm_c, utm_ct, fbc, param_url,
+        utm_s, utm_m, utm_c, utm_ct, fbc, param_url, gcl,
     )
     try:
         with get_connection() as conn:
@@ -90,6 +92,7 @@ def persist_booking_visitor_event(
                     "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_content TEXT;"
                     "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS fbclid TEXT;"
                     "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS parametro_url TEXT;"
+                    "ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS gclid TEXT;"
                 )
             conn.commit()
         with get_connection() as conn:

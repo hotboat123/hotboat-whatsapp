@@ -2508,6 +2508,7 @@ class TrackEventRequest(BaseModel):
     utm_campaign: Optional[str] = ""
     utm_content: Optional[str] = ""
     fbclid: Optional[str] = ""  # present = clicked a Meta ad
+    gclid: Optional[str] = ""  # present = clicked a Google Ads ad (auto-tagging)
     # Custom ad URL parameter (landing pages / Meta website URL fields)
     parametro_url: Optional[str] = ""
     link_token: Optional[str] = ""  # present when the visit came from a per-client tracked link (/ir/{token})
@@ -2548,6 +2549,7 @@ async def track_booking_event(body: TrackEventRequest):
             utm_content=(body.utm_content or "").strip() or None,
             fbclid=(body.fbclid or "").strip() or None,
             parametro_url=(body.parametro_url or "").strip() or None,
+            gclid=(body.gclid or "").strip() or None,
         )
     except Exception as _persist_e:
         logger.warning("visitor event persist failed: %s", _persist_e)

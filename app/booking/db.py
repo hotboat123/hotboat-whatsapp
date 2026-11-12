@@ -930,6 +930,10 @@ def ensure_db_columns() -> None:
                 ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS utm_content   TEXT;
                 ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS fbclid        TEXT;
                 ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS parametro_url TEXT;
+
+                -- gclid: id de clic de Google Ads (auto-etiquetado). Sin esto no se puede
+                -- distinguir un clic en anuncio de Google de una búsqueda orgánica.
+                ALTER TABLE booking_visitor_events ADD COLUMN IF NOT EXISTS gclid         TEXT;
             """)
             conn.commit()
 
