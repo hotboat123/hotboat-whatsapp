@@ -4349,6 +4349,44 @@ async def test_signature_check(rid: int, x_admin_key: str = Header("")):
     return {"ok": True, "rid": rid, "booking_ref": booking["booking_ref"], "nombre": booking["customer_name"], "signed": len(sigs)}
 
 
+@admin_router.post("/api/admin/test-signature-notify/{rid}")
+async def test_signature_notify(rid: int, x_admin_key: str = Header("")):
+    """Resend the per-signature 'X firmó, N de M pasajeros' email for a specific
+    booking (for testing). Reuses the most recent real signature if one exists,
+    otherwise a placeholder passenger — nothing is written to the DB."""
+    _check_auth(x_admin_key)
+    import asyncio
+    from app.booking.signatures_email import notify_admin_new_signature
+    from app.booking.db import get_signatures_by_booking_ref, _booking_ref_sql
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT id, {_booking_ref_sql()}, nombre_cliente, fecha, hora,
+                       NULLIF(num_personas,'')::integer, num_adultos
+                FROM all_appointments WHERE id = %s
+            """, (rid,))
+            row = cur.fetchone()
+
+    if not row:
+        return {"error": f"Booking {rid} not found"}
+
+    cols = ["id", "booking_ref", "customer_name", "booking_date", "booking_time",
+            "num_people", "num_adultos"]
+    booking = dict(zip(cols, row))
+    for k in ("booking_date", "booking_time"):
+        if booking.get(k):
+            booking[k] = str(booking[k])
+
+    sigs = await asyncio.to_thread(get_signatures_by_booking_ref, booking["booking_ref"])
+    sig = sigs[-1] if sigs else {
+        "id": 0, "booking_ref": booking["booking_ref"], "passenger_name": "Cristian (prueba)",
+        "passenger_email": "", "passenger_phone": "", "passenger_birthday": "",
+    }
+    await asyncio.to_thread(notify_admin_new_signature, sig, booking)
+    return {"ok": True, "rid": rid, "booking_ref": booking["booking_ref"], "nombre": booking["customer_name"], "signed": len(sigs) or 1}
+
+
 @admin_router.post("/api/admin/test-post-visit-check/{rid}")
 async def test_post_visit_check(rid: int, x_admin_key: str = Header("")):
     """Resend the post-visit data-completeness check email for a specific booking (for testing)."""

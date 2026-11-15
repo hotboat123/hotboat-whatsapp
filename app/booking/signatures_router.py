@@ -51,7 +51,7 @@ def _resolve_booking(booking_ref: str) -> Optional[dict]:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT nombre_cliente, fecha, hora, num_personas, email FROM all_appointments WHERE id=%s",
+                    "SELECT nombre_cliente, fecha, hora, num_personas, email, num_adultos FROM all_appointments WHERE id=%s",
                     (apt_id,),
                 )
                 row = cur.fetchone()
@@ -63,6 +63,7 @@ def _resolve_booking(booking_ref: str) -> Optional[dict]:
                     "booking_time": str(row[2])[:5] if row[2] else "",
                     "num_people": row[3],
                     "customer_email": row[4] or "",
+                    "num_adultos": row[5],
                     "booking_ref": booking_ref,
                 }
 
@@ -76,6 +77,7 @@ def _resolve_booking(booking_ref: str) -> Optional[dict]:
             "booking_time": str(b.get("booking_time") or "")[:5],
             "num_people": b.get("num_people"),
             "customer_email": b.get("customer_email") or "",
+            "num_adultos": b.get("num_adultos"),
             "booking_ref": booking_ref,
         }
     return None

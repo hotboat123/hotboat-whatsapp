@@ -43,7 +43,10 @@ def _fmt_date(d: Optional[str]) -> str:
 
 
 def notify_admin_new_signature(sig: dict, booking: dict) -> None:
-    """Send a per-signature notification email to the admin."""
+    """Send a per-signature notification email to the admin, with a running
+    "X de N pasajeros" count so the operator can watch the group fill in
+    real time — and a "listo para embarcar" callout the moment the last
+    passenger signs."""
     name = sig.get("passenger_name") or "-"
     email = sig.get("passenger_email") or "-"
     phone = sig.get("passenger_phone") or "-"
@@ -51,9 +54,34 @@ def notify_admin_new_signature(sig: dict, booking: dict) -> None:
     booking_ref = sig.get("booking_ref") or booking.get("booking_ref", "")
     booking_date = _fmt_date(str(booking.get("booking_date") or ""))
     booking_time = str(booking.get("booking_time") or "")[:5]
-    num_people = booking.get("num_people") or "-"
 
-    subject = f"✍️ Nueva firma T&C — {name} ({booking_ref})"
+    required = booking.get("num_adultos") or booking.get("num_people") or 0
+    try:
+        required = int(required)
+    except Exception:
+        required = 0
+
+    try:
+        from app.booking.db import get_signatures_by_booking_ref
+        signed = len(get_signatures_by_booking_ref(booking_ref))
+    except Exception as e:
+        logger.warning("notify_admin_new_signature: couldn't count signatures for %s: %s", booking_ref, e)
+        signed = 0
+
+    complete = required > 0 and signed >= required
+    progress_text = f"{signed} de {required} pasajeros" if required > 0 else f"{signed} pasajeros firmados"
+
+    if complete:
+        headline = f"✅ {name} firmó los términos y condiciones — {progress_text}. ¡Listo para embarcar!"
+        status_bg, status_color = "#e8f5e9", "#2e7d32"
+        status_text = "✅ Listo para embarcar"
+        subject = f"✅ Listo para embarcar — {booking_ref} ({progress_text})"
+    else:
+        headline = f"{name} firmó los términos y condiciones — {progress_text}."
+        status_bg, status_color = "#fff3e0", "#e65100"
+        status_text = f"✍️ {progress_text}"
+        subject = f"✍️ {name} firmó T&C — {progress_text} ({booking_ref})"
+
     html = f"""
 <!DOCTYPE html>
 <html lang="es">
@@ -61,30 +89,25 @@ def notify_admin_new_signature(sig: dict, booking: dict) -> None:
 <style>
   body{{font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px}}
   .card{{background:#fff;border-radius:12px;max-width:520px;margin:auto;padding:28px;box-shadow:0 2px 8px rgba(0,0,0,.1)}}
-  h2{{color:#1a1a2e;margin:0 0 18px}}
+  h2{{color:#1a1a2e;margin:0 0 10px;font-size:19px}}
+  .status{{display:inline-block;background:{status_bg};color:{status_color};border-radius:20px;
+           padding:5px 16px;font-size:13px;font-weight:700;margin-bottom:18px}}
   table{{width:100%;border-collapse:collapse}}
   td{{padding:8px 6px;border-bottom:1px solid #eee;font-size:14px}}
   td:first-child{{color:#666;width:40%}}
-  .badge{{display:inline-block;background:#e8f5e9;color:#2e7d32;border-radius:20px;
-          padding:3px 12px;font-size:12px;font-weight:700}}
   .ref{{color:#888;font-size:12px;margin-top:16px}}
 </style>
 </head>
 <body>
 <div class="card">
-  <h2>✍️ Firma de Términos y Condiciones</h2>
-  <p>Un pasajero firmó los T&amp;C para la reserva <strong>{booking_ref}</strong>.</p>
+  <h2>{headline}</h2>
+  <div class="status">{status_text}</div>
   <table>
     <tr><td>Pasajero</td><td><strong>{name}</strong></td></tr>
     <tr><td>Email</td><td>{email}</td></tr>
     <tr><td>Teléfono</td><td>{phone}</td></tr>
     <tr><td>Fecha de nacimiento</td><td>{bday}</td></tr>
-    <tr><td>Acepta T&amp;C</td><td><span class="badge">✔ Sí</span></td></tr>
-  </table>
-  <hr style="margin:18px 0;border:none;border-top:1px solid #eee">
-  <table>
     <tr><td>Fecha reserva</td><td>{booking_date} {booking_time}</td></tr>
-    <tr><td>Personas en reserva</td><td>{num_people}</td></tr>
   </table>
   <p class="ref">Reserva: {booking_ref} · HotBoat Chile</p>
 </div>
@@ -93,7 +116,7 @@ def notify_admin_new_signature(sig: dict, booking: dict) -> None:
 """
     try:
         _send(ADMIN_NOTIFICATION_EMAIL, subject, html)
-        logger.info("notify_admin_new_signature sent for %s / sig_id=%s", booking_ref, sig.get("id"))
+        logger.info("notify_admin_new_signature sent for %s / sig_id=%s (%s)", booking_ref, sig.get("id"), progress_text)
     except Exception as e:
         logger.error("notify_admin_new_signature failed: %s", e)
 
