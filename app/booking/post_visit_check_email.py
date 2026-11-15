@@ -71,7 +71,11 @@ def _check_items(booking: dict) -> list:
     pagos = _parse_pagos(booking.get("pagos"))
     paid_total = sum(float(p.get("amount") or 0) for p in pagos)
     has_method = any((p.get("method") or "").strip() for p in pagos if float(p.get("amount") or 0) > 0)
-    pago_ok = paid_total > 0 and has_method
+    owed_total = float(booking.get("ingreso_total") or 0)
+    missing_amount = owed_total - paid_total
+    # Same comparison as pagoBadge() in admin-bookings.html: fully ok only when
+    # what's registered covers the full ingreso_total, not just "something was paid".
+    pago_ok = paid_total > 0 and has_method and missing_amount <= 0
 
     adultos = booking.get("num_adultos")
     ninos = booking.get("num_ninos")
@@ -82,9 +86,17 @@ def _check_items(booking: dict) -> list:
     categoria_ok = bool((booking.get("categoria_clientes") or "").strip())
     atendio_ok = bool((booking.get("quien_atendio") or "").strip())
 
+    if paid_total <= 0:
+        pago_detail = "sin pagos registrados"
+    elif missing_amount > 0:
+        pago_detail = f"${paid_total:,.0f} de ${owed_total:,.0f} — faltan ${missing_amount:,.0f}".replace(",", ".")
+    elif not has_method:
+        pago_detail = f"${paid_total:,.0f} registrado, sin método de pago".replace(",", ".")
+    else:
+        pago_detail = f"${paid_total:,.0f} registrado".replace(",", ".")
+
     return [
-        {"label": "Pago y método de pago", "ok": pago_ok,
-         "detail": (f"${paid_total:,.0f} registrado" if paid_total > 0 else "sin pagos registrados").replace(",", ".")},
+        {"label": "Pago y método de pago", "ok": pago_ok, "detail": pago_detail},
         {"label": "Nº de personas que vinieron", "ok": asistencia_ok,
          "detail": f"{adultos or 0} adultos, {ninos or 0} niños" if asistencia_ok else "no registrado"},
         {"label": "Ciudad de origen", "ok": ciudad_ok, "detail": booking.get("ciudad_origen") or "no registrado"},
