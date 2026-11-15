@@ -5140,7 +5140,9 @@ function _enterDashboard(pw, loginData){
     const _pendingNotifPhone = sessionStorage.getItem('notif_pending_phone');
     if (_pendingNotifPhone) {
       sessionStorage.removeItem('notif_pending_phone');
-      _openChatFromNotification(_pendingNotifPhone);
+      const _pendingPrefill = sessionStorage.getItem('notif_pending_prefill');
+      sessionStorage.removeItem('notif_pending_prefill');
+      _openChatFromNotification(_pendingNotifPhone, _pendingPrefill);
     } else {
       showSection('whatsapp');
     }
@@ -5178,7 +5180,7 @@ function doLogin(){
 // ── Push notification deep-link ────────────────────────────────────────────
 // Opens the WhatsApp chat section and navigates to a specific conversation
 // when the admin taps a push notification.
-function _openChatFromNotification(phone) {
+function _openChatFromNotification(phone, prefillMessage) {
   if (!phone) return;
   const ifr = document.getElementById('whatsapp-iframe');
   if (!ifr) return;
@@ -5186,11 +5188,15 @@ function _openChatFromNotification(phone) {
   const ifrLoaded = (ifr.getAttribute('src') || '').startsWith('/chat');
   if (ifrLoaded) {
     setTimeout(() => {
-      try { ifr.contentWindow.postMessage({ type: 'OPEN_CHAT', phone }, '*'); } catch(e) {}
+      try { ifr.contentWindow.postMessage({ type: 'OPEN_CHAT', phone, prefillMessage: prefillMessage || undefined }, '*'); } catch(e) {}
     }, 200);
   } else {
     fetch('/api/admin/chat-login', { method: 'POST', headers: { 'x-admin-key': KEY } })
-      .finally(() => { ifr.src = `/chat?phone=${encodeURIComponent(phone)}`; });
+      .finally(() => {
+        let src = `/chat?phone=${encodeURIComponent(phone)}`;
+        if (prefillMessage) src += `&prefill=${encodeURIComponent(prefillMessage)}`;
+        ifr.src = src;
+      });
   }
 }
 
@@ -5203,12 +5209,15 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// Capture ?phone= URL param from notification deep-link (app was closed when tapped)
+// Capture ?phone=&prefill= URL params from a notification/email deep-link
+// (app was closed when tapped)
 (function() {
   const params = new URLSearchParams(window.location.search);
   const phone = params.get('phone');
   if (!phone) return;
   sessionStorage.setItem('notif_pending_phone', phone);
+  const prefill = params.get('prefill');
+  if (prefill) sessionStorage.setItem('notif_pending_prefill', prefill);
   history.replaceState({}, '', window.location.pathname);
 })();
 

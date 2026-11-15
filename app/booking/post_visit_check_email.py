@@ -95,8 +95,9 @@ def _check_items(booking: dict) -> list:
 
 
 def build_review_request_message(first_name: str, platform: str = "google") -> str:
-    """Shared with admin_router.py's /review-request route (the Popeye
-    button) so both paths ask for the same thing."""
+    """Builds the text prefilled into both the Popeye (admin WhatsApp panel)
+    and personal (wa.me) review-request buttons, so both ask for the same
+    thing."""
     fn = (first_name or "").strip() or "!"
     plat = REVIEW_PLATFORMS.get(platform, REVIEW_PLATFORMS["google"])
     return (
@@ -110,19 +111,19 @@ def _review_request_buttons_html(booking: dict) -> str:
     """Review-request buttons, one pair (Popeye / personal WhatsApp) per
     platform. Nothing in the booking data tells us whether the customer
     actually enjoyed it, so these are one-tap prompts for the operator
-    rather than an automated send.
+    rather than an automated send — nothing sends on its own either way.
 
-    - "Popeye" opens a confirm page that sends the message for real, from
-      the bot's own WhatsApp Business number via the Meta Cloud API — not a
-      wa.me link, since the ask was specifically for it to go out through
-      the app, not by opening WhatsApp manually.
-    - "Personal" is a plain wa.me link, since that one IS meant to be sent
-      by hand from the operator's own WhatsApp.
+    - "Popeye" deep-links into the admin panel's own WhatsApp tab
+      (admin-bookings.html -> the Kia-Ai /chat iframe, app.js's
+      ?phone=&prefill= handling) with the message typed into the compose
+      box, ready for the operator to review and hit Send themselves from
+      that same business-number chat — not an automatic backend send.
+    - "Personal" is a plain wa.me link, opened by hand from the operator's
+      own WhatsApp app instead.
     """
     import urllib.parse
-    rid = booking.get("id")
     phone = (booking.get("customer_phone") or "").replace("+", "").replace(" ", "").replace("-", "")
-    if not phone or not rid:
+    if not phone:
         return ""
     first_name = (booking.get("customer_name") or "").strip().split(" ")[0]
 
@@ -130,12 +131,12 @@ def _review_request_buttons_html(booking: dict) -> str:
     for platform, plat in REVIEW_PLATFORMS.items():
         msg = build_review_request_message(first_name, platform)
         wa_link = f"https://wa.me/{phone}?text={urllib.parse.quote(msg)}"
-        popeye_link = f"https://whatsapp.hotboat.cl/api/admin/reservas/{rid}/review-request/{platform}"
+        popeye_link = f"https://whatsapp.hotboat.cl/?phone={urllib.parse.quote(phone)}&prefill={urllib.parse.quote(msg)}"
         rows.append(f"""
     <div style="margin-bottom:12px">
       <div style="color:#666;font-size:13px;margin-bottom:8px">🌟 Pedir reseña en {plat['label']}</div>
       <a href="{popeye_link}" style="display:inline-block;margin:0 8px 8px 0;background:{plat['color']};color:#fff;text-decoration:none;
-         padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">🦜 Enviar por Popeye (app)</a>
+         padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">🦜 Abrir en Popeye (app)</a>
       <a href="{wa_link}" style="display:inline-block;margin:0 8px 8px 0;background:#128C7E;color:#fff;text-decoration:none;
          padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">💬 Enviar por mi WhatsApp personal</a>
     </div>""")
