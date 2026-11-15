@@ -5180,23 +5180,29 @@ function doLogin(){
 // ── Push notification deep-link ────────────────────────────────────────────
 // Opens the WhatsApp chat section and navigates to a specific conversation
 // when the admin taps a push notification.
+//
+// _pendingChatOpen: when the iframe isn't loaded yet, showSection('whatsapp')
+// below does its OWN fetch('/api/admin/chat-login') + ifr.src='/chat' the
+// instant the section becomes active. If this function also fired its own
+// fetch+src-set for phone/prefill at the same time, the two independent
+// network calls raced and whichever resolved last silently overwrote the
+// iframe's src — sometimes landing on the plain '/chat' with no phone or
+// prefill at all, with no error anywhere. _pendingChatOpen lets showSection's
+// own loader be the ONLY place that ever sets ifr.src on a cold load.
+let _pendingChatOpen = null;
 function _openChatFromNotification(phone, prefillMessage) {
   if (!phone) return;
   const ifr = document.getElementById('whatsapp-iframe');
   if (!ifr) return;
-  showSection('whatsapp');
   const ifrLoaded = (ifr.getAttribute('src') || '').startsWith('/chat');
   if (ifrLoaded) {
+    showSection('whatsapp');
     setTimeout(() => {
       try { ifr.contentWindow.postMessage({ type: 'OPEN_CHAT', phone, prefillMessage: prefillMessage || undefined }, '*'); } catch(e) {}
     }, 200);
   } else {
-    fetch('/api/admin/chat-login', { method: 'POST', headers: { 'x-admin-key': KEY } })
-      .finally(() => {
-        let src = `/chat?phone=${encodeURIComponent(phone)}`;
-        if (prefillMessage) src += `&prefill=${encodeURIComponent(prefillMessage)}`;
-        ifr.src = src;
-      });
+    _pendingChatOpen = { phone, prefillMessage };
+    showSection('whatsapp');
   }
 }
 
@@ -5241,8 +5247,16 @@ function showSection(name){
     if(ifr) ifr.style.height='calc(100vh - 57px)';
     const ifrSrc = ifr ? ifr.getAttribute('src') : '';
     if(ifr && !ifrSrc.startsWith('/chat')){
+      const _pending = _pendingChatOpen; _pendingChatOpen = null;
       fetch('/api/admin/chat-login', {method:'POST', headers:{'x-admin-key': KEY}})
-        .finally(()=>{ ifr.src = '/chat'; });
+        .finally(()=>{
+          let src = '/chat';
+          if(_pending && _pending.phone){
+            src += `?phone=${encodeURIComponent(_pending.phone)}`;
+            if(_pending.prefillMessage) src += `&prefill=${encodeURIComponent(_pending.prefillMessage)}`;
+          }
+          ifr.src = src;
+        });
     }
   } else {
     if(contentEl){ contentEl.style.padding=''; contentEl.style.height=''; }
