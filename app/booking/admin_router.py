@@ -747,6 +747,7 @@ class UpdateReservaRequest(BaseModel):
     costo_operativo_total: Optional[float] = None
     tiene_cruce: Optional[bool] = None
     extras_json: Optional[dict] = None
+    tabla_snapshot_at_load: Optional[dict] = None
     pagos: Optional[list] = None
     descuentos: Optional[list] = None
     fecha: Optional[str] = None
@@ -781,6 +782,9 @@ def _ensure_propina_columns():
 async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str = Header("")):
     _check_auth(x_admin_key)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    # Not a DB column — only used below to detect a tabla submitted via the
+    # client-facing /tabla/{ref} link while this admin session was open.
+    tabla_snapshot_at_load = updates.pop('tabla_snapshot_at_load', None) or {}
     # coupon fields are nullable — include them if explicitly sent in the request
     if (
         'coupon_code' in body.model_fields_set
@@ -828,6 +832,37 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                     old_extras = _normalize_extras_to_dict(old_row[0]) if old_row else {}
                     now_iso = datetime.now(CHILE_TZ).isoformat()
                     new_extras = updates["extras_json"] or {}
+
+                    # Protect tabla__* entries from a stale admin session: a customer
+                    # can submit their own picks via /tabla/{ref} (tabla_router.py)
+                    # at any time, independent of whether an admin has this
+                    # reservation's edit modal open. If the live tabla__ keys no
+                    # longer match what this session's modal loaded, someone else
+                    # changed them in the meantime — trust the live DB value over
+                    # whatever this (stale) save is sending for those keys, instead
+                    # of silently dropping or overwriting the customer's real pick.
+                    old_tabla = {k: v for k, v in old_extras.items() if k.startswith('tabla__')}
+                    if old_tabla != tabla_snapshot_at_load:
+                        extras_delta = 0.0
+                        for k in [k for k in new_extras if k.startswith('tabla__')]:
+                            v = new_extras.pop(k)
+                            if isinstance(v, dict):
+                                extras_delta -= float(v.get('qty', 0) or 0) * float(v.get('unit_price', 0) or 0)
+                        for k, v in old_tabla.items():
+                            new_extras[k] = v
+                            if isinstance(v, dict):
+                                extras_delta += float(v.get('qty', 0) or 0) * float(v.get('unit_price', 0) or 0)
+                        if extras_delta:
+                            if 'ingreso_extras' in updates:
+                                updates['ingreso_extras'] = (updates['ingreso_extras'] or 0) + extras_delta
+                            if 'ingreso_total' in updates:
+                                updates['ingreso_total'] = (updates['ingreso_total'] or 0) + extras_delta
+                        logger.warning(
+                            "update_reserva(%s): tabla__ changed outside this admin session "
+                            "(e.g. customer used /tabla link) — kept live value instead of the save's",
+                            rid,
+                        )
+
                     for key, val in new_extras.items():
                         if not isinstance(val, dict):
                             continue

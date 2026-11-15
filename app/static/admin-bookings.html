@@ -5049,6 +5049,7 @@ function toggleCalFilter(key){
 }
 let EXTRAS_CATALOG=[];   // loaded once after login
 let _extrasItems=[];     // working copy for current modal: [{key,name,qty,unit_price,...tablaFields}]
+let _tablaSnapshotAtLoad={}; // raw tabla__* entries as loaded, to detect a client tabla submission mid-edit (see saveModal)
 
 const TABLA_CATALOG = {
   salada:{label:'Tabla Salada',emoji:'🧀',
@@ -6874,6 +6875,7 @@ async function saveModal(id){
     costo_operativo_total:costoFijo+costoVar,
     tiene_cruce:g('e-tiene_cruce')==='true',
     extras_json: JSON.parse(JSON.stringify(extrasJson)),
+    tabla_snapshot_at_load: _tablaSnapshotAtLoad,
     propina_monto: +g('e-propina_monto')||0,
     propina_metodo_pago: g('e-propina_metodo_pago')||null,
   };
@@ -9619,6 +9621,13 @@ function initExtrasEditor(extrasJson){
     });
     extrasJson = converted;
   }
+  // Snapshot tabla__* entries exactly as loaded. If the customer submits their
+  // own tabla link while this modal is open, the server compares this snapshot
+  // to the live DB value to detect it and avoid clobbering their pick on save.
+  _tablaSnapshotAtLoad = {};
+  Object.entries(extrasJson||{}).forEach(([k, v])=>{
+    if(k.startsWith('tabla__')) _tablaSnapshotAtLoad[k] = v;
+  });
   Object.entries(extrasJson||{}).forEach(([key, val])=>{
     // Skip metadata keys that are not bookable extras (mirrors backend _flatten_saved_extras_json)
     if(key === 'extras' || key === 'price_per_person') return;
