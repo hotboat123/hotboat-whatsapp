@@ -2739,6 +2739,106 @@ async def send_reservation_template_route(rid: int, x_admin_key: str = Header(""
     return {"ok": True, "sent_to": phone_clean, "booking_ref": booking_ref, "message_id": message_id, "via": via}
 
 
+@admin_router.get("/api/admin/reservas/{rid}/review-request", response_class=HTMLResponse)
+async def review_request_confirm_page(rid: int):
+    """Confirm page for the '🦜 Enviar por Popeye' button in the post-visit
+    check email (post_visit_check_email.py). Deliberately split into this GET
+    (renders a plain HTML form, sends nothing) and the POST below (the real
+    send) instead of sending on the bare GET — mail clients and corporate
+    link scanners routinely prefetch every URL in an email, which would
+    otherwise fire a real WhatsApp message to the customer with no human
+    involved."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT nombre_cliente, telefono FROM {TABLE} WHERE id=%s", (rid,))
+            row = cur.fetchone()
+    if not row:
+        return HTMLResponse("<h3>Reserva no encontrada</h3>", status_code=404)
+    nombre, telefono = row
+    if not (telefono or "").strip():
+        return HTMLResponse("<h3>Esta reserva no tiene teléfono registrado</h3>", status_code=400)
+
+    from app.booking.post_visit_check_email import build_review_request_message
+    first_name = (nombre or "").strip().split(" ")[0]
+    preview = build_review_request_message(first_name).replace("\n", "<br>")
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body{{font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:24px}}
+  .card{{background:#fff;border-radius:12px;max-width:460px;margin:40px auto;padding:28px;box-shadow:0 2px 8px rgba(0,0,0,.1)}}
+  .msg{{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;font-size:14px;color:#14532d;margin:14px 0;line-height:1.5}}
+  button{{background:#25D366;color:#fff;border:none;border-radius:8px;padding:12px 22px;font-size:15px;font-weight:700;cursor:pointer;width:100%}}
+</style></head>
+<body>
+  <div class="card">
+    <h3>🦜 Enviar pedido de reseña a {nombre or 'cliente'}</h3>
+    <p style="color:#666;font-size:13px">Teléfono: {telefono}</p>
+    <div class="msg">{preview}</div>
+    <form method="post" action="/api/admin/reservas/{rid}/review-request">
+      <button type="submit">Enviar ahora por Popeye</button>
+    </form>
+  </div>
+</body></html>""")
+
+
+@admin_router.post("/api/admin/reservas/{rid}/review-request", response_class=HTMLResponse)
+async def review_request_send(rid: int):
+    """Actually sends the Google-review request as free text from Popeye's
+    WhatsApp Business number (Meta Cloud API), only when the customer wrote
+    in the last 24h — WhatsApp doesn't allow free text outside that window,
+    and there's no Meta-approved template for a review ask, so outside the
+    window this deliberately fails instead of sending the wrong (reservation
+    contact) template content."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT source_id, nombre_cliente, telefono FROM {TABLE} WHERE id=%s", (rid,))
+            row = cur.fetchone()
+    if not row:
+        return HTMLResponse("<h3>Reserva no encontrada</h3>", status_code=404)
+    source_id, nombre, telefono = row
+    phone_clean = (telefono or "").replace("+", "").replace(" ", "").replace("-", "")
+    if not phone_clean:
+        return HTMLResponse("<h3>Esta reserva no tiene teléfono registrado</h3>", status_code=400)
+
+    from app.db.queries import has_recent_inbound_message, save_conversation
+    from app.whatsapp.client import whatsapp_client
+    from app.booking.post_visit_check_email import build_review_request_message
+
+    first_name = (nombre or "").strip().split(" ")[0]
+    msg = build_review_request_message(first_name)
+
+    if not await has_recent_inbound_message(phone_clean):
+        return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="es"><body style="font-family:Arial,sans-serif;padding:24px;max-width:460px;margin:40px auto">
+<h3>⚠️ No se pudo enviar por Popeye</h3>
+<p>{nombre or 'Este cliente'} no ha escrito en las últimas 24 horas, así que WhatsApp no permite
+texto libre por este número — y no existe una plantilla aprobada para pedir reseñas.</p>
+<p>Usa el botón <strong>"Enviar por mi WhatsApp personal"</strong> del mail para mandárselo a mano.</p>
+</body></html>""", status_code=409)
+
+    try:
+        result = await whatsapp_client.send_text_message(phone_clean, msg)
+    except Exception as e:
+        logger.error(f"review_request_send failed for rid={rid}: {e}")
+        return HTMLResponse(f"<h3>❌ Error al enviar: {e}</h3>", status_code=502)
+
+    try:
+        await save_conversation(
+            phone_number=phone_clean, customer_name=nombre or phone_clean,
+            message_text='', response_text=msg, message_type='text',
+            message_id=(result.get('messages', [{}])[0].get('id', '') or None),
+            direction='outgoing')
+    except Exception as e:
+        logger.warning(f"Could not log review-request send in DB: {e}")
+
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="es"><body style="font-family:Arial,sans-serif;padding:24px;max-width:460px;margin:40px auto;text-align:center">
+<h2 style="color:#2e7d32">✅ Enviado</h2>
+<p>Se mandó el pedido de reseña a {nombre or phone_clean} por Popeye.</p>
+</body></html>""")
+
+
 @admin_router.post("/api/admin/reservas/{rid}/send-followup-email")
 async def send_followup_email_manual(rid: int, x_admin_key: str = Header("")):
     """Send TripAdvisor / satisfaction follow-up email to the customer (manual trigger)."""

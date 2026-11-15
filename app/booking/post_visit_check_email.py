@@ -87,32 +87,43 @@ def _check_items(booking: dict) -> list:
     ]
 
 
-def _review_request_buttons_html(booking: dict) -> str:
-    """Two wa.me buttons pre-filled with a Google-review ask for the
-    customer. Nothing in the booking data tells us whether they actually
-    enjoyed it, so this is a one-tap prompt for the operator to send
-    manually rather than an automated message. Note: wa.me only controls
-    who the chat opens WITH (the customer) — which of your own numbers
-    sends it (Popeye/business vs. personal) depends on which WhatsApp app
-    you tap through on your phone, not on the link itself; both buttons
-    below carry the same message/target and are just labeled for whichever
-    app you mean to use."""
-    import urllib.parse
-    phone = (booking.get("customer_phone") or "").replace("+", "").replace(" ", "").replace("-", "")
-    if not phone:
-        return ""
-    first_name = (booking.get("customer_name") or "").strip().split(" ")[0] or "!"
-    msg = (
-        f"Hola {first_name}! 🚤 Soy Tomás de HotBoat. Esperamos que hayan disfrutado mucho la experiencia 💛 "
+def build_review_request_message(first_name: str) -> str:
+    """Shared with admin_router.py's /review-request route (the Popeye
+    button) so both paths ask for the same thing."""
+    fn = (first_name or "").strip() or "!"
+    return (
+        f"Hola {fn}! 🚤 Soy Tomás de HotBoat. Esperamos que hayan disfrutado mucho la experiencia 💛 "
         f"Si les gustó, nos ayudaría muchísimo que nos dejaran una reseña en Google — nos sirve un montón: "
         f"{GOOGLE_REVIEW_URL}\n\n¡Muchas gracias!"
     )
+
+
+def _review_request_buttons_html(booking: dict) -> str:
+    """Two review-request buttons. Nothing in the booking data tells us
+    whether the customer actually enjoyed it, so these are one-tap prompts
+    for the operator rather than an automated send.
+
+    - "Popeye" opens a confirm page that sends the message for real, from
+      the bot's own WhatsApp Business number via the Meta Cloud API — not a
+      wa.me link, since the ask was specifically for it to go out through
+      the app, not by opening WhatsApp manually.
+    - "Personal" is a plain wa.me link, since that one IS meant to be sent
+      by hand from the operator's own WhatsApp.
+    """
+    import urllib.parse
+    rid = booking.get("id")
+    phone = (booking.get("customer_phone") or "").replace("+", "").replace(" ", "").replace("-", "")
+    if not phone or not rid:
+        return ""
+    first_name = (booking.get("customer_name") or "").strip().split(" ")[0]
+    msg = build_review_request_message(first_name)
     wa_link = f"https://wa.me/{phone}?text={urllib.parse.quote(msg)}"
+    popeye_link = f"https://whatsapp.hotboat.cl/api/admin/reservas/{rid}/review-request"
     return f"""
   <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee">
     <div style="color:#666;font-size:13px;margin-bottom:10px">🌟 Pedir reseña en Google (envío manual — no sabemos si quedaron contentos)</div>
-    <a href="{wa_link}" style="display:inline-block;margin:0 8px 8px 0;background:#25D366;color:#fff;text-decoration:none;
-       padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">🦜 Enviar por Popeye (WhatsApp Business)</a>
+    <a href="{popeye_link}" style="display:inline-block;margin:0 8px 8px 0;background:#25D366;color:#fff;text-decoration:none;
+       padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">🦜 Enviar por Popeye (app)</a>
     <a href="{wa_link}" style="display:inline-block;margin:0 8px 8px 0;background:#128C7E;color:#fff;text-decoration:none;
        padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">💬 Enviar por mi WhatsApp personal</a>
   </div>"""
