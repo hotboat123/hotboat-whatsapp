@@ -881,6 +881,44 @@ async def update_reserva(rid: int, body: UpdateReservaRequest, x_admin_key: str 
                             val["added_at"] = now_iso
                             if not val.get("sold_by"):
                                 val.pop("sold_by", None)
+                    # Mirror any tabla__ key with ingredients (added via "Agregar
+                    # Tabla" in this modal) into tabla_selections. Both the
+                    # "tablas pagadas sin ingredientes elegidos" check
+                    # (_check_missing_tabla_selection) and the stock
+                    # re-consumption (reconsume_booking) in stock_router.py read
+                    # ONLY tabla_selections, never extras_json — without this,
+                    # ingredients picked here would never clear that alert or
+                    # feed the stock discount, same as a customer's own
+                    # /tabla/{ref} submission (tabla_router.submit_tabla) does.
+                    for _k, _v in new_extras.items():
+                        if not _k.startswith('tabla__') or not isinstance(_v, dict):
+                            continue
+                        _e1, _e2, _e3 = _v.get('elige_1'), _v.get('elige_2'), _v.get('elige_3')
+                        if not _e1 or not isinstance(_e2, list) or not isinstance(_e3, list):
+                            continue
+                        cur.execute(f"SELECT source_id FROM {TABLE} WHERE id=%s", (rid,))
+                        _src_row = cur.fetchone()
+                        _booking_ref = (_src_row[0] if _src_row and _src_row[0] else f"AA-{rid}")
+                        cur.execute(
+                            """
+                            INSERT INTO tabla_selections (booking_ref, tabla_type, elige_1, elige_2, elige_3, completed_at)
+                            VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, NOW())
+                            ON CONFLICT (booking_ref) DO UPDATE SET
+                              tabla_type   = EXCLUDED.tabla_type,
+                              elige_1      = EXCLUDED.elige_1,
+                              elige_2      = EXCLUDED.elige_2,
+                              elige_3      = EXCLUDED.elige_3,
+                              completed_at = EXCLUDED.completed_at
+                            """,
+                            (
+                                _booking_ref,
+                                _v.get('tabla_type', _k.replace('tabla__', '', 1)),
+                                _e1,
+                                json.dumps(_e2, ensure_ascii=False),
+                                json.dumps(_e3, ensure_ascii=False),
+                            ),
+                        )
+
                     updates["extras_json"] = PgJson(new_extras)
                 if "pagos" in updates:
                     updates["pagos"] = PgJson(_normalize_pagos_for_db(updates["pagos"]))
