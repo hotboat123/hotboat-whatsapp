@@ -4415,3 +4415,70 @@ async def test_prebooking_notif(rid: int, x_admin_key: str = Header("")):
     prev = await asyncio.to_thread(count_previous_bookings, phone, rid)
     await asyncio.to_thread(send_pre_booking_notification, booking, prev)
     return {"ok": True, "rid": rid, "nombre": booking["customer_name"], "extras_parsed": len(__import__('app.booking.signatures_email', fromlist=['_parse_extras'])._parse_extras(booking["extras"]))}
+
+
+@admin_router.post("/api/admin/test-signature-check/{rid}")
+async def test_signature_check(rid: int, x_admin_key: str = Header("")):
+    """Resend the T&C signature-status check email for a specific booking (for testing)."""
+    _check_auth(x_admin_key)
+    import asyncio
+    from app.booking.signatures_email import send_signature_check_notification
+    from app.booking.db import get_signatures_by_booking_ref, _booking_ref_sql
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT id, {_booking_ref_sql()}, nombre_cliente, fecha, hora,
+                       NULLIF(num_personas,'')::integer, num_adultos, num_ninos, nombre_adultos
+                FROM all_appointments WHERE id = %s
+            """, (rid,))
+            row = cur.fetchone()
+
+    if not row:
+        return {"error": f"Booking {rid} not found"}
+
+    cols = ["id", "booking_ref", "customer_name", "booking_date", "booking_time",
+            "num_personas", "num_adultos", "num_ninos", "nombre_adultos"]
+    booking = dict(zip(cols, row))
+    for k in ("booking_date", "booking_time"):
+        if booking.get(k):
+            booking[k] = str(booking[k])
+
+    sigs = await asyncio.to_thread(get_signatures_by_booking_ref, booking["booking_ref"])
+    await asyncio.to_thread(send_signature_check_notification, booking, sigs)
+    return {"ok": True, "rid": rid, "booking_ref": booking["booking_ref"], "nombre": booking["customer_name"], "signed": len(sigs)}
+
+
+@admin_router.post("/api/admin/test-post-visit-check/{rid}")
+async def test_post_visit_check(rid: int, x_admin_key: str = Header("")):
+    """Resend the post-visit data-completeness check email for a specific booking (for testing)."""
+    _check_auth(x_admin_key)
+    import asyncio
+    from app.booking.post_visit_check_email import send_post_visit_check_notification
+    from app.booking.db import _booking_ref_sql
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT id, {_booking_ref_sql()}, nombre_cliente, telefono, email, fecha, hora,
+                       NULLIF(num_personas,'')::integer, num_adultos, num_ninos,
+                       nombre_adultos, nombre_ninos, ciudad_origen, como_supieron,
+                       categoria_clientes, quien_atendio, COALESCE(pagos,'[]'::jsonb), ingreso_total, status
+                FROM all_appointments WHERE id = %s
+            """, (rid,))
+            row = cur.fetchone()
+
+    if not row:
+        return {"error": f"Booking {rid} not found"}
+
+    cols = ["id", "booking_ref", "customer_name", "customer_phone", "customer_email",
+            "booking_date", "booking_time", "num_personas", "num_adultos", "num_ninos",
+            "nombre_adultos", "nombre_ninos", "ciudad_origen", "como_supieron",
+            "categoria_clientes", "quien_atendio", "pagos", "ingreso_total", "status"]
+    booking = dict(zip(cols, row))
+    for k in ("booking_date", "booking_time"):
+        if booking.get(k):
+            booking[k] = str(booking[k])
+
+    await asyncio.to_thread(send_post_visit_check_notification, booking)
+    return {"ok": True, "rid": rid, "booking_ref": booking["booking_ref"], "nombre": booking["customer_name"]}
