@@ -399,6 +399,106 @@ def run_pre_booking_notif_sweep() -> dict:
     return result
 
 
+def send_signature_check_notification(booking: dict, signatures: list) -> None:
+    """
+    Send the ~1h-before admin notification that says how many passengers have
+    signed the T&C vs. how many are required (num_adultos, falling back to
+    num_personas when that wasn't set) — separate from send_pre_booking_notification,
+    so missing signatures don't get buried inside the general booking recap.
+    """
+    ref = booking.get("booking_ref") or "-"
+    name = booking.get("customer_name") or "-"
+    bdate = _fmt_date(str(booking.get("booking_date") or ""))
+    btime = str(booking.get("booking_time") or "")[:5]
+    required = booking.get("num_adultos") or booking.get("num_personas") or 0
+    try:
+        required = int(required)
+    except Exception:
+        required = 0
+    signed = len(signatures)
+    missing = max(required - signed, 0)
+    complete = required > 0 and missing == 0
+
+    signed_names = "".join(
+        f'<tr><td style="padding:6px 0;color:#1a1a2e;font-size:14px">✔ {s.get("passenger_name","-")}</td></tr>'
+        for s in signatures
+    ) or '<tr><td style="padding:6px 0;color:#999;font-size:13px">Nadie ha firmado todavía</td></tr>'
+
+    status_color = "#2e7d32" if complete else ("#e65100" if signed > 0 else "#c62828")
+    status_bg = "#e8f5e9" if complete else ("#fff3e0" if signed > 0 else "#ffebee")
+    status_text = (
+        "✅ Todos firmaron" if complete
+        else f"⚠️ Faltan {missing} por firmar" if required > 0
+        else "⚠️ Sin Nº de adultos registrado — no se puede calcular cuántos faltan"
+    )
+
+    firma_link = f"https://whatsapp.hotboat.cl/firma/{ref}"
+
+    subject = f"✍️ Firmas T&C en 1h — {ref} ({signed}/{required if required else '?'})"
+    html = f"""
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8">
+<style>
+  body{{font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px}}
+  .card{{background:#fff;border-radius:12px;max-width:540px;margin:auto;padding:28px;box-shadow:0 2px 8px rgba(0,0,0,.1)}}
+  h2{{color:#1a1a2e;margin:0 0 6px}}
+  .sub{{color:#666;font-size:14px;margin-bottom:16px}}
+  .status{{display:inline-block;background:{status_bg};color:{status_color};border-radius:20px;
+           padding:5px 16px;font-size:13px;font-weight:700;margin-bottom:18px}}
+  table{{width:100%;border-collapse:collapse}}
+  a.btn{{display:inline-block;margin-top:16px;background:#1a1a2e;color:#fff;text-decoration:none;
+         padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700}}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>✍️ Firmas T&amp;C — reserva en 1 hora</h2>
+  <div class="sub">{ref} · {name} · {bdate} {btime}</div>
+  <div class="status">{status_text}</div>
+  <table>{signed_names}</table>
+  <a class="btn" href="{firma_link}">Abrir link de firma para reenviar</a>
+  <p style="color:#888;font-size:12px;margin-top:18px">HotBoat Chile · aviso automático 1 hora antes</p>
+</div>
+</body>
+</html>
+"""
+    try:
+        _send(ADMIN_NOTIFICATION_EMAIL, subject, html)
+        logger.info("signature_check sent for %s (%d/%s signed)", ref, signed, required)
+    except Exception as e:
+        logger.error("send_signature_check_notification failed for %s: %s", ref, e)
+
+
+def run_signature_check_sweep() -> dict:
+    """
+    Check for bookings starting in ~60 min and send the T&C signature-status
+    email (separate from the general pre-booking notif). Runs every 10 min.
+    """
+    from app.booking.db import (
+        get_bookings_for_signature_check, mark_signature_check_notif_sent,
+        get_signatures_by_booking_ref,
+    )
+
+    result = {"checked": 0, "sent": 0, "errors": 0}
+    try:
+        bookings = get_bookings_for_signature_check(window_minutes=20, target_minutes_ahead=60)
+        result["checked"] = len(bookings)
+        for b in bookings:
+            ref = b.get("booking_ref", "")
+            try:
+                sigs = get_signatures_by_booking_ref(ref)
+                send_signature_check_notification(b, sigs)
+                mark_signature_check_notif_sent(b["id"])
+                result["sent"] += 1
+            except Exception as e:
+                logger.error("signature_check sweep for %s: %s", ref, e)
+                result["errors"] += 1
+    except Exception as e:
+        logger.error("run_signature_check_sweep: %s", e)
+    return result
+
+
 def run_daily_signature_summary_sweep() -> dict:
     """
     Send a summary of T&C signatures for every booking happening today.

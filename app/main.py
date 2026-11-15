@@ -388,6 +388,41 @@ async def _run_pre_booking_notif_scheduler():
         await asyncio.sleep(POLL_SECONDS)
 
 
+async def _run_signature_check_scheduler():
+    """Every 10 min: check for bookings starting in ~60 min and notify admin
+    whether/how many passengers have signed the T&C (separate email from the
+    general pre-booking notif above)."""
+    POLL_SECONDS = 600  # 10 minutes
+    await asyncio.sleep(35)
+    while True:
+        try:
+            from app.booking.signatures_email import run_signature_check_sweep
+            result = await asyncio.to_thread(run_signature_check_sweep)
+            if result.get("sent"):
+                logger.info("✍️ Signature check sweep: %s", result)
+        except Exception as _e:
+            logger.error("Signature check scheduler error: %s", _e)
+        await asyncio.sleep(POLL_SECONDS)
+
+
+async def _run_post_visit_check_scheduler():
+    """Every 10 min: check for bookings that started ~3h ago (1h after a 2h
+    experience ends) and notify admin which post-visit summary fields
+    (payment/method, attendance, origin, how they heard, group type) are
+    still missing on the reservation."""
+    POLL_SECONDS = 600  # 10 minutes
+    await asyncio.sleep(40)
+    while True:
+        try:
+            from app.booking.post_visit_check_email import run_post_visit_check_sweep
+            result = await asyncio.to_thread(run_post_visit_check_sweep)
+            if result.get("sent"):
+                logger.info("📋 Post-visit check sweep: %s", result)
+        except Exception as _e:
+            logger.error("Post-visit check scheduler error: %s", _e)
+        await asyncio.sleep(POLL_SECONDS)
+
+
 async def _run_yesterday_weekly_scheduler():
     """Every morning at 09:00 Santiago: send yesterday's bookings summary.
     On Mondays also send the weekly summary."""
@@ -878,6 +913,8 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_signature_summary_scheduler()),
             asyncio.create_task(_run_daily_meta_report_scheduler()),
             asyncio.create_task(_run_pre_booking_notif_scheduler()),
+            asyncio.create_task(_run_signature_check_scheduler()),
+            asyncio.create_task(_run_post_visit_check_scheduler()),
             asyncio.create_task(_run_yesterday_weekly_scheduler()),
             asyncio.create_task(_run_stock_consume_scheduler()),
             asyncio.create_task(_run_visitor_session_closer_scheduler()),
@@ -892,6 +929,8 @@ async def lifespan(app: FastAPI):
         logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
         logger.info("📊 Daily Meta report scheduler iniciado (09:00 Santiago)")
         logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
+        logger.info("✍️ Signature check scheduler iniciado (cada 10 min, 60 min antes)")
+        logger.info("📋 Post-visit check scheduler iniciado (cada 10 min, 3h después del inicio)")
         logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
         logger.info("💬 Follow-up nudge scheduler iniciado (cada 15s, envía a los 2 min sin respuesta)")
         logger.info(f"⚠️ Unanswered-alert scheduler iniciado (cada 30s, alerta al operador a los {UNANSWERED_ALERT_MINUTES} min sin respuesta)")
