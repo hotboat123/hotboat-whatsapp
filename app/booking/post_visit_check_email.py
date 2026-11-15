@@ -11,6 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 ADMIN_NOTIFICATION_EMAIL = "hotboatnotification@gmail.com"
+GOOGLE_REVIEW_URL = "https://maps.app.goo.gl/jVYVHRzekkmFRjEH7"
 
 
 def _send(to: str, subject: str, html: str) -> None:
@@ -86,6 +87,37 @@ def _check_items(booking: dict) -> list:
     ]
 
 
+def _review_request_buttons_html(booking: dict) -> str:
+    """Two wa.me buttons pre-filled with a Google-review ask for the
+    customer. Nothing in the booking data tells us whether they actually
+    enjoyed it, so this is a one-tap prompt for the operator to send
+    manually rather than an automated message. Note: wa.me only controls
+    who the chat opens WITH (the customer) — which of your own numbers
+    sends it (Popeye/business vs. personal) depends on which WhatsApp app
+    you tap through on your phone, not on the link itself; both buttons
+    below carry the same message/target and are just labeled for whichever
+    app you mean to use."""
+    import urllib.parse
+    phone = (booking.get("customer_phone") or "").replace("+", "").replace(" ", "").replace("-", "")
+    if not phone:
+        return ""
+    first_name = (booking.get("customer_name") or "").strip().split(" ")[0] or "!"
+    msg = (
+        f"Hola {first_name}! 🚤 Soy Tomás de HotBoat. Esperamos que hayan disfrutado mucho la experiencia 💛 "
+        f"Si les gustó, nos ayudaría muchísimo que nos dejaran una reseña en Google — nos sirve un montón: "
+        f"{GOOGLE_REVIEW_URL}\n\n¡Muchas gracias!"
+    )
+    wa_link = f"https://wa.me/{phone}?text={urllib.parse.quote(msg)}"
+    return f"""
+  <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee">
+    <div style="color:#666;font-size:13px;margin-bottom:10px">🌟 Pedir reseña en Google (envío manual — no sabemos si quedaron contentos)</div>
+    <a href="{wa_link}" style="display:inline-block;margin:0 8px 8px 0;background:#25D366;color:#fff;text-decoration:none;
+       padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">🦜 Enviar por Popeye (WhatsApp Business)</a>
+    <a href="{wa_link}" style="display:inline-block;margin:0 8px 8px 0;background:#128C7E;color:#fff;text-decoration:none;
+       padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">💬 Enviar por mi WhatsApp personal</a>
+  </div>"""
+
+
 def send_post_visit_check_notification(booking: dict) -> None:
     ref = booking.get("booking_ref") or "-"
     name = booking.get("customer_name") or "-"
@@ -137,6 +169,7 @@ def send_post_visit_check_notification(booking: dict) -> None:
     <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
     <tbody>{rows_html}</tbody>
   </table>
+  {_review_request_buttons_html(booking)}
   <p style="color:#888;font-size:12px;margin-top:18px">HotBoat Chile · aviso automático 1 hora después de terminada la experiencia</p>
 </div>
 </body>
