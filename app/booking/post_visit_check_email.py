@@ -12,6 +12,13 @@ logger = logging.getLogger(__name__)
 
 ADMIN_NOTIFICATION_EMAIL = "hotboatnotification@gmail.com"
 GOOGLE_REVIEW_URL = "https://maps.app.goo.gl/jVYVHRzekkmFRjEH7"
+# Same link booking_email.py's existing customer-facing follow-up email uses.
+TRIPADVISOR_REVIEW_URL = "https://www.tripadvisor.cl/UserReviewEdit-g294297-d33038747-HotBoat-Pucon_Araucania_Region.html"
+
+REVIEW_PLATFORMS = {
+    "google": {"label": "Google", "url": GOOGLE_REVIEW_URL, "color": "#25D366"},
+    "tripadvisor": {"label": "TripAdvisor", "url": TRIPADVISOR_REVIEW_URL, "color": "#34e0a1"},
+}
 
 
 def _send(to: str, subject: str, html: str) -> None:
@@ -87,21 +94,23 @@ def _check_items(booking: dict) -> list:
     ]
 
 
-def build_review_request_message(first_name: str) -> str:
+def build_review_request_message(first_name: str, platform: str = "google") -> str:
     """Shared with admin_router.py's /review-request route (the Popeye
     button) so both paths ask for the same thing."""
     fn = (first_name or "").strip() or "!"
+    plat = REVIEW_PLATFORMS.get(platform, REVIEW_PLATFORMS["google"])
     return (
         f"Hola {fn}! 🚤 Soy Tomás de HotBoat. Esperamos que hayan disfrutado mucho la experiencia 💛 "
-        f"Si les gustó, nos ayudaría muchísimo que nos dejaran una reseña en Google — nos sirve un montón: "
-        f"{GOOGLE_REVIEW_URL}\n\n¡Muchas gracias!"
+        f"Si les gustó, nos ayudaría muchísimo que nos dejaran una reseña en {plat['label']} — nos sirve un montón: "
+        f"{plat['url']}\n\n¡Muchas gracias!"
     )
 
 
 def _review_request_buttons_html(booking: dict) -> str:
-    """Two review-request buttons. Nothing in the booking data tells us
-    whether the customer actually enjoyed it, so these are one-tap prompts
-    for the operator rather than an automated send.
+    """Review-request buttons, one pair (Popeye / personal WhatsApp) per
+    platform. Nothing in the booking data tells us whether the customer
+    actually enjoyed it, so these are one-tap prompts for the operator
+    rather than an automated send.
 
     - "Popeye" opens a confirm page that sends the message for real, from
       the bot's own WhatsApp Business number via the Meta Cloud API — not a
@@ -116,16 +125,25 @@ def _review_request_buttons_html(booking: dict) -> str:
     if not phone or not rid:
         return ""
     first_name = (booking.get("customer_name") or "").strip().split(" ")[0]
-    msg = build_review_request_message(first_name)
-    wa_link = f"https://wa.me/{phone}?text={urllib.parse.quote(msg)}"
-    popeye_link = f"https://whatsapp.hotboat.cl/api/admin/reservas/{rid}/review-request"
+
+    rows = []
+    for platform, plat in REVIEW_PLATFORMS.items():
+        msg = build_review_request_message(first_name, platform)
+        wa_link = f"https://wa.me/{phone}?text={urllib.parse.quote(msg)}"
+        popeye_link = f"https://whatsapp.hotboat.cl/api/admin/reservas/{rid}/review-request/{platform}"
+        rows.append(f"""
+    <div style="margin-bottom:12px">
+      <div style="color:#666;font-size:13px;margin-bottom:8px">🌟 Pedir reseña en {plat['label']}</div>
+      <a href="{popeye_link}" style="display:inline-block;margin:0 8px 8px 0;background:{plat['color']};color:#fff;text-decoration:none;
+         padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">🦜 Enviar por Popeye (app)</a>
+      <a href="{wa_link}" style="display:inline-block;margin:0 8px 8px 0;background:#128C7E;color:#fff;text-decoration:none;
+         padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">💬 Enviar por mi WhatsApp personal</a>
+    </div>""")
+
     return f"""
   <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee">
-    <div style="color:#666;font-size:13px;margin-bottom:10px">🌟 Pedir reseña en Google (envío manual — no sabemos si quedaron contentos)</div>
-    <a href="{popeye_link}" style="display:inline-block;margin:0 8px 8px 0;background:#25D366;color:#fff;text-decoration:none;
-       padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">🦜 Enviar por Popeye (app)</a>
-    <a href="{wa_link}" style="display:inline-block;margin:0 8px 8px 0;background:#128C7E;color:#fff;text-decoration:none;
-       padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700">💬 Enviar por mi WhatsApp personal</a>
+    <div style="color:#999;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Envío manual — no sabemos si quedaron contentos</div>
+    {''.join(rows)}
   </div>"""
 
 

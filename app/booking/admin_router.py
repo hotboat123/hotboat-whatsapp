@@ -2739,15 +2739,19 @@ async def send_reservation_template_route(rid: int, x_admin_key: str = Header(""
     return {"ok": True, "sent_to": phone_clean, "booking_ref": booking_ref, "message_id": message_id, "via": via}
 
 
-@admin_router.get("/api/admin/reservas/{rid}/review-request", response_class=HTMLResponse)
-async def review_request_confirm_page(rid: int):
-    """Confirm page for the '🦜 Enviar por Popeye' button in the post-visit
+@admin_router.get("/api/admin/reservas/{rid}/review-request/{platform}", response_class=HTMLResponse)
+async def review_request_confirm_page(rid: int, platform: str):
+    """Confirm page for the '🦜 Enviar por Popeye' buttons in the post-visit
     check email (post_visit_check_email.py). Deliberately split into this GET
     (renders a plain HTML form, sends nothing) and the POST below (the real
     send) instead of sending on the bare GET — mail clients and corporate
     link scanners routinely prefetch every URL in an email, which would
     otherwise fire a real WhatsApp message to the customer with no human
     involved."""
+    from app.booking.post_visit_check_email import REVIEW_PLATFORMS
+    if platform not in REVIEW_PLATFORMS:
+        return HTMLResponse(f"<h3>Plataforma de reseña desconocida: {platform}</h3>", status_code=404)
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(f"SELECT nombre_cliente, telefono FROM {TABLE} WHERE id=%s", (rid,))
@@ -2760,7 +2764,8 @@ async def review_request_confirm_page(rid: int):
 
     from app.booking.post_visit_check_email import build_review_request_message
     first_name = (nombre or "").strip().split(" ")[0]
-    preview = build_review_request_message(first_name).replace("\n", "<br>")
+    preview = build_review_request_message(first_name, platform).replace("\n", "<br>")
+    plat_label = REVIEW_PLATFORMS[platform]["label"]
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -2772,24 +2777,28 @@ async def review_request_confirm_page(rid: int):
 </style></head>
 <body>
   <div class="card">
-    <h3>🦜 Enviar pedido de reseña a {nombre or 'cliente'}</h3>
+    <h3>🦜 Pedir reseña en {plat_label} a {nombre or 'cliente'}</h3>
     <p style="color:#666;font-size:13px">Teléfono: {telefono}</p>
     <div class="msg">{preview}</div>
-    <form method="post" action="/api/admin/reservas/{rid}/review-request">
+    <form method="post" action="/api/admin/reservas/{rid}/review-request/{platform}">
       <button type="submit">Enviar ahora por Popeye</button>
     </form>
   </div>
 </body></html>""")
 
 
-@admin_router.post("/api/admin/reservas/{rid}/review-request", response_class=HTMLResponse)
-async def review_request_send(rid: int):
-    """Actually sends the Google-review request as free text from Popeye's
-    WhatsApp Business number (Meta Cloud API), only when the customer wrote
-    in the last 24h — WhatsApp doesn't allow free text outside that window,
-    and there's no Meta-approved template for a review ask, so outside the
-    window this deliberately fails instead of sending the wrong (reservation
-    contact) template content."""
+@admin_router.post("/api/admin/reservas/{rid}/review-request/{platform}", response_class=HTMLResponse)
+async def review_request_send(rid: int, platform: str):
+    """Actually sends the review request (Google or TripAdvisor) as free
+    text from Popeye's WhatsApp Business number (Meta Cloud API), only when
+    the customer wrote in the last 24h — WhatsApp doesn't allow free text
+    outside that window, and there's no Meta-approved template for a review
+    ask, so outside the window this deliberately fails instead of sending
+    the wrong (reservation contact) template content."""
+    from app.booking.post_visit_check_email import REVIEW_PLATFORMS, build_review_request_message
+    if platform not in REVIEW_PLATFORMS:
+        return HTMLResponse(f"<h3>Plataforma de reseña desconocida: {platform}</h3>", status_code=404)
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(f"SELECT source_id, nombre_cliente, telefono FROM {TABLE} WHERE id=%s", (rid,))
@@ -2803,10 +2812,10 @@ async def review_request_send(rid: int):
 
     from app.db.queries import has_recent_inbound_message, save_conversation
     from app.whatsapp.client import whatsapp_client
-    from app.booking.post_visit_check_email import build_review_request_message
 
     first_name = (nombre or "").strip().split(" ")[0]
-    msg = build_review_request_message(first_name)
+    msg = build_review_request_message(first_name, platform)
+    plat_label = REVIEW_PLATFORMS[platform]["label"]
 
     if not await has_recent_inbound_message(phone_clean):
         return HTMLResponse(f"""<!DOCTYPE html>
@@ -2835,7 +2844,7 @@ texto libre por este número — y no existe una plantilla aprobada para pedir r
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="es"><body style="font-family:Arial,sans-serif;padding:24px;max-width:460px;margin:40px auto;text-align:center">
 <h2 style="color:#2e7d32">✅ Enviado</h2>
-<p>Se mandó el pedido de reseña a {nombre or phone_clean} por Popeye.</p>
+<p>Se mandó el pedido de reseña en {plat_label} a {nombre or phone_clean} por Popeye.</p>
 </body></html>""")
 
 
