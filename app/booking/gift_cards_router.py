@@ -223,6 +223,22 @@ async def create_gift_card_endpoint(request: CreateGiftCardRequest):
                     )
                 conn.commit()
 
+        # Admin "lead" notification — fired immediately, mirrors admin_new_lead
+        # for regular reservations. The abandoned-cart follow-up (if payment
+        # isn't completed) and the confirmed-sale notification are handled by
+        # gift_card_notifications.py.
+        try:
+            from app.booking.gift_card_notifications import notify_admin_gift_card_lead
+            notify_admin_gift_card_lead({
+                "code": code, "num_adultos": adults, "num_ninos": children,
+                "num_people": n, "amount": amount,
+                "buyer_name": request.buyer_name.strip(), "buyer_phone": request.buyer_phone.strip(),
+                "buyer_email": (request.buyer_email or "").strip() or None,
+                "recipient_name": (request.recipient_name or "").strip() or None,
+            })
+        except Exception as e:
+            logger.warning(f"notify_admin_gift_card_lead failed for {code}: {e}")
+
         from app.booking.router import _create_transbank_payment
         payment_url = await _create_transbank_payment(code, amount)
 
@@ -504,6 +520,30 @@ async def send_gift_card_confirmation(code: str, x_admin_key: str = Header("")):
     }
 
 
+@gift_cards_router.post("/api/admin/gift-cards/{code}/test-notif/{stage}")
+async def test_gift_card_admin_notif(code: str, stage: str, x_admin_key: str = Header("")):
+    """Resend one of the three admin notification emails for a gift card
+    (for testing): stage is 'lead', 'abandoned' or 'confirmed'."""
+    _check_auth(x_admin_key)
+    gc = get_gift_card_by_code(code)
+    if not gc:
+        raise HTTPException(status_code=404, detail="Gift card no encontrada")
+
+    from app.booking.gift_card_notifications import (
+        notify_admin_gift_card_lead, notify_admin_gift_card_abandoned,
+        notify_admin_gift_card_confirmed,
+    )
+    if stage == "lead":
+        notify_admin_gift_card_lead(gc)
+    elif stage == "abandoned":
+        notify_admin_gift_card_abandoned(gc)
+    elif stage == "confirmed":
+        notify_admin_gift_card_confirmed(code)
+    else:
+        raise HTTPException(status_code=400, detail="stage debe ser 'lead', 'abandoned' o 'confirmed'")
+    return {"ok": True, "code": code, "stage": stage}
+
+
 class RedeemGiftCardRequest(BaseModel):
     redeemed_booking_ref: Optional[str] = None
 
@@ -607,6 +647,11 @@ def confirm_gift_card_payment(code: str, payment_id: Optional[str], status: str,
             _send_gift_card_email(code)
         except Exception as e:
             logger.warning(f"Gift card confirmation email error for {code}: {e}")
+        try:
+            from app.booking.gift_card_notifications import notify_admin_gift_card_confirmed
+            notify_admin_gift_card_confirmed(code)
+        except Exception as e:
+            logger.warning(f"Admin gift card confirmed notification error for {code}: {e}")
     return True
 
 
