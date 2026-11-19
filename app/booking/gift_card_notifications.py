@@ -51,6 +51,21 @@ def _fmt_clp(amount) -> str:
         return str(amount or 0)
 
 
+def _price_rows_html(gc: dict) -> str:
+    """Price breakdown row(s) — just the final amount when no coupon was
+    used, or total/coupon/final when one was applied."""
+    coupon_code = gc.get("coupon_code")
+    coupon_discount = gc.get("coupon_discount") or 0
+    if not coupon_code or coupon_discount <= 0:
+        return f"<tr><td>Precio total</td><td><strong>{_fmt_clp(gc.get('amount'))}</strong></td></tr>"
+    base_amount = gc.get("base_amount")
+    if base_amount is None:
+        base_amount = (gc.get("amount") or 0) + coupon_discount
+    return f"""<tr><td>Precio total</td><td>{_fmt_clp(base_amount)}</td></tr>
+    <tr><td>Cupón aplicado</td><td><strong>{coupon_code}</strong> (-{_fmt_clp(coupon_discount)})</td></tr>
+    <tr><td>Quedó en</td><td><strong>{_fmt_clp(gc.get('amount'))}</strong></td></tr>"""
+
+
 def _card_html(headline: str, status_bg: str, status_color: str, status_text: str, gc: dict, extra_rows: str = "") -> str:
     n = gc.get("num_people") or ((gc.get("num_adultos") or 0) + (gc.get("num_ninos") or 0))
     recipient = gc.get("recipient_name") or ""
@@ -81,7 +96,7 @@ def _card_html(headline: str, status_bg: str, status_color: str, status_text: st
     <tr><td>Email</td><td>{gc.get('buyer_email') or '-'}</td></tr>
     {recipient_row}
     <tr><td>Personas</td><td>{n}</td></tr>
-    <tr><td>Monto</td><td><strong>{_fmt_clp(gc.get('amount'))}</strong></td></tr>
+    {_price_rows_html(gc)}
     {extra_rows}
   </table>
   <p class="ref">Gift card: {gc.get('code') or '-'} · HotBoat Chile</p>
@@ -179,17 +194,18 @@ def get_gift_cards_pending_abandoned_notif(stale_minutes: int = GIFT_CARD_ABANDO
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT code, num_adultos, num_ninos, amount, buyer_name, buyer_phone,
-                       buyer_email, recipient_name
+                       buyer_email, recipient_name, coupon_code, coupon_discount
                 FROM gift_cards
                 WHERE status = 'pending_payment'
                   AND created_at < NOW() - (INTERVAL '1 minute' * %s)
                   AND abandoned_cart_notif_sent_at IS NULL
             """, (stale_minutes,))
             cols = ["code", "num_adultos", "num_ninos", "amount", "buyer_name",
-                    "buyer_phone", "buyer_email", "recipient_name"]
+                    "buyer_phone", "buyer_email", "recipient_name", "coupon_code", "coupon_discount"]
             rows = [dict(zip(cols, row)) for row in cur.fetchall()]
             for r in rows:
                 r["num_people"] = (r.get("num_adultos") or 0) + (r.get("num_ninos") or 0)
+                r["base_amount"] = (r.get("amount") or 0) + (r.get("coupon_discount") or 0)
             return rows
 
 

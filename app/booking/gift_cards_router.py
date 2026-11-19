@@ -189,6 +189,7 @@ async def create_gift_card_endpoint(request: CreateGiftCardRequest):
         amount = price_breakdown(adults, children, price_pp)["subtotal"]
         if request.test_price is not None and request.test_price > 0:
             amount = request.test_price
+        base_amount = amount  # before any coupon — kept for the admin notification emails
 
         code = generate_gift_card_code()
         coupon_code = (request.coupon_code or "").strip() or None
@@ -231,7 +232,8 @@ async def create_gift_card_endpoint(request: CreateGiftCardRequest):
             from app.booking.gift_card_notifications import notify_admin_gift_card_lead
             notify_admin_gift_card_lead({
                 "code": code, "num_adultos": adults, "num_ninos": children,
-                "num_people": n, "amount": amount,
+                "num_people": n, "amount": amount, "base_amount": base_amount,
+                "coupon_code": coupon_code, "coupon_discount": coupon_discount,
                 "buyer_name": request.buyer_name.strip(), "buyer_phone": request.buyer_phone.strip(),
                 "buyer_email": (request.buyer_email or "").strip() or None,
                 "recipient_name": (request.recipient_name or "").strip() or None,
@@ -257,7 +259,8 @@ def get_gift_card_by_code(code: str) -> Optional[dict]:
             cur.execute("""
                 SELECT code, num_adultos, num_ninos, amount, buyer_name, buyer_phone,
                        buyer_email, recipient_name, dedication, sender_name, status,
-                       purchased_at, expires_at, redeemed_at, redeemed_booking_ref
+                       purchased_at, expires_at, redeemed_at, redeemed_booking_ref,
+                       coupon_code, coupon_discount
                 FROM gift_cards WHERE code = %s
             """, (code,))
             row = cur.fetchone()
@@ -265,13 +268,17 @@ def get_gift_card_by_code(code: str) -> Optional[dict]:
         return None
     (code, adults, children, amount, buyer_name, buyer_phone, buyer_email,
      recipient_name, dedication, sender_name, status,
-     purchased_at, expires_at, redeemed_at, redeemed_booking_ref) = row
+     purchased_at, expires_at, redeemed_at, redeemed_booking_ref,
+     coupon_code, coupon_discount) = row
     return {
         "code": code,
         "num_adultos": adults,
         "num_ninos": children,
         "num_people": adults + children,
         "amount": amount,
+        "base_amount": (amount or 0) + (coupon_discount or 0),
+        "coupon_code": coupon_code,
+        "coupon_discount": coupon_discount,
         "buyer_name": buyer_name,
         "buyer_phone": buyer_phone,
         "buyer_email": buyer_email,
