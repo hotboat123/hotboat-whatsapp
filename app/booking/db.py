@@ -718,6 +718,63 @@ def mark_post_visit_check_notif_sent(booking_id: int) -> None:
             conn.commit()
 
 
+def get_bookings_for_post_visit_check_reminder(window_minutes: int = 20, target_minutes_ahead: int = 300) -> list:
+    """Bookings that already got the first post-visit check email (~3h after
+    start) and started ~target_minutes_ahead minutes ago (default 300 = 5h
+    after start / 3h after a 2h experience ends) — these get a reminder
+    resend if the summary is still incomplete. See
+    run_post_visit_check_reminder_sweep()."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                ALTER TABLE all_appointments
+                    ADD COLUMN IF NOT EXISTS post_visit_check_reminder_sent_at TIMESTAMPTZ
+            """)
+            conn.commit()
+
+    half = window_minutes // 2
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT id, {_booking_ref_sql()} AS booking_ref,
+                       nombre_cliente, telefono, email, fecha, hora,
+                       NULLIF(num_personas, '')::integer AS num_personas,
+                       num_adultos, num_ninos, nombre_adultos, nombre_ninos,
+                       ciudad_origen, como_supieron, categoria_clientes, quien_atendio,
+                       COALESCE(pagos, '[]'::jsonb) AS pagos,
+                       ingreso_total, status
+                FROM all_appointments
+                WHERE (fecha + COALESCE(hora, '12:00:00'::time)) AT TIME ZONE 'America/Santiago'
+                      BETWEEN (NOW() - INTERVAL '{target_minutes_ahead + half} minutes')
+                          AND (NOW() - INTERVAL '{target_minutes_ahead - half} minutes')
+                  AND status NOT IN ('cancelled', 'cancelada', 'solicitud')
+                  AND post_visit_check_notif_sent_at IS NOT NULL
+                  AND post_visit_check_reminder_sent_at IS NULL
+            """)
+            cols = ["id", "booking_ref", "customer_name", "customer_phone", "customer_email",
+                    "booking_date", "booking_time", "num_personas", "num_adultos", "num_ninos",
+                    "nombre_adultos", "nombre_ninos", "ciudad_origen", "como_supieron",
+                    "categoria_clientes", "quien_atendio", "pagos", "ingreso_total", "status"]
+            rows = []
+            for row in cur.fetchall():
+                d = dict(zip(cols, row))
+                for k in ("booking_date", "booking_time"):
+                    if d.get(k):
+                        d[k] = str(d[k])
+                rows.append(d)
+            return rows
+
+
+def mark_post_visit_check_reminder_sent(booking_id: int) -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE all_appointments SET post_visit_check_reminder_sent_at=NOW() WHERE id=%s",
+                (booking_id,),
+            )
+            conn.commit()
+
+
 def count_previous_bookings(customer_email: str = "", customer_phone: str = "",
                              exclude_ref: str = "") -> int:
     """

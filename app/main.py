@@ -423,6 +423,23 @@ async def _run_post_visit_check_scheduler():
         await asyncio.sleep(POLL_SECONDS)
 
 
+async def _run_post_visit_check_reminder_scheduler():
+    """Every 10 min: for bookings that already got the first post-visit
+    check email and started ~5h ago (3h after a 2h experience ends), resend
+    it as a reminder — only if the summary is still incomplete."""
+    POLL_SECONDS = 600  # 10 minutes
+    await asyncio.sleep(42)
+    while True:
+        try:
+            from app.booking.post_visit_check_email import run_post_visit_check_reminder_sweep
+            result = await asyncio.to_thread(run_post_visit_check_reminder_sweep)
+            if result.get("sent") or result.get("skipped"):
+                logger.info("🔁 Post-visit check reminder sweep: %s", result)
+        except Exception as _e:
+            logger.error("Post-visit check reminder scheduler error: %s", _e)
+        await asyncio.sleep(POLL_SECONDS)
+
+
 async def _run_gift_card_abandoned_sweep_scheduler():
     """Every 2 min: notify admin about gift-card purchases still unpaid
     after GIFT_CARD_ABANDONED_MINUTES (the "dejó el carrito" equivalent for
@@ -932,6 +949,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_pre_booking_notif_scheduler()),
             asyncio.create_task(_run_signature_check_scheduler()),
             asyncio.create_task(_run_post_visit_check_scheduler()),
+            asyncio.create_task(_run_post_visit_check_reminder_scheduler()),
             asyncio.create_task(_run_gift_card_abandoned_sweep_scheduler()),
             asyncio.create_task(_run_yesterday_weekly_scheduler()),
             asyncio.create_task(_run_stock_consume_scheduler()),
@@ -949,6 +967,7 @@ async def lifespan(app: FastAPI):
         logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
         logger.info("✍️ Signature check scheduler iniciado (cada 10 min, 60 min antes)")
         logger.info("📋 Post-visit check scheduler iniciado (cada 10 min, 3h después del inicio)")
+        logger.info("🔁 Post-visit check reminder scheduler iniciado (cada 10 min, 5h después del inicio, solo si falta algo)")
         logger.info("🎁 Gift card abandoned-cart scheduler iniciado (cada 2 min, 5 min sin pagar)")
         logger.info("📬 Yesterday/weekly notif scheduler iniciado (09:00 Santiago, lunes también semanal)")
         logger.info("💬 Follow-up nudge scheduler iniciado (cada 15s, envía a los 2 min sin respuesta)")

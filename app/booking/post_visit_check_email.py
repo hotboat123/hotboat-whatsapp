@@ -5,7 +5,11 @@ people actually came, where they're from, how they heard about HotBoat,
 and what type of group it was. These all live on the reservation's edit
 modal in admin-bookings.html (fields: pagos, num_adultos/num_ninos,
 ciudad_origen, como_supieron, categoria_clientes, quien_atendio) but nothing
-reminds the operator to fill them in after the fact — this sweep does."""
+reminds the operator to fill them in after the fact — this sweep does.
+
+A second reminder (run_post_visit_check_reminder_sweep) fires ~3h after the
+first one (5h after start / 3h after the experience ends) and resends the
+same email, but only if the summary is still incomplete."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -160,7 +164,7 @@ def _review_request_buttons_html(booking: dict) -> str:
   </div>"""
 
 
-def send_post_visit_check_notification(booking: dict) -> None:
+def send_post_visit_check_notification(booking: dict, is_reminder: bool = False) -> None:
     ref = booking.get("booking_ref") or "-"
     name = booking.get("customer_name") or "-"
     bdate = _fmt_date(booking.get("booking_date"))
@@ -186,7 +190,8 @@ def send_post_visit_check_notification(booking: dict) -> None:
     status_bg = "#e8f5e9" if complete else "#ffebee"
     status_text = "✅ Resumen completo" if complete else f"⚠️ Faltan {len(missing)} de {len(items)} campos"
 
-    subject = f"📋 Resumen post-reserva — {ref} ({'completo' if complete else f'{len(missing)} pendientes'})"
+    reminder_prefix = "🔁 Recordatorio — " if is_reminder else ""
+    subject = f"{reminder_prefix}📋 Resumen post-reserva — {ref} ({'completo' if complete else f'{len(missing)} pendientes'})"
     html = f"""
 <!DOCTYPE html>
 <html lang="es">
@@ -204,7 +209,7 @@ def send_post_visit_check_notification(booking: dict) -> None:
 </head>
 <body>
 <div class="card">
-  <h2>📋 Resumen post-reserva</h2>
+  <h2>{'🔁 Recordatorio — ' if is_reminder else ''}📋 Resumen post-reserva</h2>
   <div class="sub">{ref} · {name} · {bdate} {btime}</div>
   <div class="status">{status_text}</div>
   <table>
@@ -212,14 +217,14 @@ def send_post_visit_check_notification(booking: dict) -> None:
     <tbody>{rows_html}</tbody>
   </table>
   {_review_request_buttons_html(booking)}
-  <p style="color:#888;font-size:12px;margin-top:18px">HotBoat Chile · aviso automático 1 hora después de terminada la experiencia</p>
+  <p style="color:#888;font-size:12px;margin-top:18px">HotBoat Chile · aviso automático {'de recordatorio, 3 horas después de terminada la experiencia' if is_reminder else '1 hora después de terminada la experiencia'}</p>
 </div>
 </body>
 </html>
 """
     try:
         _send(ADMIN_NOTIFICATION_EMAIL, subject, html)
-        logger.info("post_visit_check sent for %s (%d/%d missing)", ref, len(missing), len(items))
+        logger.info("post_visit_check sent for %s (%d/%d missing, reminder=%s)", ref, len(missing), len(items), is_reminder)
     except Exception as e:
         logger.error("send_post_visit_check_notification failed for %s: %s", ref, e)
 
@@ -244,4 +249,36 @@ def run_post_visit_check_sweep() -> dict:
                 result["errors"] += 1
     except Exception as e:
         logger.error("run_post_visit_check_sweep: %s", e)
+    return result
+
+
+def run_post_visit_check_reminder_sweep() -> dict:
+    """Check for bookings that got the first post-visit check email and
+    started ~5h ago (3h after a 2h experience ends) — resend only if the
+    summary is still incomplete, since a completed one needs no reminder.
+    Runs every 10 min."""
+    from app.booking.db import (
+        get_bookings_for_post_visit_check_reminder,
+        mark_post_visit_check_reminder_sent,
+    )
+
+    result = {"checked": 0, "sent": 0, "skipped": 0, "errors": 0}
+    try:
+        bookings = get_bookings_for_post_visit_check_reminder(window_minutes=20, target_minutes_ahead=300)
+        result["checked"] = len(bookings)
+        for b in bookings:
+            ref = b.get("booking_ref", "")
+            try:
+                items = _check_items(b)
+                if any(not it["ok"] for it in items):
+                    send_post_visit_check_notification(b, is_reminder=True)
+                    result["sent"] += 1
+                else:
+                    result["skipped"] += 1
+                mark_post_visit_check_reminder_sent(b["id"])
+            except Exception as e:
+                logger.error("post_visit_check reminder sweep for %s: %s", ref, e)
+                result["errors"] += 1
+    except Exception as e:
+        logger.error("run_post_visit_check_reminder_sweep: %s", e)
     return result

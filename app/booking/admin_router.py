@@ -4388,7 +4388,7 @@ async def test_signature_notify(rid: int, x_admin_key: str = Header("")):
 
 
 @admin_router.post("/api/admin/test-post-visit-check/{rid}")
-async def test_post_visit_check(rid: int, x_admin_key: str = Header("")):
+async def test_post_visit_check(rid: int, reminder: bool = False, x_admin_key: str = Header("")):
     """Resend the post-visit data-completeness check email for a specific booking (for testing)."""
     _check_auth(x_admin_key)
     import asyncio
@@ -4418,5 +4418,5 @@ async def test_post_visit_check(rid: int, x_admin_key: str = Header("")):
         if booking.get(k):
             booking[k] = str(booking[k])
 
-    await asyncio.to_thread(send_post_visit_check_notification, booking)
-    return {"ok": True, "rid": rid, "booking_ref": booking["booking_ref"], "nombre": booking["customer_name"]}
+    await asyncio.to_thread(send_post_visit_check_notification, booking, reminder)
+    return {"ok": True, "rid": rid, "booking_ref": booking["booking_ref"], "nombre": booking["customer_name"], "reminder": reminder}
