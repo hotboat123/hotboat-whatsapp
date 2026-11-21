@@ -17,7 +17,7 @@ not just promising ones)."""
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
@@ -53,15 +53,17 @@ def _send(to: str, subject: str, html: str) -> None:
         logger.warning("daily_digest: send failed: %s", result["reason"])
 
 
-def _today_conversations() -> dict:
-    """Today's (Santiago calendar day) whatsapp_conversations rows, grouped
-    by phone_number, with each conversation's lead_status attached.
+def _conversations_for_day(target_date: date) -> dict:
+    """whatsapp_conversations rows for the given Santiago calendar day,
+    grouped by phone_number, with each conversation's lead_status attached.
     created_at is stored as a naive UTC timestamp (confirmed against NOW()),
-    so the Santiago midnight boundary is converted to UTC before filtering."""
+    so the Santiago day boundaries are converted to UTC before filtering."""
     from app.db.connection import get_connection
 
-    midnight_cl = datetime.now(CHILE_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-    midnight_utc_naive = midnight_cl.astimezone(UTC_TZ).replace(tzinfo=None)
+    start_cl = datetime.combine(target_date, datetime.min.time(), tzinfo=CHILE_TZ)
+    end_cl = start_cl + timedelta(days=1)
+    start_utc_naive = start_cl.astimezone(UTC_TZ).replace(tzinfo=None)
+    end_utc_naive = end_cl.astimezone(UTC_TZ).replace(tzinfo=None)
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -69,9 +71,9 @@ def _today_conversations() -> dict:
                 SELECT phone_number, customer_name, message_text, response_text,
                        direction, created_at
                 FROM whatsapp_conversations
-                WHERE created_at >= %s
+                WHERE created_at >= %s AND created_at < %s
                 ORDER BY phone_number, created_at
-            """, (midnight_utc_naive,))
+            """, (start_utc_naive, end_utc_naive))
             rows = cur.fetchall()
 
             cur.execute("SELECT phone_number, lead_status FROM whatsapp_leads")
@@ -225,7 +227,8 @@ def _popeye_link(phone: str) -> str:
     return f"https://whatsapp.hotboat.cl/?phone={urllib.parse.quote(digits)}"
 
 
-def _digest_html(items: list, total_reviewed: int) -> str:
+def _digest_html(items: list, total_reviewed: int, target_date: date) -> str:
+    day_label = target_date.strftime("%d/%m")
     if items:
         rows = "".join(f"""
     <div style="border:1px solid #eee;border-radius:10px;padding:14px 16px;margin-bottom:12px">
@@ -246,7 +249,7 @@ def _digest_html(items: list, total_reviewed: int) -> str:
         status_bg, status_color = "#ffebee", "#c62828"
         status_text = f"🔥 {len(items)} por retomar"
     else:
-        rows = '<p style="color:#666;font-size:14px">Ninguna conversación de hoy parece estar cerca de cerrar y sin responder — nada urgente que retomar.</p>'
+        rows = f'<p style="color:#666;font-size:14px">Ninguna conversación del {day_label} parece estar cerca de cerrar y sin responder — nada urgente que retomar.</p>'
         status_bg, status_color = "#e8f5e9", "#2e7d32"
         status_text = "✅ Nada urgente"
 
@@ -265,8 +268,8 @@ def _digest_html(items: list, total_reviewed: int) -> str:
 </head>
 <body>
 <div class="card">
-  <h2>📲 Resumen WhatsApp del día</h2>
-  <div class="sub">{total_reviewed} conversación(es) abiertas sin reserva revisadas hoy</div>
+  <h2>📲 Resumen WhatsApp — {day_label}</h2>
+  <div class="sub">{total_reviewed} conversación(es) abiertas sin reserva revisadas del {day_label}</div>
   <div class="status">{status_text}</div>
   {rows}
   <p style="color:#888;font-size:12px;margin-top:18px">HotBoat Chile · aviso automático 21:00 — conversaciones del día sin reserva que parecen cerca de cerrar</p>
@@ -276,13 +279,17 @@ def _digest_html(items: list, total_reviewed: int) -> str:
 """
 
 
-def run_whatsapp_daily_digest() -> dict:
-    """Build and send the 21:00 Santiago digest. Runs once a day; always
-    sends an email (even with zero flagged conversations) so the operator
-    knows the check ran."""
-    result = {"reviewed": 0, "flagged": 0}
+def run_whatsapp_daily_digest(target_date: date | None = None) -> dict:
+    """Build and send the digest for target_date (Santiago calendar day;
+    defaults to today, for the 21:00 scheduled run). Always sends an email
+    (even with zero flagged conversations) so the operator knows the check
+    ran. A past target_date is for testing/backfill — it never mutates
+    anything, so re-running it is harmless."""
+    if target_date is None:
+        target_date = datetime.now(CHILE_TZ).date()
+    result = {"reviewed": 0, "flagged": 0, "date": target_date.isoformat()}
     try:
-        conversations = _today_conversations()
+        conversations = _conversations_for_day(target_date)
         open_phones = [
             p for p, c in conversations.items()
             if c.get("lead_status") not in _EXCLUDED_LEAD_STATUSES and c["turns"]
@@ -302,8 +309,9 @@ def run_whatsapp_daily_digest() -> dict:
                 items.append({**f, "name": c["name"]})
         result["flagged"] = len(items)
 
-        subject = f"📲 WhatsApp 21:00 — {len(items)} por retomar" if items else "📲 WhatsApp 21:00 — nada urgente"
-        _send(ADMIN_NOTIFICATION_EMAIL, subject, _digest_html(items, result["reviewed"]))
+        day_label = target_date.strftime("%d/%m")
+        subject = f"📲 WhatsApp {day_label} — {len(items)} por retomar" if items else f"📲 WhatsApp {day_label} — nada urgente"
+        _send(ADMIN_NOTIFICATION_EMAIL, subject, _digest_html(items, result["reviewed"], target_date))
         logger.info("whatsapp_daily_digest sent: %s", result)
     except Exception as e:
         logger.error("run_whatsapp_daily_digest failed: %s", e)

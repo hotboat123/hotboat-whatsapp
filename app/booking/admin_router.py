@@ -4388,12 +4388,16 @@ async def test_signature_notify(rid: int, x_admin_key: str = Header("")):
 
 
 @admin_router.post("/api/admin/test-whatsapp-digest")
-async def test_whatsapp_digest(x_admin_key: str = Header("")):
+async def test_whatsapp_digest(days_ago: int = 0, x_admin_key: str = Header("")):
     """Run the 21:00 WhatsApp "conversations about to close" digest right
-    now (for testing)."""
+    now (for testing). days_ago=1 runs it for yesterday's conversations
+    instead of today's — useful to sanity-check against a full day."""
     _check_auth(x_admin_key)
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
     from app.whatsapp.daily_digest import run_whatsapp_daily_digest
-    result = await asyncio.to_thread(run_whatsapp_daily_digest)
+    target_date = datetime.now(ZoneInfo("America/Santiago")).date() - timedelta(days=days_ago)
+    result = await asyncio.to_thread(run_whatsapp_daily_digest, target_date)
     return {"ok": True, **result}
 
 
