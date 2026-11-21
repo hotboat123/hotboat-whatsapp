@@ -341,7 +341,7 @@ def _seed_tabla_products() -> None:
                            show_in_booking = TRUE,
                            user_hidden     = FALSE,
                            cost_per_unit   = 10000,
-                           precio_venta    = 20000,
+                           precio_venta    = 25000,
                            icon            = COALESCE(NULLIF(icon, ''), '🧺'),
                            sort_order      = 80,
                            updated_at      = NOW()
@@ -355,7 +355,7 @@ def _seed_tabla_products() -> None:
                             notes, is_active, consumption_qty, slug, show_in_booking,
                             sort_order, precio_venta, icon)
                        VALUES ('Tabla de picoteo', 'Extras (sin stock)', 'unidad', NULL, 0, 10000,
-                               '', TRUE, 1, 'tabla_de_picoteo', TRUE, 80, 20000, '🧺')"""
+                               '', TRUE, 1, 'tabla_de_picoteo', TRUE, 80, 25000, '🧺')"""
                 )
         conn.commit()
     logger.info("Tabla ingredients seeded into stock_products (%d products)", len(_TABLA_INGREDIENTS))

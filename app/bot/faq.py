@@ -207,7 +207,7 @@ El lago Villarrica es hermoso todo el año, pero el mejor clima es en verano.
 
 🍇 *Tablas de Picoteo*
 1️⃣ Tabla grande (4 personas) - $25.000
-2️⃣ Tabla pequeña (2 personas) - $20.000
+2️⃣ Tabla de Picoteo - $25.000
 
 🥤 *Bebidas y Jugos* (sin alcohol)
 3️⃣ Jugo natural 1L (piña o naranja) - $10.000
@@ -320,7 +320,7 @@ Want to add something special to your HotBoat?
 
 🍇 *Charcuterie Boards*
 1️⃣ Large board (4 people) - {p('tabla_4_personas', 25000)} CLP
-2️⃣ Small board (2 people) - {p('tabla_2_personas', 20000)} CLP
+2️⃣ Charcuterie board - {p('tabla_2_personas', 25000)} CLP
 
 🥤 *Drinks and Juices* (non-alcoholic)
 3️⃣ Natural juice 1L (pineapple or orange) - {p('jugo_natural', 10000)} CLP
@@ -360,7 +360,7 @@ Quer adicionar algo especial ao seu HotBoat?
 
 🍇 *Tábuas de Frios*
 1️⃣ Tábua grande (4 pessoas) - {p('tabla_4_personas', 25000)} CLP
-2️⃣ Tábua pequena (2 pessoas) - {p('tabla_2_personas', 20000)} CLP
+2️⃣ Tábua de frios - {p('tabla_2_personas', 25000)} CLP
 
 🥤 *Bebidas e Sucos* (sem álcool)
 3️⃣ Suco natural 1L (abacaxi ou laranja) - {p('jugo_natural', 10000)} CLP
@@ -400,7 +400,7 @@ Quer adicionar algo especial ao seu HotBoat?
 
 🍇 *Tablas de Picoteo*
 1️⃣ Tabla grande (4 personas) - {p('tabla_4_personas', 25000)}
-2️⃣ Tabla pequeña (2 personas) - {p('tabla_2_personas', 20000)}
+2️⃣ Tabla de Picoteo - {p('tabla_2_personas', 25000)}
 
 🥤 *Bebidas y Jugos* (sin alcohol)
 3️⃣ Jugo natural 1L (piña o naranja) - {p('jugo_natural', 10000)}

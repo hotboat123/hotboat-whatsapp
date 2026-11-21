@@ -653,7 +653,7 @@ def _ensure_vendor_push_table():
 _EXTRAS_SEED = [
     # (extra_name_lower, display_name, precio_venta, costo, icon, sort_order)
     ("tabla_4_personas",  "Tabla de Picoteo Grande (4 personas)",     25000,  0, "🍇",  1),
-    ("tabla_2_personas",  "Tabla de Picoteo Pequeña (2 personas)",    20000,  0, "🍇",  2),
+    ("tabla_2_personas",  "Tabla de Picoteo",                         25000,  0, "🍇",  2),
     ("jugo_natural",      "Jugo Natural 1L (piña o naranja)",         10000,  0, "🥤",  3),
     ("lata_bebida",       "Lata Bebida (Coca-Cola o Fanta)",           2900,  0, "🥤",  4),
     ("agua_mineral",      "Agua Mineral 1.5L",                         2500,  0, "💧",  5),

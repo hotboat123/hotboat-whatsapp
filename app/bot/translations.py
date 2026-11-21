@@ -506,7 +506,7 @@ Gostaria de reservar sua experiência?"""
 
 🍇 *Tablas de Picoteo*
 1️⃣ Tabla grande (4 personas) - $25.000
-2️⃣ Tabla pequeña (2 personas) - $20.000
+2️⃣ Tabla de Picoteo - $25.000
 
 🥤 *Bebidas y Jugos* (sin alcohol)
 3️⃣ Jugo natural 1L (piña o naranja) - $10.000
@@ -545,7 +545,7 @@ Want to add something special to your HotBoat?
 
 🍇 *Charcuterie Boards*
 1️⃣ Large board (4 people) - $25,000 CLP
-2️⃣ Small board (2 people) - $20,000 CLP
+2️⃣ Charcuterie board - $25,000 CLP
 
 🥤 *Drinks and Juices* (non-alcoholic)
 3️⃣ Natural juice 1L (pineapple or orange) - $10,000 CLP
@@ -584,7 +584,7 @@ Quer adicionar algo especial ao seu HotBoat?
 
 🍇 *Tábuas de Frios*
 1️⃣ Tábua grande (4 pessoas) - $25.000 CLP
-2️⃣ Tábua pequena (2 pessoas) - $20.000 CLP
+2️⃣ Tábua de frios - $25.000 CLP
 
 🥤 *Bebidas e Sucos* (sem álcool)
 3️⃣ Suco natural 1L (abacaxi ou laranja) - $10.000 CLP
