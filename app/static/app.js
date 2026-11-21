@@ -204,7 +204,36 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBotVariantOptions();
     _initParentMessages();
     initMyStatusPill();
+    initChatFontSize();
 });
+
+// ── Chat text size control ──────────────────────────────────────────────
+// Some operators have trouble reading the chat bubbles/quick-reply buttons
+// at their default small size. A-/A+ in the chat header scale them via the
+// --chat-font-scale CSS variable (see styles.css's .message-text,
+// .message-time, .quick-reply-btn, .quick-reply-label), remembered
+// per-device in localStorage (same pattern as MY_VARIANT_STORAGE_KEY above).
+const CHAT_FONT_SCALE_KEY = 'kiaAiChatFontScale';
+const CHAT_FONT_SCALE_MIN = 0.7;
+const CHAT_FONT_SCALE_MAX = 2.5;
+const CHAT_FONT_SCALE_STEP = 0.15;
+
+function initChatFontSize() {
+    const saved = parseFloat(localStorage.getItem(CHAT_FONT_SCALE_KEY));
+    const scale = isNaN(saved) ? 1 : saved;
+    document.documentElement.style.setProperty('--chat-font-scale', scale);
+}
+
+function adjustChatFontSize(direction) {
+    const current = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--chat-font-scale')
+    ) || 1;
+    let next = current + direction * CHAT_FONT_SCALE_STEP;
+    next = Math.min(CHAT_FONT_SCALE_MAX, Math.max(CHAT_FONT_SCALE_MIN, next));
+    next = Math.round(next * 100) / 100;
+    document.documentElement.style.setProperty('--chat-font-scale', next);
+    localStorage.setItem(CHAT_FONT_SCALE_KEY, next);
+}
 
 // ── "Me desactivo / me activo" self-service pill ────────────────────────────
 // Lets a human operator (Tomás, Esteban, ...) pause/resume their OWN

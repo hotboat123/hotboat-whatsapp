@@ -13,6 +13,9 @@
     --success-color: #4caf50;
     --warning-color: #ff9800;
     --vh: 1vh;
+    /* Scales chat bubble + quick-reply text for operators who need bigger
+       letters — see adjustChatFontSize() in app.js. 1 = original size. */
+    --chat-font-scale: 1;
 }
 
 /* Reset & Base */
@@ -550,11 +553,11 @@ body {
 .message-text {
     margin-bottom: 0.1rem;
     line-height: 1.2;
-    font-size: 0.5rem;
+    font-size: calc(0.5rem * var(--chat-font-scale));
 }
 
 .message-time {
-    font-size: 0.4rem;
+    font-size: calc(0.4rem * var(--chat-font-scale));
     color: var(--text-secondary);
     text-align: right;
 }
@@ -1395,7 +1398,7 @@ audio::-webkit-media-controls-volume-slider {
 }
 
 .quick-reply-label {
-    font-size: 0.5rem;
+    font-size: calc(0.5rem * var(--chat-font-scale));
     color: var(--text-secondary);
     white-space: nowrap;
     padding-top: 0.3rem;
@@ -1421,7 +1424,7 @@ audio::-webkit-media-controls-volume-slider {
     background-color: var(--bg-light);
     color: #2196F3;
     cursor: pointer;
-    font-size: 0.6rem;
+    font-size: calc(0.6rem * var(--chat-font-scale));
     font-weight: 600;
     transition: all 0.2s;
     min-width: 28px;
@@ -1437,6 +1440,28 @@ audio::-webkit-media-controls-volume-slider {
 .quick-reply-btn:active {
     transform: translateY(0);
     box-shadow: 0 1px 3px rgba(33, 150, 243, 0.3);
+}
+
+.chat-font-size-control {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.chat-font-size-control .btn-font-size {
+    padding: 0.25rem 0.45rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-light);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.chat-font-size-control .btn-font-size:hover {
+    background-color: var(--border-color);
 }
 
 .translate-section {
