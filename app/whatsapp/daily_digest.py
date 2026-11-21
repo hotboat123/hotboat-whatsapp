@@ -118,51 +118,100 @@ def _phones_with_confirmed_booking(phones: list) -> set:
     return result
 
 
+_PROMPT_INSTRUCTIONS = (
+    "Eres el asistente de un operador de tours en bote (HotBoat) que no quiere dejar pasar ventas. "
+    "Abajo hay transcripciones de conversaciones de WhatsApp de HOY con clientes que todavía NO reservaron "
+    "(ya se excluyeron quienes ya reservaron o fueron marcados como mal lead). "
+    "Identifica cuáles muestran intención real de reservar — preguntaron fecha/hora, precio, disponibilidad, "
+    "pidieron el link de pago, dijeron que querían ir — pero la conversación quedó sin cerrar: sin responder, "
+    "con una pregunta pendiente, o el cliente dejó de escribir antes de confirmar. "
+    "Ignora saludos genéricos, preguntas ya resueltas sin intención de compra, spam, o clientes que dijeron "
+    "explícitamente que no les interesa.\n\n"
+    "Responde SOLO con JSON (sin texto extra, sin markdown): una lista de objetos "
+    '{"phone": "...", "reason": "motivo breve en español, 1 frase", "urgency": "alta"|"media"}. '
+    "Si ninguna conversación aplica, responde [].\n\n"
+)
+
+# Groq's openai/gpt-oss-120b on-demand tier caps at 8000 tokens/minute
+# (prompt + completion combined) — found 2026-11-20 hitting a 413 "Request
+# too large" with 30 same-day conversations in one call (~9.3k tokens).
+# Truncating each conversation and splitting into token-budgeted chunks,
+# paced a minute apart, keeps every single request under that ceiling.
+_MAX_TURNS_PER_CONVERSATION = 8
+_MAX_CHARS_PER_MESSAGE = 220
+_MAX_PROMPT_TOKENS_PER_CHUNK = 4500  # leaves headroom for completion tokens
+_CHARS_PER_TOKEN = 3.5  # rough heuristic for Spanish text
+
+
+def _estimate_tokens(text: str) -> int:
+    return int(len(text) / _CHARS_PER_TOKEN)
+
+
+def _conversation_block(c: dict) -> str:
+    lines = [
+        f"[{who}] {text[:_MAX_CHARS_PER_MESSAGE]}"
+        for who, text in c["turns"][-_MAX_TURNS_PER_CONVERSATION:]
+    ]
+    return f"### Teléfono {c['phone']} ({c['name'] or 'sin nombre'})\n" + "\n".join(lines)
+
+
+def _chunk_conversations(conversations: list) -> list:
+    """Groups conversation blocks so each chunk's estimated prompt tokens
+    stay under _MAX_PROMPT_TOKENS_PER_CHUNK."""
+    base_tokens = _estimate_tokens(_PROMPT_INSTRUCTIONS)
+    chunks, current, current_tokens = [], [], base_tokens
+    for c in conversations:
+        block = _conversation_block(c)
+        block_tokens = _estimate_tokens(block)
+        if current and current_tokens + block_tokens > _MAX_PROMPT_TOKENS_PER_CHUNK:
+            chunks.append(current)
+            current, current_tokens = [], base_tokens
+        current.append(block)
+        current_tokens += block_tokens
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _classify_chunk(client, blocks: list) -> list:
+    prompt = _PROMPT_INSTRUCTIONS + "\n\n".join(blocks)
+    resp = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+    )
+    text = (resp.choices[0].message.content or "[]").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:]
+    parsed = json.loads(text)
+    return parsed if isinstance(parsed, list) else []
+
+
 def _classify_with_llm(conversations: list) -> list:
     """Ask the bot's own Groq model which of today's still-open
-    conversations look close to closing. Returns [{phone, reason, urgency}]
-    — empty on any failure, so a flaky LLM call never blocks the digest."""
+    conversations look close to closing. Returns [{phone, reason, urgency}].
+    Splits into token-budgeted chunks (see constants above), pacing calls a
+    minute apart to stay under Groq's per-minute token cap. A chunk that
+    still fails is skipped — never blocks the rest of the digest."""
+    import time
     from openai import OpenAI
     from app.config import get_settings
 
     settings = get_settings()
     client = OpenAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1")
 
-    blocks = []
-    for c in conversations:
-        lines = [f"[{who}] {text}" for who, text in c["turns"][-20:]]
-        blocks.append(f"### Teléfono {c['phone']} ({c['name'] or 'sin nombre'})\n" + "\n".join(lines))
-
-    prompt = (
-        "Eres el asistente de un operador de tours en bote (HotBoat) que no quiere dejar pasar ventas. "
-        "Abajo hay transcripciones de conversaciones de WhatsApp de HOY con clientes que todavía NO reservaron "
-        "(ya se excluyeron quienes ya reservaron o fueron marcados como mal lead). "
-        "Identifica cuáles muestran intención real de reservar — preguntaron fecha/hora, precio, disponibilidad, "
-        "pidieron el link de pago, dijeron que querían ir — pero la conversación quedó sin cerrar: sin responder, "
-        "con una pregunta pendiente, o el cliente dejó de escribir antes de confirmar. "
-        "Ignora saludos genéricos, preguntas ya resueltas sin intención de compra, spam, o clientes que dijeron "
-        "explícitamente que no les interesa.\n\n"
-        "Responde SOLO con JSON (sin texto extra, sin markdown): una lista de objetos "
-        '{"phone": "...", "reason": "motivo breve en español, 1 frase", "urgency": "alta"|"media"}. '
-        "Si ninguna conversación aplica, responde [].\n\n" + "\n\n".join(blocks)
-    )
-
-    try:
-        resp = client.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-        )
-        text = (resp.choices[0].message.content or "[]").strip()
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.lower().startswith("json"):
-                text = text[4:]
-        parsed = json.loads(text)
-        return parsed if isinstance(parsed, list) else []
-    except Exception as e:
-        logger.error("daily_digest: LLM classification failed: %s", e)
-        return []
+    chunks = _chunk_conversations(conversations)
+    results = []
+    for i, chunk in enumerate(chunks):
+        if i > 0:
+            time.sleep(61)  # stay under the per-minute token cap between chunks
+        try:
+            results.extend(_classify_chunk(client, chunk))
+        except Exception as e:
+            logger.error("daily_digest: LLM classification failed for chunk %d/%d: %s", i + 1, len(chunks), e)
+    return results
 
 
 def _wa_link(phone: str) -> str:
