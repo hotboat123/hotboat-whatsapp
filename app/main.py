@@ -346,6 +346,32 @@ async def _run_signature_summary_scheduler():
         await asyncio.sleep(60)
 
 
+async def _run_whatsapp_daily_digest_scheduler():
+    """Every day at 21:00 Santiago: review today's WhatsApp conversations
+    that haven't turned into a booking yet, and email the operator which
+    ones look close to closing so none go cold overnight."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta
+    CHILE_TZ = ZoneInfo("America/Santiago")
+    SEND_HOUR = 21  # 21:00 Santiago
+
+    while True:
+        now = datetime.now(CHILE_TZ)
+        target = now.replace(hour=SEND_HOUR, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_secs = (target - now).total_seconds()
+        logger.info("📲 WhatsApp daily digest scheduled in %.0f min (at %s Santiago)", wait_secs / 60, target.strftime("%H:%M %d/%m"))
+        await asyncio.sleep(wait_secs)
+        try:
+            from app.whatsapp.daily_digest import run_whatsapp_daily_digest
+            result = await asyncio.to_thread(run_whatsapp_daily_digest)
+            logger.info("📲 WhatsApp daily digest: %s", result)
+        except Exception as _e:
+            logger.error("WhatsApp daily digest scheduler error: %s", _e)
+        await asyncio.sleep(60)  # safety gap to avoid double-fire
+
+
 async def _run_daily_meta_report_scheduler():
     """Every morning at 09:00 Santiago: email the Meta Ads report for
     yesterday (spend/CPC/conversion funnel) — see app/meta/daily_report.py,
@@ -946,6 +972,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_daily_summary_scheduler()),
             asyncio.create_task(_run_signature_summary_scheduler()),
             asyncio.create_task(_run_daily_meta_report_scheduler()),
+            asyncio.create_task(_run_whatsapp_daily_digest_scheduler()),
             asyncio.create_task(_run_pre_booking_notif_scheduler()),
             asyncio.create_task(_run_signature_check_scheduler()),
             asyncio.create_task(_run_post_visit_check_scheduler()),
@@ -964,6 +991,7 @@ async def lifespan(app: FastAPI):
         logger.info("📅 Daily summary scheduler iniciado (08:00 Santiago)")
         logger.info("✍️ Signature summary scheduler iniciado (09:00 Santiago)")
         logger.info("📊 Daily Meta report scheduler iniciado (09:00 Santiago)")
+        logger.info("📲 WhatsApp daily digest scheduler iniciado (21:00 Santiago, conversaciones por cerrar)")
         logger.info("⏰ Pre-booking notif scheduler iniciado (cada 10 min, 60 min antes)")
         logger.info("✍️ Signature check scheduler iniciado (cada 10 min, 60 min antes)")
         logger.info("📋 Post-visit check scheduler iniciado (cada 10 min, 3h después del inicio)")

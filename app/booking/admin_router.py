@@ -4387,6 +4387,16 @@ async def test_signature_notify(rid: int, x_admin_key: str = Header("")):
     return {"ok": True, "rid": rid, "booking_ref": booking["booking_ref"], "nombre": booking["customer_name"], "signed": len(sigs) or 1}
 
 
+@admin_router.post("/api/admin/test-whatsapp-digest")
+async def test_whatsapp_digest(x_admin_key: str = Header("")):
+    """Run the 21:00 WhatsApp "conversations about to close" digest right
+    now (for testing)."""
+    _check_auth(x_admin_key)
+    from app.whatsapp.daily_digest import run_whatsapp_daily_digest
+    result = await asyncio.to_thread(run_whatsapp_daily_digest)
+    return {"ok": True, **result}
+
+
 @admin_router.post("/api/admin/test-post-visit-check/{rid}")
 async def test_post_visit_check(rid: int, reminder: bool = False, x_admin_key: str = Header("")):
     """Resend the post-visit data-completeness check email for a specific booking (for testing)."""
