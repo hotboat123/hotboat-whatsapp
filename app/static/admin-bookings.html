@@ -9017,24 +9017,24 @@ function renderExtrasCat(list){
               style="width:48px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.15rem;font-size:.78rem">
           </td>
           <td style="text-align:center">${badge}</td>
-          <td style="text-align:center;padding:.3rem .4rem">
-            <div style="display:inline-flex;gap:.2rem;align-items:center">
+          <td style="text-align:center;padding:.3rem .2rem">
+            <div style="display:inline-flex;gap:.12rem;align-items:center">
               <button onclick="quickAdjust(${sp.id},-1,'${sp.unit}')"
-                style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;width:24px;height:24px;cursor:pointer;font-weight:700;font-size:.9rem">−</button>
+                style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:5px;width:19px;height:19px;cursor:pointer;font-weight:700;font-size:.78rem;padding:0;line-height:1">−</button>
               <input type="number" id="qa-${sp.id}" value="1" min="0.5" step="0.5"
-                style="width:40px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.1rem;font-size:.78rem">
+                style="width:30px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:.1rem;font-size:.72rem">
               <button onclick="quickAdjust(${sp.id},1,'${sp.unit}')"
-                style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.3);border-radius:6px;width:24px;height:24px;cursor:pointer;font-weight:700;font-size:.9rem">+</button>
+                style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.3);border-radius:5px;width:19px;height:19px;cursor:pointer;font-weight:700;font-size:.78rem;padding:0;line-height:1">+</button>
             </div>
           </td>`;
       })()}
       <td>
         <input class="ec-input" type="number" min="0" value="${e.price||0}"
-          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="price">
+          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="price" style="min-width:68px">
       </td>
       <td>
         <input class="ec-input" type="number" min="0" value="${e.cost||0}"
-          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="cost">
+          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="cost" style="min-width:88px">
       </td>
       <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
       <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
