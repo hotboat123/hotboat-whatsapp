@@ -4519,6 +4519,14 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <!-- ══ GASTOS SECTION ════════════════════════════════════════════════════ -->
     <div id="section-gastos" class="section">
 
+      <!-- Sub-tabs: Registro de Gastos (por boleta) / Costos de Insumos (por producto) -->
+      <div class="gastos-tab-bar" style="display:flex;gap:.4rem;margin-bottom:.9rem;border-bottom:1px solid var(--border)">
+        <button class="gastos-tab active" data-tab="registro" onclick="setGastosTab('registro')">📋 Registro de Gastos</button>
+        <button class="gastos-tab" data-tab="insumos" onclick="setGastosTab('insumos')">📦 Costos de Insumos</button>
+      </div>
+
+      <div id="gastos-registro-panel">
+
       <!-- Filter + action bar -->
       <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.9rem">
         <select id="gastos-year" onchange="loadGastos()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.35rem .7rem;font-size:.85rem;outline:none"></select>
@@ -4736,6 +4744,19 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         </div>
       </div>
 
+      </div><!-- /gastos-registro-panel -->
+
+      <!-- Costos de Insumos panel (hidden by default) -->
+      <div id="gastos-insumos-panel" style="display:none">
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:.9rem">
+          <input type="text" id="insumos-search" placeholder="🔍 Buscar producto (ej: queso crema)"
+                 oninput="renderGastosInsumos()"
+                 style="flex:1;min-width:220px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.45rem .8rem;font-size:.88rem;outline:none">
+        </div>
+        <div id="insumos-chips" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem"></div>
+        <div id="insumos-result"></div>
+      </div>
+
     </div><!-- /section-gastos -->
 
     <div id="section-flujo-caja" class="section">
@@ -4758,6 +4779,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </select>
           <button onclick="addFlujoCajaMovimiento()" style="margin-left:auto;background:var(--green);color:#fff;border:none;border-radius:8px;padding:.4rem 1rem;font-size:.85rem;cursor:pointer;font-weight:600">+ Nuevo movimiento</button>
         </div>
+        <datalist id="fc-categorias-datalist"></datalist>
 
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
           <div style="overflow-x:auto">
@@ -12602,6 +12624,8 @@ document.addEventListener('DOMContentLoaded', () => {
 .fin-shortcut:hover{color:var(--text);border-color:var(--gold)}
 .fin-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:.55rem 1.1rem;cursor:pointer;font-size:.85rem;transition:all .15s}
 .fin-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.gastos-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:.55rem 1.1rem;cursor:pointer;font-size:.85rem;font-weight:600;transition:all .15s}
+.gastos-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
 .fin-kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.9rem 1rem}
 .fin-kpi .fk-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem}
 .fin-kpi .fk-value{font-size:1.25rem;font-weight:700;color:var(--text)}
@@ -14849,6 +14873,11 @@ async function openEditGasto(id){
     await new Promise(r => requestAnimationFrame(r));
     if(g.categoria2_id) document.getElementById('gastos-cat2').value = g.categoria2_id;
   }
+  _gastosItems = (g.items || []).map(it => ({
+    descripcion: it.descripcion || '', monto: it.monto || 0,
+    categoria_1_id: it.categoria1_id || null, categoria_2_id: null,
+  }));
+  renderGastosItems();
   if(g.imagen_path){
     const prev = document.getElementById('gastos-img-preview');
     const img  = document.getElementById('gastos-preview-img');
@@ -14930,10 +14959,11 @@ function renderGastosItems(){
   if(!panel || !list) return;
   const cat1Hint = document.getElementById('gastos-cat1-hint');
   if(cat1Hint) cat1Hint.style.display = _gastosItems.length ? 'block' : 'none';
-  if(!_gastosItems.length){ panel.style.display = 'none'; return; }
   panel.style.display = 'block';
   const suma = _gastosItems.reduce((s,i)=>s+(parseInt(i.monto)||0),0);
-  if(countEl) countEl.textContent = `${_gastosItems.length} ítem(s) — suma ${fmtCLP(suma)}`;
+  if(countEl) countEl.textContent = _gastosItems.length
+    ? `${_gastosItems.length} ítem(s) — suma ${fmtCLP(suma)}`
+    : 'Sin ítems — agregá uno si querés desglosar la boleta por producto';
   list.innerHTML = _gastosItems.map((it, idx) => `
     <div style="border:1px solid var(--border);border-radius:8px;padding:.55rem .6rem;display:flex;flex-direction:column;gap:.4rem">
       <div style="display:flex;gap:.4rem;align-items:center">
@@ -14953,12 +14983,20 @@ function renderGastosItems(){
         </select>
       </div>
     </div>
-  `).join('');
+  `).join('') + `
+    <button onclick="addGastoItem()" style="align-self:flex-start;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:6px;padding:.35rem .7rem;font-size:.78rem;cursor:pointer">➕ Agregar ítem</button>
+  `;
 }
 
 function setItemCat1(idx, val){
   _gastosItems[idx].categoria_1_id = val || null;
   _gastosItems[idx].categoria_2_id = null;
+  renderGastosItems();
+}
+
+function addGastoItem(){
+  const cat1 = document.getElementById('gastos-cat1')?.value || null;
+  _gastosItems.push({ descripcion: '', monto: 0, categoria_1_id: (cat1 && cat1 !== '__new__') ? cat1 : null, categoria_2_id: null });
   renderGastosItems();
 }
 
@@ -14977,6 +15015,192 @@ function cascadeMainCategoriaToItems(){
   _gastosItems.forEach(it => { it.categoria_1_id = cat1; it.categoria_2_id = cat2; });
   renderGastosItems();
 }
+
+// ── Sub-tabs: Registro de Gastos (por boleta) / Costos de Insumos (por producto) ──
+let _gastosTab = 'registro';
+function setGastosTab(t){
+  _gastosTab = t;
+  document.querySelectorAll('.gastos-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+  document.getElementById('gastos-registro-panel').style.display = t === 'registro' ? '' : 'none';
+  document.getElementById('gastos-insumos-panel').style.display  = t === 'insumos'  ? '' : 'none';
+  if(t === 'insumos') loadGastosInsumos();
+}
+
+// ── Costos de Insumos: price history per product + provider ──────────
+// Products come from free-text OCR, so they won't dedupe perfectly (e.g.
+// "Queso crema" vs "Queso Crema Philadelphia 200g") — rather than guess a
+// fuzzy grouping, this is search-first: type a substring, see every matching
+// line item across every receipt ever scanned, grouped by provider.
+let _gastosInsumosData = null; // flat list from /api/admin/gastos/insumos, cached for the session
+const _INSUMOS_COLORS = ['#34d399', '#60a5fa', '#f87171', '#fbbf24', '#a78bfa', '#f472b6', '#38bdf8', '#facc15'];
+
+function _foldText(s){
+  return (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+async function loadGastosInsumos(){
+  if(_gastosInsumosData){ renderGastosInsumos(); return; }
+  try{
+    const res = await api('/api/admin/gastos/insumos');
+    _gastosInsumosData = res.items || [];
+  }catch(e){
+    _gastosInsumosData = [];
+    showToast('Error cargando insumos: ' + e.message);
+  }
+  renderGastosInsumos();
+}
+
+function _insumosTopProductos(n){
+  const counts = {};
+  (_gastosInsumosData || []).forEach(it => {
+    const key = _foldText(it.descripcion).trim();
+    if(!key) return;
+    if(!counts[key]) counts[key] = { label: it.descripcion, count: 0 };
+    counts[key].count++;
+  });
+  return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, n);
+}
+
+function renderGastosInsumos(){
+  const chipsEl  = document.getElementById('insumos-chips');
+  const resultEl = document.getElementById('insumos-result');
+  if(!chipsEl || !resultEl) return;
+  const q = (document.getElementById('insumos-search')?.value || '').trim();
+
+  if(!_gastosInsumosData){
+    resultEl.innerHTML = '<div style="color:var(--muted);text-align:center;padding:2rem">Cargando…</div>';
+    return;
+  }
+
+  if(!q){
+    const top = _insumosTopProductos(10);
+    chipsEl.innerHTML = top.length ? top.map(t => `<button onclick="document.getElementById('insumos-search').value=this.dataset.label;renderGastosInsumos()"
+      data-label="${t.label.replace(/"/g, '&quot;')}"
+      style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:999px;padding:.3rem .8rem;font-size:.78rem;cursor:pointer">${t.label} <span style="color:var(--muted)">×${t.count}</span></button>`).join('')
+      : '<span style="color:var(--muted);font-size:.85rem">Aún no hay productos registrados</span>';
+    resultEl.innerHTML = '<div style="color:var(--muted);text-align:center;padding:2rem;font-size:.85rem">Buscá un producto para ver su historial de precio y proveedor</div>';
+    return;
+  }
+  chipsEl.innerHTML = '';
+
+  const qFolded = _foldText(q);
+  const matches = (_gastosInsumosData || []).filter(it => _foldText(it.descripcion).includes(qFolded));
+  if(!matches.length){
+    resultEl.innerHTML = `<div style="color:var(--muted);text-align:center;padding:2rem;font-size:.85rem">Sin resultados para "${q.replace(/</g, '&lt;')}"</div>`;
+    return;
+  }
+
+  const sorted = [...matches].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+  const proveedores = [...new Set(sorted.map(it => it.proveedor || '(sin proveedor)'))];
+  const colorOf = {};
+  proveedores.forEach((p, i) => { colorOf[p] = _INSUMOS_COLORS[i % _INSUMOS_COLORS.length]; });
+
+  const summary = proveedores.map(p => {
+    const rows = sorted.filter(it => (it.proveedor || '(sin proveedor)') === p);
+    const last = rows[rows.length - 1];
+    const avg  = rows.reduce((s, r) => s + (r.monto || 0), 0) / rows.length;
+    return { proveedor: p, color: colorOf[p], compras: rows.length, promedio: avg, ultimo: last.monto, ultimaFecha: last.fecha };
+  }).sort((a, b) => a.ultimo - b.ultimo);
+
+  resultEl.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.9rem 1rem;margin-bottom:.8rem">
+      <div style="font-weight:600;font-size:.88rem;margin-bottom:.6rem">${matches.length} compra(s) encontradas para "${q.replace(/</g, '&lt;')}"</div>
+      <canvas id="insumos-chart" height="200" style="width:100%;display:block"></canvas>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+        <thead><tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
+          <th style="padding:.5rem .8rem">Proveedor</th><th style="padding:.5rem .8rem">Compras</th>
+          <th style="padding:.5rem .8rem">Precio promedio</th><th style="padding:.5rem .8rem">Último precio</th><th style="padding:.5rem .8rem">Última fecha</th>
+        </tr></thead>
+        <tbody>${summary.map(s => `
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:.5rem .8rem"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${s.color};margin-right:.4rem"></span>${s.proveedor}</td>
+            <td style="padding:.5rem .8rem">${s.compras}</td>
+            <td style="padding:.5rem .8rem">${fmtCLP(Math.round(s.promedio))}</td>
+            <td style="padding:.5rem .8rem;font-weight:600">${fmtCLP(s.ultimo)}</td>
+            <td style="padding:.5rem .8rem">${s.ultimaFecha ? s.ultimaFecha.slice(0, 10) : '-'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  _insumosDrawChart(sorted, colorOf);
+}
+
+function _insumosDrawChart(points, colorOf){
+  const canvas = document.getElementById('insumos-chart');
+  if(!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 400;
+  const H = 200;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad = { top: 14, right: 14, bottom: 26, left: 60 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top  - pad.bottom;
+
+  const dates = points.map(p => new Date(p.fecha).getTime()).filter(t => !isNaN(t));
+  const montos = points.map(p => p.monto || 0);
+  const minT = Math.min(...dates), maxT = Math.max(...dates);
+  const maxV = Math.max(...montos) * 1.15 || 1;
+  const tRange = (maxT - minT) || 1;
+
+  function xPx(t){ return pad.left + ((t - minT) / tRange) * cW; }
+  function yPx(v){ return pad.top + (1 - v / maxV) * cH; }
+
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,.32)';
+  const yTicks = 4;
+  for(let i = 0; i <= yTicks; i++){
+    const v  = maxV * i / yTicks;
+    const py = yPx(v);
+    ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, py); ctx.lineTo(pad.left + cW, py); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.32)';
+    ctx.fillText(fmtCLP(Math.round(v)), pad.left - 6, py + 3.5);
+  }
+
+  const byProv = {};
+  points.forEach(p => {
+    const prov = p.proveedor || '(sin proveedor)';
+    (byProv[prov] = byProv[prov] || []).push(p);
+  });
+  Object.entries(byProv).forEach(([prov, rows]) => {
+    const color = colorOf[prov] || '#9ca3af';
+    ctx.strokeStyle = color;
+    ctx.fillStyle   = color;
+    ctx.lineWidth   = 2;
+    ctx.beginPath();
+    rows.forEach((r, i) => {
+      const t = new Date(r.fecha).getTime();
+      if(isNaN(t)) return;
+      const x = xPx(t), y = yPx(r.monto || 0);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    rows.forEach(r => {
+      const t = new Date(r.fecha).getTime();
+      if(isNaN(t)) return;
+      const x = xPx(t), y = yPx(r.monto || 0);
+      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    });
+  });
+
+  ctx.fillStyle = 'rgba(255,255,255,.32)'; ctx.font = '9px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(new Date(minT).toLocaleDateString('es-CL'), pad.left, H - 6);
+  ctx.textAlign = 'right';
+  ctx.fillText(new Date(maxT).toLocaleDateString('es-CL'), pad.left + cW, H - 6);
+}
+
+window.addEventListener('resize', () => {
+  if(_gastosTab === 'insumos' && document.getElementById('insumos-chart')) renderGastosInsumos();
+});
 
 // ── IVA calculator (live preview) ──────────────────
 function calcGastosIva(){
@@ -15145,6 +15369,10 @@ async function loadFlujoCaja(){
   const month = document.getElementById('fc-month')?.value || 0;
   const tbody = document.getElementById('fc-tbody');
   try {
+    if(!_gastosCategorias.length){
+      const cRes = await api('/api/admin/gastos/categorias');
+      _gastosCategorias = cRes.categorias || [];
+    }
     const res = await api(`/api/admin/flujo-caja?year=${year}&month=${month}`);
     renderFlujoCajaTable(res.movimientos || []);
   } catch(e) {
@@ -15152,11 +15380,20 @@ async function loadFlujoCaja(){
   }
 }
 
-function _fcInput(id, field, value, type){
+function _fcInput(id, field, value, type, listId){
   const v = (value===null||value===undefined) ? '' : String(value).replace(/"/g,'&quot;');
-  return `<input id="fc-${field}-${id}" type="${type||'text'}" value="${v}" onblur="saveFlujoCajaRow(${id})"
+  return `<input id="fc-${field}-${id}" type="${type||'text'}" value="${v}" onblur="saveFlujoCajaRow(${id})" ${listId?`list="${listId}"`:''}
     style="background:transparent;border:1px solid transparent;color:var(--text);border-radius:5px;padding:.25rem .35rem;font-size:.8rem;width:100%;min-width:${type==='date'?'125px':(type==='number'?'85px':'110px')};outline:none"
     onfocus="this.style.borderColor='var(--border)'" onmouseover="this.style.borderColor='var(--border)'" onmouseout="if(document.activeElement!==this)this.style.borderColor='transparent'">`;
+}
+
+// Same category vocabulary Gastos uses (gastos_categorias nivel 1 + 2), so
+// Flujo de Caja's categoria_1/categoria_2 stop drifting into ad hoc text —
+// a <datalist> rather than a strict <select> because this column is also
+// hand-edited directly in the synced Google Sheet, which is free text.
+function _fcCategoriasDatalistOptions(){
+  const names = [...new Set((_gastosCategorias || []).map(c => c.nombre).filter(Boolean))].sort();
+  return names.map(n => `<option value="${n.replace(/"/g,'&quot;')}">`).join('');
 }
 
 function renderFlujoCajaTable(movs){
@@ -15173,8 +15410,8 @@ function renderFlujoCajaTable(movs){
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'cargos',m.cargos,'number')}</td>
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'abonos',m.abonos,'number')}</td>
       <td style="padding:.3rem .2rem;color:var(--muted);text-align:center">—</td>
-      <td style="padding:.3rem .2rem">${_fcInput(m.id,'categoria_1',m.categoria_1)}</td>
-      <td style="padding:.3rem .2rem">${_fcInput(m.id,'categoria_2',m.categoria_2)}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'categoria_1',m.categoria_1,null,'fc-categorias-datalist')}</td>
+      <td style="padding:.3rem .2rem">${_fcInput(m.id,'categoria_2',m.categoria_2,null,'fc-categorias-datalist')}</td>
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'observaciones',m.observaciones)}</td>
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'facturado_o_iva',m.facturado_o_iva)}</td>
       <td style="padding:.3rem .2rem">${_fcInput(m.id,'origen',m.origen)}</td>
@@ -15183,6 +15420,8 @@ function renderFlujoCajaTable(movs){
       </td>
     </tr>
   `).join('');
+  const datalist = document.getElementById('fc-categorias-datalist');
+  if(datalist) datalist.innerHTML = _fcCategoriasDatalistOptions();
 }
 
 async function saveFlujoCajaRow(id){

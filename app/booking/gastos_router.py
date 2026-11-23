@@ -58,6 +58,15 @@ def _ensure_tables():
     ALTER TABLE gastos ADD COLUMN IF NOT EXISTS incluir_en_utilidad BOOLEAN DEFAULT TRUE;
     CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
     CREATE INDEX IF NOT EXISTS idx_gastos_cat1 ON gastos(categoria1_id);
+    CREATE TABLE IF NOT EXISTS gastos_items (
+        id SERIAL PRIMARY KEY,
+        gasto_id INTEGER NOT NULL REFERENCES gastos(id) ON DELETE CASCADE,
+        descripcion TEXT NOT NULL DEFAULT '',
+        monto INTEGER NOT NULL DEFAULT 0,
+        categoria1_id INTEGER REFERENCES gastos_categorias(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_gastos_items_gasto ON gastos_items(gasto_id);
     ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS boletado BOOLEAN DEFAULT FALSE;
     ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS incluir_en_utilidad BOOLEAN DEFAULT TRUE;
     CREATE TABLE IF NOT EXISTS gastos_origenes (
@@ -113,6 +122,7 @@ def _seed_default_categories():
         ("Arriendo/Marina","#14b8a6", "⚓", ["arriendo", "muelle", "marina", "bodega", "oficina", "puerto", "molo", "boya", "fondeo"]),
         ("Seguros",        "#6366f1", "🛡️", ["seguro", "póliza", "responsabilidad civil", "seguro embarcación", "seguro náutico", "hull"]),
         ("Bancario",       "#84cc16", "💳", ["comisión", "transbank", "mercadopago", "banco", "cuota bancaria", "mantención cuenta", "cargo bancario"]),
+        ("Extras",         "#d946ef", "🧺", ["tabla", "picoteo", "queso", "pan", "vino", "extras", "velas", "globos", "decoración"]),
         ("Otros",          "#6b7280", "📌", []),
     ]
     # nivel=2 subcategories: {parent_nombre: [(nombre, color, icono, keywords)]}
@@ -298,6 +308,57 @@ def resolve_origen_by_name(name: str) -> Optional[str]:
         if name_folded in _fold(nombre) or _fold(nombre) in name_folded:
             return nombre
     return None
+
+
+def _build_items_for_gasto(body: "GastoCreate") -> list:
+    """Builds the authoritative per-line-item list for a gasto: the
+    AI-scanned (or manually entered) items if present, else a single item
+    synthesized from the receipt's own comercio/monto/categoría so every
+    gasto always has >=1 item. This same list feeds both `gastos_items`
+    (price-history tracking, see list_gastos_insumos) and
+    flujo_caja_movimientos (the bank ledger) — kept as one function so the
+    two never see a different item breakdown for the same gasto."""
+    if body.items:
+        return [
+            {"descripcion": it.descripcion or body.comercio, "monto": it.monto,
+             "categoria_1": it.categoria_1, "categoria_2": it.categoria_2}
+            for it in body.items
+        ]
+    cat1_nombre, cat2_nombre = "", ""
+    cat_ids = [i for i in (body.categoria1_id, body.categoria2_id) if i]
+    if cat_ids:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, nombre FROM gastos_categorias WHERE id = ANY(%s)", (cat_ids,))
+                names = dict(cur.fetchall())
+        cat1_nombre = names.get(body.categoria1_id, "") or ""
+        cat2_nombre = names.get(body.categoria2_id, "") or ""
+    return [{"descripcion": body.comercio, "monto": body.monto,
+             "categoria_1": cat1_nombre, "categoria_2": cat2_nombre}]
+
+
+def _save_gastos_items(gasto_id: int, items: list) -> None:
+    """Replace-all: delete this gasto's existing gastos_items rows and
+    insert the current list. Each item's categoria_1 (a name string, same
+    shape flujo_caja's items use) is resolved to a gastos_categorias nivel=1
+    id for the gastos_items.categoria1_id FK."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM gastos_items WHERE gasto_id=%s", (gasto_id,))
+            for item in items:
+                descripcion = (item.get("descripcion") or "").strip()
+                monto = item.get("monto") or 0
+                cat1_name = (item.get("categoria_1") or "").strip()
+                cat1_id = None
+                if cat1_name:
+                    match = resolve_category_by_name(cat1_name, nivel=1)
+                    cat1_id = match["id"] if match else None
+                cur.execute(
+                    "INSERT INTO gastos_items (gasto_id, descripcion, monto, categoria1_id) "
+                    "VALUES (%s,%s,%s,%s)",
+                    (gasto_id, descripcion, monto, cat1_id),
+                )
+        conn.commit()
 
 
 def resolve_category_by_name(name: str, nivel: int, parent_id: Optional[int] = None) -> Optional[dict]:
@@ -667,6 +728,25 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
             cur.execute(sql, params)
             rows = cur.fetchall()
 
+    items_by_gasto: dict = {}
+    gasto_ids = [r[0] for r in rows]
+    if gasto_ids:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT gi.gasto_id, gi.id, gi.descripcion, gi.monto, gi.categoria1_id, "
+                    "c.nombre, c.color, c.icono "
+                    "FROM gastos_items gi LEFT JOIN gastos_categorias c ON gi.categoria1_id = c.id "
+                    "WHERE gi.gasto_id = ANY(%s) ORDER BY gi.id",
+                    (gasto_ids,),
+                )
+                for r in cur.fetchall():
+                    items_by_gasto.setdefault(r[0], []).append({
+                        "id": r[1], "descripcion": r[2] or "", "monto": r[3] or 0,
+                        "categoria1_id": r[4], "categoria1_nombre": r[5] or "",
+                        "categoria1_color": r[6] or "#6b7280", "categoria1_icono": r[7] or "📌",
+                    })
+
     def _build_row(r):
         m = r[2] or 0
         tdoc = r[16] or "boleta"
@@ -689,6 +769,7 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
             "categoria2_icono": r[13] or "📌",
             "notas": r[14] or "",
             "created_at": r[15].isoformat() if r[15] else "",
+            "items": items_by_gasto.get(r[0], []),
         }
 
     return {"ok": True, "gastos": [_build_row(r) for r in rows]}
@@ -723,29 +804,14 @@ async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
             (new_id,) = cur.fetchone()
         conn.commit()
 
+    items = _build_items_for_gasto(body)
+    _save_gastos_items(new_id, items)
+
     try:
         from app.booking.flujo_caja_router import create_movimientos_from_gasto
-        if body.items:
-            fc_items = [
-                {"descripcion": it.descripcion or body.comercio, "monto": it.monto,
-                 "categoria_1": it.categoria_1, "categoria_2": it.categoria_2}
-                for it in body.items
-            ]
-        else:
-            cat1_nombre, cat2_nombre = "", ""
-            cat_ids = [i for i in (body.categoria1_id, body.categoria2_id) if i]
-            if cat_ids:
-                with get_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("SELECT id, nombre FROM gastos_categorias WHERE id = ANY(%s)", (cat_ids,))
-                        names = dict(cur.fetchall())
-                cat1_nombre = names.get(body.categoria1_id, "") or ""
-                cat2_nombre = names.get(body.categoria2_id, "") or ""
-            fc_items = [{"descripcion": body.comercio, "monto": body.monto,
-                         "categoria_1": cat1_nombre, "categoria_2": cat2_nombre}]
         create_movimientos_from_gasto(
             gasto_id=new_id, fecha=body.fecha, notas=body.notas, tipo_documento=body.tipo_documento,
-            origen=body.origen, items=fc_items,
+            origen=body.origen, items=items,
         )
     except Exception as e:
         logger.warning(f"flujo_caja movimiento skipped for gasto {new_id}: {e}")
@@ -792,6 +858,38 @@ async def update_gasto(gasto_id: int, body: GastoCreate, x_admin_key: str = Head
                      body.tipo_documento, body.incluir_en_utilidad, body.notas, gasto_id),
                 )
         conn.commit()
+
+    items = _build_items_for_gasto(body)
+    _save_gastos_items(gasto_id, items)
+
+    # Resync the Flujo de Caja ledger rows for this gasto so an edit (added/
+    # removed/recategorized item) doesn't leave stale movimientos behind —
+    # same cleanup delete_gasto() does below, then recreate from scratch.
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM flujo_caja_movimientos WHERE gasto_id=%s", (gasto_id,))
+                old_fc_ids = [r[0] for r in cur.fetchall()]
+        if old_fc_ids:
+            from app.booking.sheets_sync import clear_row
+            for fc_id in old_fc_ids:
+                try:
+                    clear_row(fc_id)
+                except Exception as e:
+                    logger.warning(f"Sheets clear skipped while updating gasto {gasto_id}: {e}")
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM flujo_caja_movimientos WHERE id = ANY(%s)", (old_fc_ids,))
+                conn.commit()
+
+        from app.booking.flujo_caja_router import create_movimientos_from_gasto
+        create_movimientos_from_gasto(
+            gasto_id=gasto_id, fecha=body.fecha, notas=body.notas, tipo_documento=body.tipo_documento,
+            origen=body.origen, items=items,
+        )
+    except Exception as e:
+        logger.warning(f"flujo_caja movimiento resync skipped for gasto {gasto_id}: {e}")
+
     return {"ok": True}
 
 
@@ -832,3 +930,51 @@ async def delete_gasto(gasto_id: int, x_admin_key: str = Header("")):
             conn.commit()
 
     return {"ok": True}
+
+
+# ── Costos de Insumos (price-history per product/provider) ────────────────
+
+@gastos_router.get("/api/admin/gastos/insumos")
+async def list_gastos_insumos(q: str = "", year: int = 0, month: int = 0, x_admin_key: str = Header("")):
+    """Flat list of every gasto line item ever saved, with its parent
+    receipt's provider (comercio) and date — a product's price history is
+    just this list grouped by producto/proveedor, done client-side (same
+    pattern as the Gastos KPI cards). `q` is an optional accent/case-
+    insensitive substring filter on descripcion, applied in Python since the
+    dataset here is small and this avoids a Postgres unaccent dependency."""
+    _check_auth(x_admin_key)
+    conditions, params = [], []
+    if year:
+        conditions.append("EXTRACT(YEAR FROM g.fecha) = %s")
+        params.append(year)
+    if month:
+        conditions.append("EXTRACT(MONTH FROM g.fecha) = %s")
+        params.append(month)
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    sql = f"""
+        SELECT gi.id, gi.gasto_id, gi.descripcion, gi.monto, g.comercio, g.fecha,
+               gi.categoria1_id, c.nombre, c.color, c.icono
+        FROM gastos_items gi
+        JOIN gastos g ON gi.gasto_id = g.id
+        LEFT JOIN gastos_categorias c ON gi.categoria1_id = c.id
+        {where}
+        ORDER BY g.fecha DESC, gi.id DESC
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+
+    q_folded = _fold(q) if q else ""
+    out = []
+    for r in rows:
+        descripcion = r[2] or ""
+        if q_folded and q_folded not in _fold(descripcion):
+            continue
+        out.append({
+            "id": r[0], "gasto_id": r[1], "descripcion": descripcion, "monto": r[3] or 0,
+            "proveedor": r[4] or "", "fecha": str(r[5]) if r[5] else None,
+            "categoria1_id": r[6], "categoria1_nombre": r[7] or "",
+            "categoria1_color": r[8] or "#6b7280", "categoria1_icono": r[9] or "📌",
+        })
+    return {"ok": True, "items": out}
