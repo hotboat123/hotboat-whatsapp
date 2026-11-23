@@ -696,24 +696,25 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           <thead>
             <tr>
               <th style="text-align:center">Orden</th>
-              <th>Ícono</th>
               <th>Nombre extra</th>
               <th>Descripción (app)</th>
-              <th style="min-width:136px;color:#93c5fd;font-size:.78rem">🇺🇸 EN</th>
-              <th style="min-width:136px;color:#86efac;font-size:.78rem">🇧🇷 PT</th>
-              <th style="text-align:center">Mostrar en<br>reservas</th>
-              <th style="text-align:center" title="Incluir en control de stock">Stock</th>
-              <th style="text-align:right">Precio venta</th>
-              <th style="text-align:right">Costo</th>
-              <th style="text-align:right">Utilidad</th>
-              <th style="text-align:right">Margen</th>
               <th style="text-align:center;color:var(--muted)">Stock<br>actual</th>
               <th style="text-align:center;color:var(--muted)">Mín.</th>
               <th style="text-align:center;color:var(--muted)">Estado</th>
               <th style="text-align:center;color:var(--muted)">Ajuste rápido</th>
+              <th style="text-align:right">Precio venta</th>
+              <th style="text-align:right">Costo</th>
+              <th style="text-align:right">Utilidad</th>
+              <th style="text-align:right">Margen</th>
+              <th>Ícono</th>
+              <th style="min-width:136px;color:#93c5fd;font-size:.78rem">🇺🇸 EN</th>
+              <th style="min-width:136px;color:#86efac;font-size:.78rem">🇧🇷 PT</th>
+              <th style="text-align:center">Mostrar en<br>reservas</th>
+              <th style="text-align:center" title="Incluir en control de stock">Stock</th>
+              <th style="text-align:center">Acciones</th>
             </tr>
           </thead>
-          <tbody id="ec-tbody"><tr><td colspan="16" class="loading-msg">Cargando...</td></tr></tbody>
+          <tbody id="ec-tbody"><tr><td colspan="17" class="loading-msg">Cargando...</td></tr></tbody>
         </table>
       </div>
 
@@ -8986,11 +8987,6 @@ function renderExtrasCat(list){
         <button onclick="moveExtra(${i},-1)" title="Subir" style="background:none;border:1px solid var(--border);border-radius:5px;padding:.1rem .4rem;cursor:pointer;font-size:.85rem;color:var(--text)" ${i===0?'disabled':''}>↑</button>
         <button onclick="moveExtra(${i},1)" title="Bajar" style="background:none;border:1px solid var(--border);border-radius:5px;padding:.1rem .4rem;cursor:pointer;font-size:.85rem;color:var(--text)" ${i===list.length-1?'disabled':''}>↓</button>
       </td>
-      <td style="text-align:center">
-        <input class="ec-input" value="${escHtml(icon)}" data-field="icon"
-          oninput="ecMarkDirty('${eid}')"
-          style="width:3rem;text-align:center;font-size:1.1rem;padding:.2rem">
-      </td>
       <td>
         <input class="ec-input ec-name-input" value="${escHtml(e.name)}"
           oninput="ecMarkDirty('${eid}')" data-field="name" style="min-width:180px">
@@ -8999,6 +8995,53 @@ function renderExtrasCat(list){
         <input class="ec-input" value="${escHtml(e.description||'')}" data-field="description"
           placeholder="Texto informativo visible en la app"
           oninput="ecMarkDirty('${eid}')" style="min-width:220px;font-size:.8rem">
+      </td>
+      ${(()=>{
+        const sp = e.stock_product_id ? _stockProducts.find(p=>p.id===e.stock_product_id) : null;
+        if(!sp) return '<td style="text-align:center;color:var(--muted);font-size:.8rem">—</td><td style="text-align:center;color:var(--muted);font-size:.8rem">—</td><td></td><td></td>';
+        const isLow = sp.min_stock > 0 && sp.current_stock <= sp.min_stock;
+        const badge = isLow
+          ? `<span style="background:rgba(239,68,68,.15);color:#f87171;border-radius:12px;padding:2px 6px;font-size:.7rem;font-weight:700;white-space:nowrap">⚠️ Bajo</span>`
+          : `<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 6px;font-size:.7rem;white-space:nowrap">✓ OK</span>`;
+        return `
+          <td style="text-align:center">
+            <input type="number" id="cs-${sp.id}" value="${sp.current_stock}" step="0.5"
+              title="Editar stock directamente (sin registrar movimiento)"
+              onchange="saveCurrentStock(${sp.id}, this.value)"
+              style="width:56px;text-align:center;font-weight:700;color:${isLow?'#f87171':'#4ade80'};font-size:.9rem;background:var(--input);border:1px solid var(--border);border-radius:6px;padding:.15rem">
+          </td>
+          <td style="text-align:center">
+            <input type="number" id="min-${sp.id}" value="${sp.min_stock}" min="0" step="0.5"
+              title="Mínimo para alerta de stock bajo"
+              onchange="saveMinStock(${sp.id}, this.value)"
+              style="width:48px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.15rem;font-size:.78rem">
+          </td>
+          <td style="text-align:center">${badge}</td>
+          <td style="text-align:center;padding:.3rem .4rem">
+            <div style="display:inline-flex;gap:.2rem;align-items:center">
+              <button onclick="quickAdjust(${sp.id},-1,'${sp.unit}')"
+                style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;width:24px;height:24px;cursor:pointer;font-weight:700;font-size:.9rem">−</button>
+              <input type="number" id="qa-${sp.id}" value="1" min="0.5" step="0.5"
+                style="width:40px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.1rem;font-size:.78rem">
+              <button onclick="quickAdjust(${sp.id},1,'${sp.unit}')"
+                style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.3);border-radius:6px;width:24px;height:24px;cursor:pointer;font-weight:700;font-size:.9rem">+</button>
+            </div>
+          </td>`;
+      })()}
+      <td>
+        <input class="ec-input" type="number" min="0" value="${e.price||0}"
+          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="price">
+      </td>
+      <td>
+        <input class="ec-input" type="number" min="0" value="${e.cost||0}"
+          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="cost">
+      </td>
+      <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
+      <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
+      <td style="text-align:center">
+        <input class="ec-input" value="${escHtml(icon)}" data-field="icon"
+          oninput="ecMarkDirty('${eid}')"
+          style="width:3rem;text-align:center;font-size:1.1rem;padding:.2rem">
       </td>
       <td style="vertical-align:top;padding:.35rem .45rem">
         <input class="ec-input" value="${escHtml(e.name_en||'')}" data-field="name_en"
@@ -9037,48 +9080,6 @@ function renderExtrasCat(list){
              </button>`
         }
       </td>
-      <td>
-        <input class="ec-input" type="number" min="0" value="${e.price||0}"
-          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="price">
-      </td>
-      <td>
-        <input class="ec-input" type="number" min="0" value="${e.cost||0}"
-          oninput="ecMarkDirty('${eid}');ecUpdateRow('${eid}')" data-field="cost">
-      </td>
-      <td class="ec-util ${utilCls}" id="ec-util-${e.id}">${fmtMoney(util)}</td>
-      <td style="color:var(--muted);text-align:right;font-size:.8rem" id="ec-margen-${e.id}">${margen!=null?margen+'%':'—'}</td>
-      ${(()=>{
-        const sp = e.stock_product_id ? _stockProducts.find(p=>p.id===e.stock_product_id) : null;
-        if(!sp) return '<td style="text-align:center;color:var(--muted);font-size:.8rem">—</td><td style="text-align:center;color:var(--muted);font-size:.8rem">—</td><td></td><td></td>';
-        const isLow = sp.min_stock > 0 && sp.current_stock <= sp.min_stock;
-        const badge = isLow
-          ? `<span style="background:rgba(239,68,68,.15);color:#f87171;border-radius:12px;padding:2px 6px;font-size:.7rem;font-weight:700;white-space:nowrap">⚠️ Bajo</span>`
-          : `<span style="background:rgba(34,197,94,.1);color:#4ade80;border-radius:12px;padding:2px 6px;font-size:.7rem;white-space:nowrap">✓ OK</span>`;
-        return `
-          <td style="text-align:center">
-            <input type="number" id="cs-${sp.id}" value="${sp.current_stock}" step="0.5"
-              title="Editar stock directamente (sin registrar movimiento)"
-              onchange="saveCurrentStock(${sp.id}, this.value)"
-              style="width:56px;text-align:center;font-weight:700;color:${isLow?'#f87171':'#4ade80'};font-size:.9rem;background:var(--input);border:1px solid var(--border);border-radius:6px;padding:.15rem">
-          </td>
-          <td style="text-align:center">
-            <input type="number" id="min-${sp.id}" value="${sp.min_stock}" min="0" step="0.5"
-              title="Mínimo para alerta de stock bajo"
-              onchange="saveMinStock(${sp.id}, this.value)"
-              style="width:48px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.15rem;font-size:.78rem">
-          </td>
-          <td style="text-align:center">${badge}</td>
-          <td style="text-align:center;padding:.3rem .4rem">
-            <div style="display:inline-flex;gap:.2rem;align-items:center">
-              <button onclick="quickAdjust(${sp.id},-1,'${sp.unit}')"
-                style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;width:24px;height:24px;cursor:pointer;font-weight:700;font-size:.9rem">−</button>
-              <input type="number" id="qa-${sp.id}" value="1" min="0.5" step="0.5"
-                style="width:40px;text-align:center;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.1rem;font-size:.78rem">
-              <button onclick="quickAdjust(${sp.id},1,'${sp.unit}')"
-                style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.3);border-radius:6px;width:24px;height:24px;cursor:pointer;font-weight:700;font-size:.9rem">+</button>
-            </div>
-          </td>`;
-      })()}
       <td style="display:flex;gap:.3rem;align-items:center;padding:.5rem .3rem;white-space:nowrap;flex-wrap:wrap;justify-content:flex-end">
         <button type="button" class="ec-save-btn" style="background:#7c3aed;color:#fff;font-size:.72rem;padding:.28rem .45rem"
           onclick="autoTranslateExtra('${eid}')" title="Generar inglés y portugués">✨ IA</button>
