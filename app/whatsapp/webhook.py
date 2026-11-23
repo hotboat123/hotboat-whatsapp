@@ -154,6 +154,7 @@ async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, cap
 
         scan = await scan_receipt(ScanRequest(imagen_base64=imagen_base64, mime_type="image/jpeg"), x_admin_key="")
         cat1 = get_categoria_by_id(scan.get("categoria1_id"))
+        cat2 = get_categoria_by_id(scan.get("categoria2_id"))
         comercio = scan.get("comercio") or ""
 
         payload = {
@@ -165,8 +166,8 @@ async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, cap
             "caption": caption or "",
             "categoria1_id": cat1["id"] if cat1 else None,
             "categoria1_nombre": cat1["nombre"] if cat1 else "",
-            "categoria2_id": None,
-            "categoria2_nombre": "",
+            "categoria2_id": cat2["id"] if cat2 else None,
+            "categoria2_nombre": cat2["nombre"] if cat2 else "",
             "tipo_documento": "factura",
             "items": scan.get("items") or [],
             "imagen_base64": imagen_base64,

@@ -67,6 +67,7 @@ def _ensure_tables():
         created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_gastos_items_gasto ON gastos_items(gasto_id);
+    ALTER TABLE gastos_items ADD COLUMN IF NOT EXISTS categoria2_id INTEGER REFERENCES gastos_categorias(id) ON DELETE SET NULL;
     ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS boletado BOOLEAN DEFAULT FALSE;
     ALTER TABLE all_appointments ADD COLUMN IF NOT EXISTS incluir_en_utilidad BOOLEAN DEFAULT TRUE;
     CREATE TABLE IF NOT EXISTS gastos_origenes (
@@ -115,14 +116,13 @@ def _seed_default_categories():
         ("Combustible",    "#ef4444", "⛽", ["bencina", "combustible", "copec", "shell", "petrobras", "axion", "gasolinera", "diésel", "diesel", "lubricante", "aceite motor"]),
         ("Mantenimiento",  "#f97316", "🔧", ["mantención", "reparación", "taller", "repuesto", "ferretería", "herramienta", "pintura", "antifouling", "impeller", "filtro"]),
         ("Marketing",      "#8b5cf6", "📣", ["publicidad", "instagram", "facebook", "google", "meta", "diseño", "imprenta", "flyer", "fotografía", "video", "drone"]),
-        ("Alimentación",   "#22c55e", "🍽️", ["supermercado", "restaurant", "comida", "almuerzo", "jumbo", "lider", "unimarc", "santa isabel", "colación", "provisiones", "snack"]),
+        ("Costos Variables","#ef4444", "📊", []),
         ("Servicios",      "#0ea5e9", "💡", ["agua", "luz", "electricidad", "internet", "teléfono", "básico", "sanitario", "enel", "entel", "movistar", "aguas andinas", "esval"]),
         ("Suministros",    "#f59e0b", "🛒", ["materiales", "insumos", "limpieza", "útiles", "papelería", "producto", "chaleco", "extintor", "botiquín"]),
         ("Remuneraciones", "#ec4899", "👥", ["sueldo", "salario", "honorario", "gratificación", "remuneración", "liquidación", "bono personal", "finiquito"]),
         ("Arriendo/Marina","#14b8a6", "⚓", ["arriendo", "muelle", "marina", "bodega", "oficina", "puerto", "molo", "boya", "fondeo"]),
         ("Seguros",        "#6366f1", "🛡️", ["seguro", "póliza", "responsabilidad civil", "seguro embarcación", "seguro náutico", "hull"]),
         ("Bancario",       "#84cc16", "💳", ["comisión", "transbank", "mercadopago", "banco", "cuota bancaria", "mantención cuenta", "cargo bancario"]),
-        ("Extras",         "#d946ef", "🧺", ["tabla", "picoteo", "queso", "pan", "vino", "extras", "velas", "globos", "decoración"]),
         ("Otros",          "#6b7280", "📌", []),
     ]
     # nivel=2 subcategories: {parent_nombre: [(nombre, color, icono, keywords)]}
@@ -144,7 +144,14 @@ def _seed_default_categories():
             ("Fotografía/Video","#8b5cf6", "📸", ["fotografía", "video", "drone", "fotógrafo"]),
             ("Impreso",         "#8b5cf6", "🖨️", ["imprenta", "flyer", "banner", "tarjeta"]),
         ],
-        "Alimentación": [
+        # "Costos Variables" (an owner-added, not seed-added, nivel=1 category
+        # representing day-to-day variable spend) groups what Alimentación
+        # used to be its own top-level category — Alimentación and Extras
+        # (tabla/picoteo ingredients) are siblings here, not one subsuming
+        # the other, since the same supermarket run can feed either.
+        "Costos Variables": [
+            ("Alimentación",      "#22c55e", "🍽️", ["supermercado", "restaurant", "comida", "almuerzo", "jumbo", "lider", "unimarc", "santa isabel"]),
+            ("Extras",            "#d946ef", "🧺", ["tabla", "picoteo", "queso", "cream cheese", "jamón", "salame", "aceituna", "vino", "extras", "velas", "globos", "decoración"]),
             ("Colación personal", "#22c55e", "🍱", ["colación", "almuerzo personal"]),
             ("Provisiones viaje", "#22c55e", "🧃", ["provisiones", "snack", "bebida", "agua pasajeros"]),
         ],
@@ -224,6 +231,34 @@ def _match_category(text: str, categorias: list) -> Optional[int]:
             if kw and kw.lower() in txt:
                 return cat["id"]
     return None
+
+
+def _match_category_with_sub(texts: list, categorias: list) -> tuple:
+    """Like _match_category, but tries nivel=2 (subcategory) keywords first —
+    checked against each text in `texts` in order, most specific first (e.g.
+    an item's own description before the whole receipt's comercio name).
+    A specific product keyword ("queso", "tabla") is a much stronger signal
+    for which subcategory a variable cost belongs to than the comercio name
+    alone (a generic supermarket keyword like "lider" would otherwise always
+    win and push everything into the same top-level bucket). Returns
+    (categoria1_id, categoria2_id); falls back to the existing nivel=1-only
+    match (categoria2_id=None) over the combined texts if no subcategory
+    keyword hits anywhere."""
+    for text in texts:
+        txt = (text or "").lower()
+        if not txt:
+            continue
+        for cat in categorias:
+            if cat["nivel"] != 2:
+                continue
+            kws = cat.get("keywords") or []
+            if isinstance(kws, str):
+                kws = json.loads(kws)
+            for kw in kws:
+                if kw and kw.lower() in txt:
+                    return cat["parent_id"], cat["id"]
+    combined = " ".join(t for t in texts if t)
+    return _match_category(combined, categorias), None
 
 
 # ── Admin gasto-from-WhatsApp confirmation flow ─────────────────────────────
@@ -339,9 +374,9 @@ def _build_items_for_gasto(body: "GastoCreate") -> list:
 
 def _save_gastos_items(gasto_id: int, items: list) -> None:
     """Replace-all: delete this gasto's existing gastos_items rows and
-    insert the current list. Each item's categoria_1 (a name string, same
-    shape flujo_caja's items use) is resolved to a gastos_categorias nivel=1
-    id for the gastos_items.categoria1_id FK."""
+    insert the current list. Each item's categoria_1/categoria_2 (name
+    strings, same shape flujo_caja's items use) are resolved to
+    gastos_categorias ids for the gastos_items FKs."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM gastos_items WHERE gasto_id=%s", (gasto_id,))
@@ -349,14 +384,19 @@ def _save_gastos_items(gasto_id: int, items: list) -> None:
                 descripcion = (item.get("descripcion") or "").strip()
                 monto = item.get("monto") or 0
                 cat1_name = (item.get("categoria_1") or "").strip()
+                cat2_name = (item.get("categoria_2") or "").strip()
                 cat1_id = None
                 if cat1_name:
                     match = resolve_category_by_name(cat1_name, nivel=1)
                     cat1_id = match["id"] if match else None
+                cat2_id = None
+                if cat2_name:
+                    match2 = resolve_category_by_name(cat2_name, nivel=2, parent_id=cat1_id)
+                    cat2_id = match2["id"] if match2 else None
                 cur.execute(
-                    "INSERT INTO gastos_items (gasto_id, descripcion, monto, categoria1_id) "
-                    "VALUES (%s,%s,%s,%s)",
-                    (gasto_id, descripcion, monto, cat1_id),
+                    "INSERT INTO gastos_items (gasto_id, descripcion, monto, categoria1_id, categoria2_id) "
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    (gasto_id, descripcion, monto, cat1_id, cat2_id),
                 )
         conn.commit()
 
@@ -636,14 +676,16 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         logger.error(f"Gemini http error: {e}")
         raise HTTPException(status_code=502, detail=f"Error de red al conectar con Gemini: {e}")
 
-    # Keyword-based category matching
+    # Keyword-based category matching (both levels — see _match_category_with_sub)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, nombre, nivel, keywords FROM gastos_categorias WHERE nivel=1")
-            cats = [{"id": r[0], "nombre": r[1], "nivel": r[2], "keywords": r[3]} for r in cur.fetchall()]
+            cur.execute("SELECT id, nombre, nivel, parent_id, keywords FROM gastos_categorias")
+            cats = [{"id": r[0], "nombre": r[1], "nivel": r[2], "parent_id": r[3], "keywords": r[4]} for r in cur.fetchall()]
 
-    search_text = f"{extracted.get('comercio', '')} {extracted.get('descripcion', '')}".lower()
-    cat1_id = _match_category(search_text, cats)
+    raw_items_for_match = extracted.get("items") or []
+    item_texts = [it.get("descripcion", "") for it in raw_items_for_match if isinstance(it, dict)]
+    whole_receipt_text = f"{extracted.get('comercio', '')} {extracted.get('descripcion', '')}"
+    cat1_id, cat2_id = _match_category_with_sub(item_texts + [whole_receipt_text], cats)
 
     # Flujo de Caja ledger suggestion (separate category vocabulary, learned
     # from what's been saved for this comercio before — see flujo_caja_router.py)
@@ -664,7 +706,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
     items_out = []
     raw_items = extracted.get("items") or []
     if isinstance(raw_items, list) and raw_items:
-        cats_by_name = {(c["nombre"] or "").strip().lower(): c["id"] for c in cats}
+        cats_by_name_nivel = {((c["nombre"] or "").strip().lower(), c["nivel"]): c["id"] for c in cats}
         try:
             from app.booking.flujo_caja_router import lookup_producto_default as _lookup
         except Exception:
@@ -674,17 +716,22 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
                 continue
             desc = (item.get("descripcion") or "").strip()
             monto_item = item.get("monto")
-            cat1_item_id = None
+            cat1_item_id, cat2_item_id = None, None
             if _lookup and desc:
                 try:
                     sug = _lookup(desc)
                     if sug and sug.get("categoria_1"):
-                        cat1_item_id = cats_by_name.get(sug["categoria_1"].strip().lower())
+                        cat1_item_id = cats_by_name_nivel.get((sug["categoria_1"].strip().lower(), 1))
+                    if sug and sug.get("categoria_2"):
+                        cat2_item_id = cats_by_name_nivel.get((sug["categoria_2"].strip().lower(), 2))
                 except Exception:
                     pass
             if not cat1_item_id and desc:
-                cat1_item_id = _match_category(desc.lower(), cats)
-            items_out.append({"descripcion": desc, "monto": monto_item, "categoria1_id": cat1_item_id})
+                cat1_item_id, cat2_item_id = _match_category_with_sub([desc], cats)
+            items_out.append({
+                "descripcion": desc, "monto": monto_item,
+                "categoria1_id": cat1_item_id, "categoria2_id": cat2_item_id,
+            })
 
     return {
         "ok": True,
@@ -692,6 +739,7 @@ async def scan_receipt(body: ScanRequest, x_admin_key: str = Header("")):
         "comercio": extracted.get("comercio", ""),
         "fecha": extracted.get("fecha"),
         "categoria1_id": cat1_id,
+        "categoria2_id": cat2_id,
         "flujo_caja_categoria_1": flujo_caja_categoria_1,
         "flujo_caja_categoria_2": flujo_caja_categoria_2,
         "items": items_out,
@@ -735,8 +783,10 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT gi.gasto_id, gi.id, gi.descripcion, gi.monto, gi.categoria1_id, "
-                    "c.nombre, c.color, c.icono "
-                    "FROM gastos_items gi LEFT JOIN gastos_categorias c ON gi.categoria1_id = c.id "
+                    "c1.nombre, c1.color, c1.icono, gi.categoria2_id, c2.nombre "
+                    "FROM gastos_items gi "
+                    "LEFT JOIN gastos_categorias c1 ON gi.categoria1_id = c1.id "
+                    "LEFT JOIN gastos_categorias c2 ON gi.categoria2_id = c2.id "
                     "WHERE gi.gasto_id = ANY(%s) ORDER BY gi.id",
                     (gasto_ids,),
                 )
@@ -745,6 +795,7 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
                         "id": r[1], "descripcion": r[2] or "", "monto": r[3] or 0,
                         "categoria1_id": r[4], "categoria1_nombre": r[5] or "",
                         "categoria1_color": r[6] or "#6b7280", "categoria1_icono": r[7] or "📌",
+                        "categoria2_id": r[8], "categoria2_nombre": r[9] or "",
                     })
 
     def _build_row(r):
@@ -953,10 +1004,11 @@ async def list_gastos_insumos(q: str = "", year: int = 0, month: int = 0, x_admi
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     sql = f"""
         SELECT gi.id, gi.gasto_id, gi.descripcion, gi.monto, g.comercio, g.fecha,
-               gi.categoria1_id, c.nombre, c.color, c.icono
+               gi.categoria1_id, c1.nombre, c1.color, c1.icono, gi.categoria2_id, c2.nombre
         FROM gastos_items gi
         JOIN gastos g ON gi.gasto_id = g.id
-        LEFT JOIN gastos_categorias c ON gi.categoria1_id = c.id
+        LEFT JOIN gastos_categorias c1 ON gi.categoria1_id = c1.id
+        LEFT JOIN gastos_categorias c2 ON gi.categoria2_id = c2.id
         {where}
         ORDER BY g.fecha DESC, gi.id DESC
     """
@@ -976,5 +1028,6 @@ async def list_gastos_insumos(q: str = "", year: int = 0, month: int = 0, x_admi
             "proveedor": r[4] or "", "fecha": str(r[5]) if r[5] else None,
             "categoria1_id": r[6], "categoria1_nombre": r[7] or "",
             "categoria1_color": r[8] or "#6b7280", "categoria1_icono": r[9] or "📌",
+            "categoria2_id": r[10], "categoria2_nombre": r[11] or "",
         })
     return {"ok": True, "items": out}

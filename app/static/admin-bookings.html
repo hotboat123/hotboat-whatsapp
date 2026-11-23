@@ -14875,7 +14875,7 @@ async function openEditGasto(id){
   }
   _gastosItems = (g.items || []).map(it => ({
     descripcion: it.descripcion || '', monto: it.monto || 0,
-    categoria_1_id: it.categoria1_id || null, categoria_2_id: null,
+    categoria_1_id: it.categoria1_id || null, categoria_2_id: it.categoria2_id || null,
   }));
   renderGastosItems();
   if(g.imagen_path){
@@ -15258,17 +15258,22 @@ async function scanGastosReceipt(){
     if(res.categoria1_id){
       document.getElementById('gastos-cat1').value = res.categoria1_id;
       loadGastosCat2();
+      if(res.categoria2_id){
+        await new Promise(r => requestAnimationFrame(r));
+        document.getElementById('gastos-cat2').value = res.categoria2_id;
+      }
     }
     calcGastosIva();
     if(res.items && res.items.length > 1){
       // Per-item AI suggestion wins; otherwise default to whatever
-      // Categoría 1 the whole-receipt suggestion just set above.
+      // Categoría 1/2 the whole-receipt suggestion just set above.
       const mainCat1 = document.getElementById('gastos-cat1').value || null;
+      const mainCat2 = document.getElementById('gastos-cat2').value || null;
       _gastosItems = res.items.map(it => ({
         descripcion: it.descripcion || '',
         monto: it.monto || 0,
         categoria_1_id: it.categoria1_id || mainCat1,
-        categoria_2_id: null,
+        categoria_2_id: it.categoria2_id || mainCat2,
       }));
       renderGastosItems();
       showToast(`✅ Escaneado con IA — ${res.items.length} ítems detectados, revisá categorías`);
