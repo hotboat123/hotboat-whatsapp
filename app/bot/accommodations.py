@@ -12,30 +12,32 @@ from app.utils.media_handler import get_accommodation_image_path
 
 logger = logging.getLogger(__name__)
 
-# Fallback data used if DB is unavailable at startup
+# Fallback data used if DB is unavailable at startup. price_from is HotBoat's
+# 20% commission (2026-11 pricing-model change) — precio_proveedor is the
+# other 80%, paid by the customer directly to the provider on site.
 _FALLBACK_ROWS = [
     {"slug": "open-sky-domo-tina",  "name": "Open Sky – Domo con Tina de Baño",
-     "group_name": "Open Sky",          "price_from": 100000, "cost_from": 0, "capacity": 2,
+     "group_name": "Open Sky",          "price_from": 20000, "cost_from": 0, "precio_proveedor": 80000, "capacity": 2,
      "description": "Domo transparente con tina de baño interior, vista a las estrellas.",
      "image_path": None, "is_active": True, "display_order": 10},
     {"slug": "open-sky-domo-hidro",  "name": "Open Sky – Domo con Hidromasaje",
-     "group_name": "Open Sky",          "price_from": 120000, "cost_from": 0, "capacity": 2,
+     "group_name": "Open Sky",          "price_from": 24000, "cost_from": 0, "precio_proveedor": 96000, "capacity": 2,
      "description": "Domo transparente con hidromasaje interior, la experiencia más exclusiva.",
      "image_path": None, "is_active": True, "display_order": 11},
     {"slug": "relikura-cabana-2",    "name": "Raíces de Relikura – Cabaña 2 personas",
-     "group_name": "Raíces de Relikura","price_from": 60000,  "cost_from": 0, "capacity": 2,
+     "group_name": "Raíces de Relikura","price_from": 12000, "cost_from": 0, "precio_proveedor": 48000, "capacity": 2,
      "description": "Cabaña junto al río con tinaja, ideal para parejas.",
      "image_path": None, "is_active": True, "display_order": 20},
     {"slug": "relikura-cabana-4",    "name": "Raíces de Relikura – Cabaña 4 personas",
-     "group_name": "Raíces de Relikura","price_from": 80000,  "cost_from": 0, "capacity": 4,
+     "group_name": "Raíces de Relikura","price_from": 16000, "cost_from": 0, "precio_proveedor": 64000, "capacity": 4,
      "description": "Cabaña espaciosa junto al río, ideal para familias.",
      "image_path": None, "is_active": True, "display_order": 21},
     {"slug": "relikura-cabana-6",    "name": "Raíces de Relikura – Cabaña 6 personas",
-     "group_name": "Raíces de Relikura","price_from": 100000, "cost_from": 0, "capacity": 6,
+     "group_name": "Raíces de Relikura","price_from": 20000, "cost_from": 0, "precio_proveedor": 80000, "capacity": 6,
      "description": "Cabaña grande junto al río, perfecta para grupos.",
      "image_path": None, "is_active": True, "display_order": 22},
     {"slug": "relikura-hostal",      "name": "Raíces de Relikura – Hostal",
-     "group_name": "Raíces de Relikura","price_from": 20000,  "cost_from": 0, "capacity": 1,
+     "group_name": "Raíces de Relikura","price_from": 4000,  "cost_from": 0, "precio_proveedor": 16000, "capacity": 1,
      "description": "Hostal económico por persona, tinaja compartida.",
      "image_path": None, "is_active": True, "display_order": 23},
 ]
@@ -58,7 +60,8 @@ def _load_db_rows() -> List[dict]:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT slug, name, group_name, price_from, cost_from, capacity,"
+                    "SELECT slug, name, group_name, price_from, cost_from, "
+                    "       COALESCE(precio_proveedor,0) AS precio_proveedor, capacity,"
                     "       description, image_path, is_active, display_order"
                     " FROM alojamientos WHERE is_active=TRUE ORDER BY display_order, id"
                 )
@@ -78,6 +81,7 @@ class AccommodationInfo:
         self.group_name   = row.get("group_name", "")
         self.price_per_night = row.get("price_from", 0)
         self.cost_per_night  = row.get("cost_from", 0)
+        self.precio_proveedor = row.get("precio_proveedor", 0)
         self.capacity     = row.get("capacity", 2)
         self.description  = row.get("description", "")
         self.image_path_db = row.get("image_path")  # admin-uploaded image
@@ -136,6 +140,8 @@ class AccommodationsHandler:
 
             for acc in accs:
                 price_text = f"💰 ${acc.price_per_night:,} / noche ({acc.capacity} pers.)"
+                if acc.precio_proveedor:
+                    price_text += f"\n💵 + ${acc.precio_proveedor:,} directo en el lugar"
                 caption = (
                     f"*{acc.name}*\n\n"
                     f"{acc.description}\n\n"

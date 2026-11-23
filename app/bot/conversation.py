@@ -3673,7 +3673,7 @@ Escribe el número que prefieras 🚤"""
                 conversation["metadata"]["experience_flow"] = {
                     "type": "horseback",
                     "step": "confirming",
-                    "price": 50000,
+                    "price": 10000,  # 20% comisión HotBoat — resto ($40.000) se paga al proveedor en el lugar
                     "name": "Cabalgata Parque Ojos del Caburguá"
                 }
                 return get_text("horseback_options", language)
@@ -3713,11 +3713,11 @@ Escribe el número que prefieras 🚤"""
                     # User selects level (bajo or alto)
                     if "1" in message_clean or "bajo" in message_clean or "low" in message_clean or "baixo" in message_clean:
                         flow["level"] = "bajo"
-                        flow["price"] = 30000
+                        flow["price"] = 6000  # 20% comisión HotBoat — resto ($24.000) se paga al proveedor en el lugar
                         flow["name"] = "Rafting Bajo"
                     elif "2" in message_clean or "alto" in message_clean or "high" in message_clean:
                         flow["level"] = "alto"
-                        flow["price"] = 40000
+                        flow["price"] = 8000  # 20% comisión HotBoat — resto ($32.000) se paga al proveedor en el lugar
                         flow["name"] = "Rafting Alto"
                     else:
                         return get_text("rafting_options", language)
@@ -3823,17 +3823,19 @@ Escribe el número que prefieras 🚤"""
             elif exp_type == "navigation":
                 if step == "selecting_option":
                     # Define navigation options
+                    # price = 20% comisión HotBoat (ver migración 2026-11); el resto
+                    # (80%) se paga al proveedor en el lugar.
                     navigation_options = {
-                        "1": {"name": "Travesía 30 min (2p)", "price": 300000, "people": 2},
-                        "2": {"name": "Travesía 30 min (4p)", "price": 340000, "people": 4},
-                        "3": {"name": "Travesía 30 min (6p)", "price": 360000, "people": 6},
-                        "4": {"name": "Travesía 30 min (8p)", "price": 380000, "people": 8},
-                        "5": {"name": "Travesía 30 min (10p)", "price": 400000, "people": 10},
-                        "6": {"name": "Yave a vela Akimbo 2p (1.5hr)", "price": 120000, "people": 2},
-                        "7": {"name": "Yave a vela Akimbo 3p (1.5hr)", "price": 130000, "people": 3},
-                        "8": {"name": "Yave a vela Akimbo 4p (1.5hr)", "price": 140000, "people": 4},
-                        "9": {"name": "Yave a vela Akimbo 5p (1.5hr)", "price": 150000, "people": 5},
-                        "10": {"name": "Yave a vela Akimbo 5p (1.5hr)", "price": 160000, "people": 5}
+                        "1": {"name": "Travesía 30 min (2p)", "price": 60000, "people": 2},
+                        "2": {"name": "Travesía 30 min (4p)", "price": 68000, "people": 4},
+                        "3": {"name": "Travesía 30 min (6p)", "price": 72000, "people": 6},
+                        "4": {"name": "Travesía 30 min (8p)", "price": 76000, "people": 8},
+                        "5": {"name": "Travesía 30 min (10p)", "price": 80000, "people": 10},
+                        "6": {"name": "Yave a vela Akimbo 2p (1.5hr)", "price": 24000, "people": 2},
+                        "7": {"name": "Yave a vela Akimbo 3p (1.5hr)", "price": 26000, "people": 3},
+                        "8": {"name": "Yave a vela Akimbo 4p (1.5hr)", "price": 28000, "people": 4},
+                        "9": {"name": "Yave a vela Akimbo 5p (1.5hr)", "price": 30000, "people": 5},
+                        "10": {"name": "Yave a vela Akimbo 5p (1.5hr)", "price": 32000, "people": 5}
                     }
                     
                     # Parse user selection

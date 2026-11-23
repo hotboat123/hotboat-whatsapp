@@ -1332,6 +1332,7 @@ def ensure_alojamientos_table() -> None:
                 ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS group_name_pt TEXT DEFAULT '';
                 ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS price_from INTEGER DEFAULT 0;
                 ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS cost_from INTEGER DEFAULT 0;
+                ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS precio_proveedor INTEGER DEFAULT 0;
                 ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS capacity INTEGER DEFAULT 2;
                 ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS total_units INTEGER DEFAULT 1;
                 ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS owner_whatsapp TEXT DEFAULT '';

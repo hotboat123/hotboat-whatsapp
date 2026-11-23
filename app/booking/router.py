@@ -1680,12 +1680,11 @@ async def create_accommodation_booking(request: AlojBookingRequest):
     high_season_aloj = is_high_season_web_addon(check_in, "alojamiento", slug_hs)
 
     total_aloj = request.price_per_night * nights
-    is_combined_with_hotboat = bool(
-        (request.hotboat_booking_ref or "").strip()
-        or (request.hotboat_date and request.hotboat_time and request.hotboat_people)
-    )
-    # Alojamiento solo: cobrar 100%. Combinado con HotBoat: 50% del alojamiento.
-    deposit_aloj = round(total_aloj * 0.5) if is_combined_with_hotboat else int(total_aloj)
+    # price_per_night ya es la comisión de HotBoat (20% del precio anterior,
+    # ver migración 2026-11) — se cobra siempre completa, solo o combinado
+    # con HotBoat; el otro 80% ahora lo paga el cliente directo al
+    # proveedor en el lugar (ver precio_proveedor).
+    deposit_aloj = int(total_aloj)
 
     # Generate accommodation booking ref
     year    = datetime.now(CHILE_TZ).year
@@ -1974,8 +1973,11 @@ async def create_experience_booking(request: ExperienceBookingRequest):
 
     total_price = int(request.price_per_person) * int(request.num_people) * int(days_count)
     hotboat_ref = (request.hotboat_booking_ref or "").strip()
-    # Experiencia sola: cobrar 100%. Combinada con HotBoat: 50%.
-    deposit_paid = round(total_price * 0.5) if hotboat_ref else int(total_price)
+    # price_per_person ya es la comisión de HotBoat (20% del precio anterior,
+    # ver migración 2026-11) — se cobra siempre completa, solo o combinada
+    # con HotBoat; el otro 80% ahora lo paga el cliente directo al
+    # proveedor en el lugar (ver precio_proveedor).
+    deposit_paid = int(total_price)
     exp_ref = _gen_extras_booking_ref("EX")
 
     # Insert calendar row first so it exists even if payment fails
@@ -2196,7 +2198,10 @@ async def create_experience_cart_booking(request: ExperienceCartRequest):
             raise HTTPException(status_code=400, detail="Experiencia incompleta en carrito")
 
         total_price = int(it.price_per_person) * int(it.num_people) * int(days_count)
-        deposit_paid = round(total_price * 0.5) if hotboat_ref else int(total_price)
+        # price_per_person ya es la comisión de HotBoat (20%, ver migración
+        # 2026-11) — se cobra siempre completa; el pack (arriba) queda con
+        # su propio modelo de precio sin cambios.
+        deposit_paid = int(total_price)
         exp_ref = _gen_extras_booking_ref("EX")
 
         with _gc() as conn:

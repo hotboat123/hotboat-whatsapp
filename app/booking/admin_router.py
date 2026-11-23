@@ -3190,6 +3190,11 @@ def _ensure_experiences_admin_columns(cur) -> None:
     cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_pt TEXT")
     cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
     cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+    # precio_proveedor: what the customer now pays the provider directly on
+    # site (2026-11 commission-model change) — price_per_person is HotBoat's
+    # 20% cut only; cost_per_person is retired (always 0) since HotBoat no
+    # longer collects/forwards the other 80%.
+    cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS precio_proveedor INTEGER DEFAULT 0")
 
 
 def _ensure_packs_admin_columns(cur) -> None:
@@ -3212,7 +3217,8 @@ async def admin_list_experiencias(x_admin_key: str = Header(...)):
                 "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
                 "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
                 "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
-                "price_per_person,cost_per_person,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "price_per_person,cost_per_person,COALESCE(precio_proveedor,0) AS precio_proveedor,"
+                "image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
                 "is_active,display_order FROM experiences ORDER BY display_order,id"
             )
             cols = [d.name for d in cur.description]
@@ -3231,6 +3237,7 @@ class ExperienceBody(BaseModel):
     admin_whatsapp: str = ""
     price_per_person: int = 0
     cost_per_person: int = 0
+    precio_proveedor: int = 0
     image_path: Optional[str] = None
     extra_images: List[str] = []
     is_active: bool = True
@@ -3245,11 +3252,11 @@ async def admin_create_experiencia(body: ExperienceBody, x_admin_key: str = Head
             _ensure_experiences_admin_columns(cur)
             cur.execute(
                 "INSERT INTO experiences (slug,name,icon,description,name_en,name_pt,description_en,description_pt,"
-                "admin_whatsapp,price_per_person,cost_per_person,image_path,extra_images,is_active,display_order)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
+                "admin_whatsapp,price_per_person,cost_per_person,precio_proveedor,image_path,extra_images,is_active,display_order)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
                 (body.slug, body.name, body.icon, body.description, body.name_en, body.name_pt,
                  body.description_en, body.description_pt, body.admin_whatsapp,
-                 body.price_per_person, body.cost_per_person,
+                 body.price_per_person, body.cost_per_person, body.precio_proveedor,
                  body.image_path, json.dumps(body.extra_images), body.is_active, body.display_order),
             )
             new_id = cur.fetchone()[0]
@@ -3266,11 +3273,11 @@ async def admin_update_experiencia(exp_id: int, body: ExperienceBody, x_admin_ke
             cur.execute(
                 "UPDATE experiences SET slug=%s,name=%s,icon=%s,description=%s,"
                 "name_en=%s,name_pt=%s,description_en=%s,description_pt=%s,admin_whatsapp=%s,"
-                "price_per_person=%s,cost_per_person=%s,image_path=%s,extra_images=%s::jsonb,is_active=%s,"
+                "price_per_person=%s,cost_per_person=%s,precio_proveedor=%s,image_path=%s,extra_images=%s::jsonb,is_active=%s,"
                 "display_order=%s,updated_at=NOW() WHERE id=%s",
                 (body.slug, body.name, body.icon, body.description,
                  body.name_en, body.name_pt, body.description_en, body.description_pt, body.admin_whatsapp,
-                 body.price_per_person, body.cost_per_person,
+                 body.price_per_person, body.cost_per_person, body.precio_proveedor,
                  body.image_path, json.dumps(body.extra_images), body.is_active, body.display_order, exp_id),
             )
             conn.commit()
@@ -3339,7 +3346,8 @@ async def admin_list_alojamientos(x_admin_key: str = Header(...)):
                 "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
                 "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
                 "COALESCE(group_name_en,'') AS group_name_en,COALESCE(group_name_pt,'') AS group_name_pt,"
-                "price_from,cost_from,capacity,total_units,owner_whatsapp,image_path,is_active,display_order,"
+                "price_from,cost_from,COALESCE(precio_proveedor,0) AS precio_proveedor,"
+                "capacity,total_units,owner_whatsapp,image_path,is_active,display_order,"
                 "COALESCE(extra_images,'[]'::jsonb) AS extra_images"
                 " FROM alojamientos ORDER BY display_order,id"
             )
@@ -3361,6 +3369,7 @@ class AlojamientoBody(BaseModel):
     group_name_pt: str = ""
     price_from: int = 0
     cost_from: int = 0
+    precio_proveedor: int = 0
     capacity: int = 2
     total_units: int = 1
     owner_whatsapp: str = ""
@@ -3378,10 +3387,10 @@ async def admin_create_alojamiento(body: AlojamientoBody, x_admin_key: str = Hea
             cur.execute(
                 "INSERT INTO alojamientos"
                 " (slug,name,group_name,icon,description,name_en,name_pt,description_en,description_pt,"
-                "  group_name_en,group_name_pt,price_from,cost_from,capacity,total_units,owner_whatsapp,"
+                "  group_name_en,group_name_pt,price_from,cost_from,precio_proveedor,capacity,total_units,owner_whatsapp,"
                 "  image_path,extra_images,is_active,display_order)"
                 " VALUES ("
-                + ",".join(["%s"] * 16)
+                + ",".join(["%s"] * 17)
                 + ",%s,%s::jsonb,%s,%s) RETURNING id",
                 (
                     body.slug,
@@ -3397,6 +3406,7 @@ async def admin_create_alojamiento(body: AlojamientoBody, x_admin_key: str = Hea
                     body.group_name_pt,
                     body.price_from,
                     body.cost_from,
+                    body.precio_proveedor,
                     body.capacity,
                     body.total_units,
                     body.owner_whatsapp,
@@ -3420,12 +3430,12 @@ async def admin_update_alojamiento(aloj_id: int, body: AlojamientoBody, x_admin_
                 "UPDATE alojamientos SET slug=%s,name=%s,group_name=%s,icon=%s,description=%s,"
                 "name_en=%s,name_pt=%s,description_en=%s,description_pt=%s,"
                 "group_name_en=%s,group_name_pt=%s,"
-                "price_from=%s,cost_from=%s,capacity=%s,total_units=%s,owner_whatsapp=%s,image_path=%s,"
+                "price_from=%s,cost_from=%s,precio_proveedor=%s,capacity=%s,total_units=%s,owner_whatsapp=%s,image_path=%s,"
                 "extra_images=%s::jsonb,is_active=%s,display_order=%s WHERE id=%s",
                 (body.slug, body.name, body.group_name, body.icon, body.description,
                  body.name_en, body.name_pt, body.description_en, body.description_pt,
                  body.group_name_en, body.group_name_pt,
-                 body.price_from, body.cost_from, body.capacity, body.total_units, body.owner_whatsapp,
+                 body.price_from, body.cost_from, body.precio_proveedor, body.capacity, body.total_units, body.owner_whatsapp,
                  body.image_path, json.dumps(body.extra_images),
                  body.is_active, body.display_order, aloj_id),
             )

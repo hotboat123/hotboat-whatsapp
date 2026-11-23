@@ -116,7 +116,7 @@ def list_alojamientos(active_only: bool = True, lang: str = Query("es", descript
                  "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
                  "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
                  "COALESCE(group_name_en,'') AS group_name_en,COALESCE(group_name_pt,'') AS group_name_pt,"
-                 "price_from,cost_from,capacity,image_path,"
+                 "price_from,cost_from,COALESCE(precio_proveedor,0) AS precio_proveedor,capacity,image_path,"
                  "COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
                  "is_active,display_order"
                  " FROM alojamientos")
@@ -209,12 +209,14 @@ def list_experiencias(active_only: bool = True, lang: str = Query("es", descript
             cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS description_pt TEXT")
             cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS admin_whatsapp TEXT")
             cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS extra_images JSONB DEFAULT '[]'::jsonb")
+            cur.execute("ALTER TABLE experiences ADD COLUMN IF NOT EXISTS precio_proveedor INTEGER DEFAULT 0")
             q = (
                 "SELECT id,slug,name,icon,description,"
                 "COALESCE(name_en,'') AS name_en,COALESCE(name_pt,'') AS name_pt,"
                 "COALESCE(description_en,'') AS description_en,COALESCE(description_pt,'') AS description_pt,"
                 "COALESCE(admin_whatsapp,'') AS admin_whatsapp,"
-                "price_per_person,cost_per_person,image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
+                "price_per_person,cost_per_person,COALESCE(precio_proveedor,0) AS precio_proveedor,"
+                "image_path,COALESCE(extra_images,'[]'::jsonb) AS extra_images,"
                 "is_active,display_order FROM experiences"
             )
             if active_only:

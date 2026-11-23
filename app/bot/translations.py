@@ -1708,12 +1708,14 @@ Digite o número da sua escolha (1, 2 ou 3)
 *Opciones Disponibles:*
 
 1️⃣ *Rafting Bajo* - Nivel principiante
-   💰 $30.000 por persona
+   💰 $6.000 por persona
+   💵 + $24.000 directo en el lugar
    ⏱️ Duración: 2-3 horas
    🌊 Dificultad: Baja (ideal para familias)
 
 2️⃣ *Rafting Alto* - Nivel avanzado
-   💰 $40.000 por persona
+   💰 $8.000 por persona
+   💵 + $32.000 directo en el lugar
    ⏱️ Duración: 3-4 horas
    🌊 Dificultad: Alta (más adrenalina)
 
@@ -1730,12 +1732,14 @@ Escribe 1 para Bajo o 2 para Alto
 *Available Options:*
 
 1️⃣ *Low Rafting* - Beginner level
-   💰 $30,000 CLP per person
+   💰 $6,000 CLP per person
+   💵 + $24,000 CLP paid directly on site
    ⏱️ Duration: 2-3 hours
    🌊 Difficulty: Low (ideal for families)
 
 2️⃣ *High Rafting* - Advanced level
-   💰 $40,000 CLP per person
+   💰 $8,000 CLP per person
+   💵 + $32,000 CLP paid directly on site
    ⏱️ Duration: 3-4 hours
    🌊 Difficulty: High (more adrenaline)
 
@@ -1752,12 +1756,14 @@ Type 1 for Low or 2 for High
 *Opções Disponíveis:*
 
 1️⃣ *Rafting Baixo* - Nível iniciante
-   💰 $30.000 CLP por pessoa
+   💰 $6.000 CLP por pessoa
+   💵 + $24.000 CLP direto no local
    ⏱️ Duração: 2-3 horas
    🌊 Dificuldade: Baixa (ideal para famílias)
 
 2️⃣ *Rafting Alto* - Nível avançado
-   💰 $40.000 CLP por pessoa
+   💰 $8.000 CLP por pessoa
+   💵 + $32.000 CLP direto no local
    ⏱️ Duração: 3-4 horas
    🌊 Dificuldade: Alta (mais adrenalina)
 
@@ -1777,7 +1783,8 @@ Digite 1 para Baixo ou 2 para Alto
 *Opciones Disponibles:*
 
 1️⃣ *Cabalgata Parque Ojos del Caburguá*
-   💰 $50.000 por persona
+   💰 $10.000 por persona
+   💵 + $40.000 directo en el lugar
    ⏱️ Duración: 3-4 horas
    🌲 Incluye: Guía, equipo completo y snack
 
@@ -1794,7 +1801,8 @@ Escribe 1 para confirmar o "Menu" para volver
 *Available Options:*
 
 1️⃣ *Horseback Riding Ojos del Caburguá Park*
-   💰 $50,000 CLP per person
+   💰 $10,000 CLP per person
+   💵 + $40,000 CLP paid directly on site
    ⏱️ Duration: 3-4 hours
    🌲 Includes: Guide, complete equipment and snack
 
@@ -1811,7 +1819,8 @@ Type 1 to confirm or "Menu" to go back
 *Opções Disponíveis:*
 
 1️⃣ *Cavalgada Parque Ojos del Caburguá*
-   💰 $50.000 CLP por pessoa
+   💰 $10.000 CLP por pessoa
+   💵 + $40.000 CLP direto no local
    ⏱️ Duração: 3-4 horas
    🌲 Inclui: Guia, equipamento completo e lanche
 
@@ -1830,17 +1839,17 @@ Digite 1 para confirmar ou "Menu" para voltar
 
 *Opciones Disponibles:*
 
-1️⃣ *Travesía 30 minutos (2p)* - $300.000
-2️⃣ *Travesía 30 minutos (4p)* - $340.000
-3️⃣ *Travesía 30 minutos (6p)* - $360.000
-4️⃣ *Travesía 30 minutos (8p)* - $380.000
-5️⃣ *Travesía 30 minutos (10p)* - $400.000
+1️⃣ *Travesía 30 minutos (2p)* - $60.000 (+ $240.000 en el lugar)
+2️⃣ *Travesía 30 minutos (4p)* - $68.000 (+ $272.000 en el lugar)
+3️⃣ *Travesía 30 minutos (6p)* - $72.000 (+ $288.000 en el lugar)
+4️⃣ *Travesía 30 minutos (8p)* - $76.000 (+ $304.000 en el lugar)
+5️⃣ *Travesía 30 minutos (10p)* - $80.000 (+ $320.000 en el lugar)
 
-6️⃣ *Yave a vela Akimbo 2p (1.5hr)* - $120.000
-7️⃣ *Yave a vela Akimbo 3p (1.5hr)* - $130.000
-8️⃣ *Yave a vela Akimbo 4p (1.5hr)* - $140.000
-9️⃣ *Yave a vela Akimbo 5p (1.5hr)* - $150.000
-🔟 *Yave a vela Akimbo 5p (1.5hr)* - $160.000
+6️⃣ *Yave a vela Akimbo 2p (1.5hr)* - $24.000 (+ $96.000 en el lugar)
+7️⃣ *Yave a vela Akimbo 3p (1.5hr)* - $26.000 (+ $104.000 en el lugar)
+8️⃣ *Yave a vela Akimbo 4p (1.5hr)* - $28.000 (+ $112.000 en el lugar)
+9️⃣ *Yave a vela Akimbo 5p (1.5hr)* - $30.000 (+ $120.000 en el lugar)
+🔟 *Yave a vela Akimbo 5p (1.5hr)* - $32.000 (+ $128.000 en el lugar)
 
 *¿Qué opción prefieres?*
 
@@ -1854,17 +1863,17 @@ Escribe el número de tu elección (1-10)
 
 *Available Options:*
 
-1️⃣ *30-minute crossing (2p)* - $300,000 CLP
-2️⃣ *30-minute crossing (4p)* - $340,000 CLP
-3️⃣ *30-minute crossing (6p)* - $360,000 CLP
-4️⃣ *30-minute crossing (8p)* - $380,000 CLP
-5️⃣ *30-minute crossing (10p)* - $400,000 CLP
+1️⃣ *30-minute crossing (2p)* - $60,000 CLP (+ $240,000 paid on site)
+2️⃣ *30-minute crossing (4p)* - $68,000 CLP (+ $272,000 paid on site)
+3️⃣ *30-minute crossing (6p)* - $72,000 CLP (+ $288,000 paid on site)
+4️⃣ *30-minute crossing (8p)* - $76,000 CLP (+ $304,000 paid on site)
+5️⃣ *30-minute crossing (10p)* - $80,000 CLP (+ $320,000 paid on site)
 
-6️⃣ *Sailboat Akimbo 2p (1.5hr)* - $120,000 CLP
-7️⃣ *Sailboat Akimbo 3p (1.5hr)* - $130,000 CLP
-8️⃣ *Sailboat Akimbo 4p (1.5hr)* - $140,000 CLP
-9️⃣ *Sailboat Akimbo 5p (1.5hr)* - $150,000 CLP
-🔟 *Sailboat Akimbo 5p (1.5hr)* - $160,000 CLP
+6️⃣ *Sailboat Akimbo 2p (1.5hr)* - $24,000 CLP (+ $96,000 paid on site)
+7️⃣ *Sailboat Akimbo 3p (1.5hr)* - $26,000 CLP (+ $104,000 paid on site)
+8️⃣ *Sailboat Akimbo 4p (1.5hr)* - $28,000 CLP (+ $112,000 paid on site)
+9️⃣ *Sailboat Akimbo 5p (1.5hr)* - $30,000 CLP (+ $120,000 paid on site)
+🔟 *Sailboat Akimbo 5p (1.5hr)* - $32,000 CLP (+ $128,000 paid on site)
 
 *Which option do you prefer?*
 
@@ -1878,17 +1887,17 @@ Type the number of your choice (1-10)
 
 *Opções Disponíveis:*
 
-1️⃣ *Travessia 30 minutos (2p)* - $300.000 CLP
-2️⃣ *Travessia 30 minutos (4p)* - $340.000 CLP
-3️⃣ *Travessia 30 minutos (6p)* - $360.000 CLP
-4️⃣ *Travessia 30 minutos (8p)* - $380.000 CLP
-5️⃣ *Travessia 30 minutos (10p)* - $400.000 CLP
+1️⃣ *Travessia 30 minutos (2p)* - $60.000 CLP (+ $240.000 no local)
+2️⃣ *Travessia 30 minutos (4p)* - $68.000 CLP (+ $272.000 no local)
+3️⃣ *Travessia 30 minutos (6p)* - $72.000 CLP (+ $288.000 no local)
+4️⃣ *Travessia 30 minutos (8p)* - $76.000 CLP (+ $304.000 no local)
+5️⃣ *Travessia 30 minutos (10p)* - $80.000 CLP (+ $320.000 no local)
 
-6️⃣ *Veleiro Akimbo 2p (1.5hr)* - $120.000 CLP
-7️⃣ *Veleiro Akimbo 3p (1.5hr)* - $130.000 CLP
-8️⃣ *Veleiro Akimbo 4p (1.5hr)* - $140.000 CLP
-9️⃣ *Veleiro Akimbo 5p (1.5hr)* - $150.000 CLP
-🔟 *Veleiro Akimbo 5p (1.5hr)* - $160.000 CLP
+6️⃣ *Veleiro Akimbo 2p (1.5hr)* - $24.000 CLP (+ $96.000 no local)
+7️⃣ *Veleiro Akimbo 3p (1.5hr)* - $26.000 CLP (+ $104.000 no local)
+8️⃣ *Veleiro Akimbo 4p (1.5hr)* - $28.000 CLP (+ $112.000 no local)
+9️⃣ *Veleiro Akimbo 5p (1.5hr)* - $30.000 CLP (+ $120.000 no local)
+🔟 *Veleiro Akimbo 5p (1.5hr)* - $32.000 CLP (+ $128.000 no local)
 
 *Qual opção você prefere?*
 
