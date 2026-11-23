@@ -937,7 +937,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Precio/noche ($)</label><input id="aloj-price" type="number" min="0" value="0"></div>
-            <div class="form-group-adm"><label>Costo/noche ($)</label><input id="aloj-cost" type="number" min="0" value="0"></div>
+            <div class="form-group-adm" title="Lo que el cliente paga directo al proveedor en el lugar (no pasa por HotBoat)"><label>Precio proveedor/noche ($)</label><input id="aloj-precio-proveedor" type="number" min="0" value="0"></div>
             <div class="form-group-adm"><label>Orden</label><input id="aloj-order" type="number" min="0" value="0"></div>
             <div style="display:flex;align-items:flex-end;padding-bottom:.6rem">
               <label class="toggle-wrap" style="flex-shrink:0"><input type="checkbox" id="aloj-active" checked><span class="toggle-slider"></span></label>
@@ -1033,7 +1033,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
           </details>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
             <div class="form-group-adm"><label>Precio/persona ($)</label><input id="exp-price" type="number" min="0" value="0"></div>
-            <div class="form-group-adm"><label>Costo/persona ($)</label><input id="exp-cost" type="number" min="0" value="0"></div>
+            <div class="form-group-adm" title="Lo que el cliente paga directo al proveedor en el lugar (no pasa por HotBoat)"><label>Precio proveedor/persona ($)</label><input id="exp-precio-proveedor" type="number" min="0" value="0"></div>
           </div>
           <div class="form-group-adm"><label>Orden de display</label><input id="exp-order" type="number" min="0" value="0"></div>
           <div style="display:flex;align-items:center;gap:.75rem;margin:.8rem 0">
@@ -10173,7 +10173,7 @@ function renderAlojList(){
           <div style="font-size:.8rem;margin:.2rem 0">
             <strong style="color:var(--gold)">$${Number(a.price_from||0).toLocaleString('es-CL')}/noche</strong>
             &nbsp;·&nbsp; ${a.capacity||1} persona${(a.capacity||1)>1?'s':''}
-            ${a.cost_from ? `&nbsp;·&nbsp; <span style="color:var(--muted)">costo $${Number(a.cost_from).toLocaleString('es-CL')}</span>` : ''}
+            ${a.precio_proveedor ? `&nbsp;·&nbsp; <span style="color:var(--muted)">proveedor $${Number(a.precio_proveedor).toLocaleString('es-CL')} (en el lugar)</span>` : ''}
           </div>
           ${a.owner_whatsapp ? `<div style="font-size:.75rem;color:var(--muted);margin:.1rem 0">📱 Admin: <a href="https://wa.me/${(a.owner_whatsapp).replace(/[^0-9]/g,'')}" target="_blank" style="color:#25D366">${a.owner_whatsapp}</a></div>` : '<div style="font-size:.75rem;color:#ff6b6b;margin:.1rem 0">⚠️ Sin WhatsApp admin</div>'}
           <span class="status-badge ${a.is_active?'badge-on':'badge-off'}">${a.is_active?'Activo':'Inactivo'}</span>
@@ -10207,7 +10207,7 @@ function openAlojModal(id){
   document.getElementById('aloj-capacity').value = a ? (a.capacity||2) : 2;
   document.getElementById('aloj-units').value = a ? (a.total_units||1) : 1;
   document.getElementById('aloj-price').value = a ? (a.price_from||0) : 0;
-  document.getElementById('aloj-cost').value = a ? (a.cost_from||0) : 0;
+  document.getElementById('aloj-precio-proveedor').value = a ? (a.precio_proveedor||0) : 0;
   document.getElementById('aloj-order').value = a ? (a.display_order||0) : 0;
   document.getElementById('aloj-active').checked = a ? a.is_active : true;
   // Build image list: main + extras
@@ -10245,7 +10245,7 @@ async function saveAloj(){
     capacity: +document.getElementById('aloj-capacity').value||2,
     total_units: +document.getElementById('aloj-units').value||1,
     price_from: +document.getElementById('aloj-price').value||0,
-    cost_from: +document.getElementById('aloj-cost').value||0,
+    precio_proveedor: +document.getElementById('aloj-precio-proveedor').value||0,
     display_order: +document.getElementById('aloj-order').value||0,
     is_active: document.getElementById('aloj-active').checked,
     image_path: _alojImagesList[0] || null,
@@ -10434,7 +10434,7 @@ function renderExpList(){
       <div class="item-body">
         <div style="font-weight:700;font-size:.95rem">${e.icon} ${e.name}</div>
         <div style="color:var(--muted);font-size:.78rem;margin:.2rem 0">${e.description||''}</div>
-        <div style="font-size:.8rem">Precio: <strong>$${Number(e.price_per_person).toLocaleString('es-CL')}/persona</strong> · Costo: $${Number(e.cost_per_person).toLocaleString('es-CL')}</div>
+        <div style="font-size:.8rem">Precio: <strong>$${Number(e.price_per_person).toLocaleString('es-CL')}/persona</strong> · Proveedor (en el lugar): $${Number(e.precio_proveedor||0).toLocaleString('es-CL')}</div>
         <span class="status-badge ${e.is_active?'badge-on':'badge-off'}" style="margin-top:.35rem">${e.is_active?'Activa':'Inactiva'}</span>
       </div>
       <div class="item-actions">
@@ -10458,7 +10458,7 @@ function openExpModal(id){
   document.getElementById('exp-desc-en').value = e ? (e.description_en||'') : '';
   document.getElementById('exp-desc-pt').value = e ? (e.description_pt||'') : '';
   document.getElementById('exp-price').value = e ? e.price_per_person : 0;
-  document.getElementById('exp-cost').value = e ? e.cost_per_person : 0;
+  document.getElementById('exp-precio-proveedor').value = e ? (e.precio_proveedor||0) : 0;
   document.getElementById('exp-order').value = e ? e.display_order : 0;
   document.getElementById('exp-active').checked = e ? e.is_active : true;
   const allImgs = [];
@@ -10486,7 +10486,7 @@ async function saveExp(){
     description_en: document.getElementById('exp-desc-en').value.trim(),
     description_pt: document.getElementById('exp-desc-pt').value.trim(),
     price_per_person: +document.getElementById('exp-price').value||0,
-    cost_per_person: +document.getElementById('exp-cost').value||0,
+    precio_proveedor: +document.getElementById('exp-precio-proveedor').value||0,
     display_order: +document.getElementById('exp-order').value||0,
     is_active: document.getElementById('exp-active').checked,
     image_path: _expImagesList[0] || null,
