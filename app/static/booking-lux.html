@@ -43,6 +43,14 @@ body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min
 .menu-btn .icon{font-size:1.5rem}
 .menu-btn .label{font-weight:600;font-size:.9rem}
 .menu-btn .desc{font-size:.75rem;color:var(--muted)}
+.menu-btn-featured{
+  background:var(--coral);border-color:var(--coral);flex-direction:row;align-items:center;
+  gap:.7rem;padding:1.1rem 1.2rem;width:100%;
+}
+.menu-btn-featured:hover{background:var(--coral);filter:brightness(1.07)}
+.menu-btn-featured .icon{font-size:1.9rem}
+.menu-btn-featured .label{color:#fff;font-size:1.05rem}
+.menu-btn-featured .desc{color:rgba(255,255,255,.85)}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
   background:var(--coral);color:#fff;border:none;border-radius:var(--r);
@@ -369,7 +377,7 @@ const I18N = {
     steps: ['Fecha','Personas','Datos','Pago'],
     // Menu
     menuReservar: 'Reservar HotBoat', menuReservarDesc: 'Ver disponibilidad y fechas',
-    menuPrecios: 'Precios', menuPreciosDesc: 'Tarifas por persona',
+    menuPrecios: 'Precios y Ubicación', menuPreciosDesc: 'Tarifas y cómo llegar',
     menuCaract: 'Características', menuCaractDesc: 'Conoce la experiencia',
     menuExp: 'Otras experiencias', menuExpDesc: 'Tours y aventura',
     menuAloj: 'Alojamiento', menuAlojDesc: 'Cabañas y hospedaje',
@@ -498,7 +506,7 @@ const I18N = {
     loading: 'Loading...',
     steps: ['Date','People','Details','Payment'],
     menuReservar: 'Book HotBoat', menuReservarDesc: 'Check availability & dates',
-    menuPrecios: 'Prices', menuPreciosDesc: 'Rates per person',
+    menuPrecios: 'Prices & Location', menuPreciosDesc: 'Rates and how to get there',
     menuCaract: 'Features', menuCaractDesc: 'About the experience',
     menuExp: 'Other Experiences', menuExpDesc: 'Tours & adventure',
     menuAloj: 'Accommodation', menuAlojDesc: 'Cabins & lodging',
@@ -620,7 +628,7 @@ const I18N = {
     loading: 'Carregando...',
     steps: ['Data','Pessoas','Dados','Pagamento'],
     menuReservar: 'Reservar HotBoat', menuReservarDesc: 'Ver disponibilidade e datas',
-    menuPrecios: 'Preços', menuPreciosDesc: 'Tarifas por pessoa',
+    menuPrecios: 'Preços e Localização', menuPreciosDesc: 'Tarifas e como chegar',
     menuCaract: 'Características', menuCaractDesc: 'Conheça a experiência',
     menuExp: 'Outras experiências', menuExpDesc: 'Tours e aventura',
     menuAloj: 'Hospedagem', menuAlojDesc: 'Cabanas e alojamento',
@@ -988,22 +996,21 @@ function renderMenu(){
   renderLangSwitcher();
   mc.innerHTML = `
   <div class="card" style="padding-top:.8rem;padding-bottom:.8rem">
-    <div class="menu-grid">
-      <button class="menu-btn" onclick="goReservar()">
-        <span class="icon">📅</span><span class="label">${t('menuReservar')}</span>
+    <button class="menu-btn menu-btn-featured" onclick="goReservar()">
+      <span class="icon">📅</span>
+      <span style="display:flex;flex-direction:column;gap:.15rem">
+        <span class="label">${t('menuReservar')}</span>
         <span class="desc">${t('menuReservarDesc')}</span>
-      </button>
-      <button class="menu-btn" onclick="showPrices()">
+      </span>
+    </button>
+    <div class="menu-grid" style="margin-top:.75rem">
+      <button class="menu-btn" onclick="showPreciosUbicacion()">
         <span class="icon">💰</span><span class="label">${t('menuPrecios')}</span>
         <span class="desc">${t('menuPreciosDesc')}</span>
       </button>
       <button class="menu-btn" onclick="showFeatures()">
         <span class="icon">⚡</span><span class="label">${t('menuCaract')}</span>
         <span class="desc">Que incluye la experiencia</span>
-      </button>
-      <button class="menu-btn" onclick="showUbicacion()">
-        <span class="icon">📍</span><span class="label">Ubicacion</span>
-        <span class="desc">Como llegar · Mapa</span>
       </button>
       ${S.menuSettings.show_experiencias!==false?`
       <button class="menu-btn" onclick="showExperiencias()">
@@ -1218,7 +1225,7 @@ function renderExperienceCartPaymentScreen(itemCount){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
 }
 
-function showPrices(){
+function showPreciosUbicacion(){
   _trackEvent('view_prices');
   const rows = Object.entries(S.prices).map(([n,p])=>`
     <div class="summary-row">
@@ -1231,6 +1238,23 @@ function showPrices(){
     <p style="color:var(--muted);font-size:.85rem;margin-bottom:.8rem">Paseo 2 horas · Lago Villarrica · Motor electrico</p>
     ${rows}
     <p style="color:var(--muted);font-size:.75rem;margin-top:.5rem">*Ninos pagan desde los 6 anos</p>
+  </div>
+  <div class="card">
+    <div class="card-title">📍 Como llegar</div>
+    <div class="info-box" style="line-height:2">
+      📍 Entre Pucon y Curarrehue · La Araucania<br>
+      🚗 Acceso 100% pavimentado<br><br>
+      ⏱️ <strong>Desde Pucon:</strong> 25 min<br>
+      ⏱️ <strong>Desde Villarrica:</strong> 50 min<br>
+      ⏱️ <strong>Desde Temuco:</strong> 2 horas
+    </div>
+    <br>
+    <a href="https://maps.app.goo.gl/jVYVHRzekkmFRjEH7" target="_blank" class="btn" style="text-decoration:none">
+      Ver en Google Maps 🗺️
+    </a>
+    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem;text-align:center">
+      ⭐⭐⭐⭐⭐ +100 resenas de navegantes
+    </p>
   </div>
   <button class="btn" onclick="goReservar()">Reservar ahora 🚤</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
@@ -1254,30 +1278,6 @@ function showFeatures(){
     </div>
   </div>
   <button class="btn" onclick="goReservar()">Reservar ahora 🚤</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
-}
-
-function showUbicacion(){
-  _trackEvent('view_ubicacion');
-  mc.innerHTML = `
-  <div class="card">
-    <div class="card-title">📍 Como llegar</div>
-    <div class="info-box" style="line-height:2">
-      📍 Entre Pucon y Curarrehue · La Araucania<br>
-      🚗 Acceso 100% pavimentado<br><br>
-      ⏱️ <strong>Desde Pucon:</strong> 25 min<br>
-      ⏱️ <strong>Desde Villarrica:</strong> 50 min<br>
-      ⏱️ <strong>Desde Temuco:</strong> 2 horas
-    </div>
-    <br>
-    <a href="https://maps.app.goo.gl/jVYVHRzekkmFRjEH7" target="_blank" class="btn" style="text-decoration:none">
-      Ver en Google Maps 🗺️
-    </a>
-    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem;text-align:center">
-      ⭐⭐⭐⭐⭐ +100 resenas de navegantes
-    </p>
-  </div>
-  <button class="btn" onclick="goReservar()" style="margin-top:.5rem">Reservar ahora 🚤</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">Volver al menu</button>`;
 }
 

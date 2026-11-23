@@ -44,6 +44,14 @@ body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--text);min
 .menu-btn .icon{font-size:1.5rem}
 .menu-btn .label{font-weight:600;font-size:.9rem}
 .menu-btn .desc{font-size:.75rem;color:var(--muted)}
+.menu-btn-featured{
+  background:var(--coral);border-color:var(--coral);flex-direction:row;align-items:center;
+  gap:.7rem;padding:1.1rem 1.2rem;width:100%;
+}
+.menu-btn-featured:hover{background:var(--coral);filter:brightness(1.07)}
+.menu-btn-featured .icon{font-size:1.9rem}
+.menu-btn-featured .label{color:#fff;font-size:1.05rem}
+.menu-btn-featured .desc{color:rgba(255,255,255,.85)}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
   background:var(--coral);color:#fff;border:none;border-radius:var(--r);
@@ -457,7 +465,7 @@ const I18N = {
     steps: ['Fecha','Personas','Datos','Pago'],
     // Menu
     menuReservar: 'Reservar HotBoat', menuReservarDesc: 'Ver disponibilidad y fechas',
-    menuPrecios: 'Precios', menuPreciosDesc: 'Tarifas por persona',
+    menuPrecios: 'Precios y Ubicación', menuPreciosDesc: 'Tarifas y cómo llegar',
     menuCaract: 'Características', menuCaractDesc: 'Conoce la experiencia',
     menuUbicacion: 'Ubicación', menuUbicacionDesc: 'Cómo llegar · Mapa',
     menuExp: 'Otras experiencias', menuExpDesc: 'Tours y aventura',
@@ -596,7 +604,7 @@ const I18N = {
     loading: 'Loading...',
     steps: ['Date','People','Details','Payment'],
     menuReservar: 'Book HotBoat', menuReservarDesc: 'Check availability & dates',
-    menuPrecios: 'Prices', menuPreciosDesc: 'Rates per person',
+    menuPrecios: 'Prices & Location', menuPreciosDesc: 'Rates and how to get there',
     menuCaract: 'Features', menuCaractDesc: 'About the experience',
     menuUbicacion: 'Location', menuUbicacionDesc: 'How to get there · Map',
     menuExp: 'Other Experiences', menuExpDesc: 'Tours & adventure',
@@ -727,7 +735,7 @@ const I18N = {
     loading: 'Carregando...',
     steps: ['Data','Pessoas','Dados','Pagamento'],
     menuReservar: 'Reservar HotBoat', menuReservarDesc: 'Ver disponibilidade e datas',
-    menuPrecios: 'Preços', menuPreciosDesc: 'Tarifas por pessoa',
+    menuPrecios: 'Preços e Localização', menuPreciosDesc: 'Tarifas e como chegar',
     menuCaract: 'Características', menuCaractDesc: 'Conheça a experiência',
     menuUbicacion: 'Localização', menuUbicacionDesc: 'Como chegar · Mapa',
     menuExp: 'Outras experiências', menuExpDesc: 'Tours e aventura',
@@ -1186,22 +1194,21 @@ function renderMenu(){
   renderLangSwitcher();
   mc.innerHTML = `
   <div class="card" style="padding-top:.8rem;padding-bottom:.8rem">
-    <div class="menu-grid">
-      <button class="menu-btn" onclick="goReservar()">
-        <span class="icon"><span class="ic ic-calendar"></span></span><span class="label">${t('menuReservar')}</span>
+    <button class="menu-btn menu-btn-featured" onclick="goReservar()">
+      <span class="icon"><span class="ic ic-calendar"></span></span>
+      <span style="display:flex;flex-direction:column;gap:.15rem">
+        <span class="label">${t('menuReservar')}</span>
         <span class="desc">${t('menuReservarDesc')}</span>
-      </button>
-      <button class="menu-btn" onclick="showPrices()">
+      </span>
+    </button>
+    <div class="menu-grid" style="margin-top:.75rem">
+      <button class="menu-btn" onclick="showPreciosUbicacion()">
         <span class="icon"><span class="ic ic-wallet"></span></span><span class="label">${t('menuPrecios')}</span>
         <span class="desc">${t('menuPreciosDesc')}</span>
       </button>
       <button class="menu-btn" onclick="showFeatures()">
         <span class="icon"><span class="ic ic-zap"></span></span><span class="label">${t('menuCaract')}</span>
         <span class="desc">${t('menuCaractDesc')}</span>
-      </button>
-      <button class="menu-btn" onclick="showUbicacion()">
-        <span class="icon"><span class="ic ic-pin"></span></span><span class="label">${t('menuUbicacion')}</span>
-        <span class="desc">${t('menuUbicacionDesc')}</span>
       </button>
       ${S.menuSettings.show_experiencias!==false?`
       <button class="menu-btn" onclick="showExperiencias()">
@@ -1417,7 +1424,7 @@ function renderExperienceCartPaymentScreen(itemCount){
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
 }
 
-function _pricesCardHtml(bodyHtml){
+function _pricesCardHtml(bodyHtml, extraHtml){
   // No separate card-title here on purpose: the message itself (both the
   // template and the fallback) already opens with its own "💰 ..." title
   // line, so a second heading would just duplicate it.
@@ -1425,8 +1432,26 @@ function _pricesCardHtml(bodyHtml){
   <div class="card">
     <div style="font-size:1rem;color:var(--text);text-align:left;white-space:pre-wrap;line-height:1.6">${bodyHtml}</div>
   </div>
+  ${extraHtml||''}
   <button class="btn" onclick="goReservar()">${t('bookNowBtn')}</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
+}
+
+function _ubicacionCardHtml(){
+  return `
+  <div class="card">
+    <div class="card-title">${t('ubicacionTitle')}</div>
+    <div class="info-box" style="line-height:2">
+      ${t('ubicacionBody')}
+    </div>
+    <br>
+    <a href="https://maps.app.goo.gl/jVYVHRzekkmFRjEH7" target="_blank" class="btn" style="text-decoration:none">
+      ${t('ubicacionMapBtn')}
+    </a>
+    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem;text-align:center">
+      ${t('ubicacionReviews')}
+    </p>
+  </div>`;
 }
 
 const _pricingNoteTranslationCache = {};
@@ -1452,25 +1477,26 @@ async function _translatedPricingNote(text, lang){
 
 let _pricesRenderToken = 0;
 
-async function showPrices(){
+async function showPreciosUbicacion(){
   _trackEvent('view_prices');
   const myToken = ++_pricesRenderToken;
   const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const ubicacion = _ubicacionCardHtml();
 
   if(!S.pricingNote){
-    mc.innerHTML = _pricesCardHtml(esc(t('pricesFallback')));
+    mc.innerHTML = _pricesCardHtml(esc(t('pricesFallback')), ubicacion);
     return;
   }
   if(LANG === 'es'){
-    mc.innerHTML = _pricesCardHtml(esc(S.pricingNote));
+    mc.innerHTML = _pricesCardHtml(esc(S.pricingNote), ubicacion);
     return;
   }
   // Non-Spanish: the message comes from the admin's Spanish-only template
   // in Precios Dinamicos, so translate it on demand (cached) instead of
   // showing Spanish text under an EN/PT menu.
-  mc.innerHTML = _pricesCardHtml(`<span style="color:var(--muted)">${t('loading')}</span>`);
+  mc.innerHTML = _pricesCardHtml(`<span style="color:var(--muted)">${t('loading')}</span>`, ubicacion);
   const translated = await _translatedPricingNote(S.pricingNote, LANG);
-  if(myToken === _pricesRenderToken) mc.innerHTML = _pricesCardHtml(esc(translated));
+  if(myToken === _pricesRenderToken) mc.innerHTML = _pricesCardHtml(esc(translated), ubicacion);
 }
 
 function showFeatures(){
@@ -1483,26 +1509,6 @@ function showFeatures(){
     </div>
   </div>
   <button class="btn" onclick="goReservar()">${t('bookNowBtn')}</button>
-  <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
-}
-
-function showUbicacion(){
-  _trackEvent('view_ubicacion');
-  mc.innerHTML = `
-  <div class="card">
-    <div class="card-title">${t('ubicacionTitle')}</div>
-    <div class="info-box" style="line-height:2">
-      ${t('ubicacionBody')}
-    </div>
-    <br>
-    <a href="https://maps.app.goo.gl/jVYVHRzekkmFRjEH7" target="_blank" class="btn" style="text-decoration:none">
-      ${t('ubicacionMapBtn')}
-    </a>
-    <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem;text-align:center">
-      ${t('ubicacionReviews')}
-    </p>
-  </div>
-  <button class="btn" onclick="goReservar()" style="margin-top:.5rem">${t('bookNowBtn')}</button>
   <button class="btn btn-secondary" style="margin-top:.5rem" onclick="renderMenu()">${t('backToMenu')}</button>`;
 }
 
