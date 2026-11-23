@@ -14602,6 +14602,9 @@ function renderGastosTable(gastos){
       ? `<div class="gasto-card-obs"><strong>Obs:</strong> ${g.notas}</div>`
       : '';
     const exclBadge = excluido ? `<span class="gasto-card-excl">⚠ excluido bono</span>` : '';
+    const subidoPor = g.creado_por
+      ? `<span style="font-size:.75rem;color:var(--muted)">👤 ${g.creado_por}</span>`
+      : '';
 
     // Format date: "15 jun"
     let fechaFmt = '—';
@@ -14627,6 +14630,7 @@ function renderGastosTable(gastos){
       <div class="gasto-card-foot">
         ${fotoBtn}
         ${exclBadge}
+        ${subidoPor}
         <div style="margin-left:auto;display:flex;gap:.25rem">
           <button onclick="openEditGasto(${g.id})" title="Editar"
             style="background:rgba(232,184,109,.1);border:1px solid rgba(232,184,109,.3);color:var(--gold);cursor:pointer;font-size:.8rem;border-radius:7px;padding:.28rem .65rem;font-weight:600">✏️ Editar</button>
@@ -16491,6 +16495,14 @@ async function deleteBotKeyword(id){
         <div style="font-size:.72rem;color:var(--muted);margin-top:.25rem">Dejar en blanco al editar para no cambiar la contraseña.</div>
       </div>
       <div>
+        <label style="font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em" title="Si esta persona le manda una foto de boleta a Popeye por WhatsApp desde este número, el gasto queda registrado a su nombre en vez de solo &quot;Admin&quot;.">
+          📱 WhatsApp (opcional)
+        </label>
+        <input id="um-phone" type="text" placeholder="Ej: 56912345678"
+          style="width:100%;margin-top:.3rem;padding:.55rem .75rem;background:var(--input);border:1px solid var(--border);color:#fff;border-radius:8px;font-size:.88rem;outline:none;box-sizing:border-box">
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.25rem">Para atribuir boletas enviadas por WhatsApp a quién realmente las subió.</div>
+      </div>
+      <div>
         <label style="font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:.6rem">
           Acceso a pestañas
           <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.72rem">(sin marcar ninguna = acceso completo)</span>
@@ -16692,6 +16704,7 @@ async function openUserModal(idx){
   document.getElementById('user-modal-title').textContent = _userModalIdx !== null ? '✏️ Editar usuario' : '👤 Agregar usuario';
   document.getElementById('um-name').value = '';
   document.getElementById('um-key').value  = '';
+  document.getElementById('um-phone').value = '';
   document.getElementById('um-is-vendor').checked = false;
 
   // Build section checkboxes
@@ -16731,6 +16744,7 @@ async function openUserModal(idx){
         }
         variantSelect.value = u.variant_key || '';
         document.getElementById('um-is-vendor').checked = !!u.is_vendor;
+        document.getElementById('um-phone').value = u.phone || '';
       }
     } catch(_){}
   }
@@ -16751,14 +16765,15 @@ async function saveUserModal(){
   const sections = checked.length ? checked : null; // null = full access
   const variant_key = document.getElementById('um-variant').value || null;
   const is_vendor = document.getElementById('um-is-vendor').checked;
+  const phone = document.getElementById('um-phone').value.trim();
 
   try {
     if(_userModalIdx !== null){
-      const body = {name, sections, variant_key, is_vendor};
+      const body = {name, sections, variant_key, is_vendor, phone};
       if(key) body.key = key;
       await api(`/api/admin/users/${_userModalIdx}`,{method:'PUT',body:JSON.stringify(body)});
     } else {
-      await api('/api/admin/users',{method:'POST',body:JSON.stringify({name,key,sections,variant_key,is_vendor})});
+      await api('/api/admin/users',{method:'POST',body:JSON.stringify({name,key,sections,variant_key,is_vendor,phone})});
     }
     closeUserModal();
     loadAdminUsers();

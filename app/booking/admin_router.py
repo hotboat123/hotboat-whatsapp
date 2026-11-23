@@ -180,6 +180,39 @@ def verify_admin_key(x_admin_key: str, users: list) -> Optional[dict]:
     return None
 
 
+def admin_name_for_phone(phone: str) -> Optional[str]:
+    """Match a WhatsApp phone number against admin_users' own `phone` field
+    (digits-only comparison, same normalization _is_admin_number uses) —
+    lets webhook.py attribute a gasto photo to the real person who sent it
+    (Esteban, Néstor, ...) instead of only knowing "an admin sent this"."""
+    digits = lambda s: "".join(c for c in (s or "") if c.isdigit())
+    target = digits(phone)
+    if not target:
+        return None
+    for u in _get_admin_users():
+        if u.get("phone") and digits(u["phone"]) == target:
+            return u.get("name")
+    return None
+
+
+def resolve_admin_name(x_admin_key: str) -> str:
+    """Resolve the display name for an x-admin-key header value, reusing
+    the same lookup POST /api/admin/auth/login uses below — for routers
+    (gastos_router, etc.) that want to stamp "who did this" on a record
+    without duplicating the master-key / admin_users logic. Always returns
+    a name ("Admin" if the key matches nothing, no admin_users are
+    configured, or the key is blank) — never None, so a caller can stamp
+    it unconditionally."""
+    master_key = os.environ.get("ADMIN_MASTER_KEY", "")
+    if master_key and x_admin_key == master_key:
+        return "Admin"
+    users = _get_admin_users()
+    if not users:
+        return "Admin"
+    user = verify_admin_key(x_admin_key, users)
+    return user.get("name", "Admin") if user else "Admin"
+
+
 @admin_router.post("/api/admin/auth/login")
 async def admin_login(x_admin_key: str = Header("")):
     """Return user info (name + allowed sections) for the given key.
@@ -219,7 +252,7 @@ async def list_admin_users(x_admin_key: str = Header("")):
             masked_key = (k[:2] + "***" + k[-2:]) if len(k) > 4 else "***"
         masked.append({"idx": i, "name": u.get("name", ""), "key_masked": masked_key,
                        "sections": u.get("sections"), "variant_key": u.get("variant_key"),
-                       "is_vendor": bool(u.get("is_vendor"))})
+                       "is_vendor": bool(u.get("is_vendor")), "phone": u.get("phone", "")})
     return {"users": masked}
 
 
@@ -237,6 +270,10 @@ async def create_admin_user(request: Request, x_admin_key: str = Header("")):
     # persona real, no por a quién se le asignó originalmente.
     variant_key = (body.get("variant_key") or "").strip() or None
     is_vendor = bool(body.get("is_vendor"))
+    # WhatsApp phone this person sends receipt photos from (optional) — see
+    # admin_name_for_phone above; lets a gasto photo be attributed to them
+    # by name instead of just "an admin sent this".
+    phone = (body.get("phone") or "").strip()
     if not name or not key:
         raise HTTPException(400, "nombre y contraseña son requeridos")
     users = _get_admin_users()
@@ -247,7 +284,7 @@ async def create_admin_user(request: Request, x_admin_key: str = Header("")):
         raise HTTPException(409, "Ya existe un usuario con esa contraseña")
     users.append({
         "name": name, "key_hash": _hash_key(key), "sections": sections,
-        "variant_key": variant_key, "is_vendor": is_vendor,
+        "variant_key": variant_key, "is_vendor": is_vendor, "phone": phone,
     })
     _save_admin_users(users)
     return {"ok": True}
@@ -275,6 +312,8 @@ async def update_admin_user(idx: int, request: Request, x_admin_key: str = Heade
         users[idx]["variant_key"] = (body["variant_key"] or "").strip() or None
     if "is_vendor" in body:
         users[idx]["is_vendor"] = bool(body["is_vendor"])
+    if "phone" in body:
+        users[idx]["phone"] = (body["phone"] or "").strip()
     _save_admin_users(users)
     return {"ok": True}
 

@@ -56,6 +56,7 @@ def _ensure_tables():
     );
     ALTER TABLE gastos ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(20) DEFAULT 'boleta';
     ALTER TABLE gastos ADD COLUMN IF NOT EXISTS incluir_en_utilidad BOOLEAN DEFAULT TRUE;
+    ALTER TABLE gastos ADD COLUMN IF NOT EXISTS creado_por TEXT DEFAULT '';
     CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
     CREATE INDEX IF NOT EXISTS idx_gastos_cat1 ON gastos(categoria1_id);
     CREATE TABLE IF NOT EXISTS gastos_items (
@@ -764,7 +765,7 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
                g.categoria1_id, c1.nombre, c1.color, c1.icono,
                g.categoria2_id, c2.nombre, c2.color, c2.icono,
                g.notas, g.created_at, COALESCE(g.tipo_documento, 'boleta'),
-               COALESCE(g.incluir_en_utilidad, TRUE)
+               COALESCE(g.incluir_en_utilidad, TRUE), COALESCE(g.creado_por, '')
         FROM gastos g
         LEFT JOIN gastos_categorias c1 ON g.categoria1_id = c1.id
         LEFT JOIN gastos_categorias c2 ON g.categoria2_id = c2.id
@@ -820,15 +821,19 @@ async def list_gastos(year: int = 0, month: int = 0, x_admin_key: str = Header("
             "categoria2_icono": r[13] or "📌",
             "notas": r[14] or "",
             "created_at": r[15].isoformat() if r[15] else "",
+            "creado_por": r[18] or "",
             "items": items_by_gasto.get(r[0], []),
         }
 
     return {"ok": True, "gastos": [_build_row(r) for r in rows]}
 
 
-@gastos_router.post("/api/admin/gastos")
-async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
-    _check_auth(x_admin_key)
+async def _create_gasto_internal(body: "GastoCreate", creado_por: str) -> dict:
+    """Does the actual INSERT + items/ledger side effects for a new gasto.
+    Split out from the POST route handler so the WhatsApp flow
+    (webhook.py's _finalize_pending_gasto) can pass an already-resolved
+    uploader name (from the sender's phone) instead of an x-admin-key
+    header, which it doesn't have."""
     imagen_path = ""
     if body.imagen_base64:
         try:
@@ -846,11 +851,11 @@ async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO gastos (fecha, monto, descripcion, comercio, imagen_path, "
-                "categoria1_id, categoria2_id, tipo_documento, incluir_en_utilidad, notas) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                "categoria1_id, categoria2_id, tipo_documento, incluir_en_utilidad, notas, creado_por) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
                 (body.fecha, body.monto, body.descripcion, body.comercio,
                  imagen_path, body.categoria1_id, body.categoria2_id,
-                 body.tipo_documento, body.incluir_en_utilidad, body.notas),
+                 body.tipo_documento, body.incluir_en_utilidad, body.notas, creado_por),
             )
             (new_id,) = cur.fetchone()
         conn.commit()
@@ -868,6 +873,14 @@ async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
         logger.warning(f"flujo_caja movimiento skipped for gasto {new_id}: {e}")
 
     return {"ok": True, "id": new_id, "imagen_path": imagen_path}
+
+
+@gastos_router.post("/api/admin/gastos")
+async def create_gasto(body: GastoCreate, x_admin_key: str = Header("")):
+    _check_auth(x_admin_key)
+    from app.booking.admin_router import resolve_admin_name
+    creado_por = resolve_admin_name(x_admin_key)
+    return await _create_gasto_internal(body, creado_por)
 
 
 @gastos_router.put("/api/admin/gastos/{gasto_id}")

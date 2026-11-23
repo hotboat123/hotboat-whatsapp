@@ -122,18 +122,26 @@ def _is_duplicate_incoming(message_id: Optional[str]) -> bool:
 
 
 def _is_admin_number(phone: str) -> bool:
-    """True when an incoming message's sender is the owner's own WhatsApp
-    number (ADMIN_PHONE — same env var content_router.py already uses to
-    address outgoing admin notifications), comparing digits only so a
-    "+56 9..." vs "56912345678" formatting mismatch doesn't matter.
-    Supports a comma-separated list in case more than one number should
-    get this treatment later."""
+    """True when an incoming message's sender is an admin WhatsApp number —
+    either the owner's own number (ADMIN_PHONE — same env var
+    content_router.py already uses to address outgoing admin notifications,
+    comparing digits only so a "+56 9..." vs "56912345678" formatting
+    mismatch doesn't matter; supports a comma-separated list), or any
+    other staff member's number registered with a `phone` on their
+    admin_users entry (see admin_router.py:admin_name_for_phone — lets
+    Esteban, Néstor, etc. send gasto photos from their own numbers)."""
     digits = lambda s: "".join(c for c in (s or "") if c.isdigit())
     target = digits(phone)
     if not target:
         return False
     admins = os.getenv("ADMIN_PHONE", "56974950762").split(",")
-    return any(digits(a) == target for a in admins)
+    if any(digits(a) == target for a in admins):
+        return True
+    try:
+        from app.booking.admin_router import admin_name_for_phone
+        return admin_name_for_phone(phone) is not None
+    except Exception:
+        return False
 
 
 async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, caption: str) -> bool:
@@ -157,6 +165,12 @@ async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, cap
         cat2 = get_categoria_by_id(scan.get("categoria2_id"))
         comercio = scan.get("comercio") or ""
 
+        try:
+            from app.booking.admin_router import admin_name_for_phone
+            creado_por = admin_name_for_phone(from_number) or "Admin"
+        except Exception:
+            creado_por = "Admin"
+
         payload = {
             "fecha": scan.get("fecha") or datetime.now().date().isoformat(),
             "monto": scan.get("monto") or 0,
@@ -164,6 +178,7 @@ async def _handle_admin_gasto_photo(from_number: str, local_image_path: str, cap
             "descripcion": caption or comercio,
             "origen": "Banco Estado",
             "caption": caption or "",
+            "creado_por": creado_por,
             "categoria1_id": cat1["id"] if cat1 else None,
             "categoria1_nombre": cat1["nombre"] if cat1 else "",
             "categoria2_id": cat2["id"] if cat2 else None,
@@ -229,6 +244,9 @@ def _pending_gasto_summary_text(payload: dict) -> str:
         f"🗂️ Categoría: {cat_line}",
         f"📄 Tipo: {tipo}",
     ]
+    creado_por = payload.get("creado_por") or ""
+    if creado_por and creado_por != "Admin":
+        lines.append(f"👤 Subido por: {creado_por}")
     if len(items) > 1:
         lines.append(f"🧾 {len(items)} ítems detectados (misma categoría para todos)")
     lines += [
@@ -346,7 +364,7 @@ async def _apply_gasto_edits(from_number: str, payload: dict, edits: dict) -> li
 
 
 async def _finalize_pending_gasto(from_number: str, payload: dict) -> None:
-    from app.booking.gastos_router import create_gasto, GastoCreate, GastoItemIn
+    from app.booking.gastos_router import _create_gasto_internal, GastoCreate, GastoItemIn
     from app.booking.gastos_router import clear_pending_gasto as _clear_pending
 
     monto = payload.get("monto") or 0
@@ -377,7 +395,8 @@ async def _finalize_pending_gasto(from_number: str, payload: dict) -> None:
         origen=payload.get("origen") or "",
         notas="Agregado desde WhatsApp", items=items,
     )
-    res = await create_gasto(body, x_admin_key="")
+    creado_por = payload.get("creado_por") or "Admin"
+    res = await _create_gasto_internal(body, creado_por)
     _clear_pending(from_number)
 
     monto_fmt = f"${monto:,.0f}".replace(",", ".")
