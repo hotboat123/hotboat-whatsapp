@@ -273,8 +273,16 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 .extras-total-row span{color:var(--gold)}
 /* Extras catalog table */
 .ec-table{width:100%;border-collapse:collapse}
+/* #ec-table-wrap overrides the generic .tbl-wrap's overflow:hidden — an
+   ancestor with overflow other than visible becomes the sticky positioning
+   context, and since that div never actually scrolls on its own (the page
+   does), a sticky header inside it never un-stuck; it just never stuck in
+   the first place. Dropping it here (losing the rounded-corner clip on
+   this one table only) is what lets the header actually freeze. */
+#ec-table-wrap{overflow:visible}
 .ec-table th{background:var(--surface);padding:.55rem .9rem;text-align:left;
-  font-size:.73rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+  font-size:.73rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;
+  position:sticky;top:53px;z-index:5}
 .ec-table td{padding:.5rem .9rem;border-top:1px solid var(--border);font-size:.83rem;vertical-align:middle}
 .ec-table tr:hover td{background:rgba(255,255,255,.02)}
 .ec-input{background:var(--surface);border:1px solid var(--border);color:var(--text);
@@ -683,7 +691,7 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
         <div id="tabla-pending-list" style="font-size:.82rem;color:#fdba74;line-height:1.8"></div>
       </div>
 
-      <div class="tbl-wrap">
+      <div class="tbl-wrap" id="ec-table-wrap">
         <table class="ec-table">
           <thead>
             <tr>
