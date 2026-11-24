@@ -298,6 +298,7 @@ const I18N = {
     alojYourBooking: '🛒 Tu reserva',
     alojDepositNow: '💳 Abono ahora (50%)',
     payNowLabel: '💳 Pago ahora',
+    alojReserveLabel: '🎟️ Se reserva con el 20%',
     alojBalanceArrival: (bal) => `Pagas ${bal} directo en el lugar`,
     alojYourData: '👤 Tus datos',
     alojEmailOpt: 'Email (opcional)',
@@ -420,6 +421,7 @@ const I18N = {
     alojYourBooking: '🛒 Your booking',
     alojDepositNow: '💳 Deposit now (50%)',
     payNowLabel: '💳 Pay now',
+    alojReserveLabel: '🎟️ Reserve now with 20%',
     alojBalanceArrival: (bal) => `Pay ${bal} directly on site`,
     alojYourData: '👤 Your details',
     alojEmailOpt: 'Email (optional)',
@@ -542,6 +544,7 @@ const I18N = {
     alojYourBooking: '🛒 Sua reserva',
     alojDepositNow: '💳 Sinal agora (50%)',
     payNowLabel: '💳 Pagar agora',
+    alojReserveLabel: '🎟️ Reserve com 20%',
     alojBalanceArrival: (bal) => `Pague ${bal} direto no local`,
     alojYourData: '👤 Seus dados',
     alojEmailOpt: 'E-mail (opcional)',
@@ -682,7 +685,7 @@ function rebuildAlojamientosFromDyn(){
       name: loc.name,
       icon: a.icon||'🏠',
       desc: loc.desc,
-      price: '$'+Number(a.price_from||0).toLocaleString(_moneyLocale()),
+      price: '$'+(Number(a.price_from||0)+Number(a.precio_proveedor||0)).toLocaleString(_moneyLocale()),
       unit: t('alojPerNight'),
       cap,
       precioProveedor: Number(a.precio_proveedor||0),
@@ -903,13 +906,21 @@ function renderExperienceCartScreen(){
     return;
   }
   let sum = 0;
-  // Carrito sin HotBoat en el mismo checkout: cobro completo al pagar desde aquí.
+  let fullSum = 0; // suma del precio real (comisión + proveedor) — solo para mostrar
+  let onSiteTotal = 0; // suma de lo que se paga directo al proveedor en el lugar (packs no incluidos, fuera de alcance)
+  // Carrito sin HotBoat en el mismo checkout: cobro completo (20% comisión) al pagar desde aquí.
   const lines = _experienceCart.map(li=>{
     const days = _addonDaysFromRange(li.start_date, li.end_date);
     const isPack = li.kind==='pack' || !!li.pack_slug;
     const pp = isPack ? Number(li.unit_price_per_person)||0 : Number(li.price_per_person)||0;
-    const tot = pp * (Math.max(1, Number(li.num_people)||1)) * days;
+    const people = Math.max(1, Number(li.num_people)||1);
+    const tot = pp * people * days;
     sum += tot;
+    const dynExp = !isPack ? DYN_EXPERIENCIAS.find(x=>x.slug===li.experience_slug) : null;
+    const provPP = dynExp ? Number(dynExp.precio_proveedor||0) : 0;
+    const fullPP = pp + provPP;
+    fullSum += fullPP * people * days;
+    onSiteTotal += provPP * people * days;
     const de = li.end_date || li.start_date;
     const title = isPack ? (li.pack_name||'') : (li.experience_name||'');
     const ic = isPack ? '📦' : '🎫';
@@ -925,7 +936,7 @@ function renderExperienceCartScreen(){
             ${dateLine}
           </div>
           <div style="font-size:.85rem;margin-top:.35rem">
-            ${_alojMoney(pp)}/pers · ${li.num_people} · <strong>${_alojMoney(tot)}</strong>
+            ${_alojMoney(fullPP)}/pers · ${li.num_people} · <strong>${_alojMoney(pp*people*days)}</strong>
           </div>
         </div>
         <button type="button" onclick="removeExperienceCartLine('${li.cart_id}');renderExperienceCartScreen();"
@@ -937,8 +948,9 @@ function renderExperienceCartScreen(){
   <div class="card">
     <div class="card-title">${t('expCartTitle')}</div>
     ${lines}
-    <div class="summary-row total"><span>${t('labelTotal')}</span><span>${_alojMoney(sum)}</span></div>
-    <p style="color:var(--gold);font-size:.85rem;margin-top:.35rem">${t('payNowLabel')}: ${_alojMoney(sum)}</p>
+    <div class="summary-row total"><span>${t('labelTotal')}</span><span>${_alojMoney(fullSum)}</span></div>
+    <p style="color:var(--gold);font-size:.85rem;margin-top:.35rem">${t('alojReserveLabel')}: ${_alojMoney(sum)}</p>
+    ${onSiteTotal>0 ? `<p style="color:var(--muted);font-size:.75rem;margin-top:.2rem">${t('alojBalanceArrival', _alojMoney(onSiteTotal))}</p>` : ''}
   </div>
   <div class="card">
     <div class="card-title" style="font-size:1.05rem">👤 ${LANG==='es'?'Tus datos':LANG==='pt'?'Seus dados':'Your details'}</div>
@@ -1187,7 +1199,7 @@ function showExperiencias(){
     <button class="menu-btn" onclick="showExperienciaDetail('${e.slug}')" style="flex-direction:row;align-items:center;gap:.75rem">
       <span style="font-size:2rem">${e.icon}</span>
       <div><div class="label">${e.name}</div>
-        <div class="desc">${e.description||''}${e.price_per_person?` · $${Number(e.price_per_person).toLocaleString('es-CL')}/persona`:''}</div>
+        <div class="desc">${e.description||''}${e.price_per_person?` · $${(Number(e.price_per_person)+Number(e.precio_proveedor||0)).toLocaleString('es-CL')}/persona`:''}</div>
       </div>
     </button>`).join('');
   mc.innerHTML = `
@@ -1214,6 +1226,10 @@ function showExperienciaDetail(slug){
     showExperiencias();
     return;
   }
+  // pricePerPerson es solo la comisión HotBoat (20%) — lo que se cobra
+  // ahora, y lo que viaja al carrito/checkout sin cambios. fullPricePerPerson
+  // (comisión + proveedor) es el precio real, solo para mostrar en el header.
+  const fullPricePerPerson = pricePerPerson + Math.round(Number(e.precio_proveedor||0));
   _destroyAddonPickers();
   _addonPackState = null;
   _addonExpState = {e, slug, name: e.name, pricePerPerson, checkIn:null};
@@ -1224,7 +1240,7 @@ function showExperienciaDetail(slug){
   <div class="card">
     ${imgHtml}
     <div class="card-title">${e.name}</div>
-    <div class="price-tag"><div class="price-big">${_alojMoney(pricePerPerson)}</div>
+    <div class="price-tag"><div class="price-big">${_alojMoney(fullPricePerPerson)}</div>
       <div class="price-sub">${t('addonPriceHint')}</div></div>
     <p style="color:var(--muted);font-size:.85rem;margin-top:.8rem;line-height:1.5">${e.description||''}</p>
   </div>
@@ -1287,9 +1303,12 @@ function _renderAddonExpAvailable(){
   if(!st||!st.checkIn) return;
   const people=Math.max(1, parseInt(document.getElementById('addon-exp-people')?.value||'1',10)||1);
   const days=1;
-  const unit=st.pricePerPerson;
-  const total=unit*people*days;
-  const payNow=total;
+  const unit=st.pricePerPerson; // comisión HotBoat (20%) — lo que se cobra ahora
+  const provPP=Number(st.e?.precio_proveedor||0); // lo que se paga al proveedor en el lugar
+  const fullUnit=unit+provPP;
+  const total=fullUnit*people*days;
+  const payNow=unit*people*days;
+  const onSite=provPP*people*days;
   const result=document.getElementById('addon-booking-result');
   if(!result) return;
   result.innerHTML = `
@@ -1300,14 +1319,14 @@ function _renderAddonExpAvailable(){
       <span style="opacity:.85">${t('addonDaysLabel', days)}</span>
     </div>
     <div class="summary-row">
-      <span>${_alojMoney(unit)}/pers. × ${people}</span>
+      <span>${_alojMoney(fullUnit)}/pers. × ${people}</span>
       <span><strong>${_alojMoney(total)}</strong></span>
     </div>
     <div class="summary-row" style="color:var(--gold)">
-      <span>${t('payNowLabel')}</span>
+      <span>${t('alojReserveLabel')}</span>
       <span><strong>${_alojMoney(payNow)}</strong></span>
     </div>
-    <div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(total-payNow))}</div>
+    ${onSite>0 ? `<div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">${t('addonBalanceActivity', _alojMoney(onSite))}</div>` : ''}
   </div>
   <div class="card">
     <div class="card-title" style="font-size:1rem">${t('alojMsgExtra')}</div>
@@ -1826,6 +1845,10 @@ async function showAlojamiento(id){
   if(!a) return showAlojamientos();
   const dynA = DYN_ALOJAMIENTOS.find(x=>x.slug===id) || {};
   const pricePerNight = Number(dynA.price_from || 0);
+  // Precio real/noche (lo que se muestra) = comisión HotBoat + lo que se
+  // paga al proveedor en el lugar. pricePerNight (solo la comisión, 20%)
+  // sigue siendo lo que de verdad se cobra ahora — ver _renderAlojAvailable.
+  const fullPricePerNight = pricePerNight + Number(dynA.precio_proveedor || 0);
   const alojId = Number(dynA.id || a.dbId || 0);
   const imgs = (a.all_images&&a.all_images.length)?a.all_images:(a.image_path?[a.image_path]:[]);
   const gid = 'gal-'+a.id;
@@ -1835,7 +1858,7 @@ async function showAlojamiento(id){
   <div class="card">
     ${imgHtml}
     <div class="card-title">${a.name}</div>
-    <div class="price-tag"><div class="price-big">${_alojMoney(pricePerNight)}</div>
+    <div class="price-tag"><div class="price-big">${_alojMoney(fullPricePerNight)}</div>
       <div class="price-sub">${t('alojPriceSub', a.cap)}</div></div>
     <p style="color:var(--muted);font-size:.85rem;margin-top:.8rem;line-height:1.5">${a.desc}</p>
     ${a.features.filter(f=>f).map(f=>`<div style="font-size:.82rem;margin-top:.3rem">✓ ${f}</div>`).join('')}
@@ -2039,8 +2062,12 @@ async function _submitAlojSolicitud(){
 
 function _renderAlojAvailable(){
   const {a, checkIn, checkOut, nights, pricePerNight} = _alojState;
+  // pricePerNight es solo la comisión HotBoat (20%) — lo que de verdad se
+  // cobra ahora. fullPricePerNight (comisión + proveedor) es el precio real
+  // de la noche, solo para mostrar — ver showAlojamiento().
+  const fullPricePerNight = pricePerNight + (a.precioProveedor || 0);
+  const fullTotal = fullPricePerNight * nights;
   const total = pricePerNight * nights;
-  // price_per_night ya es la comisión de HotBoat (20%, ver migración 2026-11) — se cobra completa.
   const payNow = total;
   const remaining = (a.precioProveedor || 0) * nights; // se paga directo al proveedor en el lugar
   document.getElementById('aloj-booking-result').innerHTML = `
@@ -2051,11 +2078,11 @@ function _renderAlojAvailable(){
       <span>${t('alojNightsLabel', nights)}</span>
     </div>
     <div class="summary-row">
-      <span>${_alojMoney(pricePerNight)}${t('alojPerNight')} × ${nights}</span>
-      <span><strong>${_alojMoney(total)}</strong></span>
+      <span>${_alojMoney(fullPricePerNight)}${t('alojPerNight')} × ${nights}</span>
+      <span><strong>${_alojMoney(fullTotal)}</strong></span>
     </div>
     <div class="summary-row" style="color:var(--gold)">
-      <span>${t('payNowLabel')}</span>
+      <span>${t('alojReserveLabel')}</span>
       <span><strong>${_alojMoney(payNow)}</strong></span>
     </div>
     ${remaining>0 ? `<div style="color:var(--muted);font-size:.75rem;margin-top:.3rem">
@@ -2139,6 +2166,7 @@ function _startHotboatWithAloj(){
     check_out:       checkOut,
     num_people:      a.cap,
     price_per_night: pricePerNight,
+    precio_proveedor: a.precioProveedor || 0,
     customer_name:   '',
     customer_phone:  '',
     customer_email:  null,
@@ -2785,8 +2813,11 @@ function renderForm(){
   if(_pendingAlojBooking){
     const p = _pendingAlojBooking;
     const alojNights = (new Date(p.check_out) - new Date(p.check_in)) / 86400000;
-    const alojTotal = p.price_per_night * alojNights;
-    const alojDeposit = alojTotal; // ya es la comisión (20%) — el resto se paga al proveedor en el lugar
+    const provPerNight = Number(p.precio_proveedor||0);
+    const fullPerNight = p.price_per_night + provPerNight;
+    const alojTotal = p.price_per_night * alojNights; // comisión (20%) — lo que se cobra ahora
+    const alojDeposit = alojTotal;
+    const alojOnSite = provPerNight * alojNights; // se paga directo al proveedor en el lugar
     const hbDeposit = Math.round(hbTotal * 0.5);
     const combinedTotal = hbTotal + alojTotal;
     const combinedDeposit = hbDeposit + alojDeposit;
@@ -2798,8 +2829,9 @@ function renderForm(){
       <div class="summary-row"><span>📅 Check-in</span><span>${ciD}/${ciM}/${ciY}</span></div>
       <div class="summary-row"><span>📅 Check-out</span><span>${coD}/${coM}/${coY}</span></div>
       <div class="summary-row"><span>🌙 Noches</span><span>${alojNights}</span></div>
-      <div class="summary-row"><span>$${p.price_per_night.toLocaleString('es-CL')}/noche × ${alojNights}</span><span><strong>$${alojTotal.toLocaleString('es-CL')}</strong></span></div>
-      <div class="summary-row" style="color:var(--gold)"><span>Alojamiento (comisión HotBoat)</span><span>$${alojDeposit.toLocaleString('es-CL')}</span></div>
+      <div class="summary-row"><span>$${fullPerNight.toLocaleString('es-CL')}/noche × ${alojNights}</span><span><strong>$${(fullPerNight*alojNights).toLocaleString('es-CL')}</strong></span></div>
+      <div class="summary-row" style="color:var(--gold)"><span>Alojamiento — se reserva con el 20%</span><span>$${alojDeposit.toLocaleString('es-CL')}</span></div>
+      ${alojOnSite>0?`<div style="color:var(--muted);font-size:.75rem;margin-top:.1rem">${t('alojBalanceArrival', '$'+alojOnSite.toLocaleString('es-CL'))}</div>`:''}
     </div>`;
     combinedDepositNote = `
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
@@ -2808,12 +2840,18 @@ function renderForm(){
     </div>`;
   } else if(_experienceCart.length){
     let expTotalAll = 0;
+    let expOnSiteAll = 0;
     const rows = _experienceCart.map((p)=>{
       const days = _addonDaysFromRange(p.start_date, p.end_date);
       const isPack = p.kind==='pack' || !!p.pack_slug;
       const pp = isPack ? (Number(p.unit_price_per_person)||0) : (Number(p.price_per_person)||0);
-      const expTotal = pp * (Math.max(1, Number(p.num_people)||1)) * days;
+      const people = Math.max(1, Number(p.num_people)||1);
+      const expTotal = pp * people * days;
       expTotalAll += expTotal;
+      const dynExp = !isPack ? DYN_EXPERIENCIAS.find(x=>x.slug===p.experience_slug) : null;
+      const provPP = dynExp ? Number(dynExp.precio_proveedor||0) : 0;
+      const fullPP = pp + provPP;
+      expOnSiteAll += provPP * people * days;
       const dateEnd = p.end_date || p.start_date;
       const ic = isPack ? '📦' : '🎫';
       const nm = isPack ? (p.pack_name||'') : (p.experience_name||'');
@@ -2821,8 +2859,8 @@ function renderForm(){
         ? `<span>📅 ${_fmtDate(p.start_date)}</span><span>${t('addonDaysLabel', days)}</span>`
         : `<span>📅 ${_fmtDate(p.start_date)} → ${_fmtDate(dateEnd)}</span><span>${t('addonDaysLabel', days)}</span>`;
       const pxRow = days>1
-        ? `${_alojMoney(pp)}/pers. × ${p.num_people} × ${days}`
-        : `${_alojMoney(pp)}/pers. × ${p.num_people}`;
+        ? `${_alojMoney(fullPP)}/pers. × ${p.num_people} × ${days}`
+        : `${_alojMoney(fullPP)}/pers. × ${p.num_people}`;
       const cid = String(p.cart_id || '').replace(/'/g, '');
       return `
       <div style="border-bottom:1px solid var(--border);padding:.55rem 0;margin-bottom:.45rem">
@@ -2843,7 +2881,8 @@ function renderForm(){
     const combinedDeposit = hbDeposit + expDepositAll;
     unifiedCartTopInner = `
       ${rows}
-      <div class="summary-row" style="color:var(--gold);margin-top:.35rem;padding-top:.35rem;border-top:1px solid var(--border)"><span>${t('payNowLabel')}</span><span><strong>${_alojMoney(expDepositAll)}</strong></span></div>`;
+      <div class="summary-row" style="color:var(--gold);margin-top:.35rem;padding-top:.35rem;border-top:1px solid var(--border)"><span>${t('alojReserveLabel')}</span><span><strong>${_alojMoney(expDepositAll)}</strong></span></div>
+      ${expOnSiteAll>0?`<div style="color:var(--muted);font-size:.75rem;margin-top:.2rem">${t('alojBalanceArrival', _alojMoney(expOnSiteAll))}</div>`:''}`;
     combinedDepositNote = `
     <div style="background:rgba(255,200,0,.08);border:1px solid rgba(255,200,0,.2);border-radius:10px;padding:.65rem .9rem;margin-top:.75rem;font-size:.8rem;color:var(--muted);line-height:1.5">
       🎫🚤 <strong style="color:var(--gold)">Total abono ahora: ${_alojMoney(combinedDeposit)}</strong><br>
