@@ -105,7 +105,8 @@ def _check_and_alert_usage_threshold(provider: str, model: str, call_type: str) 
             return
         tokens_limit = limit_cfg.get("daily_tokens")
         seconds_limit = limit_cfg.get("daily_seconds")
-        if not tokens_limit and not seconds_limit:
+        requests_limit = limit_cfg.get("daily_requests")
+        if not tokens_limit and not seconds_limit and not requests_limit:
             return
 
         from app.booking.operator_settings import get_setting, set_setting
@@ -127,7 +128,7 @@ def _check_and_alert_usage_threshold(provider: str, model: str, call_type: str) 
                     used = cur.fetchone()[0]
                     pct = used / tokens_limit if tokens_limit else 0
                     usage_line = f"{used:,} / {tokens_limit:,} tokens".replace(",", ".")
-                else:
+                elif seconds_limit:
                     cur.execute(
                         "SELECT COALESCE(SUM(audio_seconds),0) FROM ai_usage_log "
                         "WHERE provider=%s AND model=%s AND call_type=%s "
@@ -137,6 +138,16 @@ def _check_and_alert_usage_threshold(provider: str, model: str, call_type: str) 
                     used = float(cur.fetchone()[0])
                     pct = used / seconds_limit if seconds_limit else 0
                     usage_line = f"{used:,.0f} / {seconds_limit:,.0f} segundos".replace(",", ".")
+                else:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM ai_usage_log "
+                        "WHERE provider=%s AND model=%s AND call_type=%s "
+                        "AND created_at >= date_trunc('day', NOW())",
+                        (provider, model, call_type),
+                    )
+                    used = cur.fetchone()[0]
+                    pct = used / requests_limit if requests_limit else 0
+                    usage_line = f"{used:,} / {requests_limit:,} llamadas".replace(",", ".")
 
         if pct < _USAGE_ALERT_THRESHOLD:
             return
