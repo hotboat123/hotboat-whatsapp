@@ -171,6 +171,19 @@ def _ensure_tables():
                     # mensaje menciona que Popeye puede ayudar con lo básico
                     # mientras tanto).
                     "welcome_message TEXT",
+                    # Smooth weighted round-robin running counter (nginx-style
+                    # load-balancer algorithm) — see
+                    # app/db/leads.py:_pick_active_variant(). Replaced the
+                    # plain weighted-random pick 2026-11 at the owner's
+                    # request: "que se vayan turnando según los pesos" and
+                    # "que no salga la misma dos veces seguidas". Each pick
+                    # bumps every eligible variant's rr_current_weight by its
+                    # own weight, the highest wins (ties broken by whichever
+                    # wasn't just picked), then the winner's counter drops by
+                    # the total weight — converges to each variant's
+                    # weight/total share over time, same as before, but in a
+                    # predictable rotation instead of a coin flip.
+                    "rr_current_weight DOUBLE PRECISION NOT NULL DEFAULT 0",
                 ]:
                     try:
                         cur.execute(f"ALTER TABLE bot_ab_variants ADD COLUMN IF NOT EXISTS {col_def}")

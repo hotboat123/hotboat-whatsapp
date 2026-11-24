@@ -83,6 +83,100 @@ def log_usage(
             conn.commit()
     except Exception as e:
         logger.warning(f"ai_usage log_usage failed (non-fatal): {e}")
+        return
+    _check_and_alert_usage_threshold(provider, model, call_type)
+
+
+_USAGE_ALERT_THRESHOLD = 0.5  # owner asked for a heads-up at 50% of the configured daily limit
+
+
+def _check_and_alert_usage_threshold(provider: str, model: str, call_type: str) -> None:
+    """Email the owner once per calendar day the first time this
+    (provider, model, call_type) crosses _USAGE_ALERT_THRESHOLD of its
+    operator-entered daily limit (same limits as get_usage_limits(), set
+    from the "Uso de IA" admin card). A dedup flag in hotboat_settings,
+    keyed by today's date, is what keeps a busy afternoon from sending one
+    email per call once past the threshold — never raises, same
+    best-effort contract as log_usage() itself."""
+    try:
+        key = f"{provider}:{model}:{call_type}"
+        limit_cfg = get_usage_limits().get(key)
+        if not limit_cfg:
+            return
+        tokens_limit = limit_cfg.get("daily_tokens")
+        seconds_limit = limit_cfg.get("daily_seconds")
+        if not tokens_limit and not seconds_limit:
+            return
+
+        from app.booking.operator_settings import get_setting, set_setting
+        from datetime import date
+
+        dedup_key = f"ai_usage_alert_50pct:{key}:{date.today().isoformat()}"
+        if get_setting(dedup_key, ""):
+            return  # already alerted today for this exact model
+
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                if tokens_limit:
+                    cur.execute(
+                        "SELECT COALESCE(SUM(total_tokens),0) FROM ai_usage_log "
+                        "WHERE provider=%s AND model=%s AND call_type=%s "
+                        "AND created_at >= date_trunc('day', NOW())",
+                        (provider, model, call_type),
+                    )
+                    used = cur.fetchone()[0]
+                    pct = used / tokens_limit if tokens_limit else 0
+                    usage_line = f"{used:,} / {tokens_limit:,} tokens".replace(",", ".")
+                else:
+                    cur.execute(
+                        "SELECT COALESCE(SUM(audio_seconds),0) FROM ai_usage_log "
+                        "WHERE provider=%s AND model=%s AND call_type=%s "
+                        "AND created_at >= date_trunc('day', NOW())",
+                        (provider, model, call_type),
+                    )
+                    used = float(cur.fetchone()[0])
+                    pct = used / seconds_limit if seconds_limit else 0
+                    usage_line = f"{used:,.0f} / {seconds_limit:,.0f} segundos".replace(",", ".")
+
+        if pct < _USAGE_ALERT_THRESHOLD:
+            return
+
+        set_setting(dedup_key, "1")
+        _send_usage_threshold_email(provider, model, call_type, pct, usage_line)
+    except Exception as e:
+        logger.warning(f"ai_usage 50% threshold check failed (non-fatal): {e}")
+
+
+def _send_usage_threshold_email(provider: str, model: str, call_type: str, pct: float, usage_line: str) -> None:
+    try:
+        from app.config import get_settings
+        from app.email.send_email import send_email
+
+        settings = get_settings()
+        from_addr = (
+            getattr(settings, "resend_from_confirmations", "")
+            or getattr(settings, "email_from", "")
+            or "noreply@reservas.hotboat.cl"
+        ).strip()
+        pct_display = round(pct * 100)
+        subject = f"⚠️ {provider}/{model} llegó al {pct_display}% de su cuota diaria"
+        html = (
+            f"<p><strong>{provider} — {model}</strong> ({call_type}) lleva <strong>{usage_line}</strong> "
+            f"hoy — el {pct_display}% del límite diario que configuraste en el panel.</p>"
+            f"<p>Revisa el panel admin → Chatbot → \"📊 Uso de IA (tokens)\" para más detalle, "
+            f"o ajusta el reparto de pesos entre variantes si quieres bajarle tráfico a este modelo.</p>"
+        )
+        result = send_email(
+            to="hotboatnotification@gmail.com",
+            subject=subject,
+            html=html,
+            from_address=from_addr,
+            trigger="ai_usage_threshold",
+        )
+        if not result.get("sent"):
+            logger.warning("ai_usage threshold email failed: %s", result.get("reason"))
+    except Exception as e:
+        logger.warning(f"ai_usage threshold email failed (non-fatal): {e}")
 
 
 def get_usage_summary(days: int = 30) -> list:

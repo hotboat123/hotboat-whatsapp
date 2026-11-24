@@ -97,17 +97,31 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     missing or empty is a normal, expected state — most of the time
     there's no test active).
 
-    A weighted random pick — each active variant's `weight` (default 1) is
-    its relative probability, independent of any accumulated history. NOT
-    "whoever is furthest behind their all-time count/weight ratio" (that
-    was the original 2026-07-23 design, replaced 2026-08-12): with variants
-    created at very different times — e.g. "control" had ~180 leads before
-    "tom"/"esteban" (created later) had any — a catch-up algorithm makes
-    the newer variants absorb ~100% of new leads for a long time to close
-    that historical gap, which reads as "control gets nothing" even though
-    weights are equal. The owner explicitly asked for weights to mean
-    "share of new leads going forward," not "eventually equalize the
-    lifetime total," so this is a plain weighted coin flip instead.
+    A smooth weighted round-robin (the nginx load-balancer algorithm),
+    replacing the plain weighted-random coin flip 2026-11 at the owner's
+    explicit request: "que se vayan turnando según los pesos" (rotate by
+    weight, not randomly) and "que no salga la misma dos veces seguidas"
+    (never the same variant twice in a row). Each eligible variant carries
+    a running `rr_current_weight` counter (persisted in bot_ab_variants);
+    every pick bumps every eligible variant's counter by its own `weight`,
+    the highest counter wins, and the winner's counter then drops by the
+    sum of all eligible weights. Over many picks this converges to exactly
+    each variant's weight/total share — same guarantee the old random pick
+    had — but as a predictable rotation instead of chance, and a variant
+    whose "turn" would repeat the immediately-previous pick is skipped in
+    favor of the next-highest counter (its own counter is left untouched,
+    so it's simply first in line again next time, not penalized for being
+    skipped).
+
+    This is NOT "whoever is furthest behind their all-time count/weight
+    ratio" (that was the original 2026-07-23 design, replaced 2026-08-12):
+    with variants created at very different times — e.g. "control" had
+    ~180 leads before "tom"/"esteban" (created later) had any — a catch-up
+    algorithm makes the newer variants absorb ~100% of new leads for a long
+    time to close that historical gap, which reads as "control gets
+    nothing" even though weights are equal. The rr_current_weight counters
+    only ever look forward from whenever they were last reset (e.g. by
+    changing a weight), never at the lifetime total.
 
     Returns (variant_key, is_human) — is_human lets the caller set
     bot_enabled=FALSE on the new lead right away when the picked variant
@@ -130,14 +144,15 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     in applying it to every variant. If filtering leaves zero candidates
     (e.g. every active variant currently off-shift), falls back to the
     unfiltered list rather than leaving a lead unassigned."""
-    import random
     from datetime import datetime
     from zoneinfo import ZoneInfo
     from app.bot.variant_overrides import hour_in_schedule
+    from app.booking.operator_settings import get_setting, set_setting
 
     try:
         cur.execute(
-            "SELECT variant_key, weight, is_human, schedule_start_hour, schedule_end_hour "
+            "SELECT variant_key, weight, is_human, schedule_start_hour, schedule_end_hour, "
+            "COALESCE(rr_current_weight, 0) "
             "FROM bot_ab_variants WHERE is_active = TRUE"
         )
         variants = cur.fetchall()
@@ -160,9 +175,26 @@ def _pick_active_variant(cur) -> tuple[Optional[str], bool]:
     if len(eligible) == 1:
         return eligible[0][0], bool(eligible[0][2])
 
-    weights = [w or 1 for _, w, _, _, _ in eligible]
-    picked = random.choices(eligible, weights=weights, k=1)[0]
-    return picked[0], bool(picked[2])
+    total_weight = sum((w or 1) for _, w, _, _, _, _ in eligible)
+    bumped = [
+        {"key": key, "is_human": is_human, "cw": (cw or 0) + (w or 1)}
+        for key, w, is_human, _, _, cw in eligible
+    ]
+    bumped.sort(key=lambda b: b["cw"], reverse=True)
+
+    last_key = get_setting("ab_last_picked_variant", "")
+    pick = bumped[0]
+    if pick["key"] == last_key and len(bumped) > 1:
+        pick = bumped[1]
+
+    for b in bumped:
+        new_cw = b["cw"] - total_weight if b["key"] == pick["key"] else b["cw"]
+        cur.execute(
+            "UPDATE bot_ab_variants SET rr_current_weight=%s WHERE variant_key=%s",
+            (new_cw, b["key"]),
+        )
+    set_setting("ab_last_picked_variant", pick["key"])
+    return pick["key"], bool(pick["is_human"])
 
 
 def save_lead_language(phone_number: str, language: str) -> None:
