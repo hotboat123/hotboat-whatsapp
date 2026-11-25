@@ -23,6 +23,7 @@ from app.booking.financial_router import financial_router
 from app.booking.bot_config_router import bot_config_router, _ensure_tables as _ensure_bot_tables, seed_defaults as seed_bot_defaults
 from app.booking.gastos_router import gastos_router, _ensure_tables as _ensure_gastos_tables
 from app.booking.flujo_caja_router import flujo_caja_router, _ensure_tables as _ensure_flujo_caja_tables
+from app.booking.remuneraciones_router import remuneraciones_router, _ensure_tables as _ensure_remuneraciones_tables
 from app.booking.tabla_router import tabla_router, _ensure_tabla_table, _seed_tabla_products, _ensure_catalog_table, _seed_catalog_defaults
 from app.booking.reserva_router import reserva_router
 from app.booking.link_tracking_router import link_tracking_router
@@ -931,6 +932,10 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         logger.warning(f"flujo_caja tables setup skipped: {_e}")
     try:
+        _ensure_remuneraciones_tables()
+    except Exception as _e:
+        logger.warning(f"remuneraciones tables setup skipped: {_e}")
+    try:
         from app.bot.ai_usage import _ensure_tables as _ensure_ai_usage_tables
         _ensure_ai_usage_tables()
     except Exception as _e:
@@ -1073,6 +1078,7 @@ app.include_router(financial_router)
 app.include_router(bot_config_router)
 app.include_router(gastos_router)
 app.include_router(flujo_caja_router)
+app.include_router(remuneraciones_router)
 app.include_router(tabla_router)
 app.include_router(reserva_router)
 app.include_router(link_tracking_router)

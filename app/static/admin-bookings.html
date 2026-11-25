@@ -436,6 +436,9 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
     <div class="nav-item" onclick="showSection('sueldos');calcWorkersView()" id="nav-sueldos">
       <span class="ni">👷</span> Sueldos
     </div>
+    <div class="nav-item" onclick="showSection('remuneraciones')" id="nav-remuneraciones">
+      <span class="ni">💼</span> Remuneraciones
+    </div>
     <div class="nav-item" onclick="showSection('comisiones');loadComisiones()" id="nav-comisiones">
       <span class="ni">💸</span> Comisiones extras
     </div>
@@ -4380,6 +4383,80 @@ tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
 
     </div><!-- /section-sueldos -->
 
+    <!-- ══ SISTEMA DE REMUNERACIONES SECTION ════════════════════════════════ -->
+    <div id="section-remuneraciones" class="section">
+
+      <!-- Selector de mes + KPIs de utilidad -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em">📅 MES A CALCULAR</div>
+          <select id="rem-year" onchange="loadRemuneracionesMes()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.85rem"></select>
+          <select id="rem-month" onchange="loadRemuneracionesMes()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.85rem">
+            <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+            <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+            <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+            <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
+        </div>
+        <div id="rem-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem"></div>
+      </div>
+
+      <!-- Bonos por trabajador -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+        <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.8rem">💵 BONO REAL DEL MES POR TRABAJADOR</div>
+        <div id="rem-bonos" style="overflow-x:auto"></div>
+      </div>
+
+      <!-- Trabajadores (config propia de Remuneraciones) -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem">
+          <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em">👷 TRABAJADORES Y TRAMOS POR UTILIDAD</div>
+          <div>
+            <button onclick="remAddWorker()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.35rem .7rem;font-size:.78rem;cursor:pointer">+ Trabajador</button>
+            <button onclick="remSaveWorkers()" style="background:var(--gold);border:none;color:#1a1a1a;border-radius:6px;padding:.35rem .9rem;font-size:.78rem;font-weight:700;cursor:pointer;margin-left:.4rem">Guardar</button>
+          </div>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:.6rem">
+          Configuración independiente de la del Simulador — el bono real se calcula sobre la utilidad estimada del mes, no sobre un escenario hipotético.
+        </div>
+        <div id="rem-workers"></div>
+      </div>
+
+      <!-- Categorías de gastos que cuentan para remuneraciones -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem">
+          <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em">🧾 CATEGORÍAS DE GASTOS QUE CUENTAN</div>
+          <button onclick="remSaveCategorias()" style="background:var(--gold);border:none;color:#1a1a1a;border-radius:6px;padding:.35rem .9rem;font-size:.78rem;font-weight:700;cursor:pointer">Guardar</button>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:.6rem">
+          Marca una vez las categorías/subcategorías de Gastos que deben restar de la utilidad (agua, arriendo, internet, supermercado/extras, devoluciones, etc.). Todo gasto nuevo bien categorizado entra solo, sin elegir nada cada mes.
+        </div>
+        <div id="rem-categorias" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.9rem"></div>
+      </div>
+
+      <!-- Costos manuales (gas, leña) -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+        <div style="font-size:.8rem;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:.8rem">🔥 COSTOS MANUALES (gas, leña, etc.)</div>
+        <div style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-bottom:.8rem">
+          <div>
+            <label style="font-size:.72rem;color:var(--muted);display:block;margin-bottom:.2rem">Mes</label>
+            <input type="month" id="rem-manual-mes" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem">
+          </div>
+          <div>
+            <label style="font-size:.72rem;color:var(--muted);display:block;margin-bottom:.2rem">Concepto</label>
+            <input type="text" id="rem-manual-concepto" placeholder="gas / leña" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;width:140px">
+          </div>
+          <div>
+            <label style="font-size:.72rem;color:var(--muted);display:block;margin-bottom:.2rem">Monto</label>
+            <input type="number" id="rem-manual-monto" min="0" step="1000" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.32rem .5rem;font-size:.85rem;width:120px">
+          </div>
+          <button onclick="remSaveCostoManual()" style="background:var(--gold);border:none;color:#1a1a1a;border-radius:6px;padding:.4rem .9rem;font-size:.82rem;font-weight:700;cursor:pointer">Guardar</button>
+        </div>
+        <div id="rem-manuales-list" style="overflow-x:auto"></div>
+      </div>
+
+    </div><!-- /section-remuneraciones -->
+
     <!-- ══ TEST PAGOS SECTION ════════════════════════════════════════════════ -->
     <div id="section-payment-test" class="section">
       <div style="display:grid;gap:1rem">
@@ -5267,7 +5344,7 @@ function showSection(name){
   document.getElementById('nav-'+name).classList.add('active');
   // En mobile, cerrar el sidebar automáticamente al elegir una sección
   document.getElementById('sidebar').classList.remove('open');
-  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Extras','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',comisiones:'Comisiones por Extra Presencial',gastos:'Registro de Gastos','flujo-caja':'Flujo de Caja Sheet',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
+  const titles={calendar:'Calendario de Reservas',lista:'Todas las Reservas',clientes:'Clientes',stats:'Estadisticas','extras-cat':'Extras','tablas-admin':'Tablas — Catálogo',coupons:'Cupones',emails:'Emails de reservas',settings:'Configuracion','alojamientos-admin':'Alojamientos',experiencias:'Otras Experiencias','packs-admin':'Packs Completos','cal-extras':'Calendario de Extras',financial:'Finanzas',simulator:'Simulador Financiero',sueldos:'Proyección de Sueldos',remuneraciones:'Sistema de Remuneraciones',comisiones:'Comisiones por Extra Presencial',gastos:'Registro de Gastos','flujo-caja':'Flujo de Caja Sheet',chatbot:'Chatbot',logs:'Logs del servidor',whatsapp:'WhatsApp'};
   document.getElementById('section-title').textContent = titles[name]||name;
   const contentEl  = document.getElementById('content');
   const topbarBtns = ['year-sel','new-reserva-btn'];
@@ -5309,6 +5386,7 @@ function showSection(name){
   if(name==='cal-extras') loadCalExtras();
   if(name==='financial') initFinancialSection();
   if(name==='simulator') requestAnimationFrame(()=>{ simCalc(); });
+  if(name==='remuneraciones') loadRemuneraciones();
   if(name==='comisiones') initWorkerCommission();
   if(name==='chatbot'){ loadBotResponses(); loadBotKeywords(); loadPersonas(); loadAbVariants(); loadAbResults(); loadAiUsage(); }
   if(name==='logs') initLogsSection();
@@ -5325,6 +5403,255 @@ async function api(url, opts={}){
   return r.json();
 }
 function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+
+// ── Sistema de Remuneraciones ──────────────────────────────────────────────
+let _remWorkers = [];
+let _remCategorias = [];
+
+function _remMonthBounds(y, m){
+  const dFrom = `${y}-${String(m).padStart(2,'0')}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const dTo = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  return [dFrom, dTo];
+}
+
+async function loadRemuneraciones(){
+  const ySel = document.getElementById('rem-year');
+  if(ySel && !ySel.options.length){
+    const now = new Date();
+    for(let y=now.getFullYear()+1; y>=now.getFullYear()-2; y--){
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = y;
+      ySel.appendChild(opt);
+    }
+    ySel.value = now.getFullYear();
+    document.getElementById('rem-month').value = now.getMonth()+1;
+  }
+  await Promise.all([loadRemCategorias(), loadRemWorkers()]);
+  await loadRemuneracionesMes();
+}
+
+async function loadRemuneracionesMes(){
+  const y = +document.getElementById('rem-year').value;
+  const m = +document.getElementById('rem-month').value;
+  const [dFrom, dTo] = _remMonthBounds(y, m);
+  try {
+    const [resumen, bonos] = await Promise.all([
+      api(`/api/admin/remuneraciones/resumen?date_from=${dFrom}&date_to=${dTo}`),
+      api(`/api/admin/remuneraciones/bonos?year=${y}&month=${m}`),
+    ]);
+    renderRemKpis(resumen.totales);
+    renderRemBonos(bonos);
+  } catch(e){ showToast('❌ '+e.message); }
+  loadRemManuales(y);
+}
+
+function renderRemKpis(t){
+  const el = document.getElementById('rem-kpis');
+  if(!el) return;
+  const card = (label, val, color) => `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .9rem">
+      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.25rem">${label}</div>
+      <div style="font-size:1.05rem;font-weight:700;color:${color||'var(--text)'}">${fmtMoney(val)}</div>
+    </div>`;
+  el.innerHTML =
+    card('Ingresos (sin IVA)', t.ingresos) +
+    card('− Costos marcados', -t.costos_marcados) +
+    card('− Marketing', -t.marketing) +
+    card('− Gas/Leña (manual)', -t.costos_manuales) +
+    card('= Utilidad estimada', t.utilidad_estimada, t.utilidad_estimada>=0 ? 'var(--gold)' : '#ef4444');
+}
+
+function renderRemBonos(data){
+  const el = document.getElementById('rem-bonos');
+  if(!el) return;
+  if(!data.bonos || !data.bonos.length){
+    el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Sin trabajadores configurados todavía — agrégalos abajo.</div>';
+    return;
+  }
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+      <thead><tr style="text-align:left;color:var(--muted);font-size:.72rem">
+        <th style="padding:.4rem .5rem">Trabajador</th><th style="padding:.4rem .5rem">Sueldo base</th>
+        <th style="padding:.4rem .5rem">% aplicado</th><th style="padding:.4rem .5rem">Bono utilidad</th>
+        <th style="padding:.4rem .5rem">Total a pagar</th>
+      </tr></thead>
+      <tbody>
+        ${data.bonos.map(b => `
+          <tr style="border-top:1px solid var(--border)">
+            <td style="padding:.4rem .5rem">${escHtml(b.nombre)}</td>
+            <td style="padding:.4rem .5rem">${fmtMoney(b.sueldo_base)}</td>
+            <td style="padding:.4rem .5rem">${b.pct_aplicado}%</td>
+            <td style="padding:.4rem .5rem">${fmtMoney(b.bono_utilidad)}</td>
+            <td style="padding:.4rem .5rem;font-weight:700;color:var(--gold)">${fmtMoney(b.total)}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ── Categorías de gastos ──────────────────────────────────────────────────
+async function loadRemCategorias(){
+  try {
+    const d = await api('/api/admin/remuneraciones/categorias');
+    _remCategorias = d.categorias || [];
+    renderRemCategorias();
+  } catch(e){ showToast('❌ '+e.message); }
+}
+
+function renderRemCategorias(){
+  const el = document.getElementById('rem-categorias');
+  if(!el) return;
+  const nivel1 = _remCategorias.filter(c=>c.nivel===1);
+  el.innerHTML = nivel1.map(p => {
+    const hijos = _remCategorias.filter(c=>c.nivel===2 && c.parent_id===p.id);
+    const rows = hijos.length ? hijos : [p]; // sin subcategorías → marcar el nivel 1 directo
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.6rem .7rem">
+        <div style="font-weight:700;font-size:.82rem;margin-bottom:.4rem">${p.icono||'📌'} ${escHtml(p.nombre)}</div>
+        ${rows.map(c => `
+          <label style="display:flex;align-items:center;gap:.45rem;font-size:.8rem;padding:.15rem 0;cursor:pointer">
+            <input type="checkbox" data-cat-id="${c.id}" ${c.incluir_en_remuneraciones?'checked':''} style="accent-color:#fbbf24;width:14px;height:14px">
+            <span>${hijos.length ? escHtml(c.nombre) : '(sin subcategorías)'}</span>
+          </label>`).join('')}
+      </div>`;
+  }).join('');
+}
+
+async function remSaveCategorias(){
+  const boxes = document.querySelectorAll('#rem-categorias input[data-cat-id]');
+  const flags = Array.from(boxes).map(b => ({
+    id: +b.getAttribute('data-cat-id'),
+    incluir_en_remuneraciones: b.checked,
+  }));
+  try {
+    await api('/api/admin/remuneraciones/categorias', {method:'PUT', body:JSON.stringify({flags})});
+    showToast('✅ Categorías guardadas');
+    await loadRemCategorias();
+    loadRemuneracionesMes();
+  } catch(e){ showToast('❌ '+e.message); }
+}
+
+// ── Trabajadores ───────────────────────────────────────────────────────────
+async function loadRemWorkers(){
+  try {
+    const d = await api('/api/admin/remuneraciones/workers');
+    _remWorkers = d.workers || [];
+    renderRemWorkers();
+  } catch(e){ showToast('❌ '+e.message); }
+}
+
+function renderRemWorkers(){
+  const el = document.getElementById('rem-workers');
+  if(!el) return;
+  if(!_remWorkers.length){
+    el.innerHTML = '<div style="color:var(--muted);font-size:.82rem">Sin trabajadores — usa "+ Trabajador" para agregar el primero.</div>';
+    return;
+  }
+  el.innerHTML = _remWorkers.map((w, wi) => `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem .8rem;margin-bottom:.6rem">
+      <div style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-bottom:.5rem">
+        <div>
+          <label style="font-size:.7rem;color:var(--muted);display:block;margin-bottom:.15rem">Nombre</label>
+          <input type="text" value="${escHtml(w.nombre||'')}" oninput="_remWorkers[${wi}].nombre=this.value" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:140px">
+        </div>
+        <div>
+          <label style="font-size:.7rem;color:var(--muted);display:block;margin-bottom:.15rem">Sueldo base</label>
+          <input type="number" value="${w.sueldo_base||0}" min="0" step="1000" oninput="_remWorkers[${wi}].sueldo_base=+this.value||0" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .5rem;font-size:.82rem;width:120px">
+        </div>
+        <button onclick="remRemoveWorker(${wi})" style="background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:.3rem .6rem;font-size:.75rem;cursor:pointer">Eliminar</button>
+      </div>
+      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.3rem">Tramos por utilidad (desde qué utilidad mensual, qué % se bonifica)</div>
+      <div id="rem-tramos-${wi}">
+        ${(w.tramos||[]).map((t, ti) => `
+          <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.3rem">
+            <span style="font-size:.75rem;color:var(--muted)">Desde</span>
+            <input type="number" value="${t.umbral_utilidad||0}" min="0" step="10000" oninput="_remWorkers[${wi}].tramos[${ti}].umbral_utilidad=+this.value||0" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .4rem;font-size:.78rem;width:110px">
+            <span style="font-size:.75rem;color:var(--muted)">→</span>
+            <input type="number" value="${t.pct_utilidad||0}" min="0" max="100" step="0.5" oninput="_remWorkers[${wi}].tramos[${ti}].pct_utilidad=+this.value||0" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.25rem .4rem;font-size:.78rem;width:70px">
+            <span style="font-size:.75rem;color:var(--muted)">%</span>
+            <button onclick="remRemoveTramo(${wi},${ti})" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:.78rem">✕</button>
+          </div>`).join('')}
+      </div>
+      <button onclick="remAddTramo(${wi})" style="background:transparent;border:1px dashed var(--border);color:var(--muted);border-radius:6px;padding:.25rem .6rem;font-size:.75rem;cursor:pointer">+ tramo</button>
+    </div>`).join('');
+}
+
+function remAddWorker(){
+  _remWorkers.push({id:null, nombre:'', sueldo_base:0, tramos:[{umbral_utilidad:0, pct_utilidad:0}]});
+  renderRemWorkers();
+}
+function remRemoveWorker(wi){
+  _remWorkers.splice(wi,1);
+  renderRemWorkers();
+}
+function remAddTramo(wi){
+  _remWorkers[wi].tramos.push({umbral_utilidad:0, pct_utilidad:0});
+  renderRemWorkers();
+}
+function remRemoveTramo(wi, ti){
+  _remWorkers[wi].tramos.splice(ti,1);
+  renderRemWorkers();
+}
+async function remSaveWorkers(){
+  try {
+    const body = {workers: _remWorkers.map(w=>({id:w.id, nombre:w.nombre, sueldo_base:w.sueldo_base, tramos:w.tramos}))};
+    const d = await api('/api/admin/remuneraciones/workers', {method:'PUT', body:JSON.stringify(body)});
+    _remWorkers = d.workers || [];
+    renderRemWorkers();
+    showToast('✅ Trabajadores guardados');
+    loadRemuneracionesMes();
+  } catch(e){ showToast('❌ '+e.message); }
+}
+
+// ── Costos manuales (gas, leña) ─────────────────────────────────────────────
+async function loadRemManuales(year){
+  const el = document.getElementById('rem-manuales-list');
+  if(!el) return;
+  try {
+    const d = await api(`/api/admin/remuneraciones/costos-manuales?year=${year}`);
+    const costos = d.costos || [];
+    if(!costos.length){
+      el.innerHTML = '<div style="color:var(--muted);font-size:.8rem">Sin costos manuales registrados en '+year+'.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        <thead><tr style="text-align:left;color:var(--muted);font-size:.72rem">
+          <th style="padding:.3rem .5rem">Mes</th><th style="padding:.3rem .5rem">Concepto</th>
+          <th style="padding:.3rem .5rem">Monto</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${costos.map(c => `
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:.3rem .5rem">${c.mes}</td>
+              <td style="padding:.3rem .5rem">${escHtml(c.concepto)}</td>
+              <td style="padding:.3rem .5rem">${fmtMoney(c.monto)}</td>
+              <td style="padding:.3rem .5rem"><button onclick="remDeleteCostoManual(${c.id},${year})" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:.8rem">✕</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e){ showToast('❌ '+e.message); }
+}
+
+async function remSaveCostoManual(){
+  const mes = document.getElementById('rem-manual-mes').value;
+  const concepto = document.getElementById('rem-manual-concepto').value.trim();
+  const monto = +document.getElementById('rem-manual-monto').value || 0;
+  if(!mes || !concepto){ showToast('❌ Completa mes y concepto'); return; }
+  try {
+    await api('/api/admin/remuneraciones/costos-manuales', {method:'PUT', body:JSON.stringify({mes, concepto, monto})});
+    showToast('✅ Costo manual guardado');
+    loadRemuneracionesMes();
+  } catch(e){ showToast('❌ '+e.message); }
+}
+
+async function remDeleteCostoManual(id, year){
+  try {
+    await api(`/api/admin/remuneraciones/costos-manuales/${id}`, {method:'DELETE'});
+    loadRemManuales(year);
+    loadRemuneracionesMes();
+  } catch(e){ showToast('❌ '+e.message); }
+}
 
 // ── Load all ─────────────────────────────────────────────────────────────────
 async function reloadAll(){
@@ -16668,7 +16995,7 @@ const _SECTION_LABELS = {
   'tablas-admin':'🍽 Tablas','coupons':'🎟️ Cupones','quick-replies':'⚡ Respuestas Rápidas','giftcards':'🎀 Gift Cards','emails':'✉️ Emails reservas',
   'alojamientos-admin':'🏠 Alojamientos','aloj-bookings':'📋 Reservas Aloj.',
   'experiencias':'🏔️ Experiencias','packs-admin':'🎁 Packs','cal-extras':'🗓️ Cal. Extras',
-  'financial':'💰 Finanzas','simulator':'🎯 Simulador','sueldos':'👷 Sueldos','extras-vendidos':'🛍️ Extras Vendidos',
+  'financial':'💰 Finanzas','simulator':'🎯 Simulador','sueldos':'👷 Sueldos','remuneraciones':'💼 Remuneraciones','extras-vendidos':'🛍️ Extras Vendidos',
   'gastos':'🧾 Gastos','whatsapp':'💬 WhatsApp','chatbot':'🤖 Chatbot','payment-test':'💳 Test Pagos',
   'logs':'🔍 Logs','settings':'⚙️ Configuración',
 };

@@ -39,6 +39,7 @@ def _ensure_tables():
         icono TEXT DEFAULT '📌',
         created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE gastos_categorias ADD COLUMN IF NOT EXISTS incluir_en_remuneraciones BOOLEAN DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS gastos (
         id SERIAL PRIMARY KEY,
         fecha DATE NOT NULL DEFAULT CURRENT_DATE,
